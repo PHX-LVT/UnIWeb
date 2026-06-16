@@ -1,0 +1,66 @@
+/* -- Controls & Buttons ------------------------------------ */
+.btn-admin {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+    .btn-admin i {
+        font-size: 0.85rem;
+    }
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        border-color: var(--primary-hover);
+    }
+
+.btn-outline {
+    background: transparent;
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+    .btn-outline:hover {
+        background: #e8edf8;
+    }
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+}
+
+    .btn-danger:hover {
+        background: #bb2d3b;
+    }
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border);
+}
+
+    .btn-ghost:hover {
+        background: var(--bg);
+        color: var(--text);
+    }
+
+.btn-admin:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}

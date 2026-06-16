@@ -1,0 +1,75 @@
+﻿@page "/{slug}"
+@page "/{parentSlug}/{childSlug}"
+@inject PublicApiService Api
+@inject LanguageService LangService
+@inject IJSRuntime JS
+@using Contracts.Public
+@implements IDisposable
+
+@if (_page is not null)
+{
+    <PageRenderer Page="_page" Lang="@_lang" OnFormSubmit="HandleFormSubmit" />
+}
+else if (_notFound)
+{
+    <div class="sc-not-found">
+        <h1>Page not found</h1>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Slug { get; set; }
+    [Parameter] public string? ParentSlug { get; set; }
+    [Parameter] public string? ChildSlug { get; set; }
+
+    private PublicPageDto? _page;
+    private bool _notFound = false;
+    private string? _widgetsInitializedForPageId;
+    private string _lang = "en";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_page is not null && _widgetsInitializedForPageId != _page.Id)
+        {
+            await JS.InvokeVoidAsync("cmsWidgets.init");
+            _widgetsInitializedForPageId = _page.Id;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LangService.Changed += HandleLanguageChanged;
+        _lang = await LangService.GetAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _notFound = false;
+        _page = !string.IsNullOrEmpty(ChildSlug)
+            ? await Api.GetChildPageAsync(ParentSlug!, ChildSlug)
+            : await Api.GetPageAsync(Slug!);
+
+        if (_page is null) _notFound = true;
+    }
+
+    private async Task<bool> HandleFormSubmit(
+     string pageId, string sectionId, string blockId,
+     Dictionary<string, string> data)
+    {
+        if (!string.IsNullOrEmpty(ChildSlug))
+            return await Api.SubmitChildFormAsync(ParentSlug!, ChildSlug, sectionId, blockId, data);
+
+        return await Api.SubmitFormAsync(Slug!, sectionId, blockId, data);
+    }
+
+    private void HandleLanguageChanged(string lang)
+    {
+        _lang = lang;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        LangService.Changed -= HandleLanguageChanged;
+    }
+}

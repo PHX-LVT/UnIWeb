@@ -1,0 +1,15 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-design-block sc-icon-block">
+    <div class="sc-icon-block__icon">
+        <i class="@(string.IsNullOrWhiteSpace(Block.Icon) ? "fas fa-star" : Block.Icon)"></i>
+    </div>
+    <h3>@StyleHelper.Lang(Block.Label, Lang)</h3>
+    <p>@StyleHelper.Lang(Block.Description, Lang)</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicIconBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

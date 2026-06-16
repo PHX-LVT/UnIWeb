@@ -1,0 +1,69 @@
+@using AdminSite.Models
+
+@switch (Section.Type)
+{
+    case "hero":
+        <HeroSectionEditor Section="@Section" PageId="@PageId"
+                           Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "cta":
+        <CtaSectionEditor Section="@Section" PageId="@PageId"
+                          Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "gallery":
+        <GallerySectionEditor Section="@Section" PageId="@PageId"
+                              OnSaved="@OnSaved" />
+        break;
+    case "list":
+        <ListSectionEditor Section="@Section" PageId="@PageId"
+                           Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "html":
+        <HtmlSectionEditor Section="@Section" PageId="@PageId"
+                           Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "columns":
+        <ColumnsSectionEditor Section="@Section" PageId="@PageId"
+                              Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "showcase":
+        <ShowcaseSectionEditor Section="@Section" PageId="@PageId"
+                               Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "library":
+        <LibrarySectionEditor @key="Section.Id"
+                              Section="@Section" PageId="@PageId"
+                              Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "stats":
+        <StatsSectionEditor Section="@Section" PageId="@PageId"
+                            Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "carousel":
+        <CarouselSectionEditor Section="@Section" PageId="@PageId"
+                               Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "network-map":
+        <NetworkMapSectionEditor Section="@Section" PageId="@PageId"
+                                 Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "testimonial":
+        <TestimonialSectionEditor Section="@Section" PageId="@PageId"
+                                  Languages="@Languages" OnSaved="@OnSaved" />
+        break;
+    case "canvas":
+        <CanvasSectionEditor Section="@Section" PageId="@PageId"
+                             OnSaved="@OnSaved"
+                             OnSectionsChanged="@OnSaved" />
+        break;
+    default:
+        <p class="text-muted">Unknown section type: @Section.Type</p>
+        break;
+}
+
+@code {
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+}

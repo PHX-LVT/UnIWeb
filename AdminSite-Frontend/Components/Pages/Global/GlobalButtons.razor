@@ -1,0 +1,201 @@
+@page "/global/buttons"
+@using SharedComponents.Helpers
+@inject GlobalButtonsService ButtonsService
+@inject IHttpService Http
+@inject AdminLanguageService AdminLanguageState
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-hand-pointer"></i> @T("GlobalButtons")</h1>
+    <div class="page-actions">
+        <button class="btn-admin btn-primary" @onclick="() => OpenModal(null)"
+                disabled="@(_buttons.Count >= 4)">
+            <i class="fas fa-plus"></i> @T("AddButton")
+        </button>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="admin-card" style="text-align:center;padding:2rem">
+        <div class="spinner" style="margin:0 auto"></div>
+    </div>
+}
+else if (!_buttons.Any())
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoButtonsYet")</p>
+    </div>
+}
+else
+{
+    <div class="admin-card">
+        @foreach (var btn in _buttons.OrderBy(b => b.Order))
+        {
+            <div style="display:flex;align-items:center;gap:1rem;
+                    padding:.75rem 0;border-bottom:1px solid var(--border)">
+                <div style="flex:1">
+                    <div style="font-weight:500">@LabelFor(btn)</div>
+                    <div class="text-muted" style="font-size:.8rem">@btn.Href · @btn.Position</div>
+                </div>
+                <button class="visibility-toggle @(btn.Visible ? "visible" : "hidden")"
+                        @onclick="() => ToggleVisibility(btn)">
+                    <i class="fas @(btn.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                    @(btn.Visible ? T("Visible") : T("Hidden"))
+                </button>
+                <button class="btn-admin btn-ghost" @onclick="() => OpenModal(btn)">
+                    <i class="fas fa-pencil-alt"></i>
+                </button>
+                <button class="btn-admin btn-danger" @onclick="() => Delete(btn.Id)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        }
+    </div>
+}
+
+@if (_showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@(_editing is null ? T("AddButton") : T("Edit"))</span>
+                <button class="btn-admin btn-ghost" @onclick="CloseModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label required">@T("ButtonLabel")</label>
+                    <LangField @bind-Value="_formLabelText"
+                               Languages="_languages"
+                               NullText="@T("ButtonLabel")" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label required">@T("Url")</label>
+                    <DxTextBox @bind-Text="_form.Href" CssClass="w-100" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("Action")</label>
+                    <DxComboBox Data="_actions" @bind-Value="_form.Action" CssClass="w-100" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("Position")</label>
+                    <DxComboBox Data="_positions" @bind-Value="_form.Position" CssClass="w-100" />
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <DxCheckBox @bind-Checked="_form.Visible" />
+                        @T("Visible")
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseModal">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+                    @(_saving ? T("Saving") : T("Save"))
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private List<GlobalButtonModel> _buttons = new();
+    private GlobalButtonModel? _editing;
+    private GlobalButtonRequest _form = new();
+    private Dictionary<string, string> _formLabelText = new();
+    private bool _loading = true;
+    private bool _saving = false;
+    private bool _showModal = false;
+    private List<string> _actions = new() { "OpenModal", "LinkToPage", "ExternalUrl" };
+    private List<string> _positions = new() { "HeaderRight", "HeaderLeft", "Floating" };
+    private List<string> _languages = new() { "en" };
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AdminLanguageState.LoadSettingsAsync();
+        _languages = AdminLanguageState.SupportedLanguages.ToList();
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        var res = await ButtonsService.GetAllAsync();
+        _buttons = res.Data ?? new();
+        _loading = false;
+    }
+
+    private void OpenModal(GlobalButtonModel? btn)
+    {
+        _editing = btn;
+        _form = btn is null ? new()
+        {
+            Action = "OpenModal",
+            Position = "HeaderRight",
+            Visible = true
+        } : new()
+        {
+            LabelText = new(btn.LabelText),
+            Href = btn.Href,
+            Action = btn.Action,
+            Position = btn.Position,
+            Visible = btn.Visible
+        };
+        _formLabelText = NormalizeLabelText(btn);
+        _showModal = true;
+    }
+
+    private void CloseModal() => _showModal = false;
+
+    private async Task Save()
+    {
+        _saving = true;
+        ApiResponse<GlobalButtonModel> res;
+        _form.LabelText = new(_formLabelText);
+
+        if (_editing is null)
+            res = await ButtonsService.CreateAsync(_form);
+        else
+            res = await ButtonsService.UpdateAsync(_editing.Id, _form);
+
+        Http.Toast(res.Message, res.StatusCode);
+
+        if (res.Success)
+        {
+            CloseModal();
+            await Load();
+        }
+        _saving = false;
+    }
+
+    private async Task ToggleVisibility(GlobalButtonModel btn)
+    {
+        var res = await ButtonsService.SetVisibilityAsync(btn.Id, !btn.Visible);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) btn.Visible = !btn.Visible;
+    }
+
+    private async Task Delete(string id)
+    {
+        var res = await ButtonsService.DeleteAsync(id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) await Load();
+    }
+
+    private string LabelFor(GlobalButtonModel button) =>
+        StyleHelper.Lang(NormalizeLabelText(button), AdminLanguage);
+
+    private static Dictionary<string, string> NormalizeLabelText(GlobalButtonModel? button)
+    {
+        var labelText = button?.LabelText is { Count: > 0 }
+            ? new Dictionary<string, string>(button.LabelText)
+            : new Dictionary<string, string>();
+
+        return labelText;
+    }
+}

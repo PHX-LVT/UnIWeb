@@ -1,0 +1,754 @@
+﻿@page "/settings"
+@inject AdminSettingsService SettingsService
+@inject AdminLanguageService AdminLanguageState
+@inject IHttpService Http
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-cog"></i> Settings</h1>
+</div>
+
+<DxTabs>
+    <DxTabPage Text='@T("Languages")' CssClass="fas fa-globe">
+        <div class="admin-card" style="margin-top:1rem">
+            <div class="admin-card-title" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+                <span style="flex:1">@T("Languages")</span>
+                <label style="display:flex;align-items:center;gap:.5rem;margin:0">
+                    <span class="text-muted">@T("FallbackLanguage")</span>
+                    <select class="form-control" style="width:180px"
+                            value="@_defaultLanguage"
+                            @onchange="ChangeFallbackLanguage">
+                        @foreach (var lang in _languages.Where(l => l.Active))
+                        {
+                            <option value="@lang.Slug">@DisplayLanguage(lang)</option>
+                        }
+                    </select>
+                </label>
+                <button class="btn-admin btn-primary" @onclick="OpenLanguageModal">
+                    <i class="fas fa-plus"></i> @T("AddLanguage")
+                </button>
+            </div>
+
+            @if (_langsLoading)
+            {
+                <div class="spinner" style="margin:1rem auto"></div>
+            }
+            else
+            {
+                <div style="overflow:auto">
+                    <table class="table" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th style="width:46px"></th>
+                                <th>@T("Order")</th>
+                                <th>@T("Language")</th>
+                                <th>@T("Code")</th>
+                                <th>@T("Direction")</th>
+                                <th>@T("AdminEditing")</th>
+                                <th>@T("UserSite")</th>
+                                <th>@T("Status")</th>
+                                <th style="width:120px">@T("Actions")</th>
+                            </tr>
+                        </thead>
+                        <tbody @ref="_languageRowsRef">
+                            @foreach (var lang in _languages.OrderBy(l => l.Order))
+                            {
+                                var isFallback = IsFallback(lang);
+                                <tr @key="lang.Slug"
+                                    data-language-slug="@(lang.Active ? lang.Slug : null)">
+                                    <td>
+                                        @if (lang.Active)
+                                        {
+                                            <span class="ez-tab__drag" title="Drag to reorder">
+                                                <i class="fas fa-grip-vertical"></i>
+                                            </span>
+                                        }
+                                    </td>
+                                    <td style="width:90px">
+                                        <span class="content-status-pill">@lang.Order</span>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:700">@DisplayLanguage(lang)</div>
+                                        <div class="text-muted" style="font-size:.8rem">@lang.NativeName</div>
+                                    </td>
+                                    <td><code>@lang.Slug</code></td>
+                                    <td>@lang.Direction.ToUpperInvariant()</td>
+                                    <td>
+                                        <input type="checkbox"
+                                               checked="@lang.AdminEnabled"
+                                               disabled="@(!lang.Active || isFallback)"
+                                               @onchange="e => lang.AdminEnabled = ReadChecked(e, lang.AdminEnabled)" />
+                                    </td>
+                                    <td>
+                                        <input type="checkbox"
+                                               checked="@lang.UserEnabled"
+                                               disabled="@(!lang.Active || isFallback)"
+                                               @onchange="e => lang.UserEnabled = ReadChecked(e, lang.UserEnabled)" />
+                                    </td>
+                                    <td>
+                                        @if (isFallback)
+                                        {
+                                            <span class="content-status-pill is-published">@T("Fallback")</span>
+                                        }
+                                        else
+                                        {
+                                            <label style="display:flex;align-items:center;gap:.5rem;margin:0">
+                                                <input type="checkbox"
+                                                       checked="@lang.Active"
+                                                       @onchange="e => ToggleLanguage(lang, e)" />
+                                                @(lang.Active ? T("Enabled") : T("Disabled"))
+                                            </label>
+                                        }
+                                    </td>
+                                    <td>
+                                        <button class="btn-admin btn-ghost" @onclick="() => OpenLanguageSettingsModal(lang)">
+                                            <i class="fas fa-cog"></i> @T("Settings")
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top:1rem;display:flex;justify-content:flex-end">
+                    <button class="btn-admin btn-primary"
+                            @onclick="SaveLanguages" disabled="@_langSaving">
+                        <i class="fas fa-save"></i>
+                        @(_langSaving ? T("Saving") : T("SaveLanguages"))
+                    </button>
+                </div>
+            }
+        </div>
+    </DxTabPage>
+
+    <DxTabPage Text='@T("AdminAppearance")' CssClass="fas fa-palette">
+        <div class="admin-card" style="margin-top:1rem">
+            <div class="admin-card-title" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+                <span style="flex:1">@T("AdminAppearance")</span>
+                <button class="btn-admin btn-primary"
+                        @onclick="SaveAdminAppearance"
+                        disabled="@_appearanceSaving">
+                    <i class="fas fa-save"></i>
+                    @(_appearanceSaving ? T("Saving") : T("SaveAppearance"))
+                </button>
+            </div>
+
+            @if (_appearanceLoading)
+            {
+                <div class="spinner" style="margin:1rem auto"></div>
+            }
+            else
+            {
+                <p class="text-muted" style="margin:.25rem 0 1rem">
+                    @T("AdminAppearanceHint")
+                </p>
+
+                <div class="admin-appearance-grid">
+                    @foreach (var preset in AdminAppearancePresets.All)
+                    {
+                        var selected = string.Equals(_appearancePreset, preset.Key, StringComparison.OrdinalIgnoreCase);
+                        <button type="button"
+                                class="admin-appearance-card @(selected ? "is-selected" : "")"
+                                @onclick="() => SelectAppearancePreset(preset.Key)">
+                            <span class="admin-appearance-card__header">
+                                <span>
+                                    <strong>@preset.Name</strong>
+                                    <small>@preset.Description</small>
+                                </span>
+                                @if (selected)
+                                {
+                                    <i class="fas fa-check-circle"></i>
+                                }
+                            </span>
+                            <span class="admin-appearance-card__swatches">
+                                <span style="background:@preset.Sidebar"></span>
+                                <span style="background:@preset.Primary"></span>
+                                <span style="background:@preset.Accent"></span>
+                                <span style="background:@preset.Background"></span>
+                                <span style="background:@preset.Surface"></span>
+                            </span>
+                            <span class="admin-appearance-card__sample"
+                                  style="background:@preset.Background;color:@preset.Text;border-color:@preset.Border">
+                                <span style="background:@preset.Sidebar"></span>
+                                <span>
+                                    <em style="background:@preset.Surface;border-color:@preset.Border"></em>
+                                    <em style="background:@preset.Primary"></em>
+                                    <em style="background:@preset.Accent"></em>
+                                </span>
+                            </span>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </DxTabPage>
+
+    <DxTabPage Text="Glossary" CssClass="fas fa-book">
+        <div class="admin-card" style="margin-top:1rem">
+            <div class="admin-card-title" style="display:flex;align-items:center">
+                <span style="flex:1">Glossary Terms</span>
+                <button class="btn-admin btn-primary"
+                        @onclick="() => OpenTermModal(null)">
+                    <i class="fas fa-plus"></i> Add Term
+                </button>
+            </div>
+
+            @if (_glossaryLoading)
+            {
+                <div class="spinner" style="margin:1rem auto"></div>
+            }
+            else if (!_glossary.Any())
+            {
+                <p class="text-muted" style="margin-top:.75rem">No terms yet.</p>
+            }
+            else
+            {
+                @foreach (var term in _glossary)
+                {
+                    <div style="display:flex;align-items:center;gap:.75rem;
+                                padding:.65rem 0;border-bottom:1px solid var(--border)">
+                        <div style="flex:1">
+                            <div style="font-weight:500">@term.Term</div>
+                            <div class="text-muted" style="font-size:.8rem">
+                                @string.Join(" · ", term.Translations?
+                                    .Select(kv => $"{kv.Key}: {kv.Value}") ?? new List<string>())
+                            </div>
+                        </div>
+                        <button class="btn-admin btn-ghost"
+                                @onclick="() => OpenTermModal(term)">
+                            <i class="fas fa-pencil-alt"></i>
+                        </button>
+                        <button class="btn-admin btn-danger"
+                                @onclick="() => DeleteTerm(term.Id)">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+    </DxTabPage>
+</DxTabs>
+
+@if (_showLanguageModal)
+{
+    <div class="modal-backdrop" @onclick="CloseLanguageModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@T("AddLanguage")</span>
+                <button class="btn-admin btn-ghost" @onclick="CloseLanguageModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label required">@T("DisplayName")</label>
+                    <input class="form-control" value="@_languageForm.Name" @oninput="e => _languageForm.Name = e.Value?.ToString()" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("NativeName")</label>
+                    <input class="form-control" value="@_languageForm.NativeName" @oninput="e => _languageForm.NativeName = e.Value?.ToString()" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label required">@T("LanguageCode")</label>
+                    <input class="form-control"
+                           placeholder="jp"
+                           value="@_languageForm.Slug"
+                           @oninput="e => _languageForm.Slug = e.Value?.ToString() ?? string.Empty" />
+                    <div class="form-hint">@T("LanguageCodeLockedHint")</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("Direction")</label>
+                    <select class="form-control" @bind="_languageForm.Direction">
+                        <option value="ltr">LTR</option>
+                        <option value="rtl">RTL</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("Order")</label>
+                    <div class="form-hint">@T("LanguageOrderAutoHint")</div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.5rem">
+                    <input type="checkbox" @bind="_languageForm.AdminEnabled" />
+                    @T("EnableAdminEditing")
+                </label>
+                <label style="display:flex;align-items:center;gap:.5rem">
+                    <input type="checkbox" @bind="_languageForm.UserEnabled" />
+                    @T("ShowInUserSite")
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseLanguageModal">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="AddLanguage">@T("AddLanguage")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showLanguageSettingsModal)
+{
+    <div class="modal-backdrop" @onclick="CloseLanguageSettingsModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@T("LanguageSettings")</span>
+                <button class="btn-admin btn-ghost" @onclick="CloseLanguageSettingsModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">@T("LanguageCode")</label>
+                    <input class="form-control" value="@_languageSettingsForm.Slug" disabled />
+                    <div class="form-hint">@T("LanguageCodeLockedHint")</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label required">@T("DisplayName")</label>
+                    <input class="form-control"
+                           value="@_languageSettingsForm.Name"
+                           @oninput="e => _languageSettingsForm.Name = e.Value?.ToString()" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("NativeName")</label>
+                    <input class="form-control"
+                           value="@_languageSettingsForm.NativeName"
+                           @oninput="e => _languageSettingsForm.NativeName = e.Value?.ToString()" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseLanguageSettingsModal">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="SaveLanguageSettings">@T("SaveLanguageSettings")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showTermModal)
+{
+    <div class="modal-backdrop" @onclick="CloseTermModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@(_editingTerm is null ? "Add Term" : "Edit Term")</span>
+                <button class="btn-admin btn-ghost" @onclick="CloseTermModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label required">Term (key)</label>
+                    <DxTextBox @bind-Text="_termForm.Term" CssClass="w-100"
+                               NullText="e.g. hero_title" />
+                </div>
+                @foreach (var lang in _languages.Where(l => l.Active))
+                {
+                    <div class="form-group">
+                        <label class="form-label">@lang.Name (@lang.Slug)</label>
+                        <DxTextBox Value="@GetTranslation(lang.Slug)"
+                                   ValueChanged="@((string v) => SetTranslation(lang.Slug, v))"
+                                   CssClass="w-100" />
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseTermModal">Cancel</button>
+                <button class="btn-admin btn-primary"
+                        @onclick="SaveTerm" disabled="@_termSaving">
+                    @(_termSaving ? "Saving..." : "Save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private CancellationTokenSource _cts = new();
+    private ElementReference _languageRowsRef;
+    private DotNetObjectReference<Settings>? _dotNetRef;
+    private bool _languageSortableInitialized;
+    // Languages
+    private List<LanguageModel> _languages    = new();
+    private bool _langsLoading  = true;
+    private bool _langSaving    = false;
+    private string _defaultLanguage = "en";
+    private bool _showLanguageModal;
+    private LanguageModel _languageForm = NewLanguageForm();
+    private bool _showLanguageSettingsModal;
+    private LanguageModel _languageSettingsForm = NewLanguageForm();
+
+    // Admin appearance
+    private bool _appearanceLoading = true;
+    private bool _appearanceSaving;
+    private string _appearancePreset = "navy-gold";
+
+    // Glossary
+    private List<GlossaryTermModel> _glossary = new();
+    private bool _glossaryLoading = true;
+    private GlossaryTermModel? _editingTerm;
+    private GlossaryTermRequest _termForm    = new();
+    private bool _showTermModal = false;
+    private bool _termSaving    = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var langRes = await SettingsService.GetLanguagesAsync();
+            if (_cts.IsCancellationRequested) return;
+            _languages = langRes.Data?.Languages ?? new();
+            ReassignLocalLanguageOrders();
+            _defaultLanguage = langRes.Data?.DefaultLanguage ?? "en";
+            _langsLoading = false;
+
+            var appearanceRes = await SettingsService.GetAdminAppearanceAsync();
+            if (_cts.IsCancellationRequested) return;
+            _appearancePreset = appearanceRes.Data?.Preset ?? "navy-gold";
+            _appearanceLoading = false;
+
+            var glossaryRes = await SettingsService.GetGlossaryAsync();
+            if (_cts.IsCancellationRequested) return;
+            _glossary = glossaryRes.Data ?? new();
+            _glossaryLoading = false;
+        }
+        catch (Exception) when (_cts.IsCancellationRequested) { }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_langsLoading && !_languageSortableInitialized && _languages.Any(l => l.Active))
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+
+            try
+            {
+                await JS.InvokeVoidAsync(
+                    "initAdminSortable",
+                    "settings-languages",
+                    _languageRowsRef,
+                    _dotNetRef,
+                    nameof(OnLanguagesReordered),
+                    "data-language-slug",
+                    ".ez-tab__drag");
+                _languageSortableInitialized = true;
+            }
+            catch
+            {
+                Http.Toast("Language sorting failed to initialize.", 500);
+            }
+        }
+    }
+
+    [JSInvokable]
+    public Task OnLanguagesReordered(List<string> orderedSlugs)
+    {
+        var orderedSet = orderedSlugs.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var activeBySlug = _languages
+            .Where(l => l.Active)
+            .ToDictionary(l => l.Slug, StringComparer.OrdinalIgnoreCase);
+
+        var active = orderedSlugs
+            .Where(slug => activeBySlug.ContainsKey(slug))
+            .Select(slug => activeBySlug[slug])
+            .Concat(_languages
+                .Where(l => l.Active && !orderedSet.Contains(l.Slug))
+                .OrderBy(l => l.Order))
+            .ToList();
+
+        var disabled = _languages.Where(l => !l.Active).OrderBy(l => l.Order).ToList();
+        _languages = active.Concat(disabled).ToList();
+        CompactLocalLanguageOrders();
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+
+        try
+        {
+            await JS.InvokeVoidAsync("disposeAdminSortable", "settings-languages");
+        }
+        catch
+        {
+            // JS may already be disconnected during circuit disposal.
+        }
+
+        _dotNetRef?.Dispose();
+        _cts.Dispose();
+    }
+
+    private async Task SaveLanguages()
+    {
+        NormalizeLanguageFormState();
+        _langSaving = true;
+        var res = await SettingsService.UpdateLanguagesAsync(new SiteSettingsUpdateModel
+        {
+            Languages = _languages.OrderBy(l => l.Order).ToList(),
+            DefaultLanguage = _defaultLanguage
+        });
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            var langRes = await SettingsService.GetLanguagesAsync();
+            _languages = langRes.Data?.Languages ?? new();
+            ReassignLocalLanguageOrders();
+            _defaultLanguage = langRes.Data?.DefaultLanguage ?? _defaultLanguage;
+            await AdminLanguageState.LoadSettingsAsync();
+        }
+        _langSaving = false;
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private string DisplayLanguage(LanguageModel lang) =>
+        string.IsNullOrWhiteSpace(lang.Name) ? lang.Slug.ToUpperInvariant() : lang.Name!;
+
+    private bool IsFallback(LanguageModel lang) =>
+        string.Equals(lang.Slug, _defaultLanguage, StringComparison.OrdinalIgnoreCase);
+
+    private void ChangeFallbackLanguage(ChangeEventArgs e)
+    {
+        var next = NormalizeCode(e.Value?.ToString());
+        if (!_languages.Any(l => string.Equals(l.Slug, next, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        _defaultLanguage = next;
+        var fallback = _languages.First(l => string.Equals(l.Slug, _defaultLanguage, StringComparison.OrdinalIgnoreCase));
+        fallback.Active = true;
+        fallback.AdminEnabled = true;
+        fallback.UserEnabled = true;
+        ReassignLocalLanguageOrders();
+    }
+
+    private void ToggleLanguage(LanguageModel lang, ChangeEventArgs e)
+    {
+        if (IsFallback(lang))
+        {
+            lang.Active = true;
+            return;
+        }
+
+        lang.Active = ReadChecked(e, lang.Active);
+        if (!lang.Active)
+        {
+            lang.AdminEnabled = false;
+            lang.UserEnabled = false;
+        }
+        ReassignLocalLanguageOrders();
+    }
+
+    private void SelectAppearancePreset(string preset)
+    {
+        _appearancePreset = preset;
+    }
+
+    private async Task SaveAdminAppearance()
+    {
+        _appearanceSaving = true;
+        try
+        {
+            var res = await SettingsService.UpdateAdminAppearanceAsync(new AdminAppearanceModel
+            {
+                Preset = _appearancePreset
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success && res.Data is not null)
+                _appearancePreset = res.Data.Preset;
+        }
+        finally
+        {
+            _appearanceSaving = false;
+        }
+    }
+
+    private void OpenLanguageModal()
+    {
+        _languageForm = NewLanguageForm();
+        _showLanguageModal = true;
+    }
+
+    private void CloseLanguageModal() => _showLanguageModal = false;
+
+    private void OpenLanguageSettingsModal(LanguageModel lang)
+    {
+        _languageSettingsForm = new LanguageModel
+        {
+            Slug = lang.Slug,
+            Name = lang.Name,
+            NativeName = lang.NativeName
+        };
+        _showLanguageSettingsModal = true;
+    }
+
+    private void CloseLanguageSettingsModal() => _showLanguageSettingsModal = false;
+
+    private void SaveLanguageSettings()
+    {
+        var code = NormalizeCode(_languageSettingsForm.Slug);
+        var lang = _languages.FirstOrDefault(l => string.Equals(l.Slug, code, StringComparison.OrdinalIgnoreCase));
+        if (lang is null)
+        {
+            CloseLanguageSettingsModal();
+            return;
+        }
+
+        lang.Name = string.IsNullOrWhiteSpace(_languageSettingsForm.Name)
+            ? lang.Slug.ToUpperInvariant()
+            : _languageSettingsForm.Name.Trim();
+        lang.NativeName = string.IsNullOrWhiteSpace(_languageSettingsForm.NativeName)
+            ? lang.Name
+            : _languageSettingsForm.NativeName.Trim();
+
+        CloseLanguageSettingsModal();
+    }
+
+    private void AddLanguage()
+    {
+        var code = NormalizeCode(_languageForm.Slug);
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            Http.Toast("Language code is required.", 400);
+            return;
+        }
+
+        if (_languages.Any(l => string.Equals(l.Slug, code, StringComparison.OrdinalIgnoreCase)))
+        {
+            Http.Toast("Language code already exists. Restore or edit the existing language.", 400);
+            return;
+        }
+
+        _languages.Add(new LanguageModel
+        {
+            Slug = code,
+            Name = string.IsNullOrWhiteSpace(_languageForm.Name) ? code.ToUpperInvariant() : _languageForm.Name.Trim(),
+            NativeName = string.IsNullOrWhiteSpace(_languageForm.NativeName)
+                ? (string.IsNullOrWhiteSpace(_languageForm.Name) ? code.ToUpperInvariant() : _languageForm.Name.Trim())
+                : _languageForm.NativeName.Trim(),
+            Active = true,
+            AdminEnabled = _languageForm.AdminEnabled,
+            UserEnabled = _languageForm.UserEnabled,
+            Direction = string.Equals(_languageForm.Direction, "rtl", StringComparison.OrdinalIgnoreCase) ? "rtl" : "ltr",
+            Order = _languages.Count == 0 ? 1 : _languages.Max(l => l.Order) + 1
+        });
+
+        ReassignLocalLanguageOrders();
+        CloseLanguageModal();
+    }
+
+    private void NormalizeLanguageFormState()
+    {
+        foreach (var lang in _languages)
+        {
+            lang.Slug = NormalizeCode(lang.Slug);
+            lang.Name = string.IsNullOrWhiteSpace(lang.Name) ? lang.Slug.ToUpperInvariant() : lang.Name.Trim();
+            lang.NativeName = string.IsNullOrWhiteSpace(lang.NativeName) ? lang.Name : lang.NativeName.Trim();
+            lang.Direction = string.Equals(lang.Direction, "rtl", StringComparison.OrdinalIgnoreCase) ? "rtl" : "ltr";
+            if (IsFallback(lang))
+            {
+                lang.Active = true;
+                lang.AdminEnabled = true;
+                lang.UserEnabled = true;
+            }
+        }
+
+        ReassignLocalLanguageOrders();
+    }
+
+    private void ReassignLocalLanguageOrders()
+    {
+        _languages = _languages
+            .OrderBy(l => l.Active ? 0 : 1)
+            .ThenBy(l => l.Order <= 0 ? int.MaxValue : l.Order)
+            .ThenBy(DisplayLanguage)
+            .ThenBy(l => l.Slug)
+            .ToList();
+
+        for (var i = 0; i < _languages.Count; i++)
+            _languages[i].Order = i + 1;
+
+        _languageSortableInitialized = false;
+    }
+
+    private void CompactLocalLanguageOrders()
+    {
+        _languages = _languages
+            .Where(l => l.Active)
+            .Concat(_languages.Where(l => !l.Active))
+            .ToList();
+
+        for (var i = 0; i < _languages.Count; i++)
+            _languages[i].Order = i + 1;
+
+        _languageSortableInitialized = false;
+    }
+
+    private static bool ReadChecked(ChangeEventArgs e, bool fallback) =>
+        e.Value is bool value ? value : fallback;
+
+    private static string NormalizeCode(string? code)
+    {
+        code = (code ?? string.Empty).Trim().ToLowerInvariant();
+        return string.Concat(code.Where(c => char.IsLetterOrDigit(c) || c == '-'));
+    }
+
+    private static LanguageModel NewLanguageForm() => new()
+    {
+        Active = true,
+        AdminEnabled = true,
+        UserEnabled = true,
+        Direction = "ltr"
+    };
+
+    // Glossary helpers
+    private string GetTranslation(string slug) =>
+        _termForm.Translations.TryGetValue(slug, out var v) ? v : string.Empty;
+
+    private void SetTranslation(string slug, string value) =>
+        _termForm.Translations[slug] = value;
+
+    private void OpenTermModal(GlossaryTermModel? term)
+    {
+        _editingTerm = term;
+        _termForm = term is null
+            ? new GlossaryTermRequest()
+            : new GlossaryTermRequest
+            {
+                Term = term.Term,
+                Translations = term.Translations is not null
+                    ? new Dictionary<string, string>(term.Translations)
+                    : new()
+            };
+        _showTermModal = true;
+    }
+
+    private void CloseTermModal() => _showTermModal = false;
+
+    private async Task SaveTerm()
+    {
+        _termSaving = true;
+        ApiResponse<GlossaryTermModel> res;
+
+        if (_editingTerm is null)
+            res = await SettingsService.CreateTermAsync(_termForm);
+        else
+            res = await SettingsService.UpdateTermAsync(_editingTerm.Id, _termForm);
+
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            CloseTermModal();
+            var glossaryRes = await SettingsService.GetGlossaryAsync();
+            _glossary = glossaryRes.Data ?? new();
+        }
+        _termSaving = false;
+    }
+
+    private async Task DeleteTerm(string id)
+    {
+        var res = await SettingsService.DeleteTermAsync(id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) _glossary.RemoveAll(t => t.Id == id);
+    }
+}

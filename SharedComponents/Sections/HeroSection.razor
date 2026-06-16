@@ -1,0 +1,64 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    <div style="position: relative; z-index: 1" class="sc-hero sc-hero--@Section.Layout sc-hero-align--@Section.ContentAlignment">
+
+        <div class="sc-hero__text">
+            @if (!string.IsNullOrWhiteSpace(HeroEyebrow))
+            {
+                <p class="sc-hero__tagline">@HeroEyebrow</p>
+            }
+            @if (Section.Heading is not null)
+            {
+                <h1 class="sc-hero__heading sc-hero__heading--@Section.HeadingSize">
+                    @StyleHelper.Lang(Section.Heading, Lang)
+                </h1>
+            }
+            @if (!string.IsNullOrWhiteSpace(HeroDescription))
+            {
+                <p class="sc-hero__sub">
+                    @HeroDescription
+                </p>
+            }
+            @if (Section.Buttons?.Any() == true)
+            {
+                <div class="sc-btn-group">
+                    @foreach (var btn in Section.Buttons.OrderBy(b => b.Order))
+                    {
+                        <a href="@btn.Href" class="sc-btn sc-btn--@btn.Style">
+                            @StyleHelper.Lang(btn.Label, Lang)
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(Section.ImageUrl))
+        {
+            <div class="sc-hero__image">
+                <img src="@Section.ImageUrl"
+                     alt="" />
+            </div>
+        }
+
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicHeroSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private string HeroEyebrow => StyleHelper.Lang(Section.Eyebrow, Lang).Trim();
+    private string HeroDescription => StyleHelper.Lang(Section.Subheading, Lang).Trim();
+}

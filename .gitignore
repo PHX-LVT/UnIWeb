@@ -1,0 +1,57 @@
+# Build output
+bin/
+obj/
+Debug/
+Release/
+TestResults/
+*.user
+*.suo
+*.cache
+*.log
+
+# Visual Studio / Rider / local IDE state
+.vs/
+.vscode/
+.idea/
+*.rsuser
+
+# Local helper/generated folders
+build-check/
+tools/
+tmp/
+temp/
+artifacts/
+
+# Node/package caches if added later
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local secrets/config
+**/appsettings.json
+**/appsettings.*.json
+!**/appsettings.example.json
+!**/appsettings.Sample.json
+
+# Local database backups / exports
+*.bson
+*.archive
+*.dump
+*.bak
+*.zip
+*.7z
+MongoBackups/
+Backups/
+DatabaseBackups/
+
+# Local uploaded assets
+uploads/
+wwwroot/uploads/
+wwwroot/assets/uploads/
+App_Data/
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,23 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-design-block sc-bullet-list-block">
+    <h3>@StyleHelper.Lang(Block.Title, Lang)</h3>
+    <ul>
+        @foreach (var item in Block.Items?.Where(i => i.Visible).OrderBy(i => i.Order) ?? Enumerable.Empty<PublicBulletListItemDto>())
+        {
+            <li>
+                @if (!string.IsNullOrWhiteSpace(item.Icon))
+                {
+                    <i class="@item.Icon"></i>
+                }
+                <span>@StyleHelper.Lang(item.Text, Lang)</span>
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicBulletListBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

@@ -1,0 +1,98 @@
+﻿@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div class="form-group">
+        <label class="form-label">@T("Columns")</label>
+        <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="5" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">@T("DurationMs")</label>
+        <DxSpinEdit @bind-Value="_durationMs" MinValue="200" MaxValue="5000" CssClass="w-100" />
+    </div>
+</div>
+
+<div class="form-group">
+    <label class="form-label">@T("SectionTitle")</label>
+    <LangField @bind-Value="_title" Languages="Languages" />
+</div>
+
+@foreach (var (item, i) in _items.Select((x, i) => (x, i)))
+{
+    <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin-bottom:.5rem">
+        <div style="display:flex;justify-content:space-between">
+            <strong>@T("Stat") @(i + 1)</strong>
+            <button class="btn-admin btn-danger" @onclick="() => _items.RemoveAt(i)"><i class="fas fa-trash"></i></button>
+        </div>
+        <LangField Value="@(item.Label ?? new())" ValueChanged="v => item.Label = v" Languages="Languages" />
+        <DxSpinEdit @bind-Value="item.Value" CssClass="w-100" />
+        <DxTextBox @bind-Text="item.Suffix" NullText="@T("Suffix")" CssClass="w-100" />
+    </div>
+}
+
+<button class="btn-admin btn-outline" @onclick="AddItem"><i class="fas fa-plus"></i> @T("AddStat")</button>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving"><i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))</button>
+</div>
+
+@code {
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private int _columns = 4;
+    private int _durationMs = 1200;
+    private Dictionary<string, string> _title = new();
+    private List<StatItemModel> _items = new();
+    private bool _saving;
+    private string? _loadedSectionId;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override void OnParametersSet()
+    {
+        if (_saving || _loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+
+        _columns = Section.Columns ?? 4;
+        _durationMs = Section.DurationMs ?? 1200;
+        _title = new(Section.SectionTitle ?? new());
+        _items = Section.Stats?.Select(x => new StatItemModel { Label = new(x.Label ?? new()), Value = x.Value, Prefix = x.Prefix, Suffix = x.Suffix, Visible = x.Visible, Order = x.Order }).ToList() ?? new();
+    }
+
+    private void AddItem() => _items.Add(new StatItemModel { Label = new(), Visible = true, Order = _items.Count });
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new StatsSectionUpdateDto
+            {
+                SectionTitle = _title,
+                Columns = _columns,
+                DurationMs = _durationMs,
+                Items = _items.Select(MapItem).ToList(),
+                Visible = Section.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static StatItemDto MapItem(StatItemModel item) => new()
+    {
+        Label = item.Label ?? new(),
+        Value = item.Value,
+        Prefix = item.Prefix,
+        Suffix = item.Suffix,
+        Visible = item.Visible,
+        Order = item.Order
+    };
+}

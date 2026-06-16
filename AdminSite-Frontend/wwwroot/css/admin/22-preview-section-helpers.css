@@ -1,0 +1,39 @@
+/* ============================================================
+   SHARED SECTION CLASSES  (used by preview iframe + UserSite)
+   StyleHelper.GetSectionClass() / GetSectionStyle()
+   ============================================================ */
+
+/* Base â€” every <section data-section-id> gets this */
+.sc-section {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 60px;           /* ensures empty sections are visible in canvas */
+}
+
+/* Padding variants */
+.sc-pad-none  { padding: 0; }
+.sc-pad-sm    { padding: 1.5rem 1.25rem; }
+.sc-pad-md    { padding: 3.5rem 1.25rem; }
+.sc-pad-lg    { padding: 6rem 1.25rem; }
+.sc-pad-xl    { padding: 10rem 1.25rem; }
+
+/* Content-width variants â€” constrain the inner content, not the section bg */
+.sc-width-narrow > *:not([style*="position:absolute"]):not([style*="position: absolute"]) {
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.sc-width-normal > *:not([style*="position:absolute"]):not([style*="position: absolute"]) {
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.sc-width-full > * {
+    width: 100%;
+}
+
+/* Mobile layout */
+@media (max-width: 768px) {
+    .sc-mobile-hide { display: none !important; }
+}

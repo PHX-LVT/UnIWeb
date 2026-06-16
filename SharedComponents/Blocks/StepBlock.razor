@@ -1,0 +1,25 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-design-block sc-step-block">
+    <div class="sc-step-block__marker">
+        @if (!string.IsNullOrWhiteSpace(Block.Icon))
+        {
+            <i class="@Block.Icon"></i>
+        }
+        else
+        {
+            <span>@StyleHelper.Lang(Block.StepLabel, Lang)</span>
+        }
+    </div>
+    <div>
+        <div class="sc-step-block__label">@StyleHelper.Lang(Block.StepLabel, Lang)</div>
+        <h3>@StyleHelper.Lang(Block.Title, Lang)</h3>
+        <p>@StyleHelper.Lang(Block.Description, Lang)</p>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicStepBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

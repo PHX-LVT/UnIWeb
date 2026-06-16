@@ -1,0 +1,36 @@
+@using SharedComponents.Helpers
+@using Contracts.Global
+
+<footer class="sc-footer">
+    <div class="sc-footer__inner">
+        <div class="sc-footer__groups">
+            @if (!string.IsNullOrWhiteSpace(Footer.CompanyName))
+            {
+                <div class="sc-footer__brand">
+                    <div class="sc-footer__brand-name">@Footer.CompanyName</div>
+                </div>
+            }
+            @foreach (var group in Footer.Groups)
+            {
+                <div class="sc-footer__group">
+                    <h4 class="sc-footer__group-title">@group.Label</h4>
+                    <ul class="sc-footer__links">
+                        @foreach (var link in group.Links)
+                        {
+                            <li>
+                                <a href="@link.Href" class="sc-footer__link">@link.Label</a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+        <div class="sc-footer__bottom">
+            <span>© @DateTime.Now.Year @Footer.CompanyName</span>
+        </div>
+    </div>
+</footer>
+
+@code {
+    [Parameter, EditorRequired] public PublicFooter Footer { get; set; } = default!;
+}

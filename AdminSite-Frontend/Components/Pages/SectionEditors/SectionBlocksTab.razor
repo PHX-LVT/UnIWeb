@@ -1,0 +1,38 @@
+@using AdminSite.Models
+
+@if (Section.Type == "columns" && Section.ColumnSlots?.Any() == true)
+{
+    <div class="accordion" id="columnBlocksAccordion">
+        @foreach (var slot in Section.ColumnSlots.OrderBy(s => s.Order))
+        {
+            <div class="card mb-3 border">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-columns me-2"></i>
+                        Column @(slot.Order + 1) <small class="text-muted">(Slot: @slot.Id)</small>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <BlockEditor PageId="@PageId"
+                                 SectionId="@Section.Id"
+                                 SlotId="@slot.Id"
+                                 SectionType="@Section.Type"
+                                 Languages="@Languages" />
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <BlockEditor PageId="@PageId"
+                 SectionId="@Section.Id"
+                 SectionType="@Section.Type"
+                 Languages="@Languages" />
+}
+
+@code {
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+}

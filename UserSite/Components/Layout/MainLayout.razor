@@ -1,0 +1,150 @@
+﻿@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject ThemeService ThemeService
+@inject IJSRuntime JS
+@inject PublicApiService Api
+@inject LanguageService LangService
+@using SharedComponents.Helpers
+
+@if (_ready)
+{
+    <SiteHeader Branding="_branding"
+                Nav="_nav"
+                GlobalButtons="_globalButtons"
+                Lang="@_lang"
+                Languages="_langs"
+                OnLanguageChanged="SwitchLang"
+                Scrolled="_headerScrolled" />
+
+    <main>
+        @Body
+    </main>
+
+    <SiteFooter Footer="_footer" />
+
+    @if (_socialButtons.Any())
+    {
+        <SocialFloat Buttons="_socialButtons" />
+    }
+}
+else
+{
+    <div class="sc-loading"><div class="sc-spinner"></div></div>
+}
+
+@code {
+
+    private bool _ready = false;
+    private bool _disposed = false;
+    private bool _headerScrolled = false;
+    private bool _scrollInitialized = false;
+    private bool _widgetsInitialized = false;
+    private string _lang = "en";
+    private DotNetObjectReference<MainLayout>? _dotNetRef;
+
+    private List<PublicGlobalButton> _globalButtons = new();
+    
+    private PublicBranding _branding = new();
+    private List<PublicNavItem> _nav = new();
+    private PublicFooter _footer = new();
+    private List<PublicSocialButton> _socialButtons = new();
+
+    private List<string> _langs = new() { "en", "vi", "cn" };
+
+    private async Task SwitchLang(string lang)
+    {
+        _lang = lang;
+        await LangService.SetAsync(lang);
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            if (_ready && !_scrollInitialized && !_disposed)
+            {
+                await InitializeHeaderScrollAsync();
+            }
+
+            if (_ready && !_widgetsInitialized && !_disposed)
+            {
+                await JS.InvokeVoidAsync("cmsWidgets.init");
+                _widgetsInitialized = true;
+            }
+
+            return;
+        }
+
+        await LangService.LoadSettingsAsync();
+        StyleHelper.SetFallbackLanguage(LangService.FallbackLanguage);
+        _langs = LangService.Languages.Select(l => l.Code).ToList();
+        _lang = await LangService.GetAsync();
+        if (!_langs.Contains(_lang, StringComparer.OrdinalIgnoreCase))
+        {
+            _lang = "en";
+        }
+
+        var theme = await ThemeService.GetAsync();
+        var css = ThemeService.ToCssVariables(theme);
+        await JS.InvokeVoidAsync("userSiteShell.setThemeVars", css);
+
+        var brandingTask = Api.GetBrandingAsync();
+        var navTask = Api.GetNavigationAsync();
+        var footerTask = Api.GetFooterAsync();
+        var socialTask = Api.GetSocialAsync();
+        var globalButtonsTask = Api.GetGlobalButtonsAsync();
+
+
+        await Task.WhenAll(brandingTask, navTask, footerTask, socialTask, globalButtonsTask);
+
+        _branding = brandingTask.Result;
+        _nav = navTask.Result;
+        _footer = footerTask.Result;
+        _globalButtons = globalButtonsTask.Result;
+        _socialButtons = socialTask.Result;
+
+    
+
+        if (_disposed) return;
+        _ready = true;
+        StateHasChanged();
+    }
+
+    private async Task InitializeHeaderScrollAsync()
+    {
+        _scrollInitialized = true;
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("userSiteShell.initHeaderScroll", _dotNetRef);
+    }
+
+    [JSInvokable]
+    public async Task SetHeaderScrolled(bool scrolled)
+    {
+        if (_disposed || _headerScrolled == scrolled)
+        {
+            return;
+        }
+
+        _headerScrolled = scrolled;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+
+        if (_scrollInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("userSiteShell.disposeHeaderScroll");
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}

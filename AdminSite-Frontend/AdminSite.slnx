@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../AdminSite-API/FullProject.csproj" />
+  <Project Path="../SharedComponents/SharedComponents.csproj" />
+  <Project Path="../UserSite/UserSite.csproj" />
+  <Project Path="AdminSite.csproj" />
+</Solution>

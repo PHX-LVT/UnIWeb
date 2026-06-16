@@ -1,0 +1,130 @@
+﻿@inject AdminBlockService BlockService
+@inject IHttpService Http
+@using Contracts.Admin
+
+<div class="form-group">
+    <label class="form-label">Form Title</label>
+    <LangField @bind-Value="_formTitle" Languages="Languages" />
+</div>
+
+<div class="form-group">
+    <label class="form-label">Fields (@_fields.Count)</label>
+
+    @foreach (var (field, i) in _fields.Select((f, i) => (f, i)))
+    {
+        <div style="border:1px solid var(--border);border-radius:8px;
+            padding:.75rem;margin-bottom:.5rem;background:var(--bg)">
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-bottom:.5rem">
+                <span style="font-weight:500;font-size:.85rem">Field @(i + 1)</span>
+                <button class="btn-admin btn-danger"
+                        style="padding:3px 8px"
+                        @onclick="() => _fields.RemoveAt(i)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;
+                margin-bottom:.5rem">
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">Field Type</label>
+                    <DxComboBox Data="_fieldTypes"
+                                Value="@field.FieldType"
+                                ValueChanged="@((string v) => field.FieldType = v)"
+                                CssClass="w-100" />
+                </div>
+                <div class="form-group" style="margin:0;
+                    display:flex;align-items:flex-end">
+                    <label style="display:flex;align-items:center;
+                        gap:8px;cursor:pointer">
+                        <DxCheckBox Checked="@field.Required"
+                                    CheckedChanged="@((bool v) => field.Required = v)" />
+                        Required
+                    </label>
+                </div>
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">Label</label>
+                <LangField Value="@(field.Label ?? new())"
+                           ValueChanged="@(v => field.Label = v)"
+                           Languages="Languages" />
+            </div>
+        </div>
+    }
+
+    <button class="btn-admin btn-outline" @onclick="AddField">
+        <i class="fas fa-plus"></i> Add Field
+    </button>
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+    </button>
+</div>
+
+@code {
+    [Parameter] public BlockModel Block { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private Dictionary<string, string> _formTitle = new();
+    private List<FormFieldModel> _fields = new();
+    private bool _saving;
+
+    private List<string> _fieldTypes = new()
+    {
+        "text", "email", "phone", "textarea",
+        "select", "checkbox", "date"
+    };
+
+    protected override void OnParametersSet()
+    {
+        _formTitle = new(Block.FormTitle ?? new());
+        _fields = Block.Fields?.Select(f => new FormFieldModel
+        {
+            Id = f.Id,
+            FieldType = f.FieldType,
+            Required = f.Required,
+            Order = f.Order,
+            Label = new(f.Label ?? new())
+        }).ToList() ?? new();
+    }
+
+    private void AddField() => _fields.Add(new FormFieldModel
+    {
+        Id = Guid.NewGuid().ToString(),
+        FieldType = "text",
+        Order = _fields.Count,
+        Label = new()
+    });
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new FormBlockUpdateDto
+            {
+                SubmitButtonLabel = _formTitle,
+                Fields = _fields.Select((f, i) => new FormFieldDto
+                {
+                    Name = string.IsNullOrWhiteSpace(f.Name) ? $"field_{i + 1}" : f.Name,
+                    Type = f.FieldType ?? "text",
+                    Label = f.Label ?? new(),
+                    Required = f.Required,
+                    Options = f.Options,
+                    Order = i
+                }).ToList(),
+                Visible = Block.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

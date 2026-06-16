@@ -1,0 +1,411 @@
+﻿@using AdminSite.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using AdminSite.Models
+@using DevExpress.Blazor
+@using Contracts.Admin
+@using System.Globalization
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+    <div class="form-group">
+        <label class="form-label">@T("Background")</label>
+        <DxComboBox Data="_bgTypes" @bind-Value="_bgType" CssClass="w-100" />
+    </div>
+
+    @if (_style.BackgroundType == "color")
+    {
+        <div class="form-group">
+            <label class="form-label">@T("BackgroundColor")</label>
+            <input type="color" value="@_style.BackgroundColor"
+                   @onchange="e => _style.BackgroundColor = e.Value?.ToString()"
+                   style="width:100%;height:38px;border:1px solid var(--border);
+                          border-radius:6px;cursor:pointer" />
+        </div>
+    }
+
+    @if (_style.BackgroundType == "gradient")
+    {
+        <div class="form-group">
+            <label class="form-label">@T("From")</label>
+            <input type="color" value="@_style.GradientFrom"
+                   @onchange="e => _style.GradientFrom = e.Value?.ToString()"
+                   style="width:100%;height:38px;border:1px solid var(--border);
+                          border-radius:6px;cursor:pointer" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("To")</label>
+            <input type="color" value="@_style.GradientTo"
+                   @onchange="e => _style.GradientTo = e.Value?.ToString()"
+                   style="width:100%;height:38px;border:1px solid var(--border);
+                          border-radius:6px;cursor:pointer" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("Direction")</label>
+            <DxComboBox Data="_gradientDirs" @bind-Value="_gradientDir" CssClass="w-100" />
+        </div>
+    }
+
+    @if (_style.BackgroundType == "video")
+    {
+        <div class="form-group">
+            <label class="form-label">@T("VideoUrl")</label>
+            <DxTextBox @bind-Text="_style.BackgroundVideoUrl" CssClass="w-100" />
+        </div>
+    }
+
+    @if (_style.BackgroundType == "image")
+    {
+        <div class="form-group">
+            <label class="form-label">@T("BackgroundImage")</label>
+            @if (!string.IsNullOrEmpty(_style.BackgroundImageUrl))
+            {
+                <div style="margin-bottom:.5rem">
+                    <img src="@_style.BackgroundImageUrl"
+                         style="max-height:80px;border-radius:6px;
+                                border:1px solid var(--border)" />
+                    <button type="button"
+                            class="btn-admin btn-ghost" style="margin-left:.5rem"
+                            @onclick="ClearBackgroundImage">
+                        <i class="fas fa-times"></i> @T("Remove")
+                    </button>
+                </div>
+            }
+            <InputFile OnChange="OnBgImageSelected" accept="image/*" />
+        </div>
+    }
+
+    @if (_style.BackgroundType is "image" or "video")
+    {
+        <div class="form-group">
+            <label class="form-label">@T("OverlayColor")</label>
+            <input type="color" value="@_style.OverlayColor"
+                   @onchange="e => _style.OverlayColor = e.Value?.ToString()"
+                   style="width:100%;height:38px;border:1px solid var(--border);
+                          border-radius:6px;cursor:pointer" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">
+                @T("OverlayOpacity") (@((_style.OverlayOpacity ?? 0.4).ToString("P0")))
+            </label>
+            <input type="range" min="0" max="1" step="0.05"
+                   value="@(_style.OverlayOpacity ?? 0.4)"
+                   @oninput="SetOverlayOpacity"
+                   style="width:100%" />
+        </div>
+    }
+
+    <div class="form-group">
+        <label class="form-label">@T("Height")</label>
+        <DxComboBox Data="_heights" @bind-Value="_height" CssClass="w-100" />
+    </div>
+
+    @if (_style.Height == "custom")
+    {
+        <div class="form-group">
+            <label class="form-label">@T("CustomMinHeightPx")</label>
+            <DxSpinEdit @bind-Value="_customMinHeightPx" MinValue="120" MaxValue="3000" CssClass="w-100" />
+        </div>
+    }
+
+    <div class="form-group">
+        <label class="form-label">@T("Padding")</label>
+        <DxComboBox Data="_paddings" @bind-Value="_padding" CssClass="w-100" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("ContentWidth")</label>
+        <DxComboBox Data="_widths" @bind-Value="_contentWidth" CssClass="w-100" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("TextColor")</label>
+        <DxComboBox Data="_textColors" @bind-Value="_textColor" CssClass="w-100" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("MobileLayout")</label>
+        <DxComboBox Data="_mobileLayouts" @bind-Value="_mobileLayout" CssClass="w-100" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("BlockLayoutMode")</label>
+        <DxComboBox Data="_blockLayoutModes" @bind-Value="_blockLayoutMode" CssClass="w-100" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("BlockGridColumns")</label>
+        <DxSpinEdit @bind-Value="_blockGridColumns" MinValue="1" MaxValue="12" CssClass="w-100" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("BlockGap")</label>
+        <DxComboBox Data="_blockGaps" @bind-Value="_blockGap" CssClass="w-100" />
+    </div>
+
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;margin-top:.5rem">
+    @if (!string.IsNullOrWhiteSpace(_saveMessage))
+    {
+        <div class="@(_saveSucceeded ? "text-success" : "text-danger")"
+             style="align-self:center;margin-right:auto;font-size:.85rem">
+            @_saveMessage
+        </div>
+    }
+    <button type="button" class="btn-admin btn-ghost" @onclick="OnClose">
+        <i class="fas fa-times"></i> @T("Close")
+    </button>
+    <button type="button"
+            class="btn-admin btn-primary"
+            @onclick:preventDefault="true"
+            @onclick:stopPropagation="true"
+            @onclick="Save"
+            disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("SaveStyle"))
+    </button>
+</div>
+
+@code {
+    [Parameter] public string            PageId    { get; set; } = string.Empty;
+    [Parameter] public string            SectionId { get; set; } = string.Empty;
+    [Parameter] public SectionStyleModel Style     { get; set; } = new();
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private SectionStyleModel _style = new();
+    private bool _saving;
+    private bool _saveSucceeded;
+    private string? _saveMessage;
+    private string? _loadedSectionId;
+    private SectionStyleModel? _loadedStyleRef;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    // Backing properties for all nullable string fields
+    private string _bgType
+    {
+        get => _style.BackgroundType ?? string.Empty;
+        set
+        {
+            if (_style.BackgroundType == value) return;
+
+            _style.BackgroundType = value;
+
+            if (value != "image")
+            {
+                _style.BackgroundImageUrl = string.Empty;
+            }
+
+            if (value != "video")
+            {
+                _style.BackgroundVideoUrl = string.Empty;
+            }
+
+            if (value != "gradient")
+            {
+                _style.GradientFrom = string.Empty;
+                _style.GradientTo = string.Empty;
+                _style.GradientDirection = string.Empty;
+            }
+            if (value != "image" && value != "video")
+            {
+                _style.OverlayColor = string.Empty; // EmptyToNull ? null in DB
+                _style.OverlayOpacity = 0;            // GetOverlayStyle: opacity <= 0 ? display:none
+            }
+        }
+    }
+    private string _gradientDir
+    {
+        get => _style.GradientDirection ?? string.Empty;
+        set => _style.GradientDirection = value;
+    }
+    private string _height
+    {
+        get => _style.Height ?? string.Empty;
+        set => _style.Height = value;
+    }
+    private int _customMinHeightPx
+    {
+        get => Math.Clamp(_style.CustomMinHeightPx ?? 640, 120, 3000);
+        set => _style.CustomMinHeightPx = Math.Clamp(value, 120, 3000);
+    }
+    private string _padding
+    {
+        get => _style.Padding ?? string.Empty;
+        set => _style.Padding = value;
+    }
+    private string _contentWidth
+    {
+        get => _style.ContentWidth ?? string.Empty;
+        set => _style.ContentWidth = value;
+    }
+    private string _textColor
+    {
+        get => _style.TextColor ?? string.Empty;
+        set => _style.TextColor = value;
+    }
+    private string _mobileLayout
+    {
+        get => _style.MobileLayout ?? string.Empty;
+        set => _style.MobileLayout = value;
+    }
+    private string _blockLayoutMode
+    {
+        get => _style.BlockLayoutMode ?? "stack";
+        set => _style.BlockLayoutMode = value;
+    }
+    private int _blockGridColumns
+    {
+        get => Math.Clamp(_style.BlockGridColumns ?? 12, 1, 12);
+        set => _style.BlockGridColumns = Math.Clamp(value, 1, 12);
+    }
+    private string _blockGap
+    {
+        get => _style.BlockGap ?? "medium";
+        set => _style.BlockGap = value;
+    }
+
+    private List<string> _bgTypes       = new() { "none","color","image","gradient","video" };
+    private List<string> _gradientDirs  = new() { "to right","to bottom","to bottom right","to bottom left" };
+    private List<string> _heights       = new() { "auto","half","full","custom" };
+    private List<string> _paddings      = new() { "small","medium","large" };
+    private List<string> _widths        = new() { "narrow","normal","full" };
+    private List<string> _textColors    = new() { "dark","light" };
+    private List<string> _mobileLayouts = new() { "stack","scroll","hide" };
+    private List<string> _blockLayoutModes = new() { "stack","grid","split" };
+    private List<string> _blockGaps = new() { "none","small","medium","large" };
+
+    protected override void OnParametersSet()
+    {
+        if (_saving) return;
+        if (_loadedSectionId == SectionId && ReferenceEquals(_loadedStyleRef, Style)) return;
+        _loadedSectionId = SectionId;
+        _loadedStyleRef = Style;
+        _saveMessage = null;
+
+        _style = new SectionStyleModel
+        {
+            BackgroundType        = Style.BackgroundType ?? "color",
+            BackgroundColor       = Style.BackgroundColor ?? "#ffffff",
+            BackgroundImageUrl = Style.BackgroundImageUrl,
+            BackgroundVideoUrl    = Style.BackgroundVideoUrl,
+            GradientFrom          = Style.GradientFrom ?? "#001a33",
+            GradientTo            = Style.GradientTo ?? "#e5c076",
+            GradientDirection     = NormalizeGradientDirection(Style.GradientDirection),
+            OverlayColor          = Style.OverlayColor,
+            OverlayOpacity        = Style.OverlayOpacity ?? 0.4,
+            Height                = Style.Height ?? "auto",
+            CustomMinHeightPx     = Style.CustomMinHeightPx ?? 640,
+            Padding               = Style.Padding ?? "medium",
+            ContentWidth          = Style.ContentWidth ?? "normal",
+            TextColor             = Style.TextColor ?? "dark",
+            MobileLayout          = Style.MobileLayout ?? "stack",
+            BlockLayoutMode       = Style.BlockLayoutMode ?? "stack",
+            BlockGridColumns      = Math.Clamp(Style.BlockGridColumns ?? 12, 1, 12),
+            BlockGap              = Style.BlockGap ?? "medium"
+
+        };
+    }
+
+    private async Task OnBgImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 5 * 1024 * 1024) return;
+
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", file, maxBytes: 5 * 1024 * 1024);
+        if (res.Success && res.Data is not null)
+        {
+            _style.BackgroundImageUrl = res.Data.Url;
+            Http.Toast("Background image uploaded.", res.StatusCode);
+        }
+        else
+        {
+            Http.Toast(res.Message ?? "Background image upload failed.", res.StatusCode);
+        }
+    }
+
+    private void ClearBackgroundImage()
+    {
+        _style.BackgroundImageUrl = string.Empty;
+    }
+
+    private void SetOverlayOpacity(ChangeEventArgs e)
+    {
+        _style.OverlayOpacity = double.Parse(
+            e.Value?.ToString() ?? "0",
+            CultureInfo.InvariantCulture);
+    }
+
+    private async Task Save()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+            _saveSucceeded = false;
+            _saveMessage = "Saving style...";
+            await InvokeAsync(StateHasChanged);
+
+            var res = await SectionService.UpdateStyleAsync(PageId, SectionId, ToDto());
+            _saveSucceeded = res.Success;
+            _saveMessage = string.IsNullOrWhiteSpace(res.Message)
+                ? (res.Success ? "Style updated." : "Style update failed.")
+                : res.Message;
+            Http.Toast(
+                _saveMessage,
+                res.StatusCode);
+
+            if (res.Success)
+            {
+                await OnSaved.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _saveSucceeded = false;
+            _saveMessage = $"Style update failed: {ex.Message}";
+            Http.Toast(_saveMessage, 500);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private SectionStyleDto ToDto() => new()
+    {
+        BackgroundType = _style.BackgroundType,
+        BackgroundColor = _style.BackgroundColor,
+        BackgroundImageUrl = _style.BackgroundImageUrl,
+        BackgroundVideoUrl = _style.BackgroundVideoUrl,
+        GradientFrom = _style.GradientFrom,
+        GradientTo = _style.GradientTo,
+        GradientDirection = _style.GradientDirection,
+        OverlayColor = _style.OverlayColor,
+        OverlayOpacity = _style.OverlayOpacity,
+        Height = _style.Height,
+        CustomMinHeightPx = _style.CustomMinHeightPx,
+        Padding = _style.Padding,
+        ContentWidth = _style.ContentWidth,
+        TextColor = _style.TextColor,
+        MobileLayout = _style.MobileLayout,
+        BlockLayoutMode = _style.BlockLayoutMode,
+        BlockGridColumns = _style.BlockGridColumns,
+        BlockGap = _style.BlockGap
+    };
+
+    private static string NormalizeGradientDirection(string? direction) => direction switch
+    {
+        "top" => "to bottom",
+        "left" => "to right",
+        "diagonal" => "to bottom right",
+        null or "" => "to bottom",
+        var value => value
+    };
+}

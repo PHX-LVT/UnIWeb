@@ -1,0 +1,72 @@
+@page "/insights/{ContentType}/{ContentSlug}"
+@inject PublicApiService Api
+@inject LanguageService LangService
+@inject IJSRuntime JS
+@using Contracts.Public
+@implements IDisposable
+
+@if (_page is not null)
+{
+    <PageRenderer Page="_page" Lang="@_lang" OnFormSubmit="HandleFormSubmit" />
+}
+else if (_notFound)
+{
+    <div class="sc-not-found">
+        <h1>Page not found</h1>
+    </div>
+}
+
+@code {
+    [Parameter] public string ContentType { get; set; } = string.Empty;
+    [Parameter] public string ContentSlug { get; set; } = string.Empty;
+
+    private PublicPageDto? _page;
+    private bool _notFound;
+    private string? _widgetsInitializedForPageId;
+    private string _lang = "en";
+
+    protected override async Task OnInitializedAsync()
+    {
+        LangService.Changed += HandleLanguageChanged;
+        _lang = await LangService.GetAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _notFound = false;
+        _widgetsInitializedForPageId = null;
+        _page = await Api.GetContentPageAsync(ContentType, ContentSlug);
+        if (_page is null)
+            _notFound = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_page is not null && _widgetsInitializedForPageId != _page.Id)
+        {
+            await JS.InvokeVoidAsync("cmsWidgets.init");
+            _widgetsInitializedForPageId = _page.Id;
+        }
+    }
+
+    private async Task<bool> HandleFormSubmit(
+        string pageId,
+        string sectionId,
+        string blockId,
+        Dictionary<string, string> data)
+    {
+        return _page is not null &&
+               await Api.SubmitFormAsync(_page.FullSlug ?? _page.Slug, sectionId, blockId, data);
+    }
+
+    private void HandleLanguageChanged(string lang)
+    {
+        _lang = lang;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        LangService.Changed -= HandleLanguageChanged;
+    }
+}

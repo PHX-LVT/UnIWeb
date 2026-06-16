@@ -1,0 +1,154 @@
+/* -- Controls bar inside each section overlay -------------- */
+.ez-section-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--primary);
+    border-radius: 0 0 4px 4px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+
+.ez-section-overlay:hover .ez-section-controls {
+    opacity: 1;
+}
+
+.ez-section-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: none;
+    background: rgba(255,255,255,.2);
+    color: #fff;
+    cursor: pointer;
+    font-size: .8rem;
+    font-family: inherit;
+    transition: background .15s;
+}
+
+.ez-section-btn:hover {
+    background: rgba(255,255,255,.38);
+}
+
+.ez-section-btn--danger:hover {
+    background: rgba(220,53,69,.85);
+}
+
+.ez-section-label {
+    flex: 1;
+    font-size: .7rem;
+    font-weight: 600;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin: 0 4px;
+    pointer-events: none;
+}
+
+.ez-section-handle {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 6px;
+    background: rgba(255,255,255,.2);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 4px;
+    cursor: grab;
+    color: #fff;
+    font-size: .85rem;
+}
+
+.ez-section-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.ez-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,.9);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: .85rem;
+    transition: background .15s, color .15s;
+}
+
+    .ez-icon-btn:hover {
+        background: var(--bg);
+        color: var(--text);
+    }
+
+.ez-icon-btn--danger:hover {
+    background: #fde8ea;
+    color: var(--danger);
+    border-color: #f5c2c7;
+}
+
+.ez-freeform-block-overlay {
+    box-sizing: border-box;
+    border: 1px dashed rgba(229, 192, 118, .95);
+    background: rgba(229, 192, 118, .08);
+    color: #001a33;
+    pointer-events: auto;
+}
+
+.ez-freeform-block-overlay--editing {
+    border-style: solid;
+    box-shadow: 0 0 0 2px rgba(229, 192, 118, .22);
+}
+
+.ez-freeform-block-handle {
+    position: absolute;
+    top: -28px;
+    left: 0;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 4px 4px 0 0;
+    background: var(--primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    font-size: .75rem;
+}
+
+.ez-freeform-block-label {
+    position: absolute;
+    top: -28px;
+    left: 32px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 4px 4px 0 0;
+    background: rgba(0, 26, 51, .88);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    pointer-events: none;
+}
+
+.ez-freeform-block-resize {
+    position: absolute;
+    right: -5px;
+    bottom: -5px;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 1px rgba(0, 26, 51, .28);
+    cursor: nwse-resize;
+}

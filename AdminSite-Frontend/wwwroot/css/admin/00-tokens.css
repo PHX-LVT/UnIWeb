@@ -1,0 +1,21 @@
+/* -- Variables --------------------------------------------- */
+:root {
+    /* Main Background Blue */
+    --primary: #0d47a1;
+    --primary-light: #448aff;
+    --primary-hover: #1565c0;
+    /* Sidebar Specifics */
+    --sidebar-bg: #0d47a1;
+    --sidebar-text: #ffffff;
+    --accent: #FAA825;
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --text: #212529;
+    --text-muted: #6c757d;
+    --danger: #dc3545;
+    --success: #198754;
+    --warning: #f0932b;
+    --navbar-h: 52px;
+    --sidebar-w: 240px;
+}

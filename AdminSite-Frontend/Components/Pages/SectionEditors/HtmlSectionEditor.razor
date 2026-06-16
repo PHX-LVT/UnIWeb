@@ -1,0 +1,58 @@
+﻿@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div class="alert alert-info">
+    <i class="fas fa-info-circle"></i>
+    HTML is sanitized on save — scripts and event handlers are stripped automatically.
+</div>
+
+<div class="form-group">
+    <label class="form-label">HTML Content</label>
+    <LangField @bind-Value="_content" Languages="Languages" Multiline="true" />
+    <div class="form-hint">
+        You can use full HTML here. Content is stored per language.
+    </div>
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+    </button>
+</div>
+
+@code {
+    [Parameter] public SectionModel  Section   { get; set; } = new();
+    [Parameter] public string        PageId    { get; set; } = string.Empty;
+    [Parameter] public List<string>  Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved   { get; set; }
+
+    private Dictionary<string, string> _content = new();
+    private bool _saving;
+    private string? _loadedSectionId;
+
+    protected override void OnParametersSet()
+    {
+        if (_saving || _loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+        _content = new(Section.Content ?? new());
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new HtmlSectionUpdateDto
+            {
+                Content = _content,
+                Visible = Section.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

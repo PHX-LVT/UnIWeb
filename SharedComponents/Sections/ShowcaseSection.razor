@@ -1,0 +1,236 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@SectionClass"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+    <div style="position: relative; z-index: 1" class="sc-showcase sc-showcase--@LayoutClass">
+        @{
+            var eyebrow = StyleHelper.Lang(Section.Eyebrow, Lang);
+            var sectionTitle = StyleHelper.Lang(Section.SectionTitle, Lang);
+        }
+        @if (!string.IsNullOrWhiteSpace(eyebrow) || !string.IsNullOrWhiteSpace(sectionTitle) || ShowTopAction)
+        {
+            <div class="sc-showcase__header">
+                <div class="sc-showcase__heading">
+                    @if (!string.IsNullOrWhiteSpace(eyebrow))
+                    {
+                        <div class="sc-showcase__eyebrow">@eyebrow</div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(sectionTitle))
+                    {
+                        <h2 class="sc-showcase__title">@sectionTitle</h2>
+                    }
+                </div>
+                @if (ShowTopAction)
+                {
+                    <a href="@ButtonHref(Section.ActionButton)"
+                       class="@SectionButtonClass(Section.ActionButton)">
+                        @ButtonLabel(Section.ActionButton)
+                    </a>
+                }
+            </div>
+        }
+
+        @if (Section.ShowSearchBar == true && Section.SearchPlaceholder is not null)
+        {
+            <div class="sc-showcase__search">
+                <input type="text"
+                       class="sc-showcase__search-input"
+                       placeholder="@StyleHelper.Lang(Section.SearchPlaceholder, Lang)"
+                       @bind="_search" @bind:event="oninput" />
+            </div>
+        }
+
+        <div class="@ItemsClass">
+            @foreach (var child in FilteredChildren)
+            {
+                var imageUrl = child.Card?.CardImageUrl;
+                var backgroundType = NormalizeBackgroundType(child.Card?.CardBackgroundType, imageUrl);
+                var backgroundColor = NormalizeBackgroundColor(child.Card?.CardBackgroundColor);
+                var imageSrc = imageUrl ?? string.Empty;
+                var hasImage = Section.ShowImage == true && backgroundType == "image" && !string.IsNullOrEmpty(imageSrc);
+                <article @key="child.Id" class="sc-showcase__item @(hasImage ? "sc-showcase__item--has-media" : "")"
+                         style="@ItemStyle(backgroundColor)">
+                    @if (LayoutClass == "card-grid" && hasImage)
+                    {
+                        <div class="sc-showcase__image">
+                            <img src="@imageSrc"
+                                 alt="@CardTitle(child)" />
+                        </div>
+                    }
+
+                    @if (LayoutClass == "media-rows" && hasImage)
+                    {
+                        <img class="sc-showcase__media-bg"
+                             src="@imageSrc"
+                             alt="" />
+                        <div class="sc-showcase__media-overlay"></div>
+                    }
+
+                    <div class="sc-showcase__body">
+                        <h3 class="sc-showcase__item-title">
+                            @CardTitle(child)
+                        </h3>
+                        @if (Section.ShowContent == true)
+                        {
+                            <p class="sc-showcase__item-desc">
+                                @StyleHelper.Lang(child.Card?.CardContent, Lang)
+                            </p>
+                        }
+                    </div>
+
+                    @if (ShowItemLink)
+                    {
+                        <a href="/@child.FullSlug" class="@LinkClass">
+                            @LinkLabel(child)
+                        </a>
+                    }
+                </article>
+            }
+        </div>
+
+        @if (ShowBottomAction)
+        {
+            <div class="@FooterActionClass">
+                <a href="@ButtonHref(Section.ActionButton)"
+                   class="@SectionButtonClass(Section.ActionButton)">
+                    @ButtonLabel(Section.ActionButton)
+                </a>
+            </div>
+        }
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicShowcaseSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private string _search = string.Empty;
+
+    private string LayoutClass => NormalizeLayout(Section.Layout);
+
+    private string SectionClass => $"{StyleHelper.GetSectionClass(Section.Style)} {(LayoutClass == "link-bar" ? "sc-section--showcase-linkbar" : string.Empty)}";
+
+    private string ItemsClass => LayoutClass switch
+    {
+        "card-grid" => $"sc-showcase__items sc-showcase__grid sc-showcase__grid--{Math.Clamp(Section.Columns ?? 4, 1, 4)}",
+        "link-bar" => $"sc-showcase__items sc-showcase__link-grid sc-showcase__link-grid--{Math.Clamp(Section.Columns ?? 10, 1, 10)}",
+        _ => "sc-showcase__items"
+    };
+
+    private IEnumerable<PublicChildCardDto> FilteredChildren =>
+        ApplyLimit(Section.Children?
+            .Where(c => string.IsNullOrEmpty(_search) ||
+                CardTitle(c)
+                    .Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                StyleHelper.Lang(c.Card?.CardContent, Lang)
+                    .Contains(_search, StringComparison.OrdinalIgnoreCase))
+        ?? Enumerable.Empty<PublicChildCardDto>());
+
+    private IEnumerable<PublicChildCardDto> ApplyLimit(IEnumerable<PublicChildCardDto> children) =>
+        Section.Limit is > 0
+            ? children.Take(Math.Clamp(Section.Limit.Value, 1, 200))
+            : children;
+
+    private static string NormalizeLayout(string? layout) => layout switch
+    {
+        "rows" => "media-rows",
+        "cards" => "card-grid",
+        "grid" => "card-grid",
+        "media-rows" => "media-rows",
+        "link-bar" => "link-bar",
+        "card-grid" => "card-grid",
+        _ => "card-grid"
+    };
+
+    private static string ItemStyle(string backgroundColor) =>
+        $"--sc-showcase-item-bg: {backgroundColor}; background-color: {backgroundColor};";
+
+    private string LinkClass =>
+        LayoutClass == "link-bar"
+            ? "sc-showcase__link"
+            : "sc-showcase__link sc-btn sc-btn--filled";
+
+    private bool ShowItemLink => LayoutClass == "link-bar" || Section.ShowItemButton != false;
+
+    private bool ShowTopAction =>
+        IsVisibleButton(Section.ActionButton) && NormalizeActionPosition(Section.ActionButtonPosition) == "top-right";
+
+    private bool ShowBottomAction =>
+        IsVisibleButton(Section.ActionButton) && NormalizeActionPosition(Section.ActionButtonPosition) != "top-right";
+
+    private string FooterActionClass => $"sc-showcase__footer sc-showcase__footer--{NormalizeActionPosition(Section.ActionButtonPosition)}";
+
+    private string LinkLabel(PublicChildCardDto child) =>
+        LayoutClass == "link-bar"
+            ? CardTitle(child)
+            : StyleHelper.Lang(Section.ButtonLabel, Lang) is { Length: > 0 } label
+                ? label
+                : "Learn More";
+
+    private static bool IsVisibleButton(PublicSectionButtonDto? button) =>
+        button is not null && button.Visible && HasButtonLabel(button);
+
+    private static bool HasButtonLabel(PublicSectionButtonDto button) =>
+        button.Label.Values.Any(v => !string.IsNullOrWhiteSpace(v));
+
+    private string ButtonLabel(PublicSectionButtonDto? button) =>
+        button is null
+            ? string.Empty
+            : StyleHelper.Lang(button.Label, Lang) is { Length: > 0 } label
+                ? label
+                : button.Label.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+
+    private static string ButtonHref(PublicSectionButtonDto? button) =>
+        string.IsNullOrWhiteSpace(button?.Href) ? "#" : button.Href!;
+
+    private static string SectionButtonClass(PublicSectionButtonDto? button) =>
+        $"sc-btn sc-btn--{NormalizeButtonStyle(button?.Style)}";
+
+    private static string NormalizeButtonStyle(string? style) => style switch
+    {
+        "outline" => "outline",
+        "ghost" => "ghost",
+        _ => "filled"
+    };
+
+    private static string NormalizeActionPosition(string? position) => position switch
+    {
+        "top-right" => "top-right",
+        "bottom-left" => "bottom-left",
+        "bottom-right" => "bottom-right",
+        _ => "bottom-center"
+    };
+
+    private string CardTitle(PublicChildCardDto child)
+    {
+        var title = StyleHelper.Lang(child.Card?.CardTitle, Lang);
+        return string.IsNullOrWhiteSpace(title)
+            ? StyleHelper.Lang(child.Name, Lang)
+            : title;
+    }
+
+    private static string NormalizeBackgroundType(string? value, string? imageUrl = null) => value switch
+    {
+        "image" => "image",
+        "color" => "color",
+        _ when !string.IsNullOrWhiteSpace(imageUrl) => "image",
+        _ => "color"
+    };
+
+    private static string NormalizeBackgroundColor(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "#ffffff" : value;
+}
+
+
+
+
+

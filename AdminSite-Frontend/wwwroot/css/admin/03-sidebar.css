@@ -1,0 +1,164 @@
+/* -- Sidebar ----------------------------------------------- */
+.ez-sidebar {
+    width: var(--sidebar-w);
+    position: relative;
+    z-index: 20;
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: visible;
+    flex-shrink: 0;
+}
+
+.ez-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 1.25rem 1rem;
+    color: var(--sidebar-text);
+    font-size: 1rem;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    flex-shrink: 0;
+}
+
+.ez-sidebar-brand i {
+        font-size: 1.2rem;
+    }
+
+.ez-sidebar-language {
+    display: grid;
+    gap: 6px;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    flex-shrink: 0;
+}
+
+.ez-sidebar-language label {
+    color: rgba(255,255,255,0.72);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.ez-sidebar-language select {
+    width: 100%;
+    min-height: 34px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.32);
+    background: var(--surface);
+    color: var(--primary);
+    padding: 0 10px;
+    font: inherit;
+}
+
+.ez-sidebar-language option {
+    background: var(--surface);
+    color: var(--primary);
+}
+
+.ez-sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.ez-theme-close {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: calc(100% - 1rem);
+    min-height: 40px;
+    margin: .75rem .5rem .5rem;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .08);
+    color: #fff;
+    font: inherit;
+    font-size: .86rem;
+    font-weight: 800;
+    cursor: pointer;
+    text-align: left;
+}
+
+.ez-theme-close:hover {
+    background: rgba(255, 255, 255, .14);
+}
+
+.ez-theme-close i {
+    width: 16px;
+    color: var(--accent);
+    text-align: center;
+}
+
+/* Footer Pinning Layer */
+.ez-sidebar-footer {
+    margin-top: auto;
+    padding: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+    z-index: 1000;
+    background: var(--sidebar-bg);
+    flex-shrink: 0;
+    /*pointer-events: auto;*/
+}
+
+/* Unified User Button */
+.ez-user-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 6px;
+    width: 100%;
+    font-family: inherit;
+    transition: background 0.15s;
+    /*position: relative;
+    z-index: 1001;
+    pointer-events: auto; */
+}
+
+    .ez-user-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+    }
+
+/* Dropdown Menu Layering */
+.ez-dropdown-menu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0.5rem;
+    right: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+    display: block;
+    z-index: 1002;
+    pointer-events: auto;
+    overflow: hidden;
+}
+
+.ez-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    background: transparent;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+}
+
+.ez-dropdown-item:hover {
+    background: var(--bg);
+}

@@ -1,0 +1,464 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    <div style="position: relative; z-index: 1" class="sc-library sc-library--@LayoutClass">
+        @{
+            var eyebrow = StyleHelper.Lang(Section.Eyebrow, Lang);
+            var title = StyleHelper.Lang(Section.SectionTitle, Lang);
+            var subheading = StyleHelper.Lang(Section.Subheading, Lang);
+            var pageItems = VisibleItems.ToList();
+        }
+        @if (!string.IsNullOrWhiteSpace(eyebrow) || !string.IsNullOrWhiteSpace(title) || !string.IsNullOrWhiteSpace(subheading))
+        {
+            <div class="sc-library__header">
+                @if (!string.IsNullOrWhiteSpace(eyebrow))
+                {
+                    <div class="sc-library__eyebrow">@eyebrow</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(title))
+                {
+                    <h2 class="sc-library__title">@title</h2>
+                }
+                @if (!string.IsNullOrWhiteSpace(subheading))
+                {
+                    <p class="sc-library__subheading">@subheading</p>
+                }
+            </div>
+        }
+
+        @if (TabsEnabled)
+        {
+            <div class="sc-library__tabs" role="tablist" aria-label="Library content types">
+                @foreach (var tab in SourceTypes)
+                {
+                    <button type="button"
+                            role="tab"
+                            class="@TabClass(tab)"
+                            aria-selected="@string.Equals(_activeTab, tab, StringComparison.OrdinalIgnoreCase)"
+                            @onclick="() => SetActiveTab(tab)">
+                        @TypeLabel(tab)
+                    </button>
+                }
+            </div>
+        }
+
+        @if (Section.ShowSearchBar == true || Section.ShowFilters == true)
+        {
+            <div class="@ControlsClass">
+                @if (Section.ShowFilters == true && FilterOptions.Any())
+                {
+                    <select class="sc-library__filter-select" value="@_filter" @onchange="OnFilterChanged" aria-label="Filter library items">
+                        <option value="">All Types</option>
+                        @foreach (var option in FilterOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                }
+                @if (Section.ShowFilters == true && YearOptions.Any())
+                {
+                    <select class="sc-library__filter-select" value="@_yearFilter" @onchange="OnYearFilterChanged" aria-label="Filter library items by year">
+                        <option value="">All Years</option>
+                        @foreach (var year in YearOptions)
+                        {
+                            <option value="@year">@year</option>
+                        }
+                    </select>
+                }
+                @if (Section.ShowSearchBar == true)
+                {
+                    <input type="text"
+                           class="sc-library__search-input"
+                           placeholder="@SearchPlaceholder"
+                           @bind="_search" @bind:event="oninput" />
+                }
+            </div>
+        }
+
+        <div class="@ItemsClass(pageItems.Count)">
+            @foreach (var item in pageItems)
+            {
+                if (LayoutClass == "lists")
+                {
+                    <article @key="item.Id" class="sc-library__item">
+                        <div class="sc-library__list-main">
+                            @if (ShowTime)
+                            {
+                                <span class="sc-library__meta">@ItemDate(item)</span>
+                            }
+                            <h3 class="sc-library__item-title">
+                                @ItemTitle(item)
+                            </h3>
+                        </div>
+                        @if (Section.ShowButton != false)
+                        {
+                            <a class="@ButtonClass"
+                               href="@ItemHref(item)"
+                               target="@Target(item)"
+                               rel="@Rel(item)"
+                               download="@DownloadName(item)">
+                                @ButtonText(item)
+                            </a>
+                        }
+                    </article>
+                }
+                else
+                {
+                    var tag = ItemTag(item);
+                    var isVideo = IsVideo(item);
+                    var summary = StyleHelper.Lang(item.Summary, Lang);
+                    <article @key="item.Id" class="sc-library__item">
+                        @if (ShowTag && !string.IsNullOrWhiteSpace(tag))
+                        {
+                            <span class="sc-library__tag">@tag</span>
+                        }
+                        @if (CanShowImage && !string.IsNullOrWhiteSpace(ImageUrl(item)))
+                        {
+                            if (isVideo)
+                            {
+                                <div class="sc-library__media sc-library__media--video">
+                                    <img src="@ImageUrl(item)" alt="@ItemTitle(item)" />
+                                    <span class="sc-library__play" aria-hidden="true"></span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="sc-library__media">
+                                    <img src="@ImageUrl(item)" alt="@ItemTitle(item)" />
+                                </div>
+                            }
+                        }
+                        else if (CanShowImage)
+                        {
+                            if (isVideo)
+                            {
+                                <div class="sc-library__media sc-library__media--placeholder sc-library__media--video">
+                                    <span>@PlaceholderLabel(item)</span>
+                                    <span class="sc-library__play" aria-hidden="true"></span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="sc-library__media sc-library__media--placeholder" aria-label="@ItemTitle(item)">
+                                    <span>@PlaceholderLabel(item)</span>
+                                </div>
+                            }
+                        }
+                        <div class="sc-library__body">
+                            @if (ShowTagInBody && !string.IsNullOrWhiteSpace(tag))
+                            {
+                                <span class="sc-library__tag">@tag</span>
+                            }
+                            @if (ShowTime)
+                            {
+                                <div class="sc-library__meta">
+                                    <span>@ItemDate(item)</span>
+                                </div>
+                            }
+                            <h3 class="sc-library__item-title">
+                                @ItemTitle(item)
+                            </h3>
+                            @if (Section.ShowSummary != false && LayoutClass != "lists" && !string.IsNullOrWhiteSpace(summary))
+                            {
+                                <p class="sc-library__summary">@summary</p>
+                            }
+                            @if (Section.ShowButton != false)
+                            {
+                                @if (isVideo)
+                                {
+                                    <button type="button"
+                                            class="sc-library__link sc-btn sc-btn--filled"
+                                            data-sc-library-video
+                                            data-video-url="@ItemHref(item)"
+                                            data-video-title="@ItemTitle(item)">
+                                        @ButtonText(item)
+                                    </button>
+                                }
+                                else
+                                {
+                                    <a class="@ButtonClass"
+                                       href="@ItemHref(item)"
+                                       target="@Target(item)"
+                                       rel="@Rel(item)"
+                                       download="@DownloadName(item)">
+                                        @ButtonText(item)
+                                    </a>
+                                }
+                            }
+                        </div>
+                    </article>
+                }
+            }
+        </div>
+
+        @if (PaginationEnabled && TotalPages > 1)
+        {
+            <div class="sc-library__pagination" aria-label="Library pagination">
+                <button type="button" class="sc-library__page-button" disabled="@(_page <= 1)" @onclick="PreviousPage">Prev</button>
+                @for (var page = 1; page <= TotalPages; page++)
+                {
+                    var pageNumber = page;
+                    <button type="button" class="@PageButtonClass(pageNumber)" @onclick="() => GoToPage(pageNumber)">@pageNumber</button>
+                }
+                <button type="button" class="sc-library__page-button" disabled="@(_page >= TotalPages)" @onclick="NextPage">Next</button>
+            </div>
+        }
+    </div>
+
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicLibrarySectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private string _search = string.Empty;
+    private string _filter = string.Empty;
+    private string _yearFilter = string.Empty;
+    private string _activeTab = string.Empty;
+    private int _page = 1;
+
+    protected override void OnParametersSet()
+    {
+        if (TabsEnabled && !SourceTypes.Contains(_activeTab, StringComparer.OrdinalIgnoreCase))
+            _activeTab = SourceTypes.FirstOrDefault() ?? string.Empty;
+
+        if (!TabsEnabled)
+            _activeTab = string.Empty;
+
+        ClampPage();
+    }
+
+    private string LayoutClass => NormalizeLayout(Section.Layout);
+    private int Columns => LayoutClass == "rows"
+        ? Math.Clamp(Section.Columns ?? 2, 1, 2)
+        : Math.Clamp(Section.Columns ?? 3, 1, 6);
+    private int Rows => Math.Clamp(Section.Rows ?? 3, 1, 12);
+    private int Limit => Math.Clamp(Section.Limit ?? 6, 1, 24);
+    private bool TabsEnabled => Section.EnableTabs == true && SourceTypes.Count > 1;
+    private bool PaginationEnabled => Section.EnablePagination == true;
+    private bool ShowTime => Section.ShowTime != false;
+    private int ItemsPerPage => Math.Clamp(Columns * Rows, 1, 48);
+    private bool CanShowImage => Section.ShowImage != false && LayoutClass is "card" or "grid";
+    private bool ShowTag => LayoutClass == "card";
+    private bool ShowTagInBody => LayoutClass == "grid";
+    private string ButtonClass => $"sc-library__link sc-btn sc-btn--{ButtonStyle}";
+    private string ControlsClass =>
+        Section.ShowFilters == true && Section.ShowSearchBar == true
+            ? "sc-library__controls sc-library__controls--filters-search"
+            : "sc-library__controls sc-library__controls--single";
+    private string ButtonStyle => Section.ButtonStyle switch
+    {
+        "outline" => "outline",
+        "ghost" => "ghost",
+        _ => "filled"
+    };
+
+    private string ItemsClass(int itemCount) => LayoutClass switch
+    {
+        "lists" => "sc-library__items sc-library__disclosure-list",
+        "rows" => $"sc-library__items sc-library__rows sc-library__grid--{EffectiveColumns(itemCount)}",
+        "grid" => $"sc-library__items sc-library__grid sc-library__resource-grid sc-library__grid--{EffectiveColumns(itemCount)}",
+        _ => $"sc-library__items sc-library__grid sc-library__grid--{EffectiveColumns(itemCount)}"
+    };
+
+    private int EffectiveColumns(int itemCount) => Math.Clamp(Math.Min(Columns, Math.Max(itemCount, 1)), 1, Columns);
+
+    private List<string> SourceTypes =>
+        (Section.ContentTypes ?? new())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private IEnumerable<PublicLibraryItemDto> ActiveItems
+    {
+        get
+        {
+            var sourceTypes = SourceTypes;
+            var activeType = TabsEnabled ? _activeTab : sourceTypes.FirstOrDefault();
+
+            return (Section.Items ?? new())
+                .Where(i => string.IsNullOrWhiteSpace(activeType) || string.Equals(i.ContentTypeKey, activeType, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private List<string> FilterOptions =>
+        ActiveItems
+            .SelectMany(i => i.Tags ?? new())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t)
+            .ToList();
+
+    private List<string> YearOptions =>
+        ActiveItems
+            .Select(i => (i.PublishedAt ?? i.UpdatedAt).ToLocalTime().Year.ToString())
+            .Where(y => !string.IsNullOrWhiteSpace(y))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(y => y)
+            .ToList();
+
+    private IEnumerable<PublicLibraryItemDto> FilteredItems =>
+        ActiveItems
+            .Where(i => string.IsNullOrWhiteSpace(_filter) || (i.Tags ?? new()).Any(t => string.Equals(t, _filter, StringComparison.OrdinalIgnoreCase)))
+            .Where(i => string.IsNullOrWhiteSpace(_yearFilter) || string.Equals((i.PublishedAt ?? i.UpdatedAt).ToLocalTime().Year.ToString(), _yearFilter, StringComparison.OrdinalIgnoreCase))
+            .Where(i => string.IsNullOrWhiteSpace(_search) ||
+                ItemTitle(i).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                StyleHelper.Lang(i.Summary, Lang).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                (i.Tags ?? new()).Any(t => t.Contains(_search, StringComparison.OrdinalIgnoreCase)));
+
+    private IEnumerable<PublicLibraryItemDto> VisibleItems =>
+        PaginationEnabled
+            ? FilteredItems.Skip((_page - 1) * ItemsPerPage).Take(ItemsPerPage)
+            : FilteredItems.Take(Limit);
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredItems.Count() / (double)ItemsPerPage));
+
+    private string SearchPlaceholder =>
+        StyleHelper.Lang(Section.SearchPlaceholder, Lang) is { Length: > 0 } text ? text : "Search...";
+
+    private void SetActiveTab(string tab)
+    {
+        _activeTab = tab;
+        _filter = string.Empty;
+        _yearFilter = string.Empty;
+        _page = 1;
+    }
+
+    private void OnFilterChanged(ChangeEventArgs e)
+    {
+        _filter = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+    }
+
+    private void OnYearFilterChanged(ChangeEventArgs e)
+    {
+        _yearFilter = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+    }
+
+    private void GoToPage(int page)
+    {
+        _page = Math.Clamp(page, 1, TotalPages);
+    }
+
+    private void PreviousPage() => GoToPage(_page - 1);
+    private void NextPage() => GoToPage(_page + 1);
+
+    private void ClampPage()
+    {
+        if (_page > TotalPages)
+            _page = TotalPages;
+        if (_page < 1)
+            _page = 1;
+    }
+
+    private string TabClass(string tab) =>
+        string.Equals(_activeTab, tab, StringComparison.OrdinalIgnoreCase)
+            ? "sc-library__tab sc-library__tab--active"
+            : "sc-library__tab";
+
+    private string PageButtonClass(int page) =>
+        _page == page
+            ? "sc-library__page-button sc-library__page-button--active"
+            : "sc-library__page-button";
+
+    private static string NormalizeLayout(string? layout) => layout switch
+    {
+        "grid" or "resource-grid" => "grid",
+        "rows" => "rows",
+        "lists" or "compact-list" or "resource-list" => "lists",
+        _ => "card"
+    };
+
+    private static string ImageUrl(PublicLibraryItemDto item) =>
+        !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? item.ThumbnailUrl! : item.HeroImageUrl ?? string.Empty;
+
+    private static string PlaceholderLabel(PublicLibraryItemDto item) =>
+        item.ClickBehavior switch
+        {
+            "download" => "PDF",
+            "video" => "Video",
+            _ => "Report"
+        };
+
+    private string ItemTitle(PublicLibraryItemDto item) =>
+        StyleHelper.Lang(item.Title, Lang) is { Length: > 0 } text ? text : item.Slug;
+
+    private static string ItemTag(PublicLibraryItemDto item) =>
+        item.Tags?.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t))?.Trim() ?? string.Empty;
+
+    private static string ItemDate(PublicLibraryItemDto item) =>
+        (item.PublishedAt ?? item.UpdatedAt).ToLocalTime().ToString("dd MMM yyyy");
+
+    private string ButtonText(PublicLibraryItemDto item)
+    {
+        var configured = StyleHelper.Lang(Section.ButtonLabel, Lang);
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+
+        return item.ClickBehavior switch
+        {
+            "download" => "Download",
+            "video" => "Watch",
+            _ => "Read More"
+        };
+    }
+
+    private static string ItemHref(PublicLibraryItemDto item) =>
+        item.ClickBehavior switch
+        {
+            "download" => item.Attachments.FirstOrDefault()?.Url ?? "#",
+            "video" => item.VideoUrl ?? "#",
+            "external" => item.ExternalUrl ?? "#",
+            _ => $"/insights/{ContentTypeRoute(item.ContentTypeKey)}/{item.Slug}"
+        };
+
+    private static string Target(PublicLibraryItemDto item) =>
+        item.ClickBehavior is "download" or "video" or "external" ? "_blank" : "_self";
+
+    private static string? Rel(PublicLibraryItemDto item) =>
+        item.ClickBehavior is "download" or "video" or "external" ? "noopener" : null;
+
+    private static string? DownloadName(PublicLibraryItemDto item) =>
+        string.Equals(item.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase)
+            ? item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url))?.FileName
+            : null;
+
+    private static bool IsVideo(PublicLibraryItemDto item) =>
+        string.Equals(item.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase);
+
+    private static string TypeLabel(string type)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+            return "Content";
+
+        return string.Join(" ", type
+            .Replace("_", "-")
+            .Split('-', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
+    }
+
+    private static string ContentTypeRoute(string type) => type switch
+    {
+        "article" => "articles",
+        "case-study" => "case-studies",
+        "whitepaper" => "whitepapers",
+        "video" => "videos",
+        "tool" => "tools",
+        "technology" => "technology",
+        _ => $"{type}s"
+    };
+}

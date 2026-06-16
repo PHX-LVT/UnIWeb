@@ -1,0 +1,117 @@
+﻿@inject AdminBlockService BlockService
+@inject IHttpService Http
+@using Contracts.Admin
+
+<div class="form-group">
+    <label class="form-label">@T("Pins") (@_pins.Count)</label>
+
+    @foreach (var (pin, i) in _pins.Select((p, i) => (p, i)))
+    {
+        <div style="border:1px solid var(--border);border-radius:8px;
+            padding:.75rem;margin-bottom:.5rem;background:var(--bg)">
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-bottom:.5rem">
+                <span style="font-weight:500;font-size:.85rem">
+                    @T("Pin") @(i + 1)
+                </span>
+                <button class="btn-admin btn-danger"
+                        style="padding:3px 8px"
+                        @onclick="() => _pins.RemoveAt(i)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+                <div class="form-group">
+                    <label class="form-label">@T("Latitude")</label>
+                    <DxSpinEdit Value="@pin.Lat"
+                                ValueChanged="@((double v) => pin.Lat = v)"
+                                CssClass="w-100" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("Longitude")</label>
+                    <DxSpinEdit Value="@pin.Lng"
+                                ValueChanged="@((double v) => pin.Lng = v)"
+                                CssClass="w-100" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">@T("Label")</label>
+                <DxTextBox @bind-Text="pin.Label" CssClass="w-100"
+                           NullText="e.g. Head Office" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">@T("Notes")</label>
+                <DxMemo @bind-Text="pin.Notes" CssClass="w-100" Rows="2"
+                        NullText="Additional info shown on pin click" />
+            </div>
+        </div>
+    }
+
+    <button class="btn-admin btn-outline" @onclick="AddPin">
+        <i class="fas fa-plus"></i> @T("AddPin")
+    </button>
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
+    </button>
+</div>
+
+@code {
+    [Parameter] public BlockModel Block { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private List<MapPinModel> _pins = new();
+    private bool _saving;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override void OnParametersSet() =>
+        _pins = Block.Pins?.Select(p => new MapPinModel
+        {
+            Id = p.Id,
+            Lat = p.Lat,
+            Lng = p.Lng,
+            Label = p.Label,
+            Notes = p.Notes
+        }).ToList() ?? new();
+
+    private void AddPin() => _pins.Add(new MapPinModel
+    {
+        Id = Guid.NewGuid().ToString(),
+        Lat = 10.7769,
+        Lng = 106.7009
+    });
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new MapBlockUpdateDto
+            {
+                CenterLat = Block.CenterLat ?? 0,
+                CenterLng = Block.CenterLng ?? 0,
+                DefaultZoom = Block.DefaultZoom ?? 12,
+                Pins = _pins.Select(p => new MapPinDto
+                {
+                    Id = p.Id,
+                    Label = p.Label ?? string.Empty,
+                    Lat = p.Lat,
+                    Lng = p.Lng,
+                    Href = p.Href
+                }).ToList(),
+                Visible = Block.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

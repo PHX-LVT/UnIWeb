@@ -1,0 +1,326 @@
+window.initSortable = (container, dotnet) => {
+    if (!container || typeof Sortable === "undefined") return;
+
+    if (window.__ezSectionSortable) {
+        window.__ezSectionSortable.destroy();
+        window.__ezSectionSortable = null;
+    }
+
+    window.__ezSectionSortable = Sortable.create(container, {
+        handle: ".ez-section-handle",
+        animation: 150,
+        onEnd: () => {
+            const ids = [...container.querySelectorAll("[data-section-id]")]
+                .map(el => el.getAttribute("data-section-id"))
+                .filter(Boolean);
+            dotnet.invokeMethodAsync("OnReordered", ids).catch(() => {});
+        }
+    });
+};
+
+window.initSlotSortable = (slotContainer, dotnet, slotId) => {
+    if (!slotContainer || typeof Sortable === "undefined") return;
+
+    Sortable.create(slotContainer, {
+        handle: ".ez-block-handle",
+        group: "blocks",
+        animation: 150,
+        onEnd: () => {
+            const ids = [...slotContainer.querySelectorAll("[data-block-id]")]
+                .map(el => el.getAttribute("data-block-id"))
+                .filter(Boolean);
+            dotnet.invokeMethodAsync("OnBlockReordered", slotId, ids).catch(() => {});
+        }
+    });
+};
+
+window.initAdminSortable = (key, container, dotnet, methodName, idAttribute, handleSelector, context, filterSelector) => {
+    if (!key || !container || !dotnet || !methodName || !idAttribute || typeof Sortable === "undefined") return;
+
+    window.__ezAdminSortables = window.__ezAdminSortables || {};
+    if (window.__ezAdminSortables[key]) {
+        window.__ezAdminSortables[key].destroy();
+        window.__ezAdminSortables[key] = null;
+    }
+
+    window.__ezAdminSortables[key] = Sortable.create(container, {
+        handle: handleSelector || undefined,
+        filter: filterSelector || undefined,
+        preventOnFilter: false,
+        draggable: `[${idAttribute}]`,
+        animation: 150,
+        onEnd: (event) => {
+            if (event.oldIndex === event.newIndex) return;
+
+            const ids = [...container.children]
+                .filter(el => el.hasAttribute(idAttribute))
+                .map(el => el.getAttribute(idAttribute))
+                .filter(Boolean);
+            if (context === undefined || context === null) {
+                dotnet.invokeMethodAsync(methodName, ids).catch(() => {});
+            } else {
+                dotnet.invokeMethodAsync(methodName, context, ids).catch(() => {});
+            }
+        }
+    });
+};
+
+window.initFooterLinkSortables = (root, dotnet) => {
+    if (!root || !dotnet || typeof Sortable === "undefined") return;
+
+    root.querySelectorAll("[data-footer-links-group-id]").forEach(container => {
+        const groupId = container.getAttribute("data-footer-links-group-id");
+        if (!groupId) return;
+
+        const key = `footer-links-${groupId}`;
+        window.__ezAdminSortables = window.__ezAdminSortables || {};
+        if (window.__ezAdminSortables[key]) {
+            window.__ezAdminSortables[key].destroy();
+            window.__ezAdminSortables[key] = null;
+        }
+
+        window.__ezAdminSortables[key] = Sortable.create(container, {
+            handle: ".footer-link-drag",
+            draggable: ".footer-link-row",
+            group: key,
+            animation: 150,
+            direction: "vertical",
+            onEnd: (event) => {
+                if (event.oldIndex === event.newIndex) return;
+
+                const ids = [...container.children]
+                    .filter(el => el.hasAttribute("data-footer-link-id"))
+                    .map(el => el.getAttribute("data-footer-link-id"))
+                    .filter(Boolean);
+                dotnet.invokeMethodAsync("OnFooterLinksReordered", groupId, ids).catch(() => {});
+            }
+        });
+    });
+};
+
+window.disposeFooterLinkSortables = () => {
+    if (!window.__ezAdminSortables) return;
+
+    Object.keys(window.__ezAdminSortables)
+        .filter(key => key.startsWith("footer-links-"))
+        .forEach(key => window.disposeAdminSortable(key));
+};
+
+window.disposeAdminSortable = (key) => {
+    if (!window.__ezAdminSortables) return;
+    if (key && window.__ezAdminSortables[key]) {
+        window.__ezAdminSortables[key].destroy();
+        window.__ezAdminSortables[key] = null;
+        return;
+    }
+
+    if (!key) {
+        Object.keys(window.__ezAdminSortables).forEach(sortableKey => {
+            if (window.__ezAdminSortables[sortableKey]) {
+                window.__ezAdminSortables[sortableKey].destroy();
+                window.__ezAdminSortables[sortableKey] = null;
+            }
+        });
+    }
+};
+
+window.initCanvasOverlay = function (dotNetRef) {
+    if (window.__ezCanvasOverlayTimeouts) {
+        window.__ezCanvasOverlayTimeouts.forEach(clearTimeout);
+    }
+    window.__ezCanvasOverlayTimeouts = [];
+
+    const requestPositions = function () {
+        const iframe = document.getElementById("ez-preview-iframe");
+        if (!iframe || !iframe.contentWindow) return;
+
+        try {
+            if (typeof iframe.contentWindow.reportSectionPositions === "function") {
+                iframe.contentWindow.reportSectionPositions();
+            } else {
+                iframe.contentWindow.postMessage({ type: "ez-request-section-positions" }, window.location.origin);
+            }
+        } catch {
+            try {
+                iframe.contentWindow.postMessage({ type: "ez-request-section-positions" }, window.location.origin);
+            } catch {
+            }
+        }
+    };
+
+    if (window.__ezCanvasOverlayHandler) {
+        window.removeEventListener("message", window.__ezCanvasOverlayHandler);
+    }
+
+    window.__ezCanvasOverlayHandler = function (e) {
+        const iframe = document.getElementById("ez-preview-iframe");
+        if (!iframe || e.source !== iframe.contentWindow || e.origin !== window.location.origin) return;
+        if (e.data && e.data.type === "ez-section-positions") {
+            dotNetRef.invokeMethodAsync(
+                "UpdateSectionPositions",
+                e.data.positions,
+                e.data.documentHeight ?? 2000,
+                e.data.blockPositions || []).catch(() => {});
+        }
+    };
+
+    window.addEventListener("message", window.__ezCanvasOverlayHandler);
+
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (iframe) {
+        iframe.removeEventListener("load", window.__ezCanvasRequestPositions);
+        window.__ezCanvasRequestPositions = requestPositions;
+        iframe.addEventListener("load", window.__ezCanvasRequestPositions);
+    }
+
+    window.__ezCanvasOverlayTimeouts.push(setTimeout(requestPositions, 0));
+    window.__ezCanvasOverlayTimeouts.push(setTimeout(requestPositions, 250));
+    window.__ezCanvasOverlayTimeouts.push(setTimeout(requestPositions, 1000));
+};
+
+window.disposeCanvasOverlay = function () {
+    if (window.__ezSectionSortable) {
+        window.__ezSectionSortable.destroy();
+        window.__ezSectionSortable = null;
+    }
+
+    if (window.__ezCanvasOverlayTimeouts) {
+        window.__ezCanvasOverlayTimeouts.forEach(clearTimeout);
+        window.__ezCanvasOverlayTimeouts = [];
+    }
+
+    if (window.__ezCanvasOverlayHandler) {
+        window.removeEventListener("message", window.__ezCanvasOverlayHandler);
+        window.__ezCanvasOverlayHandler = null;
+    }
+
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (iframe && window.__ezCanvasRequestPositions) {
+        iframe.removeEventListener("load", window.__ezCanvasRequestPositions);
+    }
+    window.__ezCanvasRequestPositions = null;
+};
+
+window.reloadPreviewIframe = function () {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (iframe) iframe.src = iframe.src;
+};
+
+window.applyPreviewThemeCss = function (css) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (!iframe || !iframe.contentDocument || !css) return;
+
+    const doc = iframe.contentDocument;
+    let style = iframe.contentDocument.getElementById("ez-live-theme-css");
+    if (!style) {
+        style = doc.createElement("style");
+        style.id = "ez-live-theme-css";
+        doc.head.appendChild(style);
+    }
+
+    style.textContent = css;
+
+    const root = doc.documentElement;
+    const declarations = css.match(/--[\w-]+\s*:\s*[^;]+;/g) || [];
+    declarations.forEach(declaration => {
+        const separator = declaration.indexOf(":");
+        if (separator < 0) return;
+
+        const name = declaration.slice(0, separator).trim();
+        const value = declaration.slice(separator + 1).replace(/;$/, "").trim();
+        if (name && value) root.style.setProperty(name, value);
+    });
+
+    window.__ezCanvasRequestPositions?.();
+};
+
+window.initFreeformBlockEditor = function (container, dotnet, scale) {
+    if (!container || !dotnet) return;
+
+    container.__ezFreeformDotNet = dotnet;
+    container.__ezFreeformScale = scale || 1;
+
+    if (container.__ezFreeformInitialized) return;
+    container.__ezFreeformInitialized = true;
+
+    container.addEventListener("pointerdown", function (event) {
+        const handle = event.target.closest(".ez-freeform-block-handle, .ez-freeform-block-resize");
+        if (!handle) return;
+
+        const block = handle.closest(".ez-freeform-block-overlay");
+        if (!block) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        block.setPointerCapture?.(event.pointerId);
+
+        const mode = handle.classList.contains("ez-freeform-block-resize") ? "resize" : "drag";
+        const scale = container.__ezFreeformScale || 1;
+        const start = {
+            x: event.clientX,
+            y: event.clientY,
+            left: parseFloat(block.style.left || "0"),
+            top: parseFloat(block.style.top || "0"),
+            width: parseFloat(block.style.width || "0"),
+            height: parseFloat(block.style.height || "0"),
+            sectionLeft: parseFloat(block.dataset.sectionLeft || "0"),
+            sectionTop: parseFloat(block.dataset.sectionTop || "0"),
+            sectionWidth: Math.max(parseFloat(block.dataset.sectionWidth || "1"), 1),
+            sectionHeight: Math.max(parseFloat(block.dataset.sectionHeight || "1"), 1)
+        };
+
+        block.classList.add("ez-freeform-block-overlay--editing");
+
+        function clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+
+        function move(e) {
+            const dx = (e.clientX - start.x) / scale;
+            const dy = (e.clientY - start.y) / scale;
+
+            if (mode === "resize") {
+                const width = clamp(start.width + dx, start.sectionWidth / 12, start.sectionWidth);
+                const height = clamp(start.height + dy, 48, Math.max(48, start.sectionHeight - (start.top - start.sectionTop)));
+                block.style.width = `${width}px`;
+                block.style.height = `${height}px`;
+                return;
+            }
+
+            const width = parseFloat(block.style.width || `${start.width}`);
+            const height = parseFloat(block.style.height || `${start.height}`);
+            const left = clamp(start.left + dx, start.sectionLeft, start.sectionLeft + start.sectionWidth - width);
+            const top = clamp(start.top + dy, start.sectionTop, start.sectionTop + start.sectionHeight - height);
+            block.style.left = `${left}px`;
+            block.style.top = `${top}px`;
+        }
+
+        function up(e) {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            block.classList.remove("ez-freeform-block-overlay--editing");
+
+            const left = parseFloat(block.style.left || `${start.left}`);
+            const top = parseFloat(block.style.top || `${start.top}`);
+            const width = parseFloat(block.style.width || `${start.width}`);
+            const height = parseFloat(block.style.height || `${start.height}`);
+
+            const x = clamp(Math.round((left - start.sectionLeft) / start.sectionWidth * 12), 0, 11);
+            const y = clamp(Math.round((top - start.sectionTop) / 48), 0, 60);
+            const w = clamp(Math.round(width / start.sectionWidth * 12), 1, 12);
+            const h = clamp(Math.round(height / 48), 1, 40);
+
+            container.__ezFreeformDotNet.invokeMethodAsync(
+                "SaveFreeformBlockLayout",
+                block.dataset.sectionId,
+                block.dataset.blockId,
+                x,
+                y,
+                w,
+                h).catch(() => {});
+        }
+
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+    });
+};

@@ -1,0 +1,967 @@
+﻿@inject AdminBlockService BlockService
+@inject IHttpService Http
+@implements IDisposable
+
+@if (_loading)
+{
+    <div style="text-align:center;padding:1rem">
+        <div class="spinner" style="margin:0 auto"></div>
+    </div>
+}
+else
+{
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-bottom:1rem">
+        <span style="font-weight:600;font-size:.85rem;color:var(--primary)">
+            @T("Blocks") (@_blocks.Count)
+        </span>
+        <button class="btn-admin btn-primary"
+                @onclick="TogglePicker">
+            <i class="fas fa-plus"></i> @T("AddBlock")
+        </button>
+    </div>
+
+    @if (_showPicker)
+    {
+        <div class="block-picker">
+            <div class="block-picker__header">
+                <div>
+                    <strong>@T("AddBlock")</strong>
+                    <span>@T("ChooseBlock")</span>
+                </div>
+                <button class="btn-admin btn-ghost"
+                        @onclick="() => _showPicker = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            @foreach (var group in _blockGroups)
+            {
+                <div class="block-picker__group">@group.Title</div>
+                <div class="block-picker__grid">
+                    @foreach (var t in group.Types)
+                    {
+                        <button class="block-picker__card"
+                                @onclick="() => AddBlock(t.Key)"
+                                disabled="@_creatingBlock">
+                            <i class="fas @t.Value.Icon"></i>
+                            <span>@t.Value.Label</span>
+                            <small>@t.Value.Desc</small>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (!_blocks.Any())
+    {
+        <div style="text-align:center;padding:1.5rem;border:2px dashed var(--border);
+                    border-radius:8px">
+            <i class="fas fa-cubes"
+               style="font-size:1.75rem;color:var(--border);margin-bottom:.5rem"></i>
+            <p class="text-muted" style="font-size:.85rem">@T("NoBlocksYet")</p>
+        </div>
+    }
+    else
+    {
+        @foreach (var block in OrderedBlocks)
+        {
+            <div class="block-card @(block.Id == _activeBlockId ? "active" : "")">
+                <div class="block-card-header"
+                     @onclick="() => ToggleBlock(block.Id)">
+                    <div style="display:flex;align-items:center;gap:.6rem">
+                        <i class="fas fa-grip-vertical text-muted"
+                           style="cursor:grab;font-size:.8rem"></i>
+                        <span class="block-type-badge">
+                            @BlockIcon(block.Type) @block.Type
+                        </span>
+                        @if (!block.Visible)
+                        {
+                            <span class="badge badge-draft">@T("Hidden")</span>
+                        }
+                    </div>
+                    <div style="display:flex;align-items:center;gap:.4rem"
+                         @onclick:stopPropagation="true">
+                        <button class="block-reorder-btn"
+                                title="@T("MoveUp")"
+                                disabled="@(_reorderingBlock || !CanMoveBlock(block, -1))"
+                                @onclick="() => MoveBlock(block, -1)">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                        <button class="block-reorder-btn"
+                                title="@T("MoveDown")"
+                                disabled="@(_reorderingBlock || !CanMoveBlock(block, 1))"
+                                @onclick="() => MoveBlock(block, 1)">
+                            <i class="fas fa-arrow-down"></i>
+                        </button>
+                        <button class="visibility-toggle
+                                @(block.Visible ? "visible" : "hidden")"
+                                @onclick="() => ToggleVisibility(block)">
+                            <i class="fas @(block.Visible
+                                ? "fa-eye" : "fa-eye-slash")"></i>
+                        </button>
+                        <button class="btn-admin btn-danger"
+                                style="padding:3px 8px"
+                                @onclick="() => _confirmDelete = block">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <i class="fas @(block.Id == _activeBlockId
+                            ? "fa-chevron-up" : "fa-chevron-down")"
+                           style="color:var(--text-muted);font-size:.8rem"></i>
+                    </div>
+                </div>
+
+                @if (block.Id == _activeBlockId)
+                {
+                    <div class="block-card-body">
+                        @if (_fullBlock is null)
+                        {
+                            <div style="text-align:center;padding:1rem">
+                                <div class="spinner" style="margin:0 auto"></div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="block-layout-panel">
+                                <div class="block-layout-panel__title">@T("BlockLayout")</div>
+                                <div class="block-layout-panel__grid">
+                                    <label>
+                                        <span>Zone</span>
+                                        <select @bind="_blockZone">
+                                            @foreach (var option in ZoneOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    @if (ContainerOptions.Any() && _fullBlock.Type != "container")
+                                    {
+                                        <label>
+                                            <span>Parent Container</span>
+                                            <select @bind="_parentBlockId">
+                                                <option value="">None</option>
+                                                @foreach (var container in ContainerOptions)
+                                                {
+                                                    <option value="@container.Id">@BlockDisplayName(container)</option>
+                                                }
+                                            </select>
+                                        </label>
+                                    }
+                                    <label>
+                                        <span>@T("Width")</span>
+                                        <select @bind="_layoutWidth">
+                                            @foreach (var option in _widthOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>@T("ColumnSpan")</span>
+                                        <input type="number" min="1" max="12" @bind="_layoutColumnSpan" />
+                                    </label>
+                                    <label>
+                                        <span>@T("Align")</span>
+                                        <select @bind="_layoutAlign">
+                                            @foreach (var option in _alignOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>@T("Justify")</span>
+                                        <select @bind="_layoutJustify">
+                                            @foreach (var option in _justifyOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>@T("Padding")</span>
+                                        <select @bind="_layoutPadding">
+                                            @foreach (var option in _spaceOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>@T("Margin")</span>
+                                        <select @bind="_layoutMargin">
+                                            @foreach (var option in _spaceOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>@T("BackgroundColor")</span>
+                                        <input type="text" placeholder="#ffffff" @bind="_layoutBackgroundColor" />
+                                    </label>
+                                    <label>
+                                        <span>@T("BorderRadius")</span>
+                                        <select @bind="_layoutBorderRadius">
+                                            @foreach (var option in _radiusOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>@T("ZIndex")</span>
+                                        <input type="number" min="0" max="20" @bind="_layoutZIndex" />
+                                    </label>
+                                    <label>
+                                        <span>@T("FreeformX")</span>
+                                        <input type="number" min="0" max="11" @bind="_layoutX" />
+                                    </label>
+                                    <label>
+                                        <span>@T("FreeformY")</span>
+                                        <input type="number" min="0" max="60" @bind="_layoutY" />
+                                    </label>
+                                    <label>
+                                        <span>@T("FreeformW")</span>
+                                        <input type="number" min="1" max="12" @bind="_layoutW" />
+                                    </label>
+                                    <label>
+                                        <span>@T("FreeformH")</span>
+                                        <input type="number" min="1" max="40" @bind="_layoutH" />
+                                    </label>
+                                </div>
+                                <p class="block-layout-panel__hint">@T("FreeformHint")</p>
+                                <div class="block-layout-panel__actions">
+                                    <button type="button"
+                                            class="btn-admin btn-primary"
+                                            disabled="@_savingLayout"
+                                            @onclick="SaveBlockLayout">
+                                        <i class="fas fa-save"></i> @(_savingLayout ? T("Saving") : T("SaveLayout"))
+                                    </button>
+                                </div>
+                            </div>
+
+                            @switch (_fullBlock.Type)
+                            {
+                                case "text":
+                                    <TextBlockEditor Block="_fullBlock"
+                                                     PageId="@PageId"
+                                                     SectionId="@SectionId"
+                                                     Languages="Languages"
+                                                     OnSaved="HandleBlockSaved" />
+                                    break;
+                                case "image":
+                                    <ImageBlockEditor Block="_fullBlock"
+                                                      PageId="@PageId"
+                                                      SectionId="@SectionId"
+                                                      Languages="Languages"
+                                                      OnSaved="HandleBlockSaved" />
+                                    break;
+                                case "video":
+                                    <VideoBlockEditor Block="_fullBlock"
+                                                      PageId="@PageId"
+                                                      SectionId="@SectionId"
+                                                      OnSaved="HandleBlockSaved" />
+                                    break;
+                                case "file":
+                                    <FileBlockEditor Block="_fullBlock"
+                                                     PageId="@PageId"
+                                                     SectionId="@SectionId"
+                                                     OnSaved="HandleBlockSaved" />
+                                    break;
+                                case "map":
+                                    <MapBlockEditor Block="_fullBlock"
+                                                    PageId="@PageId"
+                                                    SectionId="@SectionId"
+                                                    OnSaved="HandleBlockSaved" />
+                                    break;
+                                case "form":
+                                    <FormBlockEditor Block="_fullBlock"
+                                                     PageId="@PageId"
+                                                     SectionId="@SectionId"
+                                                     Languages="Languages"
+                                                     OnSaved="HandleBlockSaved" />
+                                    break;
+                                case "card":
+                                case "button":
+                                case "metric":
+                                case "bullet-list":
+                                case "step":
+                                case "icon":
+                                case "container":
+                                    <DesignBlockEditor Block="_fullBlock"
+                                                       PageId="@PageId"
+                                                       SectionId="@SectionId"
+                                                       Languages="Languages"
+                                                       OnSaved="HandleBlockSaved" />
+                                    break;
+                                default:
+                                    <p class="text-muted">@T("UnknownBlockType")</p>
+                                    break;
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+}
+
+<BlockDeleteDialog Block="_confirmDelete"
+                   ConfirmTitle="@T("ConfirmDelete")"
+                   CancelText="@T("Cancel")"
+                   DeleteText="@T("Delete")"
+                   OnCancel="ClearDelete"
+                   OnConfirm="ConfirmDelete" />
+
+<style>
+    .block-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: .5rem;
+        overflow: hidden;
+        transition: border-color .15s;
+    }
+    .block-card.active { border-color: var(--primary-light); }
+    .block-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .625rem .875rem;
+        cursor: pointer;
+        user-select: none;
+    }
+    .block-card-header:hover { background: var(--bg); }
+    .block-card-body {
+        padding: 1rem;
+        border-top: 1px solid var(--border);
+        background: #fafbfd;
+    }
+    .block-layout-panel {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        padding: .875rem;
+        margin-bottom: 1rem;
+    }
+    .block-layout-panel__title {
+        color: var(--primary);
+        font-size: .84rem;
+        font-weight: 700;
+        margin-bottom: .75rem;
+    }
+    .block-layout-panel__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+        gap: .75rem;
+    }
+    .block-layout-panel__grid label {
+        display: flex;
+        flex-direction: column;
+        gap: .3rem;
+        font-size: .75rem;
+        font-weight: 600;
+        color: var(--text-muted);
+    }
+    .block-layout-panel__grid select,
+    .block-layout-panel__grid input {
+        min-height: 34px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: .25rem .45rem;
+        color: var(--text);
+        background: #fff;
+    }
+    .block-layout-panel__hint {
+        margin: .65rem 0 0;
+        font-size: .72rem;
+        color: var(--text-muted);
+        line-height: 1.45;
+    }
+    .block-layout-panel__actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: .75rem;
+    }
+    .block-reorder-btn {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: border-color .15s, color .15s, background .15s;
+    }
+    .block-reorder-btn:hover:not(:disabled) {
+        border-color: var(--primary-light);
+        color: var(--primary);
+        background: #f0f4ff;
+    }
+    .block-reorder-btn:disabled {
+        cursor: default;
+        opacity: .42;
+    }
+    .block-type-badge {
+        font-size: .78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--primary-light);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .block-picker {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: .875rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, .08);
+    }
+    .block-picker__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-bottom: .875rem;
+    }
+    .block-picker__header strong {
+        display: block;
+        font-size: .9rem;
+        color: var(--text);
+    }
+    .block-picker__header span {
+        display: block;
+        font-size: .78rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+    .block-picker__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+        gap: .625rem;
+        margin-bottom: .875rem;
+    }
+    .block-picker__group {
+        margin: .875rem 0 .5rem;
+        color: var(--primary);
+        font-size: .76rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+    }
+    .block-picker__card {
+        min-height: 112px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: .875rem .625rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--text);
+        text-align: center;
+        cursor: pointer;
+        font-family: inherit;
+        transition: border-color .15s, background .15s, transform .15s;
+    }
+    .block-picker__card:hover:not(:disabled) {
+        border-color: var(--primary);
+        background: #f0f4ff;
+        transform: translateY(-1px);
+    }
+    .block-picker__card:disabled {
+        cursor: wait;
+        opacity: .65;
+    }
+    .block-picker__card i {
+        font-size: 1.35rem;
+        color: var(--primary-light);
+    }
+    .block-picker__card span {
+        font-size: .83rem;
+        font-weight: 700;
+    }
+    .block-picker__card small {
+        font-size: .72rem;
+        line-height: 1.35;
+        color: var(--text-muted);
+    }
+    .block-delete-dialog {
+        background: var(--surface);
+    }
+    .block-delete-dialog__header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        color: var(--primary);
+        font-size: .95rem;
+        font-weight: 700;
+    }
+    .block-delete-dialog__body {
+        padding: 1.25rem;
+    }
+    .block-delete-dialog__body p {
+        margin: 0;
+    }
+    .block-delete-dialog__footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: .5rem;
+        padding: 1rem 1.25rem;
+        border-top: 1px solid var(--border);
+    }
+</style>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+  
+   
+    [Parameter] public string? SlotId { get; set; }
+    [Parameter] public string       PageId    { get; set; } = string.Empty;
+    [Parameter] public string       SectionId { get; set; } = string.Empty;
+    [Parameter] public string?      SectionType { get; set; }
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<BlockModel> _blocks     = new();
+    private BlockModel?      _fullBlock;
+    private string?          _activeBlockId;
+    private BlockModel?      _confirmDelete;
+    private bool             _loading    = true;
+    private bool             _showPicker = false;
+    private bool             _creatingBlock = false;
+    private bool             _reorderingBlock = false;
+    private bool             _savingLayout = false;
+    private string?          _loadedPageId;
+    private string?          _loadedSectionId;
+    private string?          _loadedSlotId;
+    private List<BlockModel> OrderedBlocks =>
+        _blocks.OrderBy(b => b.Order).ThenBy(b => b.Id).ToList();
+    private List<BlockModel> ContainerOptions =>
+        _blocks
+            .Where(b => b.Type == "container" && b.Id != _activeBlockId)
+            .OrderBy(b => b.Order)
+            .ThenBy(b => b.Id)
+            .ToList();
+
+    private record BlockTypeMeta(string Label, string Icon, string Desc);
+    private record BlockTypeGroup(string Title, Dictionary<string, BlockTypeMeta> Types);
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private List<string> _widthOptions = new() { "auto", "full", "half", "third" };
+    private List<string> _alignOptions = new() { "stretch", "start", "center", "end" };
+    private List<string> _justifyOptions = new() { "start", "center", "end" };
+    private List<string> _spaceOptions = new() { "none", "small", "medium", "large" };
+    private List<string> _radiusOptions = new() { "none", "small", "medium", "large" };
+    private List<string> ZoneOptions => SectionType switch
+    {
+        "cta" => new() { "default", "right", "below" },
+        "list" => new() { "default", "header", "below" },
+        "testimonial" => new() { "default", "header", "below" },
+        _ => new() { "default" }
+    };
+
+    private string _blockZone
+    {
+        get => NormalizeBlockZone(_fullBlock?.BlockZone);
+        set
+        {
+            if (_fullBlock is not null)
+                _fullBlock.BlockZone = NormalizeBlockZone(value);
+        }
+    }
+    private string _parentBlockId
+    {
+        get => _fullBlock?.ParentBlockId ?? string.Empty;
+        set
+        {
+            if (_fullBlock is null)
+                return;
+
+            _fullBlock.ParentBlockId = value ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(value))
+                _fullBlock.BlockZone = "default";
+        }
+    }
+
+    private string _layoutWidth
+    {
+        get => EnsureLayout().Width ?? "auto";
+        set => EnsureLayout().Width = value;
+    }
+    private int _layoutColumnSpan
+    {
+        get => Math.Clamp(EnsureLayout().ColumnSpan ?? 12, 1, 12);
+        set => EnsureLayout().ColumnSpan = Math.Clamp(value, 1, 12);
+    }
+    private string _layoutAlign
+    {
+        get => EnsureLayout().Align ?? "stretch";
+        set => EnsureLayout().Align = value;
+    }
+    private string _layoutJustify
+    {
+        get => EnsureLayout().Justify ?? "start";
+        set => EnsureLayout().Justify = value;
+    }
+    private string _layoutPadding
+    {
+        get => EnsureLayout().Padding ?? "none";
+        set => EnsureLayout().Padding = value;
+    }
+    private string _layoutMargin
+    {
+        get => EnsureLayout().Margin ?? "none";
+        set => EnsureLayout().Margin = value;
+    }
+    private string _layoutBackgroundColor
+    {
+        get => EnsureLayout().BackgroundColor ?? string.Empty;
+        set => EnsureLayout().BackgroundColor = value;
+    }
+    private string _layoutBorderRadius
+    {
+        get => EnsureLayout().BorderRadius ?? "none";
+        set => EnsureLayout().BorderRadius = value;
+    }
+    private int _layoutZIndex
+    {
+        get => Math.Clamp(EnsureLayout().ZIndex ?? 1, 0, 20);
+        set => EnsureLayout().ZIndex = Math.Clamp(value, 0, 20);
+    }
+    private int _layoutX
+    {
+        get => Math.Clamp(EnsureLayout().X ?? 0, 0, 11);
+        set => EnsureLayout().X = Math.Clamp(value, 0, 11);
+    }
+    private int _layoutY
+    {
+        get => Math.Clamp(EnsureLayout().Y ?? 0, 0, 60);
+        set => EnsureLayout().Y = Math.Clamp(value, 0, 60);
+    }
+    private int _layoutW
+    {
+        get => Math.Clamp(EnsureLayout().W ?? 4, 1, 12);
+        set => EnsureLayout().W = Math.Clamp(value, 1, 12);
+    }
+    private int _layoutH
+    {
+        get => Math.Clamp(EnsureLayout().H ?? 2, 1, 40);
+        set => EnsureLayout().H = Math.Clamp(value, 1, 40);
+    }
+
+    private List<BlockTypeGroup> _blockGroups = new()
+    {
+        new("Content Blocks", new()
+        {
+            ["text"]  = new("Text",  "fa-font",        "Multilingual title and rich content"),
+            ["image"] = new("Image", "fa-image",        "Single image with alt text"),
+            ["video"] = new("Video", "fa-play-circle",  "YouTube or Vimeo embed"),
+            ["file"]  = new("File",  "fa-file-alt",     "Downloadable PDF or document"),
+            ["map"]   = new("Map",   "fa-map-marker-alt","Interactive map with pins"),
+            ["form"]  = new("Form",  "fa-wpforms",      "Dynamic form with submissions"),
+        }),
+        new("Design Blocks", new()
+        {
+            ["card"] = new("Card", "fa-id-card", "Image, title, text, and optional link"),
+            ["button"] = new("Button", "fa-hand-pointer", "Standalone call-to-action"),
+            ["metric"] = new("Metric", "fa-chart-line", "Large number with supporting label"),
+            ["bullet-list"] = new("Bullet List", "fa-list-check", "Checklist or value list"),
+            ["step"] = new("Step", "fa-shoe-prints", "Process step with marker"),
+            ["icon"] = new("Icon", "fa-icons", "Icon with label and short text"),
+        }),
+        new("Structure Blocks", new()
+        {
+            ["container"] = new("Container", "fa-layer-group", "Nested layout area for grouped blocks"),
+        })
+    };
+     private CancellationTokenSource _cts = new();
+
+public void Dispose()
+{
+    _cts.Cancel();
+    _cts.Dispose();
+}
+    protected override async Task OnInitializedAsync()
+    {
+        if (_loadedSectionId is null)
+        {
+            await ReloadBlocks();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedPageId != PageId || _loadedSectionId != SectionId || _loadedSlotId != SlotId)
+        {
+            _loadedPageId = PageId;
+            _loadedSectionId = SectionId;
+            _loadedSlotId = SlotId;
+            _activeBlockId = null;
+            _fullBlock = null;
+            await ReloadBlocks();
+        }
+    }
+
+  private async Task ReloadBlocks()
+{
+    _loading = true;
+    var res = await BlockService.GetAllAsync(PageId, SectionId);
+    _blocks = res.Data ?? new();
+
+    if (!string.IsNullOrEmpty(SlotId))
+        _blocks = _blocks.Where(b => b.ColumnSlotId == SlotId).ToList();
+
+    _loading = false;
+}
+
+    private async Task ToggleBlock(string blockId)
+    {
+        if (_activeBlockId == blockId)
+        {
+            _activeBlockId = null;
+            _fullBlock     = null;
+            return;
+        }
+
+        _activeBlockId = blockId;
+        _fullBlock     = null;
+
+        // Fetch full block so image/file base64 is included.
+        await LoadFullBlock(blockId);
+    }
+
+    private void TogglePicker() => _showPicker = !_showPicker;
+
+    private async Task AddBlock(string type)
+    {
+        _creatingBlock = true;
+        try
+        {
+            // Use slotted create only when SlotId is set.
+            var res = string.IsNullOrEmpty(SlotId)
+                ? await BlockService.CreateAsync(PageId, SectionId, type)
+                : await BlockService.CreateInSlotAsync(PageId, SectionId, SlotId, type);
+
+            Http.Toast(res.Message, res.StatusCode);
+            if (!res.Success)
+            {
+                return;
+            }
+
+            _showPicker = false;
+            await ReloadBlocks();
+            if (res.Data is not null)
+            {
+                await ToggleBlock(res.Data.Id);
+            }
+            await NotifyChangedAsync();
+        }
+        finally
+        {
+            _creatingBlock = false;
+        }
+    }
+
+    private async Task ToggleVisibility(BlockModel block)
+    {
+        var res = await BlockService.SetVisibilityAsync(
+            PageId, SectionId, block.Id, !block.Visible);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            block.Visible = !block.Visible;
+            await NotifyChangedAsync();
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_confirmDelete is null) return;
+        var res = await BlockService.DeleteAsync(PageId, SectionId, _confirmDelete.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            if (_activeBlockId == _confirmDelete.Id)
+            {
+                _activeBlockId = null;
+                _fullBlock     = null;
+            }
+            await ReloadBlocks();
+            await NotifyChangedAsync();
+        }
+        _confirmDelete = null;
+    }
+
+    private void ClearDelete() => _confirmDelete = null;
+
+    private bool CanMoveBlock(BlockModel block, int direction)
+    {
+        var ordered = OrderedPeerBlocks(block);
+        var index = ordered.FindIndex(b => b.Id == block.Id);
+        var target = index + direction;
+        return index >= 0 && target >= 0 && target < ordered.Count;
+    }
+
+    private async Task MoveBlock(BlockModel block, int direction)
+    {
+        if (_reorderingBlock || !CanMoveBlock(block, direction))
+        {
+            return;
+        }
+
+        var activeBlockId = _activeBlockId;
+        var ordered = OrderedPeerBlocks(block);
+        var index = ordered.FindIndex(b => b.Id == block.Id);
+        var target = index + direction;
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+
+        _reorderingBlock = true;
+        try
+        {
+            var res = await BlockService.ReorderAsync(
+                PageId,
+                SectionId,
+                ordered.Select(b => b.Id).ToList());
+
+            Http.Toast(res.Message, res.StatusCode);
+            if (!res.Success)
+            {
+                return;
+            }
+
+            await ReloadBlocks();
+            await RestoreActiveBlock(activeBlockId);
+            await NotifyChangedAsync();
+        }
+        finally
+        {
+            _reorderingBlock = false;
+        }
+    }
+
+    private List<BlockModel> OrderedPeerBlocks(BlockModel block)
+    {
+        var parent = NormalizeParent(block.ParentBlockId);
+        var zone = NormalizeBlockZone(block.BlockZone);
+
+        return _blocks
+            .Where(b => NormalizeParent(b.ParentBlockId) == parent)
+            .Where(b => NormalizeBlockZone(b.BlockZone) == zone)
+            .OrderBy(b => b.Order)
+            .ThenBy(b => b.Id)
+            .ToList();
+    }
+
+    private async Task NotifyChangedAsync()
+    {
+        if (OnChanged.HasDelegate)
+        {
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private async Task HandleBlockSaved()
+    {
+        var activeBlockId = _activeBlockId;
+        await ReloadBlocks();
+        await RestoreActiveBlock(activeBlockId);
+        await NotifyChangedAsync();
+    }
+
+    private async Task RestoreActiveBlock(string? activeBlockId)
+    {
+        if (!string.IsNullOrEmpty(activeBlockId) &&
+            _blocks.Any(b => b.Id == activeBlockId))
+        {
+            _activeBlockId = activeBlockId;
+            await LoadFullBlock(activeBlockId);
+            return;
+        }
+
+        _activeBlockId = null;
+        _fullBlock = null;
+    }
+
+    private async Task LoadFullBlock(string blockId)
+    {
+        var res = await BlockService.GetByIdAsync(PageId, SectionId, blockId);
+        _fullBlock = res.Data;
+        if (_fullBlock is not null)
+            _fullBlock.Layout ??= new BlockLayoutModel();
+    }
+
+    private BlockLayoutModel EnsureLayout()
+    {
+        _fullBlock ??= new BlockModel();
+        _fullBlock.Layout ??= new BlockLayoutModel();
+        return _fullBlock.Layout;
+    }
+
+    private async Task SaveBlockLayout()
+    {
+        if (_fullBlock is null || _savingLayout)
+            return;
+
+        _savingLayout = true;
+        try
+        {
+            var dto = BlockUpdateDtoMapper.Build(_fullBlock);
+            var res = await BlockService.UpdateAsync(PageId, SectionId, _fullBlock.Id, dto);
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success)
+            {
+                await HandleBlockSaved();
+            }
+        }
+        finally
+        {
+            _savingLayout = false;
+        }
+    }
+
+    private static string NormalizeBlockZone(string? zone) =>
+        string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();
+
+    private static string NormalizeParent(string? parentBlockId) =>
+        string.IsNullOrWhiteSpace(parentBlockId) ? string.Empty : parentBlockId;
+
+    private string BlockDisplayName(BlockModel block)
+    {
+        var title = LangValue(block.Title);
+        return string.IsNullOrWhiteSpace(title) ? $"Container {block.Order + 1}" : title;
+    }
+
+    private string LangValue(Dictionary<string, string>? values)
+    {
+        if (values is null || values.Count == 0)
+            return string.Empty;
+
+        if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+
+        return values.TryGetValue("en", out var en) ? en : values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+    }
+
+    private static string BlockIcon(string type) => type switch
+    {
+        "text"  => "📝",
+        "image" => "🖼",
+        "video" => "▶️",
+        "file"  => "📄",
+        "map"   => "📍",
+        "form"  => "📋",
+        "container" => "▦",
+        _       => "⬜"
+    };
+}
+

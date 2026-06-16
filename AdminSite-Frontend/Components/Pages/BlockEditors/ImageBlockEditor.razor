@@ -1,0 +1,91 @@
+﻿@inject AdminBlockService BlockService
+@inject IHttpService Http
+@using Contracts.Admin
+
+<div class="form-group">
+    <label class="form-label">@T("Image")</label>
+    @if (!string.IsNullOrEmpty(_imageUrl))
+    {
+        <div style="margin-bottom:.75rem">
+            <img src="@_imageUrl"
+                 style="max-height:160px;border-radius:6px;
+            border:1px solid var(--border)" />
+            <button class="btn-admin btn-ghost" style="margin-left:.5rem"
+                    @onclick="() => _imageUrl = null">
+                <i class="fas fa-times"></i> @T("Remove")
+            </button>
+        </div>
+    }
+    <InputFile OnChange="OnFileSelected" accept="image/*" />
+    <div class="form-hint">@T("UploadImageHint")</div>
+</div>
+
+<div class="form-group">
+    <label class="form-label">@T("AltText")</label>
+    <LangField @bind-Value="_altText"
+               Languages="Languages"
+               NullText="@T("AltTextHint")" />
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
+    </button>
+</div>
+
+@code {
+    [Parameter] public BlockModel Block { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private string? _imageUrl;
+    private Dictionary<string, string> _altText = new();
+    private bool _saving;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override void OnParametersSet()
+    {
+        _imageUrl = Block.ImageUrl;
+        _altText = new(Block.AltText ?? new());
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 5 * 1024 * 1024) return;
+
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=image-blocks", file, maxBytes: 5 * 1024 * 1024);
+        if (res.Success && res.Data is not null)
+        {
+            _imageUrl = res.Data.Url;
+            Http.Toast("Image uploaded.", res.StatusCode);
+        }
+        else
+        {
+            Http.Toast(res.Message ?? "Image upload failed.", res.StatusCode);
+        }
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new ImageBlockUpdateDto
+            {
+                ImageUrl = _imageUrl,
+                AltText = _altText,
+                Visible = Block.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -1,0 +1,14 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-design-block sc-button-block">
+    <a class="sc-btn sc-btn--@(string.IsNullOrWhiteSpace(Block.Style) ? "filled" : Block.Style)"
+       href="@(string.IsNullOrWhiteSpace(Block.Href) ? "#" : Block.Href)">
+        @StyleHelper.Lang(Block.Label, Lang)
+    </a>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicButtonBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

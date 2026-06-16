@@ -1,0 +1,85 @@
+@using System.Text.Json
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    <div style="position: relative; z-index: 1" class="sc-network-map">
+        @if (!string.IsNullOrWhiteSpace(MapEyebrow))
+        {
+            <span class="sc-network-map__eyebrow">@MapEyebrow</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(MapTitle))
+        {
+            <h2 class="sc-network-map__title">@MapTitle</h2>
+        }
+
+        <div class="sc-network-map__stage">
+            <div class="sc-network-map__canvas"
+                 data-sc-network-map
+                 data-center-lat="@(Section.CenterLat ?? 15.87)"
+                 data-center-lng="@(Section.CenterLng ?? 100.99)"
+                 data-zoom="@(Section.DefaultZoom ?? 4)"
+                 data-pins="@PinsJson">
+                <div class="sc-map-placeholder">Network map</div>
+            </div>
+
+            @if (VisiblePins.Any())
+            {
+                <aside class="sc-network-map__pin-panel" aria-label="Network locations">
+                    <div class="sc-network-map__pin-panel-title">Locations</div>
+                    <div class="sc-network-map__pin-list">
+                        @foreach (var pin in VisiblePins)
+                        {
+                            if (!string.IsNullOrWhiteSpace(pin.Href))
+                            {
+                                <a class="sc-network-map__pin-item" href="@pin.Href">
+                                    <span>@pin.Label</span>
+                                </a>
+                            }
+                            else
+                            {
+                                <div class="sc-network-map__pin-item">
+                                    <span>@pin.Label</span>
+                                </div>
+                            }
+                        }
+                    </div>
+                </aside>
+            }
+        </div>
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicNetworkMapSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private List<PublicMapPinDto> VisiblePins => Section.Pins?
+        .Where(p => !string.IsNullOrWhiteSpace(p.Label))
+        .OrderBy(p => p.Order)
+        .ToList() ?? new();
+
+    private string RawTitle => StyleHelper.Lang(Section.SectionTitle, Lang);
+    private string[] TitleParts => RawTitle
+        .Split(new[] { "\r\n", "\n" }, 2, StringSplitOptions.None);
+    private string MapEyebrow => TitleParts.Length > 1 ? TitleParts[0].Trim() : string.Empty;
+    private string MapTitle => (TitleParts.Length > 1 ? TitleParts[1] : RawTitle).Trim();
+
+    private string PinsJson => JsonSerializer.Serialize(
+        VisiblePins.Select(p => new
+        {
+            p.Label,
+            p.Lat,
+            p.Lng,
+            p.Href
+        }));
+}

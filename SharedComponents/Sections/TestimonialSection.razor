@@ -1,0 +1,104 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    <div style="position: relative; z-index: 1" class="sc-testimonial sc-testimonial--@LayoutClass">
+        @{
+            var eyebrow = StyleHelper.Lang(Section.Eyebrow, Lang);
+            var sectionTitle = StyleHelper.Lang(Section.SectionTitle, Lang);
+            var subheading = StyleHelper.Lang(Section.Subheading, Lang);
+        }
+        @if (!string.IsNullOrWhiteSpace(eyebrow) || !string.IsNullOrWhiteSpace(sectionTitle) || !string.IsNullOrWhiteSpace(subheading))
+        {
+            <div class="sc-testimonial__head sc-testimonial__head--@HeaderAlignmentClass">
+                @if (!string.IsNullOrWhiteSpace(eyebrow))
+                {
+                    <span class="sc-testimonial__eyebrow">@eyebrow</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(sectionTitle))
+                {
+                    <h2 class="sc-testimonial__title">@sectionTitle</h2>
+                }
+                @if (!string.IsNullOrWhiteSpace(subheading))
+                {
+                    <p class="sc-testimonial__sub">@subheading</p>
+                }
+            </div>
+        }
+        <SectionBlocks Blocks="Section.Blocks" BlockZone="header" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+
+        @if (Section.Items?.Any() == true)
+        {
+            <div class="sc-testimonial__grid sc-testimonial__grid--@(Math.Clamp(Section.Columns ?? 4, 1, 5))">
+                @foreach (var item in Section.Items.OrderBy(i => i.Order))
+                {
+                    var badge = BadgeText(item.Icon);
+                    <article class="sc-testimonial__card @(IsHighlighted(item.Icon) ? "sc-testimonial__card--highlight" : "")">
+                        @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                        {
+                            <div class="sc-testimonial__media">
+                                <img src="@item.ImageUrl" alt="@StyleHelper.Lang(item.Title, Lang)" />
+                            </div>
+                        }
+                        else if (LayoutClass == "feature-grid" && !string.IsNullOrWhiteSpace(badge))
+                        {
+                            <span class="sc-testimonial__badge">@badge</span>
+                        }
+                        else
+                        {
+                            <div class="sc-testimonial__icon">
+                                <i class="fas @(string.IsNullOrWhiteSpace(item.Icon) ? "fa-check" : item.Icon)"></i>
+                            </div>
+                        }
+
+                        <h3>@StyleHelper.Lang(item.Title, Lang)</h3>
+                        <p>@StyleHelper.Lang(item.Description, Lang)</p>
+                    </article>
+                }
+            </div>
+        }
+        <SectionBlocks Blocks="Section.Blocks" BlockZone="below" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+    </div>
+
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicTestimonialSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private string LayoutClass => Section.Layout switch
+    {
+        "feature-grid" => "feature-grid",
+        _ => "cards"
+    };
+
+    private string HeaderAlignmentClass => Section.HeaderAlignment switch
+    {
+        "left" => "left",
+        "right" => "right",
+        _ => "center"
+    };
+
+    private static string? BadgeText(string? icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon) || !icon.StartsWith("badge:", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var value = icon[6..];
+        var pipe = value.IndexOf('|');
+        return pipe >= 0 ? value[..pipe] : value;
+    }
+
+    private static bool IsHighlighted(string? icon) =>
+        icon?.Contains("highlight", StringComparison.OrdinalIgnoreCase) == true;
+}

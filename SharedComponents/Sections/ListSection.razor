@@ -1,0 +1,83 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+    <div style="position: relative; z-index: 1" class="sc-list sc-list--@NormalizeLayout(Section.Layout)">
+       
+        @if (!string.IsNullOrWhiteSpace(ListEyebrow))
+        {
+            <span class="sc-list__eyebrow">@ListEyebrow</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(ListTitle))
+        {
+            <h2 class="sc-list__title">
+                @ListTitle
+            </h2>
+        }
+        <SectionBlocks Blocks="Section.Blocks" BlockZone="header" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+
+        <div class="sc-list__grid sc-list__grid--@(Math.Clamp(Section.Columns ?? 3, 1, 5))">
+            
+            @foreach (var item in Section.Items?.OrderBy(i => i.Order) ?? Enumerable.Empty<PublicListItemDto>())
+            {
+                <div class="sc-list__card">
+                    @if (!string.IsNullOrEmpty(item.ImageUrl))
+                    {
+                        <div class="sc-list__card-image">
+                            <img src="@item.ImageUrl"
+                                 alt="@StyleHelper.Lang(item.Title, Lang)" />
+                        </div>
+                    }
+                    else if (Section.ShowIcon == true && !string.IsNullOrEmpty(item.Icon))
+                    {
+                        <div class="sc-list__card-icon">
+                            <i class="@item.Icon"></i>
+                        </div>
+                    }
+                    <div class="sc-list__card-body">
+                        <h3 class="sc-list__card-title">
+                            @StyleHelper.Lang(item.Title, Lang)
+                        </h3>
+                        <p class="sc-list__card-desc">
+                            @StyleHelper.Lang(item.Description, Lang)
+                        </p>
+                        @if (!string.IsNullOrEmpty(item.LinkHref))
+                        {
+                            <a href="@item.LinkHref" class="sc-list__card-link">
+                                Learn more →
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+        <SectionBlocks Blocks="Section.Blocks" BlockZone="below" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicListSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private static string NormalizeLayout(string? layout) => layout switch
+    {
+        "rows" => "rows",
+        "numbered" => "numbered",
+        _ => "cards"
+    };
+
+    private string RawTitle => StyleHelper.Lang(Section.SectionTitle, Lang);
+    private string[] TitleParts => RawTitle
+        .Split(new[] { "\r\n", "\n" }, 2, StringSplitOptions.None);
+    private string ListEyebrow => TitleParts.Length > 1 ? TitleParts[0].Trim() : string.Empty;
+    private string ListTitle => (TitleParts.Length > 1 ? TitleParts[1] : RawTitle).Trim();
+}

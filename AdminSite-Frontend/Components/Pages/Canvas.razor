@@ -1,0 +1,595 @@
+﻿@using SharedComponents.Helpers
+@inject IJSRuntime JS
+@inject AdminSectionService SectionService
+@inject AdminPageService PageService
+@inject AdminBlockService BlockService
+@inject IHttpService Http
+@implements IAsyncDisposable
+
+<div class="ez-canvas">
+
+    <div class="ez-canvas__toolbar">
+        <div class="ez-canvas__toolbar-left">
+            <span class="ez-canvas__page-title">
+                @PageTitle(ParentPage ?? Page)
+            </span>
+            <div class="ez-canvas__child-picker">
+                <span class="form-hint">@T("ChildPage"):</span>
+                <DxComboBox Data="@PageChoices"
+                            Value="@Page.Id"
+                            ValueChanged="@((string id) => SelectPage(id))"
+                            TextFieldName="Label"
+                            ValueFieldName="Id"
+                            CssClass="ez-child-page-select" />
+                <button class="btn-admin btn-ghost btn-sm"
+                        @onclick="() => OnManageChildPages.InvokeAsync()">
+                    <i class="fas fa-list"></i>
+                    <span>@T("ManageChildPages")</span>
+                </button>
+            </div>
+        </div>
+        <div class="ez-canvas__toolbar-right">
+            <button class="btn-admin btn-ghost" @onclick="OnAddSection">
+                <i class="fas fa-plus"></i>
+                <span>@T("AddSection")</span>
+            </button>
+            <button class="btn-admin btn-ghost"
+                    title="@AddChildTitle"
+                    disabled="@(!CanAddChildPage)"
+                    @onclick="OnAddChildPage">
+                <i class="fas fa-sitemap"></i>
+                <span>@T("AddChildPage")</span>
+            </button>
+            @if (Page.Status == PageStatus.Published)
+            {
+                <button class="btn-admin btn-ghost"
+                        @onclick="ResetPage"
+                        disabled="@(_resetting || _publishing)">
+                    @if (_resetting)
+                    {
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>@T("Resetting")</span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-undo"></i>
+                        <span>@T("Reset")</span>
+                    }
+                </button>
+            }
+            <button class="btn-admin btn-primary"
+                    @onclick="PublishPage"
+                    disabled="@(_publishing || _resetting)">
+                @if (_publishing)
+                {
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>@T("Publishing")</span>
+                }
+                else
+                {
+                    <i class="fas fa-globe"></i>
+                    <span>@T("Publish")</span>
+                }
+            </button>
+            @if (IsChildPage)
+            {
+                <button class="btn-admin btn-ghost" title="Child page settings"
+                        @onclick="() => OnOpenPageSettings.InvokeAsync(Page)">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button class="btn-admin btn-ghost btn-danger" title="Delete child page"
+                        @onclick="() => OnDeletePage.InvokeAsync(Page)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="ez-canvas__viewport">
+
+        <div class="ez-canvas__preview-shell"
+             style="height: @(ScaledIframeHeight)px;">
+            <div class="ez-canvas__preview-scale"
+                 style="height: @(_iframeHeight)px;">
+
+                <iframe id="ez-preview-iframe"
+                        @key="PreviewUrl"
+                        src="@PreviewUrl"
+                        style="width: 100%; height: @(_iframeHeight)px; border: none; display: block;"
+                        scrolling="no" />
+
+                @if (!Sections.Any())
+                {
+                    <div class="ez-canvas-empty">
+                        <i class="fas fa-layer-group"></i>
+                        <strong>@T("NoSectionsYet")</strong>
+                        <span>@T("AddSectionToStart")</span>
+                    </div>
+                }
+                else if (!_sectionPositions.Any())
+                {
+                    <div class="ez-canvas-empty ez-canvas-empty--loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <strong>@T("LoadingPreview")</strong>
+                        <span>@T("PreviewStuckHint")</span>
+                    </div>
+                }
+
+                <div @ref="_overlayRef"
+                     style="position: absolute; top: 0; left: 0;
+                            width: 100%; height: 100%;
+                            pointer-events: none; z-index: 10;">
+
+                    @foreach (var pos in _sectionPositions)
+                    {
+                        var section = Sections.FirstOrDefault(s => s.Id == pos.Id);
+                        if (section is null) continue;
+
+                        <div class="ez-section-overlay @(!section.Visible ? "ez-section-overlay--hidden" : "")"
+                             data-section-id="@(section.Id)"
+                             style="position: absolute;
+                                    top: @(pos.Top)px;
+                                    left: 0;
+                                    width: 100%;
+                                    height: @(pos.Height)px;
+                                    pointer-events: none;">
+
+                            <div class="ez-section-controls"
+                                 style="pointer-events: auto; position: relative; z-index: 2;"
+                                 @onclick:stopPropagation="true">
+                                <button class="ez-section-btn ez-section-handle" title="Drag to reorder">
+                                    <i class="fas fa-grip-vertical"></i>
+                                </button>
+                                <span class="ez-section-label">@(section.Type)</span>
+                                <button class="ez-section-btn" title="@T("Edit")"
+                                        @onclick="() => SelectSection(section)">
+                                    <i class="fas fa-pencil-alt"></i>
+                                </button>
+                                <button class="ez-section-btn" title="@(section.Visible ? T("Hide") : T("Show"))"
+                                        @onclick="() => ToggleVisibility(section)">
+                                    <i class="fas @(section.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                                </button>
+                                <button class="ez-section-btn ez-section-btn--danger" title="@T("Delete")"
+                                        @onclick="() => DeleteSection(section)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+
+                            <div style="position: absolute; inset: 0;
+                                        pointer-events: @(AllowsIframeInteraction(section) ? "none" : "auto"); cursor: pointer; z-index: 1;"
+                                 @onclick="() => SelectSection(section)">
+                            </div>
+                        </div>
+                    }
+
+                    @foreach (var block in _blockPositions)
+                    {
+                        <div class="ez-freeform-block-overlay"
+                             data-section-id="@block.SectionId"
+                             data-block-id="@block.Id"
+                             data-section-left="@block.SectionLeft"
+                             data-section-top="@block.SectionTop"
+                             data-section-width="@block.SectionWidth"
+                             data-section-height="@block.SectionHeight"
+                             style="position: absolute;
+                                    top: @(block.Top)px;
+                                    left: @(block.Left)px;
+                                    width: @(block.Width)px;
+                                    height: @(block.Height)px;
+                                    pointer-events: auto;
+                                    z-index: 5;">
+                            <button type="button"
+                                    class="ez-freeform-block-handle"
+                                    title="Move block">
+                                <i class="fas fa-arrows-alt"></i>
+                            </button>
+                            <span class="ez-freeform-block-label">block</span>
+                            <span class="ez-freeform-block-resize" title="Resize block"></span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<DxWindow Visible="@(_selectedSection is not null)"
+          VisibleChanged="@((bool visible) => { if (!visible) ClosePanel(); })"
+          Width="650px"
+          Height="calc(100vh - 72px)"
+          MaxWidth="90vw"
+          CssClass="ez-section-editor-window"
+          BodyCssClass="ez-section-editor-window__body"
+          AllowResize="false"
+          CloseOnEscape="true"
+          ShowCloseButton="false"
+          HorizontalAlignment="HorizontalAlignment.Right"
+          VerticalAlignment="VerticalAlignment.Center">
+    <BodyTemplate>
+        @if (_selectedSection is not null)
+        {
+            <div class="ez-edit-window-shell">
+                <EditPanel @key="_selectedSection.Id"
+                           Section="_selectedSection"
+                           PageId="@Page.Id"
+                           OnClose="ClosePanel"
+                           OnSectionSaved="HandleSectionSaved"
+                           OnSectionsChanged="OnSectionsChanged"
+                           OnBlocksChanged="HandleBlocksChanged" />
+            </div>
+        }
+    </BodyTemplate>
+</DxWindow>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter, EditorRequired] public PageModel Page { get; set; } = default!;
+    [Parameter] public PageModel? ParentPage { get; set; }
+    [Parameter] public List<PageModel> ChildPages { get; set; } = new();
+    [Parameter, EditorRequired] public List<SectionModel> Sections { get; set; } = default!;
+    [Parameter] public EventCallback<string> OnPageSelected { get; set; }
+    [Parameter] public EventCallback OnSectionsChanged { get; set; }
+    [Parameter] public EventCallback OnAddSection { get; set; }
+    [Parameter] public EventCallback OnAddChildPage { get; set; }
+    [Parameter] public EventCallback OnManageChildPages { get; set; }
+    [Parameter] public EventCallback<PageModel> OnOpenPageSettings { get; set; }
+    [Parameter] public EventCallback<PageModel> OnDeletePage { get; set; }
+    [Parameter] public EventCallback OnPageStatusChanged { get; set; }
+
+    private SectionModel? _selectedSection;
+    private bool _publishing = false;
+    private bool _resetting = false;
+    private const double PreviewScale = 0.7;
+    private double _iframeHeight = 2000;
+    private List<SectionPosition> _sectionPositions = new();
+    private List<BlockPosition> _blockPositions = new();
+    private DotNetObjectReference<Canvas>? _dotNetRef;
+    private ElementReference _overlayRef;
+    private bool _overlayInitialized;
+    private bool _sortableInitialized;
+    private string? _currentPageId;
+    private string? _currentPreviewUrl;
+    private string? _currentLang;
+    private int _previewVersion;
+    private bool IsChildPage => !string.IsNullOrWhiteSpace(Page.ParentPageId);
+    private bool CanAddChildPage => !IsChildPage;
+    private string AddChildTitle => CanAddChildPage
+        ? "Create a child page under this parent page."
+        : "Child pages cannot have child pages. Select the parent page to add another child page.";
+
+    private string PreviewUrl =>
+        $"/preview/{Page.Id}?lang={Uri.EscapeDataString(AdminLanguage)}&v={_previewVersion}";
+
+    private double ScaledIframeHeight => _iframeHeight * PreviewScale;
+    private IEnumerable<PageChoice> PageChoices
+    {
+        get
+        {
+            var parent = ParentPage ?? Page;
+            yield return new PageChoice(parent.Id, $"{T("Parent")}: {PageTitle(parent)}");
+
+            foreach (var child in ChildPages.OrderBy(p => p.Order))
+                yield return new PageChoice(child.Id, PageTitle(child));
+        }
+    }
+
+    private string PageTitle(PageModel? page)
+    {
+        if (page?.Name is null) return "Untitled";
+        if (page.Name.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+        if (page.Name.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
+            return en;
+        return page.Name.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "Untitled";
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private static bool AllowsIframeInteraction(SectionModel section) =>
+        string.Equals(section.Type, "library", StringComparison.OrdinalIgnoreCase);
+
+    private Task SelectPage(string id) => OnPageSelected.InvokeAsync(id);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _dotNetRef = DotNetObjectReference.Create(this);
+
+        if (!_overlayInitialized && _dotNetRef is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initCanvasOverlay", _dotNetRef);
+                _overlayInitialized = true;
+            }
+            catch
+            {
+                Http.Toast("Canvas overlay failed to initialize.", 500);
+            }
+        }
+
+        if (!_sortableInitialized && _sectionPositions.Count > 0 && _dotNetRef is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initSortable", _overlayRef, _dotNetRef);
+                await JS.InvokeVoidAsync("initFreeformBlockEditor", _overlayRef, _dotNetRef, PreviewScale);
+                _sortableInitialized = true;
+            }
+            catch
+            {
+                Http.Toast("Section drag sorting failed to initialize.", 500);
+            }
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        var langChanged = _currentLang != AdminLanguage;
+        var previewUrl = PreviewUrl;
+        if (_currentPageId == Page.Id && _currentPreviewUrl == previewUrl && !langChanged) return;
+
+        if (langChanged)
+        {
+            _previewVersion++;
+            _currentLang = AdminLanguage;
+        }
+
+        _currentPageId = Page.Id;
+        _currentPreviewUrl = PreviewUrl;
+        _sectionPositions = new();
+        _blockPositions = new();
+        _iframeHeight = 2000;
+        _selectedSection = null;
+        _overlayInitialized = false;
+        _sortableInitialized = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("disposeCanvasOverlay");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _dotNetRef?.Dispose();
+    }
+
+    // -- Called from overlay.js via postMessage -------------------
+
+    [JSInvokable]
+    public void UpdateSectionPositions(List<SectionPosition> positions, double documentHeight, List<BlockPosition>? blockPositions)
+    {
+        var nextHeight = Math.Max(documentHeight, 400);
+        blockPositions ??= new();
+        if (Math.Abs(_iframeHeight - nextHeight) < 1 &&
+            PositionsEqual(_sectionPositions, positions) &&
+            BlockPositionsEqual(_blockPositions, blockPositions))
+        {
+            return;
+        }
+
+        _sectionPositions = positions;
+        _blockPositions = blockPositions;
+        _iframeHeight = nextHeight;
+        StateHasChanged();
+    }
+
+    private static bool PositionsEqual(List<SectionPosition> current, List<SectionPosition> next)
+    {
+        if (current.Count != next.Count) return false;
+
+        for (var i = 0; i < current.Count; i++)
+        {
+            if (current[i].Id != next[i].Id) return false;
+            if (Math.Abs(current[i].Top - next[i].Top) >= 1) return false;
+            if (Math.Abs(current[i].Height - next[i].Height) >= 1) return false;
+            if (Math.Abs(current[i].Width - next[i].Width) >= 1) return false;
+        }
+
+        return true;
+    }
+
+    private static bool BlockPositionsEqual(List<BlockPosition> current, List<BlockPosition> next)
+    {
+        if (current.Count != next.Count) return false;
+
+        for (var i = 0; i < current.Count; i++)
+        {
+            if (current[i].Id != next[i].Id) return false;
+            if (current[i].SectionId != next[i].SectionId) return false;
+            if (Math.Abs(current[i].Top - next[i].Top) >= 1) return false;
+            if (Math.Abs(current[i].Left - next[i].Left) >= 1) return false;
+            if (Math.Abs(current[i].Height - next[i].Height) >= 1) return false;
+            if (Math.Abs(current[i].Width - next[i].Width) >= 1) return false;
+        }
+
+        return true;
+    }
+
+    [JSInvokable]
+    public async Task SaveFreeformBlockLayout(string sectionId, string blockId, int x, int y, int w, int h)
+    {
+        if (string.IsNullOrWhiteSpace(sectionId) || string.IsNullOrWhiteSpace(blockId))
+            return;
+
+        var res = await BlockService.UpdateLayoutAsync(Page.Id, sectionId, blockId, new Contracts.Admin.BlockLayoutDto
+        {
+            X = x,
+            Y = y,
+            W = w,
+            H = h
+        });
+
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            await ReloadPreviewSafelyAsync();
+        }
+    }
+
+    // -- Section actions ------------------------------------------
+
+    private void SelectSection(SectionModel section)
+    {
+        _selectedSection = section;
+    }
+
+    private void ClosePanel()
+    {
+        _selectedSection = null;
+    }
+
+    private async Task HandleSectionSaved()
+    {
+        if (_selectedSection is not null)
+        {
+            var selectedId = _selectedSection.Id;
+            var res = await SectionService.GetByIdAsync(Page.Id, selectedId);
+            if (res.Success && res.Data is not null)
+            {
+                _selectedSection = res.Data;
+
+                var index = Sections.FindIndex(s => s.Id == selectedId);
+                if (index >= 0)
+                {
+                    Sections[index] = res.Data;
+                }
+            }
+            else
+            {
+                _selectedSection = null;
+            }
+        }
+
+        await ReloadPreviewSafelyAsync();
+    }
+
+    private async Task HandleBlocksChanged()
+    {
+        await ReloadPreviewSafelyAsync();
+    }
+
+    private async Task ToggleVisibility(SectionModel section)
+    {
+        var res = await SectionService.SetVisibilityAsync(Page.Id, section.Id, !section.Visible);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            return;
+        }
+
+        section.Visible = !section.Visible;
+        await OnSectionsChanged.InvokeAsync();
+        await ReloadPreviewSafelyAsync();
+    }
+
+    private async Task DeleteSection(SectionModel section)
+    {
+        var res = await SectionService.DeleteAsync(Page.Id, section.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            return;
+        }
+
+        ClosePanel();
+        await OnSectionsChanged.InvokeAsync();
+        await ReloadPreviewSafelyAsync();
+    }
+
+    [JSInvokable]
+    public async Task OnReordered(List<string> orderedIds)
+    {
+        var res = await SectionService.ReorderAsync(Page.Id, orderedIds);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            await OnSectionsChanged.InvokeAsync();
+            await ReloadPreviewSafelyAsync();
+        }
+    }
+
+    // -- Publish / Reset ------------------------------------------
+
+    private async Task PublishPage()
+    {
+        _publishing = true;
+        try
+        {
+            var res = await PageService.PublishAsync(Page.Id);
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success)
+            {
+                await OnPageStatusChanged.InvokeAsync();
+                await ReloadPreviewSafelyAsync();
+            }
+        }
+        finally
+        {
+            _publishing = false;
+        }
+    }
+
+    private async Task ResetPage()
+    {
+        _resetting = true;
+        try
+        {
+            var res = await PageService.ResetAsync(Page.Id);
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success)
+            {
+                await OnSectionsChanged.InvokeAsync();
+                await OnPageStatusChanged.InvokeAsync();
+                await ReloadPreviewSafelyAsync();
+            }
+        }
+        finally
+        {
+            _resetting = false;
+        }
+    }
+
+    private async Task ReloadPreviewSafelyAsync()
+    {
+        _previewVersion++;
+        _sectionPositions = new();
+        _blockPositions = new();
+        _iframeHeight = 2000;
+        _overlayInitialized = false;
+        _sortableInitialized = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // -- Position model -------------------------------------------
+
+    public class SectionPosition
+    {
+        public string Id { get; set; } = string.Empty;
+        public double Top { get; set; }
+        public double Left { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+    }
+
+    public class BlockPosition
+    {
+        public string Id { get; set; } = string.Empty;
+        public string SectionId { get; set; } = string.Empty;
+        public double Top { get; set; }
+        public double Left { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+        public double SectionTop { get; set; }
+        public double SectionLeft { get; set; }
+        public double SectionWidth { get; set; }
+        public double SectionHeight { get; set; }
+    }
+
+    private sealed record PageChoice(string Id, string Label);
+}
+

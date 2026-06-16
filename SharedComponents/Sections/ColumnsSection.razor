@@ -1,0 +1,122 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    @* Fixed: Safely falls back to a default "medium" gap since Gap was dropped from this DTO *@
+    <div style="position: relative; z-index: 1" class="sc-columns sc-columns--@Section.ColumnRatio sc-columns--gap-medium
+        @(Section.StackOnMobile == true ? "sc-columns--stack" : "")">
+        
+        @* Fixed: Swapped collection type to PublicColumnSlotDto *@
+        @foreach (var slot in Section.ColumnSlots?.OrderBy(s => s.Order) ?? Enumerable.Empty<PublicColumnSlotDto>())
+        {
+            <div class="sc-column">
+                @foreach (var block in slot.Blocks.OrderBy(b => b.Order))
+                {
+                    <div class="@GetBlockClass(block)"
+                         data-block-id="@block.Id"
+                         data-block-section-id="@Section.Id"
+                         style="@GetBlockStyle(block)">
+                        @RenderBlock(block)
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    // 1. Updated root section parameter type
+    [Parameter, EditorRequired] public PublicColumnsSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private static string GetBlockClass(PublicBlockDto block)
+    {
+        var layout = block.Layout ?? new PublicBlockLayoutDto();
+        var span = Math.Clamp(layout.ColumnSpan, 1, 12);
+
+        return string.Join(" ", new[]
+        {
+            "sc-block-frame",
+            $"sc-block-frame--span-{span}",
+            $"sc-block-frame--width-{Normalize(layout.Width, "auto")}",
+            $"sc-block-frame--align-{Normalize(layout.Align, "stretch")}",
+            $"sc-block-frame--justify-{Normalize(layout.Justify, "start")}",
+            $"sc-block-frame--pad-{Normalize(layout.Padding, "none")}",
+            $"sc-block-frame--margin-{Normalize(layout.Margin, "none")}",
+            $"sc-block-frame--radius-{Normalize(layout.BorderRadius, "none")}"
+        });
+    }
+
+    private static string GetBlockStyle(PublicBlockDto block)
+    {
+        var layout = block.Layout ?? new PublicBlockLayoutDto();
+        var parts = new List<string>
+        {
+            $"--sc-block-column-span: {Math.Clamp(layout.ColumnSpan, 1, 12)}",
+            $"z-index: {Math.Clamp(layout.ZIndex, 0, 20)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(layout.BackgroundColor))
+            parts.Add($"background-color: {layout.BackgroundColor}");
+
+        return string.Join("; ", parts);
+    }
+
+    private static string Normalize(string? value, string fallback) =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    // 2. Updated to use C# Class Type Matching instead of string matching
+    private RenderFragment RenderBlock(PublicBlockDto block)
+    {
+        return block switch
+        {
+            PublicTextBlockDto textBlock =>
+                @<TextBlock Block="textBlock" Lang="@Lang" />,
+                
+            PublicImageBlockDto imageBlock =>
+                @<ImageBlock Block="imageBlock" Lang="@Lang" />,
+                
+            PublicVideoBlockDto videoBlock =>
+                @<VideoBlock Block="videoBlock" Lang="@Lang" />,
+                
+            PublicFileBlockDto fileBlock =>
+                @<FileBlock Block="fileBlock" Lang="@Lang" />,
+                
+            PublicMapBlockDto mapBlock =>
+                @<MapBlock Block="mapBlock" Lang="@Lang" />,
+                
+            PublicFormBlockDto formBlock =>
+                @<FormBlock Block="formBlock" Lang="@Lang"
+                                OnSubmit="OnSubmit is null ? null : data => OnSubmit(formBlock.Id, data)" />,
+
+            PublicCardBlockDto cardBlock =>
+                @<CardBlock Block="cardBlock" Lang="@Lang" />,
+
+            PublicButtonBlockDto buttonBlock =>
+                @<ButtonBlock Block="buttonBlock" Lang="@Lang" />,
+
+            PublicMetricBlockDto metricBlock =>
+                @<MetricBlock Block="metricBlock" Lang="@Lang" />,
+
+            PublicBulletListBlockDto bulletListBlock =>
+                @<BulletListBlock Block="bulletListBlock" Lang="@Lang" />,
+
+            PublicStepBlockDto stepBlock =>
+                @<StepBlock Block="stepBlock" Lang="@Lang" />,
+
+            PublicIconBlockDto iconBlock =>
+                @<IconBlock Block="iconBlock" Lang="@Lang" />,
+                            
+                    _ =>
+                        @<text></text>
+                };
+    }
+}

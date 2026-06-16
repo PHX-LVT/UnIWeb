@@ -1,0 +1,87 @@
+@page "/login"
+@layout AdminSite.Shared.EmptyLayout
+@using AdminSite.Services
+@inject AdminAuthService Auth
+@inject NavigationManager Nav
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-header">
+            <h1>AdminSite PageBuilder</h1>
+            <p>Admin Dashboard</p>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle"></i>
+                @_error
+            </div>
+        }
+
+        <div class="form-group">
+            <label class="form-label required">Email</label>
+            <DxTextBox @bind-Text="_email"
+                       InputType="TextInputType.Email"
+                       CssClass="w-100" />
+        </div>
+        @*turn off censorship with Password="false"*@ 
+        <div class="form-group">
+            <label class="form-label required">Password</label>
+            <DxTextBox @bind-Text="_password"
+                       InputType="TextInputType.Password"
+                       Password="true"               
+                       CssClass="w-100" />
+        </div>
+
+        <button class="btn-admin btn-primary login-submit"
+                @onclick="HandleLogin"
+                disabled="@_loading">
+            @if (_loading)
+            {
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Signing in...</span>
+            }
+            else
+            {
+                <i class="fas fa-sign-in-alt"></i>
+                <span>Sign In</span>
+            }
+        </button>
+    </div>
+</div>
+
+@code {
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string? _error = null;
+    private bool _loading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        if (Auth.IsAuthenticated)
+            Nav.NavigateTo("/");
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(_email) || string.IsNullOrWhiteSpace(_password))
+        {
+            _error = "Please enter your email and password.";
+            return;
+        }
+
+        _error = null;
+        _loading = true;
+
+        var (success, error) = await Auth.LoginAsync(_email, _password);
+
+        if (success)
+            Nav.NavigateTo("/");
+        else
+            _error = error ?? "Login failed.";
+
+        _loading = false;
+    }
+}

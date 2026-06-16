@@ -1,0 +1,17 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-design-block sc-metric-block">
+    @if (!string.IsNullOrWhiteSpace(Block.Icon))
+    {
+        <i class="@Block.Icon sc-design-icon"></i>
+    }
+    <div class="sc-metric-block__value">@Block.Prefix@Block.Value@Block.Suffix</div>
+    <div class="sc-metric-block__label">@StyleHelper.Lang(Block.Label, Lang)</div>
+    <p>@StyleHelper.Lang(Block.Description, Lang)</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicMetricBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

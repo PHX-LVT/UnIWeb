@@ -1,0 +1,580 @@
+@page "/content/new"
+@page "/content/edit/{Id}"
+@inject AdminContentService ContentService
+@inject IHttpService Http
+@inject NavigationManager Nav
+
+<div class="page-header content-editor-header">
+    <h1 class="page-title"><i class="fas fa-pen-nib"></i> @T(IsNew ? "NewContent" : "EditContent")</h1>
+    <a class="btn-admin btn-ghost" href="@ReturnUrl">
+        <i class="fas fa-arrow-left"></i> @T("Return")
+    </a>
+</div>
+
+@if (_loading)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("Loading")</p>
+    </div>
+}
+else
+{
+    <div class="content-editor-shell">
+        <div class="admin-card content-workflow-panel">
+            <div class="content-status-line">
+                <span class="content-status-dot @StatusClass"></span>
+                <div>
+                    <div class="text-muted" style="font-size:.78rem">@T("Status")</div>
+                    <strong>@DisplayStatus(_status)</strong>
+                </div>
+            </div>
+
+            <label style="margin-top:1rem">@T("ContentType")</label>
+            <select class="form-control" value="@_edit.ContentTypeKey" @onchange="OnTypeChanged">
+                @foreach (var type in _types)
+                {
+                    <option value="@type.Key">@GetLang(type.Name)</option>
+                }
+            </select>
+
+            <label style="margin-top:.75rem">@T("Slug")</label>
+            <input class="form-control" value="@_edit.Slug" @oninput="e => _edit.Slug = e.Value?.ToString()" />
+            <div class="form-hint">@T("SlugHint")</div>
+
+            <label style="margin-top:.75rem">@T("Tags")</label>
+            <div class="content-tag-editor">
+                @foreach (var tag in _tags)
+                {
+                    <span class="content-tag-pill">
+                        @tag
+                        <button type="button" @onclick="() => RemoveTag(tag)">×</button>
+                    </span>
+                }
+                <input value="@_tagDraft"
+                       placeholder="@T("AddTag")"
+                       @oninput="e => _tagDraft = e.Value?.ToString() ?? string.Empty"
+                       @onkeydown="OnTagKeyDown" />
+            </div>
+
+            <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem">
+                <input type="checkbox" @bind="_edit.Visible" />
+                @T("Visible")
+            </label>
+
+            @if (ShowsTemplate)
+            {
+                <label style="margin-top:.75rem">@T("Template")</label>
+                <select class="form-control" value="@(_edit.TemplateKey ?? string.Empty)" @onchange="e => _edit.TemplateKey = e.Value?.ToString()">
+                    <option value="">@T("DefaultTemplate")</option>
+                    <option value="article-default">@T("ArticleDefault")</option>
+                    <option value="case-study-default">@T("CaseStudyDefault")</option>
+                </select>
+            }
+
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem">
+                @if (CanSaveDraft)
+                {
+                    <button class="btn-admin btn-primary" @onclick="Save">
+                        <i class="fas fa-save"></i> @T(IsPublished ? "SaveChanges" : "SaveDraft")
+                    </button>
+                }
+                @if (!IsNew)
+                {
+                    @if (CanSubmit)
+                    {
+                        <button class="btn-admin btn-ghost" @onclick="Submit">@T(IsRejected ? "SubmitAgain" : "SubmitForReview")</button>
+                    }
+                    @if (CanPublish)
+                    {
+                        <button class="btn-admin btn-ghost" @onclick="Publish">@T(IsPublished ? "PublishChanges" : "Publish")</button>
+                    }
+                    @if (CanReject)
+                    {
+                        <button class="btn-admin btn-ghost" @onclick="Reject">@T("Reject")</button>
+                    }
+                    @if (CanRestore)
+                    {
+                        <button class="btn-admin btn-ghost" @onclick="Restore">@T("Restore")</button>
+                    }
+                    @if (CanDelete)
+                    {
+                        <button class="btn-admin btn-danger" @onclick="Delete">@T("Delete")</button>
+                    }
+                }
+            </div>
+        </div>
+
+        <div>
+            <div class="admin-card content-editor-card" style="margin-bottom:1rem">
+                <div class="content-editor-card-header">
+                    <h2 style="font-size:1rem;margin:0">@T("Content")</h2>
+                    <span>@T("EditingLanguage"): @CurrentLang.ToUpperInvariant()</span>
+                </div>
+
+                <label>@T("Title")</label>
+                <input class="form-control content-editor-input"
+                       value="@GetValue(_edit.Title, CurrentLang)"
+                       @oninput="e => SetValue(_edit.Title, CurrentLang, e.Value?.ToString())" />
+
+                <label style="margin-top:.75rem">@T("Summary")</label>
+                <textarea class="form-control content-editor-input"
+                          rows="4"
+                          value="@GetValue(_edit.Summary, CurrentLang)"
+                          @oninput="e => SetValue(_edit.Summary, CurrentLang, e.Value?.ToString())"></textarea>
+
+                @if (ShowsHero)
+                {
+                    <div class="content-editor-media">
+                        <h2 style="font-size:1rem;margin:0 0 1rem">@T("HeroImage")</h2>
+                        @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
+                        {
+                            <img class="content-editor-preview" src="@_edit.HeroImageUrl" alt="" />
+                        }
+                        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                            <InputFile class="content-editor-file-input"
+                                       id="content-hero-upload"
+                                       OnChange="UploadHero"
+                                       accept="image/*" />
+                            <label class="btn-admin btn-ghost" for="content-hero-upload">
+                                <i class="fas fa-image"></i> @T("UploadImage")
+                            </label>
+                            @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
+                            {
+                                <button class="btn-admin btn-danger" @onclick="RemoveHero">@T("RemoveImage")</button>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
+                        {
+                            <label style="margin-top:.75rem">@T("ImageDescription")</label>
+                            <input class="form-control content-editor-input"
+                                   value="@_edit.HeroImageAlt"
+                                   @oninput="e => _edit.HeroImageAlt = e.Value?.ToString()" />
+                        }
+                    </div>
+                }
+
+                @if (ShowsBody)
+                {
+                    <label style="margin-top:.75rem">@T("Body")</label>
+                    <textarea class="form-control content-editor-input"
+                              rows="14"
+                              value="@GetValue(_edit.BodyHtml, CurrentLang)"
+                              @oninput="e => SetValue(_edit.BodyHtml, CurrentLang, e.Value?.ToString())"></textarea>
+                }
+            </div>
+
+            @if (ShowsFile)
+            {
+                <div class="admin-card content-editor-card" style="margin-bottom:1rem">
+                    <h2 style="font-size:1rem;margin:0 0 1rem">@T("PrimaryFile")</h2>
+                    @if (!string.IsNullOrWhiteSpace(_fileUrl))
+                    {
+                        <div class="content-attachment-row">
+                            <i class="fas fa-file-pdf"></i>
+                            <div>
+                                <strong>@(string.IsNullOrWhiteSpace(_fileName) ? T("PrimaryFile") : _fileName)</strong>
+                                <div class="text-muted" style="font-size:.8rem">@FormatBytes(_fileSize)</div>
+                            </div>
+                            <a class="btn-admin btn-ghost content-icon-btn" href="@_fileUrl" target="_blank" rel="noopener" title="@T("View")">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <button class="btn-admin btn-danger content-icon-btn" @onclick="RemoveFile" title="@T("Remove")">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    }
+                    <label>@T("FileUrl")</label>
+                    <input class="form-control content-editor-input" value="@_fileUrl" @oninput="OnFileUrlChanged" />
+                    <label style="margin-top:.75rem">@T("FileName")</label>
+                    <input class="form-control content-editor-input" value="@_fileName" @oninput="e => _fileName = e.Value?.ToString() ?? string.Empty" />
+                    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.75rem">
+                        <InputFile class="content-editor-file-input"
+                                   id="content-file-upload"
+                                   OnChange="UploadFile"
+                                   accept="application/pdf" />
+                        <label class="btn-admin btn-ghost" for="content-file-upload">
+                            <i class="fas fa-file-pdf"></i> @T("UploadFile")
+                        </label>
+                    </div>
+                </div>
+            }
+
+            @if (ShowsVideo)
+            {
+                <div class="admin-card content-editor-card" style="margin-bottom:1rem">
+                    <h2 style="font-size:1rem;margin:0 0 1rem">@T("Video")</h2>
+                    <label>@T("VideoUrl")</label>
+                    <input class="form-control content-editor-input" value="@_edit.VideoUrl" @oninput="e => _edit.VideoUrl = e.Value?.ToString()" />
+                </div>
+            }
+
+            @if (ShowsThumbnail)
+            {
+                <div class="admin-card content-editor-card">
+                    <h2 style="font-size:1rem;margin:0 0 1rem">@T("Thumbnail")</h2>
+                    @if (!string.IsNullOrWhiteSpace(_edit.ThumbnailUrl))
+                    {
+                        <img class="content-editor-preview" src="@_edit.ThumbnailUrl" alt="" />
+                    }
+                    <label>@T("ThumbnailUrl")</label>
+                    <input class="form-control content-editor-input" value="@_edit.ThumbnailUrl" @oninput="e => _edit.ThumbnailUrl = e.Value?.ToString()" />
+                    <div style="margin-top:.75rem">
+                        <InputFile class="content-editor-file-input"
+                                   id="content-thumbnail-upload"
+                                   OnChange="UploadThumbnail"
+                                   accept="image/*" />
+                        <label class="btn-admin btn-ghost" for="content-thumbnail-upload">
+                            <i class="fas fa-image"></i> @T("UploadImage")
+                        </label>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private List<ContentTypeModel> _types = new();
+    private ContentItemRequest _edit = NewRequest();
+    private string _status = "Draft";
+    private string _tagsText = string.Empty;
+    private List<string> _tags = new();
+    private string _tagDraft = string.Empty;
+    private string _fileUrl = string.Empty;
+    private string _fileName = string.Empty;
+    private string _fileContentType = "application/pdf";
+    private long _fileSize;
+    private bool _loading = true;
+
+    private bool IsNew => string.IsNullOrWhiteSpace(Id);
+    private string CurrentLang => NormalizeLang(AdminLanguage);
+    private ContentTypeModel? SelectedType => _types.FirstOrDefault(t => string.Equals(t.Key, _edit.ContentTypeKey, StringComparison.OrdinalIgnoreCase));
+    private string ClickBehavior => SelectedType?.ClickBehavior?.ToLowerInvariant() ?? "detail";
+    private bool ShowsBody => SelectedType?.RequiresBody == true || ClickBehavior == "detail";
+    private bool ShowsHero => ClickBehavior == "detail" || SelectedType?.RequiresHeroImage == true;
+    private bool ShowsTemplate => ClickBehavior == "detail";
+    private bool ShowsFile => SelectedType?.RequiresFile == true || ClickBehavior == "download";
+    private bool ShowsVideo => SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video";
+    private bool ShowsThumbnail => ShowsFile || ShowsVideo;
+    private string ReturnUrl => GetReturnUrl();
+    private bool IsDraft => string.Equals(_status, "Draft", StringComparison.OrdinalIgnoreCase);
+    private bool IsSubmitted => string.Equals(_status, "Submitted", StringComparison.OrdinalIgnoreCase);
+    private bool IsPublished => string.Equals(_status, "Published", StringComparison.OrdinalIgnoreCase);
+    private bool IsRejected => string.Equals(_status, "Rejected", StringComparison.OrdinalIgnoreCase);
+    private bool IsDeleted => string.Equals(_status, "Deleted", StringComparison.OrdinalIgnoreCase);
+    private bool CanSaveDraft => !IsDeleted;
+    private bool CanSubmit => !IsSubmitted && !IsPublished && !IsDeleted;
+    private bool CanPublish => !IsDeleted && !IsNew;
+    private bool CanReject => IsSubmitted;
+    private bool CanDelete => !IsDeleted && !IsNew;
+    private bool CanRestore => IsDeleted && !IsNew;
+    private string StatusClass => _status.ToLowerInvariant() switch
+    {
+        "submitted" => "is-submitted",
+        "published" => "is-published",
+        "rejected" => "is-rejected",
+        "deleted" => "is-deleted",
+        _ => "is-draft"
+    };
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var typeRes = await ContentService.GetTypesAsync();
+        _types = typeRes.Data ?? new();
+        _edit.ContentTypeKey = _types.FirstOrDefault()?.Key ?? "article";
+
+        if (!IsNew)
+        {
+            var res = await ContentService.GetByIdAsync(Id!);
+            if (res.Success && res.Data is not null)
+                LoadItem(res.Data);
+            else
+                Http.Toast(res.Message, res.StatusCode);
+        }
+
+        _loading = false;
+    }
+
+    private void LoadItem(ContentItemModel item)
+    {
+        _status = item.Status;
+        _edit = new ContentItemRequest
+        {
+            ContentTypeKey = item.ContentTypeKey,
+            Slug = item.Slug,
+            Title = EnsureLangs(item.Title),
+            Summary = EnsureLangs(item.Summary),
+            BodyHtml = EnsureLangs(item.BodyHtml),
+            HeroImageUrl = item.HeroImageUrl,
+            HeroImageAlt = item.HeroImageAlt,
+            ThumbnailUrl = item.ThumbnailUrl,
+            VideoUrl = item.VideoUrl,
+            ExternalUrl = item.ExternalUrl,
+            TemplateKey = item.TemplateKey,
+            Tags = item.Tags.ToList(),
+            Attachments = item.Attachments.ToList(),
+            Visible = item.Visible
+        };
+
+        _tags = item.Tags.ToList();
+        _tagsText = string.Join(", ", _tags);
+        var file = item.Attachments.FirstOrDefault();
+        _fileUrl = file?.Url ?? string.Empty;
+        _fileName = file?.FileName ?? string.Empty;
+        _fileContentType = string.IsNullOrWhiteSpace(file?.ContentType) ? "application/pdf" : file.ContentType;
+        _fileSize = file?.SizeBytes ?? 0;
+    }
+
+    private async Task Save()
+    {
+        await SaveCurrentAsync();
+    }
+
+    private async Task<bool> SaveCurrentAsync()
+    {
+        PrepareRequest();
+        var res = IsNew
+            ? await ContentService.CreateAsync(_edit)
+            : await ContentService.UpdateAsync(Id!, _edit);
+
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success || res.Data is null) return false;
+
+        if (IsNew)
+        {
+            Nav.NavigateTo($"/content/edit/{res.Data.Id}?return={Uri.EscapeDataString(ReturnUrl)}");
+            return false;
+        }
+        else
+            LoadItem(res.Data);
+
+        return true;
+    }
+
+    private async Task Submit() => await SetStatus("Submitted");
+    private async Task Reject() => await SetStatus("Rejected");
+
+    private async Task Publish()
+    {
+        if (!await SaveCurrentAsync())
+            return;
+
+        if (IsNew) return;
+
+        var res = await ContentService.PublishAsync(Id!);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null) LoadItem(res.Data);
+    }
+
+    private async Task SetStatus(string status)
+    {
+        if (!await SaveCurrentAsync())
+            return;
+
+        if (IsNew) return;
+
+        var res = await ContentService.SetStatusAsync(Id!, status);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null) LoadItem(res.Data);
+    }
+
+    private async Task Delete()
+    {
+        if (IsNew) return;
+
+        var res = await ContentService.DeleteAsync(Id!);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) Nav.NavigateTo("/content/deleted");
+    }
+
+    private async Task Restore()
+    {
+        if (IsNew) return;
+
+        var res = await ContentService.RestoreAsync(Id!);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null) LoadItem(res.Data);
+    }
+
+    private void PrepareRequest()
+    {
+        EnsureEnglishFallback(_edit.Title);
+        EnsureEnglishFallback(_edit.Summary);
+        EnsureEnglishFallback(_edit.BodyHtml);
+        AddPendingTag();
+        _edit.Tags = _tags.ToList();
+        _tagsText = string.Join(", ", _tags);
+        _edit.Attachments = string.IsNullOrWhiteSpace(_fileUrl)
+            ? new()
+            : new()
+            {
+                new ContentAttachmentModel
+                {
+                    FileName = string.IsNullOrWhiteSpace(_fileName) ? "download.pdf" : _fileName,
+                    Url = _fileUrl,
+                    ContentType = string.IsNullOrWhiteSpace(_fileContentType) ? "application/pdf" : _fileContentType,
+                    SizeBytes = _fileSize
+                }
+            };
+    }
+
+    private void OnTypeChanged(ChangeEventArgs e)
+    {
+        _edit.ContentTypeKey = e.Value?.ToString() ?? _edit.ContentTypeKey;
+    }
+
+    private void OnFileUrlChanged(ChangeEventArgs e)
+    {
+        _fileUrl = e.Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(_fileName) && !string.IsNullOrWhiteSpace(_fileUrl))
+            _fileName = _fileUrl.Split('/').LastOrDefault() ?? "download.pdf";
+    }
+
+    private async Task UploadHero(InputFileChangeEventArgs e)
+    {
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-hero", e.File, maxBytes: 5 * 1024 * 1024);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null)
+            _edit.HeroImageUrl = res.Data.Url;
+    }
+
+    private async Task UploadThumbnail(InputFileChangeEventArgs e)
+    {
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-thumbnails", e.File, maxBytes: 5 * 1024 * 1024);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null)
+            _edit.ThumbnailUrl = res.Data.Url;
+    }
+
+    private async Task UploadFile(InputFileChangeEventArgs e)
+    {
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-files", e.File, maxBytes: 20 * 1024 * 1024);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null)
+        {
+            _fileUrl = res.Data.Url;
+            _fileName = res.Data.FileName;
+            _fileContentType = res.Data.ContentType;
+            _fileSize = res.Data.Size;
+        }
+    }
+
+    private void RemoveFile()
+    {
+        _fileUrl = string.Empty;
+        _fileName = string.Empty;
+        _fileSize = 0;
+    }
+
+    private void OnTagKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "," or "Tab")
+            AddPendingTag();
+    }
+
+    private void AddPendingTag()
+    {
+        var value = _tagDraft.Trim().Trim(',');
+        if (!string.IsNullOrWhiteSpace(value) &&
+            !_tags.Any(tag => string.Equals(tag, value, StringComparison.OrdinalIgnoreCase)))
+        {
+            _tags.Add(value);
+        }
+
+        _tagDraft = string.Empty;
+    }
+
+    private void RemoveTag(string tag)
+    {
+        _tags.RemoveAll(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void RemoveHero()
+    {
+        _edit.HeroImageUrl = null;
+        _edit.HeroImageAlt = null;
+    }
+
+    private string DisplayStatus(string status) =>
+        string.Equals(status, "Submitted", StringComparison.OrdinalIgnoreCase)
+            ? T("PendingReview")
+            : T(status);
+
+    private string GetLang(Dictionary<string, string> values) =>
+        GetValue(values, CurrentLang, fallback: true);
+
+    private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)
+    {
+        if (values.TryGetValue(lang, out var value) && !string.IsNullOrWhiteSpace(value))
+            return value;
+        return fallback && values.TryGetValue("en", out var en) ? en : string.Empty;
+    }
+
+    private static void SetValue(Dictionary<string, string> values, string lang, string? value)
+    {
+        values[lang] = value ?? string.Empty;
+    }
+
+    private void EnsureEnglishFallback(Dictionary<string, string> values)
+    {
+        if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
+            return;
+
+        var current = GetValue(values, CurrentLang);
+        if (!string.IsNullOrWhiteSpace(current))
+            values["en"] = current;
+    }
+
+    private static Dictionary<string, string> EnsureLangs(Dictionary<string, string>? source)
+    {
+        var result = source is null ? new() : new Dictionary<string, string>(source, StringComparer.OrdinalIgnoreCase);
+        foreach (var lang in new[] { "en", "vi", "cn" })
+            result.TryAdd(lang, string.Empty);
+        return result;
+    }
+
+    private static string NormalizeLang(string? lang)
+    {
+        if (string.Equals(lang, "vi", StringComparison.OrdinalIgnoreCase)) return "vi";
+        if (string.Equals(lang, "cn", StringComparison.OrdinalIgnoreCase)) return "cn";
+        return "en";
+    }
+
+    private string GetReturnUrl()
+    {
+        var uri = new Uri(Nav.Uri);
+        var query = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in query)
+        {
+            var pair = part.Split('=', 2);
+            if (pair.Length == 2 && string.Equals(Uri.UnescapeDataString(pair[0]), "return", StringComparison.OrdinalIgnoreCase))
+            {
+                var value = Uri.UnescapeDataString(pair[1]);
+                if (value.StartsWith("/content/", StringComparison.OrdinalIgnoreCase))
+                    return value;
+            }
+        }
+
+        return "/content/all";
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0) return "0 KB";
+        if (bytes < 1024 * 1024) return $"{Math.Max(1, bytes / 1024)} KB";
+        return $"{bytes / 1024d / 1024d:0.0} MB";
+    }
+
+    private static ContentItemRequest NewRequest() => new()
+    {
+        Title = EnsureLangs(null),
+        Summary = EnsureLangs(null),
+        BodyHtml = EnsureLangs(null),
+        Visible = true
+    };
+}

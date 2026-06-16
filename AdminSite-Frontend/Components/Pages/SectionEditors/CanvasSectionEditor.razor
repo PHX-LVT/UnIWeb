@@ -1,0 +1,125 @@
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div class="form-section">
+    <p class="form-hint">
+        Canvas sections are composition sections. Use Style for the section frame and Blocks for movable content.
+    </p>
+
+    <div class="form-group">
+        <label class="form-label">Preset name</label>
+        <input class="form-control" value="@_presetName" @oninput="e => _presetName = e.Value?.ToString() ?? string.Empty" />
+    </div>
+
+    <div class="ez-editor-actions">
+        <button type="button" class="btn-admin btn-primary" @onclick="SavePreset">
+            <i class="fas fa-save"></i>
+            Save Current as Preset
+        </button>
+    </div>
+</div>
+
+<div class="form-section">
+    <div class="form-group">
+        <label class="form-label">Insert saved preset</label>
+        <select class="form-select" @bind="_selectedPresetId">
+            <option value="">Select a preset</option>
+            @foreach (var preset in _presets)
+            {
+                <option value="@preset.Id">@GetPresetName(preset) (@preset.BlockCount blocks)</option>
+            }
+        </select>
+    </div>
+
+    <div class="ez-editor-actions">
+        <button type="button"
+                class="btn-admin btn-primary"
+                disabled="@string.IsNullOrWhiteSpace(_selectedPresetId)"
+                @onclick="ApplyPreset">
+            <i class="fas fa-plus"></i>
+            Insert Preset Section
+        </button>
+        <button type="button"
+                class="btn-admin btn-ghost"
+                disabled="@string.IsNullOrWhiteSpace(_selectedPresetId)"
+                @onclick="DeletePreset">
+            <i class="fas fa-trash"></i>
+            Delete Preset
+        </button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter, EditorRequired] public SectionModel Section { get; set; } = default!;
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnSectionsChanged { get; set; }
+
+    private List<CanvasSectionPresetModel> _presets = new();
+    private string _presetName = string.Empty;
+    private string _selectedPresetId = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _presetName = GetText(Section.AdminLabel) is { Length: > 0 } label
+            ? label
+            : "Canvas Preset";
+        await LoadPresets();
+    }
+
+    private async Task LoadPresets()
+    {
+        var res = await SectionService.GetCanvasPresetsAsync();
+        _presets = res.Data ?? new();
+    }
+
+    private async Task SavePreset()
+    {
+        var name = new Dictionary<string, string> { [AdminLanguage] = string.IsNullOrWhiteSpace(_presetName) ? "Canvas Preset" : _presetName.Trim() };
+        var res = await SectionService.SaveCanvasPresetAsync(PageId, Section.Id, name);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            await LoadPresets();
+            await OnSaved.InvokeAsync();
+        }
+    }
+
+    private async Task ApplyPreset()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedPresetId)) return;
+
+        var res = await SectionService.ApplyCanvasPresetAsync(PageId, _selectedPresetId);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            await OnSectionsChanged.InvokeAsync();
+            await OnSaved.InvokeAsync();
+        }
+    }
+
+    private async Task DeletePreset()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedPresetId)) return;
+
+        var res = await SectionService.DeleteCanvasPresetAsync(_selectedPresetId);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            _selectedPresetId = string.Empty;
+            await LoadPresets();
+        }
+    }
+
+    private string GetPresetName(CanvasSectionPresetModel preset) =>
+        GetText(preset.Name) is { Length: > 0 } value ? value : "Canvas Preset";
+
+    private string GetText(Dictionary<string, string>? value)
+    {
+        if (value is null) return string.Empty;
+        if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+        return value.TryGetValue("en", out var english) ? english : string.Empty;
+    }
+}

@@ -1,0 +1,44 @@
+﻿<div class="ez-modal-overlay" @onclick="OnCancel">
+    <div class="ez-modal" @onclick:stopPropagation="true">
+        <div class="ez-modal__header">
+            <h2>New Page</h2>
+            <button class="ez-icon-btn" @onclick="OnCancel">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="ez-modal__body">
+            <div class="ez-picker-grid">
+                @foreach (var template in _templates)
+                {
+                    <button class="ez-picker-card"
+                            @onclick="() => OnPicked.InvokeAsync(template.Type)">
+                        <div class="ez-picker-card__icon">
+                            <i class="fas @template.Icon"></i>
+                        </div>
+                        <span>@template.Name</span>
+                        <small>@template.Description</small>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnPicked { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private List<PageTemplate> _templates = new()
+    {
+        new("blank",     "Blank",     "fa-file",          "Start from scratch"),
+        new("landing",   "Landing",   "fa-rocket",        "Hero, stats, cards, carousel, CTA"),
+        new("about",     "About Us",  "fa-users",         "Hero, story, values, metrics, CTA"),
+        new("contact",   "Contact",   "fa-envelope",      "Hero, contact details, network map, CTA"),
+        new("services",  "Services",  "fa-concierge-bell","Hero, service cards, process, CTA"),
+        new("portfolio", "Portfolio", "fa-briefcase",     "Hero, gallery, proof points, CTA"),
+        new("faq",       "FAQ",       "fa-question-circle","Hero, FAQ cards, support CTA")
+    };
+
+    private record PageTemplate(string Type, string Name, string Icon, string Description);
+}

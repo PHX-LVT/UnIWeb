@@ -1,0 +1,247 @@
+﻿@page "/forms"
+@inject AdminFormSubmissionService FormService
+@inject IHttpService Http
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-envelope-open-text"></i> @T("FormSubmissions")</h1>
+</div>
+
+@if (_loading)
+{
+    <div class="admin-card" style="text-align:center;padding:2rem">
+        <div class="spinner" style="margin:0 auto"></div>
+    </div>
+}
+else if (!_submissions.Any())
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoSubmissionsYet")</p>
+    </div>
+}
+else
+{
+    @if (FormSubmissions.Any())
+    {
+        <div class="admin-card">
+            <h2 style="font-size:1rem;margin:0 0 1rem">@T("FormSubmissions")</h2>
+            <DxGrid Data="@FormSubmissions"
+                    CssClass="w-100"
+                    PageSize="20">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(FormSubmissionDisplayModel.SubmittedAtVietnam)"
+                                      Caption="@T("SubmittedTime")"
+                                      DisplayFormat="{0:dd MMM yyyy HH:mm}"
+                                      Width="170px" />
+                    <DxGridDataColumn Caption="@T("Source")" Width="180px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <span>@GetSourceLabel(sub.Submission)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Name")" Width="160px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <span>@GetData(sub.Submission, "Name")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Email")" Width="210px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                var email = GetData(sub.Submission, "Email");
+                                if (!string.IsNullOrWhiteSpace(email))
+                                {
+                                    <a href="mailto:@email">@email</a>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Data")">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <span>@GetDisplayData(sub.Submission)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption=" " Width="80px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <button class="btn-admin btn-danger"
+                                        @onclick="() => Delete(sub.Submission.Id)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </div>
+    }
+
+    @if (SyncHubLogins.Any())
+    {
+        <div class="admin-card" style="margin-top:1rem">
+            <h2 style="font-size:1rem;margin:0 0 1rem">@T("SyncHubLoginActivity")</h2>
+            <DxGrid Data="@SyncHubLogins"
+                    CssClass="w-100"
+                    PageSize="20">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(FormSubmissionDisplayModel.SubmittedAtVietnam)"
+                                      Caption="@T("SubmittedTime")"
+                                      DisplayFormat="{0:dd MMM yyyy HH:mm}"
+                                      Width="170px" />
+                    <DxGridDataColumn Caption="@T("Username")" Width="260px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <span>@GetData(sub.Submission, "Username")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Result")" Width="140px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <span>@GetData(sub.Submission, "LoginResult")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Source")">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <span>@GetSourceLabel(sub.Submission)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption=" " Width="80px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionDisplayModel)context.DataItem;
+                                <button class="btn-admin btn-danger"
+                                        @onclick="() => Delete(sub.Submission.Id)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </div>
+    }
+}
+
+@if (_confirmDeleteId is not null)
+{
+    <div class="modal-backdrop" @onclick="() => _confirmDeleteId = null">
+        <div class="modal-box" style="max-width:360px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("ConfirmDelete")</div>
+            <div class="modal-body">
+                <p>@T("DeleteSubmissionPrompt")</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost"
+                        @onclick="() => _confirmDeleteId = null">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" @onclick="ConfirmDelete">
+                    @T("Delete")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private List<FormSubmissionModel> _submissions = new();
+    private string? _confirmDeleteId;
+    private bool _loading = true;
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private List<FormSubmissionDisplayModel> FormSubmissions =>
+        _submissions.Where(s => !IsSyncHubLogin(s)).Select(FormSubmissionDisplayModel.FromUtc).ToList();
+
+    private List<FormSubmissionDisplayModel> SyncHubLogins =>
+        _submissions.Where(IsSyncHubLogin).Select(FormSubmissionDisplayModel.FromUtc).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await FormService.GetAllAsync();
+        _submissions = res.Data ?? new();
+        _loading = false;
+    }
+
+    private void Delete(string id) => _confirmDeleteId = id;
+
+    private async Task ConfirmDelete()
+    {
+        if (_confirmDeleteId is null) return;
+        var res = await FormService.DeleteAsync(_confirmDeleteId);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+            _submissions.RemoveAll(s => s.Id == _confirmDeleteId);
+        _confirmDeleteId = null;
+    }
+
+    private string GetSourceLabel(FormSubmissionModel sub)
+    {
+        if (string.Equals(sub.PageId, "modal:quote", StringComparison.OrdinalIgnoreCase))
+        {
+            return T("GetQuote");
+        }
+
+        if (string.Equals(sub.PageId, "modal:expert", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(sub.PageId, "modal:contact", StringComparison.OrdinalIgnoreCase))
+        {
+            return T("TalkToExpert");
+        }
+
+        if (string.Equals(sub.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase))
+        {
+            return T("LoginToSyncHub");
+        }
+
+        return string.IsNullOrWhiteSpace(sub.PageId) ? "Form" : sub.PageId;
+    }
+
+    private static string GetData(FormSubmissionModel sub, string key) =>
+        sub.Data.TryGetValue(key, out var value) ? value : string.Empty;
+
+    private static bool IsSyncHubLogin(FormSubmissionModel sub) =>
+        string.Equals(sub.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetDisplayData(FormSubmissionModel sub)
+    {
+        var hiddenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "FormType",
+            "PageUrl",
+            "Password",
+            "PasswordProvided",
+            "LoginResult"
+        };
+
+        return string.Join(" · ", sub.Data
+            .Where(kv => !hiddenKeys.Contains(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+            .Select(kv => $"{kv.Key}: {kv.Value}"));
+    }
+
+    private sealed class FormSubmissionDisplayModel
+    {
+        public required FormSubmissionModel Submission { get; init; }
+        public DateTime SubmittedAtVietnam { get; init; }
+
+        public static FormSubmissionDisplayModel FromUtc(FormSubmissionModel submission) => new()
+        {
+            Submission = submission,
+            SubmittedAtVietnam = DateTime.SpecifyKind(submission.SubmittedAt, DateTimeKind.Utc).AddHours(7)
+        };
+    }
+}

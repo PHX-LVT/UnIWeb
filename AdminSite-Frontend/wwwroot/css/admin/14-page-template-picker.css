@@ -1,0 +1,42 @@
+/* -- Page Template Picker Grid ----------------------------- */
+.ez-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .75rem;
+}
+
+.ez-picker-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 1.25rem .75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color .15s, background .15s;
+    text-align: center;
+}
+
+    .ez-picker-card:hover {
+        border-color: var(--primary);
+        background: #f0f4ff;
+    }
+
+.ez-picker-card__icon {
+    font-size: 1.5rem;
+    color: var(--primary-light);
+}
+
+.ez-picker-card span {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.ez-picker-card small {
+    font-size: .75rem;
+    color: var(--text-muted);
+}

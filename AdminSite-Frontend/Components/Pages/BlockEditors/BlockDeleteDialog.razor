@@ -1,0 +1,43 @@
+@using AdminSite.Models
+
+<DxWindow Visible="@(Block is not null)"
+          VisibleChanged="OnVisibleChanged"
+          Width="360px"
+          MaxWidth="calc(100vw - 32px)"
+          ShowCloseButton="false"
+          CloseOnEscape="true"
+          AllowResize="false"
+          HorizontalAlignment="HorizontalAlignment.Center"
+          VerticalAlignment="VerticalAlignment.Center">
+    <BodyTemplate>
+        <div class="block-delete-dialog">
+            <div class="block-delete-dialog__header">@ConfirmTitle</div>
+            <div class="block-delete-dialog__body">
+                <p>Delete this <strong>@Block?.Type</strong> block?</p>
+            </div>
+            <div class="block-delete-dialog__footer">
+                <button class="btn-admin btn-ghost"
+                        @onclick="OnCancel">@CancelText</button>
+                <button class="btn-admin btn-danger"
+                        @onclick="OnConfirm">@DeleteText</button>
+            </div>
+        </div>
+    </BodyTemplate>
+</DxWindow>
+
+@code {
+    [Parameter] public BlockModel? Block { get; set; }
+    [Parameter] public string ConfirmTitle { get; set; } = "Confirm delete";
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+    [Parameter] public string DeleteText { get; set; } = "Delete";
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    private async Task OnVisibleChanged(bool visible)
+    {
+        if (!visible && OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}

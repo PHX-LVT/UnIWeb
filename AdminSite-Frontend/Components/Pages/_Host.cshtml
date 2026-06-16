@@ -1,0 +1,47 @@
+﻿@page "/"
+@namespace AdminSite.Pages
+@using AdminSite.Components
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MySite Admin</title>
+    <base href="~/" />
+
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="css/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- FontAwesomeIcon-->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- DevExpress theme -->
+    <link href="_content/DevExpress.Blazor.Themes/blazing-berry.bs5.min.css" rel="stylesheet" />
+    <!-- Blazored Toast notifications -->
+   @* <link href="_content/Blazored.Toast/blazored-toast.css" rel="stylesheet" /> *@
+    <!-- Our admin CSS -->
+    <link rel="stylesheet" href="css/admin.css" />
+    <!-- Shared public renderer CSS for Canvas preview iframe -->
+    <link rel="stylesheet" href="_content/SharedComponents/sc-components.css" />
+</head>
+<body>
+    <component type="typeof(App)" render-mode="Server" />
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">x</a>
+    </div>
+
+    <script src="js/sortable.min.js" asp-append-version="true"></script>
+    <script src="js/canvas.js" asp-append-version="true"></script>
+    <script src="js/overlay.js" asp-append-version="true"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/cms-widgets.js"></script>
+    <script src="_framework/blazor.server.js"></script>
+</body>
+</html>
+

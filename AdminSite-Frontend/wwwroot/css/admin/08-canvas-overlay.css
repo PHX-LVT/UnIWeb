@@ -1,0 +1,16 @@
+/* -- Canvas Overlay: full-section hover overlay (iframe approach) */
+.ez-section-overlay {
+    box-sizing: border-box;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    transition: border-color .15s;
+}
+
+.ez-section-overlay:hover {
+    border-color: var(--primary);
+}
+
+.ez-section-overlay--hidden {
+    border: 2px dashed #bbb !important;
+    opacity: .55;
+}

@@ -1,0 +1,528 @@
+﻿@using Microsoft.AspNetCore.Components.Forms
+@inject AdminSectionService SectionService
+@inject AdminPageService PageService
+@inject IHttpService Http
+
+<div class="form-group">
+    <label class="form-label">@T("SourcePage")</label>
+    <DxComboBox Data="_sourcePages"
+                Value="_sourcePageId"
+                ValueChanged="@((string? value) => OnSourcePageChanged(value))"
+                TextFieldName="Label"
+                ValueFieldName="Id"
+                CssClass="w-100"
+                NullText="Select a page..." />
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+    <div class="form-group">
+        <label class="form-label">@T("Layout")</label>
+        <DxComboBox Data="_layouts" @bind-Value="_layout" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">@ColumnLabel</label>
+        <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="@ColumnMax" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">@T("Limit")</label>
+        <DxSpinEdit @bind-Value="_limit" MinValue="0" MaxValue="200" CssClass="w-100" />
+        <div class="form-hint">@T("ZeroShowsAll")</div>
+    </div>
+</div>
+
+@if (_layout == "media-rows")
+{
+    <div class="ez-editor-note">
+        Media Rows works best with images.
+    </div>
+}
+
+<div class="form-group">
+    <label class="form-label">@T("Eyebrow")</label>
+    <LangField @bind-Value="_eyebrow" Languages="Languages" />
+</div>
+
+<div class="form-group">
+    <label class="form-label">@T("SectionTitle")</label>
+    <LangField @bind-Value="_sectionTitle" Languages="Languages" />
+</div>
+
+<div class="showcase-action-editor">
+    <div class="form-group">
+        <label class="form-label">@T("ButtonLabel")</label>
+        <LangField @bind-Value="_actionButton.Label" Languages="Languages" NullText="View All" />
+    </div>
+
+    <div style="display:grid;grid-template-columns:auto auto minmax(0,1fr) auto minmax(0,1fr);gap:.6rem;align-items:center">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;white-space:nowrap">
+            <DxCheckBox @bind-Checked="_actionButton.Visible" /> @T("Visible")
+        </label>
+        <label class="form-label" style="margin:0;white-space:nowrap">@T("ButtonPosition")</label>
+        <DxComboBox Data="_buttonPositions" @bind-Value="_actionButtonPosition" CssClass="w-100" />
+        <label class="form-label" style="margin:0;white-space:nowrap">@T("Style")</label>
+        <DxComboBox Data="_buttonStyles" @bind-Value="_actionButton.Style" CssClass="w-100" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">Href</label>
+        <DxTextBox @bind-Text="_actionButton.Href" CssClass="w-100" NullText="/industry" />
+    </div>
+</div>
+
+<div class="form-group">
+    <label class="form-label">@T("SearchPlaceholder")</label>
+    <LangField @bind-Value="_searchPlaceholder" Languages="Languages"
+               NullText="Search..." />
+</div>
+
+<div style="display:flex;gap:2rem;margin-top:.25rem">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <DxCheckBox @bind-Checked="_showImage" /> @T("ShowImage")
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <DxCheckBox @bind-Checked="_showContent" /> @T("ShowContent")
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <DxCheckBox @bind-Checked="_showItemButton" /> @T("ShowItemButton")
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <DxCheckBox @bind-Checked="_showSearchBar" /> @T("ShowSearchBar")
+    </label>
+</div>
+
+<div class="form-group">
+    <label class="form-label">@T("ItemButtonLabel")</label>
+    <LangField @bind-Value="_buttonLabel" Languages="Languages"
+               NullText="View Details" />
+</div>
+
+<div class="showcase-child-editor">
+    <div class="showcase-child-editor__head">
+        <div>
+            <div class="form-label" style="margin:0">@T("ShowcaseItems")</div>
+            <div class="showcase-child-editor__hint">
+                @T("EmptyHeadingUsesChildName")
+            </div>
+        </div>
+        @if (_loadingChildren)
+        {
+            <span class="showcase-child-editor__hint">@T("Loading")</span>
+        }
+    </div>
+
+    @if (string.IsNullOrWhiteSpace(_sourcePageId))
+    {
+        <div class="ez-empty-state">@T("SelectSourcePage")</div>
+    }
+    else if (_childCards.Count == 0 && !_loadingChildren)
+    {
+        <div class="ez-empty-state">@T("NoChildPages")</div>
+    }
+    else
+    {
+        @foreach (var card in _childCards)
+        {
+            <div @key="card.Id" class="showcase-child-card">
+                <div class="showcase-child-card__top">
+                    <div>
+                        <strong>@ChildFallbackName(card)</strong>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">@T("Heading")</label>
+                    <LangField @bind-Value="card.CardTitle"
+                               Languages="Languages"
+                               NullText="@ChildFallbackName(card)" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">@T("Subheading")</label>
+                    <LangField @bind-Value="card.CardContent"
+                               Languages="Languages"
+                               NullText="Optional description" />
+                </div>
+
+                <div class="showcase-child-card__appearance">
+                    <div class="form-group">
+                        <label class="form-label">@T("BackgroundType")</label>
+                        <DxComboBox Data="_backgroundTypes"
+                                    @bind-Value="card.CardBackgroundType"
+                                    CssClass="w-100" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">@T("BackgroundColor")</label>
+                        <input type="color"
+                               class="showcase-child-card__color"
+                               @bind="card.CardBackgroundColor" />
+                    </div>
+
+                    @if (NormalizeBackgroundType(card.CardBackgroundType) == "image")
+                    {
+                        <div class="showcase-child-card__media">
+                            @if (!string.IsNullOrWhiteSpace(card.CardImageUrl))
+                            {
+                                <div class="showcase-child-card__placeholder showcase-child-card__placeholder--selected">
+                                    @T("ImageSelected")
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="showcase-child-card__placeholder">@T("NoImage")</div>
+                            }
+                            <div class="showcase-child-card__media-actions">
+                                <InputFile @key="card.UploadVersion"
+                                           id="@UploadInputId(card)"
+                                           class="showcase-child-card__file-input"
+                                           OnChange="async e => await OnCardImageSelected(e, card)"
+                                           disabled="@IsUploading(card)"
+                                           accept="image/*" />
+                                <label for="@UploadInputId(card)"
+                                       class="btn-admin btn-secondary btn-sm showcase-child-card__upload">
+                                    <i class="fas fa-image"></i> @(IsUploading(card) ? T("Uploading") : T("UploadImage"))
+                                </label>
+                                @if (!string.IsNullOrWhiteSpace(card.CardImageUrl))
+                                {
+                                    <button type="button"
+                                            class="btn-admin btn-secondary btn-sm"
+                                            @onclick="() => ClearCardImage(card)">
+                                        @T("RemoveImage")
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:1rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
+    </button>
+</div>
+
+@code {
+    [Parameter] public SectionModel  Section   { get; set; } = new();
+    [Parameter] public string        PageId    { get; set; } = string.Empty;
+    [Parameter] public List<string>  Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved   { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private string? _sourcePageId;
+    private string  _layout        = "card-grid";
+    private int     _columns       = 4;
+    private int     _limit         = 0;
+    private bool    _showImage     = true;
+    private bool    _showContent   = true;
+    private bool    _showItemButton = true;
+    private bool    _showSearchBar = true;
+    private string  _actionButtonPosition = "bottom-center";
+    private Dictionary<string, string> _eyebrow           = new();
+    private Dictionary<string, string> _sectionTitle      = new();
+    private Dictionary<string, string> _buttonLabel       = new();
+    private Dictionary<string, string> _searchPlaceholder = new();
+    private SectionButtonModel _actionButton = NewActionButton(false, "View All", "/");
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private List<PageSourceOption> _sourcePages = new();
+    private List<ShowcaseChildCardModel> _childCards = new();
+    private bool _saving;
+    private bool _loadingChildren;
+    private string? _loadedSectionId;
+    private string? _loadedChildrenSourceId;
+    private string? _uploadingCardId;
+
+    private List<string> _layouts = new() { "media-rows", "link-bar", "card-grid" };
+    private List<string> _backgroundTypes = new() { "color", "image" };
+    private List<string> _buttonStyles = new() { "filled", "outline", "ghost" };
+    private List<string> _buttonPositions = new() { "top-right", "bottom-center", "bottom-right", "bottom-left" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await PageService.GetAllAsync();
+        _sourcePages = (res.Data ?? new())
+            .Where(p => string.IsNullOrWhiteSpace(p.ParentPageId))
+            .OrderBy(p => p.Order)
+            .Select(p => new PageSourceOption(
+                p.Id,
+                $"{PageTitle(p)} /{(string.IsNullOrWhiteSpace(p.FullSlug) ? p.Slug : p.FullSlug)}"))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(_sourcePageId))
+            await LoadChildrenAsync(_sourcePageId);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_saving && _loadedSectionId != Section.Id)
+        {
+            _loadedSectionId = Section.Id;
+
+            _sourcePageId      = Section.SourcePageId;
+            _layout            = NormalizeLayout(Section.Layout);
+            _columns           = Section.Columns     ?? 4;
+            _limit             = Math.Clamp(Section.Limit ?? 0, 0, 200);
+            _showImage         = Section.ShowImage   ?? true;
+            _showContent       = Section.ShowContent ?? true;
+            _showItemButton    = Section.ShowItemButton ?? true;
+            _showSearchBar     = Section.ShowSearchBar ?? true;
+            _actionButtonPosition = NormalizeActionButtonPosition(Section.ActionButtonPosition);
+            _eyebrow           = new(Section.Eyebrow ?? new());
+            _sectionTitle      = new(Section.SectionTitle      ?? new());
+            _buttonLabel       = new(Section.ButtonLabel ?? new Dictionary<string, string> { ["en"] = "Learn More" });
+            _searchPlaceholder = new(Section.SearchPlaceholder ?? new());
+            _actionButton      = CloneActionButton(Section.ActionButton, false, "View All", "/");
+        }
+
+        if (!_saving && _loadedChildrenSourceId != _sourcePageId)
+            await LoadChildrenAsync(_sourcePageId);
+    }
+
+    private async Task OnSourcePageChanged(string? sourcePageId)
+    {
+        _sourcePageId = sourcePageId;
+        await LoadChildrenAsync(sourcePageId);
+    }
+
+    private async Task LoadChildrenAsync(string? sourcePageId)
+    {
+        _loadedChildrenSourceId = sourcePageId;
+        _childCards = new();
+        if (string.IsNullOrWhiteSpace(sourcePageId)) return;
+
+        _loadingChildren = true;
+        try
+        {
+            var overrides = (Section.ShowcaseItems ?? new())
+                .Where(i => !string.IsNullOrWhiteSpace(i.ChildPageId))
+                .GroupBy(i => i.ChildPageId)
+                .ToDictionary(g => g.Key, g => g.Last());
+
+            var res = await PageService.GetChildrenAsync(sourcePageId);
+            _childCards = (res.Data ?? new())
+                .OrderBy(p => p.Order)
+                .Select(p =>
+                {
+                    overrides.TryGetValue(p.Id, out var itemOverride);
+                    var cardImageUrl = itemOverride?.CardImageUrl ?? p.Card?.CardImageUrl;
+
+                    return new ShowcaseChildCardModel
+                    {
+                        Id = p.Id,
+                        Name = new(p.Name ?? new()),
+                        FullSlug = p.FullSlug ?? p.Slug,
+                        CardTitle = new(HasValues(itemOverride?.CardTitle) ? itemOverride!.CardTitle : p.Card?.CardTitle ?? new()),
+                        CardContent = new(HasValues(itemOverride?.CardContent) ? itemOverride!.CardContent : p.Card?.CardContent ?? new()),
+                        CardBackgroundType = NormalizeBackgroundType(itemOverride?.CardBackgroundType ?? p.Card?.CardBackgroundType, cardImageUrl),
+                        CardBackgroundColor = NormalizeBackgroundColor(itemOverride?.CardBackgroundColor ?? p.Card?.CardBackgroundColor),
+                        CardImageUrl = cardImageUrl,
+                        IsCustomized = itemOverride is not null || p.Card?.IsCustomized == true
+                    };
+                })
+                .ToList();
+        }
+        finally
+        {
+            _loadingChildren = false;
+        }
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new ShowcaseSectionUpdateDto
+            {
+                SourcePageId = _sourcePageId,
+                Layout = _layout,
+                Columns = NormalizedColumns,
+                Limit = Math.Clamp(_limit, 0, 200),
+                Eyebrow = _eyebrow,
+                SectionTitle = _sectionTitle,
+                ButtonLabel = _buttonLabel,
+                ActionButton = ToActionDto(_actionButton, 0),
+                ActionButtonPosition = NormalizeActionButtonPosition(_actionButtonPosition),
+                SearchPlaceholder = _searchPlaceholder,
+                ShowImage = _showImage,
+                ShowContent = _showContent,
+                ShowItemButton = _showItemButton,
+                ShowSearchBar = _showSearchBar,
+                Visible = Section.Visible,
+                Items = _childCards.Select(card => new ShowcaseItemOverrideDto
+                {
+                    ChildPageId = card.Id,
+                    CardTitle = card.CardTitle,
+                    CardContent = card.CardContent,
+                    CardBackgroundType = NormalizeBackgroundType(card.CardBackgroundType, card.CardImageUrl),
+                    CardBackgroundColor = NormalizeBackgroundColor(card.CardBackgroundColor),
+                    CardImageUrl = card.CardImageUrl
+                }).ToList()
+            });
+
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ResetCard(ShowcaseChildCardModel card)
+    {
+        if (string.IsNullOrWhiteSpace(_sourcePageId)) return;
+
+        var res = await PageService.ResetChildCardAsync(_sourcePageId, card.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+            await LoadChildrenAsync(_sourcePageId);
+    }
+
+    private async Task OnCardImageSelected(InputFileChangeEventArgs e, ShowcaseChildCardModel card)
+    {
+        if (_uploadingCardId is not null) return;
+
+        var file = e.File;
+        const long max = 5 * 1024 * 1024;
+        if (file.Size > max)
+        {
+            Http.Toast("Image must be 5MB or smaller.", 422);
+            return;
+        }
+
+        _uploadingCardId = card.Id;
+        try
+        {
+            var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=showcase", file, maxBytes: max);
+            if (!res.Success || res.Data is null)
+            {
+                Http.Toast(res.Message ?? "Image upload failed.", res.StatusCode);
+                return;
+            }
+
+            card.CardImageUrl = res.Data.Url;
+            card.CardBackgroundType = "image";
+        }
+        catch (Exception ex)
+        {
+            Http.Toast($"Image upload failed: {ex.Message}", 500);
+        }
+        finally
+        {
+            card.UploadVersion++;
+            _uploadingCardId = null;
+        }
+    }
+
+    private static void ClearCardImage(ShowcaseChildCardModel card)
+    {
+        card.CardImageUrl = string.Empty;
+        card.UploadVersion++;
+    }
+
+    private static string PageTitle(PageModel page) =>
+        page.Name.GetValueOrDefault("en", page.Name.Values.FirstOrDefault() ?? "Untitled");
+
+    private static string ChildFallbackName(ShowcaseChildCardModel card) =>
+        card.Name.GetValueOrDefault("en", card.Name.Values.FirstOrDefault() ?? "Untitled");
+
+    private string UploadInputId(ShowcaseChildCardModel card) =>
+        $"showcase-card-image-{Section.Id}-{card.Id}";
+
+    private bool IsUploading(ShowcaseChildCardModel card) => _uploadingCardId == card.Id;
+
+    private int ColumnMax => _layout == "link-bar" ? 10 : 4;
+
+    private string ColumnLabel => _layout == "link-bar" ? "Linkbar Columns" : "Card Grid Columns";
+
+    private int NormalizedColumns => _layout == "link-bar"
+        ? Math.Clamp(_columns, 1, 10)
+        : Math.Clamp(_columns, 1, 4);
+
+    private static string NormalizeLayout(string? layout) => layout switch
+    {
+        "rows" => "media-rows",
+        "cards" => "card-grid",
+        "grid" => "card-grid",
+        "media-rows" => "media-rows",
+        "link-bar" => "link-bar",
+        "card-grid" => "card-grid",
+        _ => "card-grid"
+    };
+
+    private static bool HasValues(Dictionary<string, string>? value) =>
+        value is not null && value.Values.Any(v => !string.IsNullOrWhiteSpace(v));
+    private static string NormalizeBackgroundType(string? value, string? imageUrl = null) => value switch
+    {
+        "image" => "image",
+        "color" => "color",
+        _ when !string.IsNullOrWhiteSpace(imageUrl) => "image",
+        _ => "color"
+    };
+
+    private static string NormalizeBackgroundColor(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "#ffffff" : value;
+
+    private static string NormalizeActionButtonPosition(string? value) => value switch
+    {
+        "top-right" => "top-right",
+        "bottom-left" => "bottom-left",
+        "bottom-right" => "bottom-right",
+        _ => "bottom-center"
+    };
+
+    private static SectionButtonModel NewActionButton(bool visible, string label, string href) => new()
+    {
+        Label = new Dictionary<string, string> { ["en"] = label },
+        Action = "linkToPage",
+        Href = href,
+        Style = "filled",
+        Visible = visible
+    };
+
+    private static SectionButtonModel CloneActionButton(SectionButtonModel? source, bool visible, string label, string href) => new()
+    {
+        Id = source?.Id ?? string.Empty,
+        Label = new Dictionary<string, string>(source?.Label ?? new Dictionary<string, string> { ["en"] = label }),
+        Action = string.IsNullOrWhiteSpace(source?.Action) ? "linkToPage" : source!.Action,
+        Href = string.IsNullOrWhiteSpace(source?.Href) ? href : source!.Href,
+        Style = string.IsNullOrWhiteSpace(source?.Style) ? "filled" : source!.Style,
+        Visible = source?.Visible ?? visible,
+        Order = source?.Order ?? 0
+    };
+
+    private static SectionButtonDto ToActionDto(SectionButtonModel button, int order) => new()
+    {
+        Label = button.Label ?? new(),
+        Action = string.IsNullOrWhiteSpace(button.Action) ? "linkToPage" : button.Action,
+        Href = button.Href,
+        Style = string.IsNullOrWhiteSpace(button.Style) ? "filled" : button.Style,
+        Visible = button.Visible,
+        Order = order
+    };
+
+    private sealed record PageSourceOption(string Id, string Label);
+
+    private sealed class ShowcaseChildCardModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public Dictionary<string, string> Name { get; set; } = new();
+        public string FullSlug { get; set; } = string.Empty;
+        public Dictionary<string, string> CardTitle { get; set; } = new();
+        public Dictionary<string, string> CardContent { get; set; } = new();
+        public string CardBackgroundType { get; set; } = "color";
+        public string CardBackgroundColor { get; set; } = "#ffffff";
+        public string? CardImageUrl { get; set; }
+        public bool IsCustomized { get; set; }
+        public int UploadVersion { get; set; }
+    }
+}
+
+
+
+
+

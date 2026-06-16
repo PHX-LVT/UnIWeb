@@ -1,0 +1,26 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-block--file">
+    @if (!string.IsNullOrEmpty(Block.FileUrl))
+    {
+        <a href="@Block.FileUrl"
+               download="@Block.Filename"
+               class="sc-file-link">
+            <i class="fas fa-file-download"></i>
+            @Block.Filename
+        </a>
+    }
+    else
+    {
+        <span class="sc-file-link sc-file-link--unavailable">
+            <i class="fas fa-file"></i>
+            @Block.Filename
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicFileBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

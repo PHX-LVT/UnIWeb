@@ -1,0 +1,798 @@
+@page "/preview/{PageId}"
+@layout Layout.PreviewLayout
+@inject AdminSectionService SectionService
+@inject AdminBlockService BlockService
+@inject AdminPageService PageService
+@inject AdminContentService ContentService
+@inject ThemeService ThemeService
+@inject AdminAuthService Auth
+@inject AdminLanguageService AdminLanguageState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@using Contracts.Public
+@using SharedComponents
+@using SharedComponents.Helpers
+@using SharedComponents.Sections
+
+@if (!string.IsNullOrWhiteSpace(_themeCss))
+{
+    <style>@((MarkupString)_themeCss)</style>
+}
+
+@if (!_ready)
+{
+    <div style="padding:2rem;text-align:center;font-family:sans-serif;">
+        Loading preview...
+    </div>
+}
+else if (_pageDto is not null)
+{
+    <PageRenderer @key="GetRequestKey()" Page="_pageDto" Lang="@_lang" ShowInvisible="true" />
+}
+else
+{
+    <div style="padding:2rem;text-align:center;font-family:sans-serif;color:#999;">
+        @(_error ?? "Page not found.")
+    </div>
+}
+
+@code {
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter, SupplyParameterFromQuery(Name = "lang")] public string? Lang { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "v")] public string? Version { get; set; }
+
+    private PublicPageDto? _pageDto;
+    private string _lang = "en";
+    private bool _ready = false;
+    private bool _widgetsInitialized = false;
+    private string? _loadedRequestKey;
+    private string? _error;
+    private string? _themeCss;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var requestKey = GetRequestKey();
+        if (_loadedRequestKey == requestKey)
+        {
+            return;
+        }
+
+        _ready = false;
+        _pageDto = null;
+        _error = null;
+        _widgetsInitialized = false;
+
+        await LoadPreviewAsync(GetRequestedLang());
+        _loadedRequestKey = requestKey;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_ready || _pageDto is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_widgetsInitialized)
+            {
+                await JS.InvokeVoidAsync("cmsWidgets.init");
+                _widgetsInitialized = true;
+            }
+            await JS.InvokeVoidAsync("reportSectionPositions");
+        }
+        catch
+        {
+            // Preview should remain visible even if optional widget JS is unavailable.
+        }
+    }
+
+    private async Task LoadPreviewAsync(string requestedLang)
+    {
+        try
+        {
+            _lang = requestedLang;
+            await AdminLanguageState.LoadSettingsAsync();
+            StyleHelper.SetFallbackLanguage(AdminLanguageState.FallbackLanguage);
+            await Auth.InitializeAsync();
+            if (!Auth.IsAuthenticated)
+            {
+                Nav.NavigateTo("/login");
+                return;
+            }
+
+            var themeRes = await ThemeService.GetAsync();
+            _themeCss = ThemeService.ToCssVariables(themeRes.Data);
+
+            var pageRes = await PageService.GetByIdAsync(PageId);
+            if (pageRes?.Data is null)
+            {
+                _error = pageRes?.Message ?? "Page not found.";
+                return;
+            }
+
+            var sectionsRes = await SectionService.GetAllAsync(PageId);
+            var sections = sectionsRes.Data ?? new();
+            var blocksBySection = await LoadBlocksAsync(sections);
+            var childrenBySourceId = await LoadShowcaseChildrenAsync(sections);
+            var libraryItems = await LoadLibraryItemsAsync(sections);
+
+            _pageDto = new PublicPageDto
+            {
+                Id = pageRes.Data.Id,
+                Slug = pageRes.Data.Slug,
+                FullSlug = pageRes.Data.FullSlug,
+                Name = pageRes.Data.Name,
+                Sections = sections
+                    .OrderBy(s => s.Order)
+                    .Select(s => ToPublicSectionDto(s, blocksBySection, childrenBySourceId, libraryItems))
+                    .ToList()
+            };
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _ready = true;
+        }
+    }
+
+    private static string NormalizeLang(string? lang)
+    {
+        lang = (lang ?? string.Empty).Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(lang)
+            ? "en"
+            : string.Concat(lang.Where(c => char.IsLetterOrDigit(c) || c == '-'));
+    }
+
+    private string GetRequestKey() => $"{PageId}:{GetRequestedLang()}:{Version}";
+
+    private string GetRequestedLang() => NormalizeLang(Lang);
+
+    private async Task<Dictionary<string, List<BlockModel>>> LoadBlocksAsync(List<SectionModel> sections)
+    {
+        var sectionIds = sections.Select(s => s.Id).ToHashSet();
+        var blocksRes = await BlockService.GetAllForPageAsync(PageId);
+
+        return (blocksRes.Data ?? new())
+            .Where(b => b.Visible && sectionIds.Contains(b.SectionId))
+            .GroupBy(b => b.SectionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(b => b.Order).ToList());
+    }
+
+    private async Task<Dictionary<string, List<PublicChildCardDto>>> LoadShowcaseChildrenAsync(List<SectionModel> sections)
+    {
+        var childrenBySourceId = new Dictionary<string, List<PublicChildCardDto>>();
+        var sourceIds = sections
+            .Where(s => s.Type == "showcase" && !string.IsNullOrWhiteSpace(s.SourcePageId))
+            .Select(s => s.SourcePageId!)
+            .Distinct();
+
+        foreach (var sourceId in sourceIds)
+        {
+            var childrenRes = await PageService.GetChildrenAsync(sourceId);
+            childrenBySourceId[sourceId] = childrenRes.Data?
+                .Select(MapChildPage)
+                .ToList() ?? new();
+        }
+
+        return childrenBySourceId;
+    }
+
+    private async Task<List<PublicLibraryItemDto>> LoadLibraryItemsAsync(List<SectionModel> sections)
+    {
+        if (!sections.Any(s => s.Type == "library"))
+            return new();
+
+        var res = await ContentService.GetAllAsync(status: "Published");
+        return (res.Data ?? new())
+            .Where(i => i.Visible)
+            .Select(MapLibraryItem)
+            .ToList();
+    }
+
+    // -- Mapping: SectionModel ? typed PublicSectionDto ---------
+
+    private static PublicSectionDto ToPublicSectionDto(
+        SectionModel s,
+        IReadOnlyDictionary<string, List<BlockModel>> blocksBySection,
+        IReadOnlyDictionary<string, List<PublicChildCardDto>> childrenBySourceId,
+        IReadOnlyList<PublicLibraryItemDto> libraryItems)
+    {
+        var style = MapStyle(s.Style);
+
+        PublicSectionDto dto = s.Type switch
+        {
+            "hero" => new PublicHeroSectionDto
+            {
+                Eyebrow = s.Eyebrow,
+                Heading = s.Heading,
+                Subheading = s.Subheading,
+                Layout = s.Layout,
+                HeadingSize = s.HeadingSize,
+                ContentAlignment = s.ContentAlignment,
+                ImageUrl = s.ImageUrl,
+                Buttons = s.Buttons?.Select(MapButton).ToList()
+            },
+            "cta" => new PublicCtaSectionDto
+            {
+                Heading = s.Heading,
+                Subtext = s.Subtext,
+                Layout = s.Layout,
+                Button = s.Button != null ? MapButton(s.Button) : null,
+                Buttons = s.Buttons?.Select(MapButton).ToList()
+            },
+            "gallery" => new PublicGallerySectionDto
+            {
+                Columns = s.Columns,
+                Gap = s.Gap,
+                ShowCaptions = s.ShowCaptions,
+                Images = s.Images?
+                    .Where(i => i.Visible)
+                    .OrderBy(i => i.Order)
+                    .Select(i => new PublicGalleryImageDto
+                {
+                    Id = i.Id,
+                    ImageUrl = i.ImageUrl,
+                    Caption = i.Caption ?? new()
+                }).ToList()
+            },
+            "list" => new PublicListSectionDto
+            {
+                Layout = s.Layout,
+                SectionTitle = s.SectionTitle,
+                ShowIcon = s.ShowIcon,
+                Columns = s.Columns,
+                Items = s.Items?
+                    .Where(i => i.Visible)
+                    .OrderBy(i => i.Order)
+                    .Select(i => new PublicListItemDto
+                {
+                    Id = i.Id,
+                    Icon = i.Icon ?? string.Empty,
+                    Title = i.Title ?? new(),
+                    Description = i.Description ?? new(),
+                    ImageUrl = i.ImageUrl,
+                    LinkHref = i.LinkHref
+                }).ToList()
+            },
+            "html" => new PublicHtmlSectionDto
+            {
+                HtmlContent = s.Content
+            },
+            "columns" => MapColumnsSection(s, blocksBySection),
+            "showcase" => new PublicShowcaseSectionDto
+            {
+                SourcePageId = s.SourcePageId,
+                Layout = s.Layout,
+                Eyebrow = s.Eyebrow,
+                SectionTitle = s.SectionTitle,
+                ButtonLabel = s.ButtonLabel,
+                ActionButton = s.ActionButton != null ? MapButton(s.ActionButton) : null,
+                ActionButtonPosition = s.ActionButtonPosition,
+                Columns = s.Columns,
+                Limit = s.Limit,
+                ShowImage = s.ShowImage,
+                ShowContent = s.ShowContent,
+                ShowItemButton = s.ShowItemButton,
+                ShowSearchBar = s.ShowSearchBar,
+                SearchPlaceholder = s.SearchPlaceholder,
+                Children = s.SourcePageId is not null && childrenBySourceId.TryGetValue(s.SourcePageId, out var children)
+                    ? ApplyShowcaseLimit(ApplyShowcaseOverrides(children, s.ShowcaseItems), s.Limit)
+                    : new()
+            },
+            "library" => new PublicLibrarySectionDto
+            {
+                ContentTypes = s.ContentTypes,
+                Layout = s.Layout,
+                Eyebrow = s.Eyebrow,
+                SectionTitle = s.SectionTitle,
+                Subheading = s.Subheading,
+                ButtonLabel = s.ButtonLabel,
+                Columns = s.Columns,
+                Rows = s.Rows,
+                Limit = s.Limit,
+                EnableTabs = s.EnableTabs,
+                EnablePagination = s.EnablePagination,
+                ShowImage = s.ShowImage,
+                ShowSummary = s.ShowSummary,
+                ShowButton = s.ShowButton,
+                ShowTime = s.ShowTime,
+                ButtonStyle = s.ButtonStyle,
+                ShowSearchBar = s.ShowSearchBar,
+                ShowFilters = s.ShowFilters,
+                SearchPlaceholder = s.SearchPlaceholder,
+                SortMode = s.SortMode,
+                Items = FilterLibraryItems(libraryItems, s)
+            },
+            "stats" => new PublicStatsSectionDto
+            {
+                SectionTitle = s.SectionTitle,
+                Columns = s.Columns,
+                DurationMs = s.DurationMs,
+                Items = s.Stats?
+                    .Where(i => i.Visible)
+                    .OrderBy(i => i.Order)
+                    .Select(i => new PublicStatItemDto
+                {
+                    Id = i.Id,
+                    Label = i.Label ?? new(),
+                    Value = i.Value,
+                    Prefix = i.Prefix,
+                    Suffix = i.Suffix,
+                    Order = i.Order
+                }).ToList()
+            },
+            "carousel" => new PublicCarouselSectionDto
+            {
+                SectionTitle = s.SectionTitle,
+                Layout = s.Layout,
+                Columns = s.Columns,
+                Autoplay = s.Autoplay,
+                ShowDots = s.ShowDots,
+                ShowArrows = s.ShowArrows,
+                Items = s.CarouselItems?
+                    .Where(i => i.Visible)
+                    .OrderBy(i => i.Order)
+                    .Select(i => new PublicCarouselItemDto
+                {
+                    Id = i.Id,
+                    Tag = i.Tag ?? new(),
+                    Title = i.Title ?? new(),
+                    Description = i.Description ?? new(),
+                    ImageUrl = i.ImageUrl,
+                    LinkHref = i.LinkHref,
+                    Metrics = i.Metrics?
+                        .OrderBy(m => m.Order)
+                        .Select(m => new PublicCarouselMetricDto
+                        {
+                            Id = m.Id,
+                            Value = m.Value ?? new(),
+                            Label = m.Label ?? new(),
+                            Tone = m.Tone ?? "positive",
+                            Order = m.Order
+                        }).ToList() ?? new(),
+                    Order = i.Order
+                }).ToList()
+            },
+            "network-map" => new PublicNetworkMapSectionDto
+            {
+                SectionTitle = s.SectionTitle,
+                CenterLat = s.CenterLat,
+                CenterLng = s.CenterLng,
+                DefaultZoom = s.DefaultZoom,
+                Pins = s.MapPins?
+                    .Where(p => p.Visible)
+                    .OrderBy(p => p.Order)
+                    .Select(p => new PublicMapPinDto
+                {
+                    Id = p.Id,
+                    Label = p.Label ?? string.Empty,
+                    Lat = p.Lat,
+                    Lng = p.Lng,
+                    Href = p.Href,
+                    Order = p.Order
+                }).ToList()
+            },
+            "testimonial" => new PublicTestimonialSectionDto
+            {
+                Eyebrow = s.Eyebrow,
+                SectionTitle = s.SectionTitle,
+                Subheading = s.Subheading,
+                Layout = s.Layout,
+                HeaderAlignment = s.HeaderAlignment,
+                Columns = s.Columns,
+                Items = s.Testimonials?
+                    .Where(i => i.Visible)
+                    .OrderBy(i => i.Order)
+                    .Select(i => new PublicTestimonialItemDto
+                {
+                    Id = i.Id,
+                    Icon = i.Icon ?? string.Empty,
+                    Title = i.Title ?? new(),
+                    Description = i.Description ?? new(),
+                    ImageUrl = i.ImageUrl,
+                    Order = i.Order
+                }).ToList()
+            },
+            "canvas" => new PublicCanvasSectionDto
+            {
+                AdminLabel = s.AdminLabel
+            },
+            _ => new PublicHtmlSectionDto { HtmlContent = null }
+        };
+
+        dto.Id = s.Id;
+        dto.Type = s.Type;
+        dto.Order = s.Order;
+        dto.Visible = s.Visible;
+        dto.Style = style;
+        if (s.Type != "columns" && blocksBySection.TryGetValue(s.Id, out var sectionBlocks))
+        {
+            dto.Blocks = MapBlocks(sectionBlocks
+                .Where(b => b.Visible && string.IsNullOrWhiteSpace(b.ColumnSlotId))
+                .OrderBy(b => b.Order));
+        }
+        return dto;
+    }
+
+    private static PublicColumnsSectionDto MapColumnsSection(
+        SectionModel s,
+        IReadOnlyDictionary<string, List<BlockModel>> blocksBySection)
+    {
+        var blocks = blocksBySection.TryGetValue(s.Id, out var sectionBlocks)
+            ? sectionBlocks
+            : new List<BlockModel>();
+
+        var blocksBySlot = blocks
+            .Where(b => b.Visible && !string.IsNullOrWhiteSpace(b.ColumnSlotId))
+            .GroupBy(b => b.ColumnSlotId!)
+            .ToDictionary(g => g.Key, g => g.OrderBy(b => b.Order).ToList());
+
+        return new PublicColumnsSectionDto
+        {
+            ColumnCount = s.ColumnCount,
+            ColumnRatio = s.ColumnRatio,
+            StackOnMobile = s.StackOnMobile,
+            ColumnSlots = s.ColumnSlots?.Select(slot => new PublicColumnSlotDto
+            {
+                Id = slot.Id,
+                Order = slot.Order,
+                Blocks = blocksBySlot.TryGetValue(slot.Id, out var slotBlocks)
+                    ? MapBlocks(slotBlocks)
+                    : new()
+            }).ToList()
+        };
+    }
+
+    private static List<PublicBlockDto> MapBlocks(IEnumerable<BlockModel> blocks, string? parentBlockId = null)
+    {
+        var blockList = blocks.ToList();
+        var mapped = blockList
+            .Where(b => string.IsNullOrWhiteSpace(parentBlockId)
+                ? string.IsNullOrWhiteSpace(b.ParentBlockId)
+                : string.Equals(b.ParentBlockId, parentBlockId, StringComparison.Ordinal))
+            .OrderBy(b => b.Order)
+            .Select(MapBlock)
+            .ToList();
+
+        foreach (var container in mapped.OfType<PublicContainerBlockDto>())
+        {
+            container.Children = MapBlocks(blockList, container.Id);
+        }
+
+        return mapped;
+    }
+
+    private static PublicBlockDto MapBlock(BlockModel b)
+    {
+        PublicBlockDto dto = b.Type switch
+        {
+            "text" => new PublicTextBlockDto
+            {
+                Title = b.Title,
+                Content = b.Content
+            },
+            "image" => new PublicImageBlockDto
+            {
+                ImageUrl = b.ImageUrl,
+                AltText = b.AltText
+            },
+            "video" => new PublicVideoBlockDto
+            {
+                EmbedUrl = b.EmbedUrl
+            },
+            "file" => new PublicFileBlockDto
+            {
+                FileUrl = b.FileUrl,
+                Filename = b.FileName,
+                FileType = b.FileType
+            },
+            "map" => new PublicMapBlockDto
+            {
+                CenterLat = b.CenterLat,
+                CenterLng = b.CenterLng,
+                DefaultZoom = b.DefaultZoom,
+                Pins = b.Pins?.Select(p => new PublicMapPinDto
+                {
+                    Id = p.Id,
+                    Label = p.Label ?? string.Empty,
+                    Lat = p.Lat,
+                    Lng = p.Lng,
+                    Href = p.Href,
+                    Order = p.Order
+                }).ToList()
+            },
+            "form" => new PublicFormBlockDto
+            {
+                SubmitButtonLabel = b.SubmitButtonLabel,
+                Fields = b.Fields?.Select(f => new PublicFormFieldDto
+                {
+                    Name = f.Name ?? f.Id,
+                    Type = f.FieldType ?? "text",
+                    Label = f.Label ?? new(),
+                    Required = f.Required,
+                    Options = f.Options,
+                    Order = f.Order
+                }).ToList()
+            },
+            "card" => new PublicCardBlockDto
+            {
+                Icon = b.Icon,
+                Title = b.Title,
+                Description = b.Description,
+                ImageUrl = b.ImageUrl,
+                ButtonLabel = b.ButtonLabel,
+                Href = b.Href
+            },
+            "button" => new PublicButtonBlockDto
+            {
+                Label = b.Label,
+                Href = b.Href,
+                Style = b.Style
+            },
+            "metric" => new PublicMetricBlockDto
+            {
+                Icon = b.Icon,
+                Label = b.Label,
+                Value = b.Value,
+                Prefix = b.Prefix,
+                Suffix = b.Suffix,
+                Description = b.Description
+            },
+            "bullet-list" => new PublicBulletListBlockDto
+            {
+                Title = b.Title,
+                Items = b.BulletItems?.Select(i => new PublicBulletListItemDto
+                {
+                    Id = i.Id,
+                    Icon = i.Icon,
+                    Text = i.Text,
+                    Visible = i.Visible,
+                    Order = i.Order
+                }).ToList()
+            },
+            "step" => new PublicStepBlockDto
+            {
+                Icon = b.Icon,
+                StepLabel = b.StepLabel,
+                Title = b.Title,
+                Description = b.Description
+            },
+            "icon" => new PublicIconBlockDto
+            {
+                Icon = b.Icon,
+                Label = b.Label,
+                Description = b.Description
+            },
+            "container" => new PublicContainerBlockDto
+            {
+                Title = b.Title,
+                LayoutMode = b.LayoutMode,
+                Columns = b.Columns,
+                Gap = b.Gap
+            },
+            _ => new PublicTextBlockDto
+            {
+                Title = b.Title,
+                Content = b.Content
+            }
+        };
+
+        dto.Id = b.Id;
+        dto.Type = b.Type;
+        dto.Order = b.Order;
+        dto.Visible = b.Visible;
+        dto.BlockZone = b.BlockZone;
+        dto.ParentBlockId = b.ParentBlockId;
+        dto.Layout = MapBlockLayout(b.Layout);
+        return dto;
+    }
+
+    private static PublicBlockLayoutDto MapBlockLayout(BlockLayoutModel? layout) => new()
+    {
+        Width = layout?.Width ?? "auto",
+        ColumnSpan = Math.Clamp(layout?.ColumnSpan ?? 12, 1, 12),
+        Align = layout?.Align ?? "stretch",
+        Justify = layout?.Justify ?? "start",
+        Padding = layout?.Padding ?? "none",
+        Margin = layout?.Margin ?? "none",
+        BackgroundColor = layout?.BackgroundColor,
+        BorderRadius = layout?.BorderRadius ?? "none",
+        ZIndex = Math.Clamp(layout?.ZIndex ?? 1, 0, 20),
+        X = Math.Clamp(layout?.X ?? 0, 0, 11),
+        Y = Math.Clamp(layout?.Y ?? 0, 0, 60),
+        W = Math.Clamp(layout?.W ?? 4, 1, 12),
+        H = Math.Clamp(layout?.H ?? 2, 1, 40)
+    };
+
+    private static List<PublicChildCardDto> ApplyShowcaseOverrides(
+        IEnumerable<PublicChildCardDto> children,
+        IEnumerable<ShowcaseItemOverrideModel>? overrides)
+    {
+        var overridesByChildId = (overrides ?? Enumerable.Empty<ShowcaseItemOverrideModel>())
+            .Where(i => !string.IsNullOrWhiteSpace(i.ChildPageId))
+            .GroupBy(i => i.ChildPageId)
+            .ToDictionary(g => g.Key, g => g.Last());
+
+        return children.Select(child =>
+        {
+            var itemOverride = FindShowcaseOverride(child, overridesByChildId);
+            return new PublicChildCardDto
+            {
+                Id = child.Id,
+                StableId = child.StableId,
+                SourceId = child.SourceId,
+                FullSlug = child.FullSlug,
+                Name = child.Name,
+                Card = MergeShowcaseCard(child.Card, itemOverride)
+            };
+        }).ToList();
+    }
+
+    private static List<PublicChildCardDto> ApplyShowcaseLimit(List<PublicChildCardDto> children, int? limit) =>
+        limit is > 0
+            ? children.Take(Math.Clamp(limit.Value, 1, 200)).ToList()
+            : children;
+
+    private static ShowcaseItemOverrideModel? FindShowcaseOverride(
+        PublicChildCardDto child,
+        IReadOnlyDictionary<string, ShowcaseItemOverrideModel> overrides)
+    {
+        if (overrides.TryGetValue(child.Id, out var byId))
+            return byId;
+
+        if (!string.IsNullOrWhiteSpace(child.SourceId) && overrides.TryGetValue(child.SourceId, out var bySourceId))
+            return bySourceId;
+
+        if (!string.IsNullOrWhiteSpace(child.StableId) && overrides.TryGetValue(child.StableId, out var byStableId))
+            return byStableId;
+
+        return null;
+    }
+
+    private static PublicChildCardContentDto MergeShowcaseCard(PublicChildCardContentDto? fallback, ShowcaseItemOverrideModel? itemOverride) => new()
+    {
+        CardTitle = HasValues(itemOverride?.CardTitle) ? itemOverride!.CardTitle : fallback?.CardTitle ?? new(),
+        CardContent = HasValues(itemOverride?.CardContent) ? itemOverride!.CardContent : fallback?.CardContent ?? new(),
+        CardBackgroundType = !string.IsNullOrWhiteSpace(itemOverride?.CardBackgroundType) ? itemOverride!.CardBackgroundType : fallback?.CardBackgroundType,
+        CardBackgroundColor = !string.IsNullOrWhiteSpace(itemOverride?.CardBackgroundColor) ? itemOverride!.CardBackgroundColor : fallback?.CardBackgroundColor,
+        CardImageUrl = itemOverride?.CardImageUrl ?? fallback?.CardImageUrl
+    };
+
+    private static bool HasValues(Dictionary<string, string>? value) =>
+        value is not null && value.Values.Any(v => !string.IsNullOrWhiteSpace(v));
+
+    private static List<PublicLibraryItemDto> FilterLibraryItems(
+        IEnumerable<PublicLibraryItemDto> items,
+        SectionModel section)
+    {
+        var typeKeys = (section.ContentTypes ?? new())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var filtered = typeKeys.Count == 0
+            ? items
+            : items.Where(i => typeKeys.Contains(i.ContentTypeKey));
+
+        filtered = section.SortMode switch
+        {
+            "oldest" => filtered.OrderBy(i => i.PublishedAt ?? i.CreatedAt),
+            "title" => filtered.OrderBy(i => i.Title.TryGetValue("en", out var title) ? title : string.Empty),
+            _ => filtered.OrderByDescending(i => i.PublishedAt ?? i.UpdatedAt)
+        };
+
+        var limit = section.EnablePagination == true
+            ? 200
+            : Math.Clamp(section.Limit ?? 6, 1, 24);
+
+        return filtered.Take(limit).ToList();
+    }
+
+    private static PublicLibraryItemDto MapLibraryItem(ContentItemModel item) => new()
+    {
+        Id = item.Id,
+        StableId = item.StableId,
+        ContentTypeKey = item.ContentTypeKey,
+        Slug = item.Slug,
+        Title = item.Title,
+        Summary = item.Summary,
+        HeroImageUrl = item.HeroImageUrl,
+        ThumbnailUrl = item.ThumbnailUrl,
+        VideoUrl = item.VideoUrl,
+        ExternalUrl = item.ExternalUrl,
+        ClickBehavior = ResolveLibraryClickBehavior(item),
+        Tags = item.Tags,
+        Attachments = item.Attachments.Select(a => new PublicLibraryAttachmentDto
+        {
+            Id = a.Id,
+            FileName = a.FileName,
+            Url = a.Url,
+            ContentType = a.ContentType,
+            SizeBytes = a.SizeBytes
+        }).ToList(),
+        CreatedAt = item.CreatedAt,
+        UpdatedAt = item.UpdatedAt,
+        PublishedAt = item.PublishedAt
+    };
+
+    private static string ResolveLibraryClickBehavior(ContentItemModel item)
+    {
+        if (string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase))
+            return "video";
+        if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) ||
+            string.Equals(item.ContentTypeKey, "whitepaper", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(item.ContentTypeKey, "tool", StringComparison.OrdinalIgnoreCase))
+            return "download";
+        if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
+            return "external";
+        return "detail";
+    }
+
+    private static PublicChildCardDto MapChildPage(PageModel page) => new()
+    {
+        Id = page.Id,
+        StableId = page.StableId,
+        SourceId = page.SourceId,
+        FullSlug = page.FullSlug ?? page.Slug,
+        Name = page.Name,
+        Card = page.Card is null ? null : new PublicChildCardContentDto
+        {
+            CardTitle = page.Card.CardTitle,
+            CardContent = page.Card.CardContent,
+            CardBackgroundType = page.Card.CardBackgroundType,
+            CardBackgroundColor = page.Card.CardBackgroundColor,
+            CardImageUrl = page.Card.CardImageUrl
+        }
+    };
+
+    private static PublicSectionStyleDto MapStyle(SectionStyleModel? s) =>
+        s is null ? new() : new()
+        {
+            BackgroundType = s.BackgroundType ?? "color",
+            BackgroundColor = s.BackgroundColor ?? "#ffffff",
+            BackgroundImageUrl = s.BackgroundImageUrl,
+            BackgroundVideoUrl = s.BackgroundVideoUrl,
+            GradientFrom = s.GradientFrom,
+            GradientTo = s.GradientTo,
+            GradientDirection = s.GradientDirection ?? "top",
+            OverlayColor = s.OverlayColor,
+            OverlayOpacity = s.OverlayOpacity ?? 0,
+            Height = s.Height ?? "auto",
+            CustomMinHeightPx = s.CustomMinHeightPx,
+            Padding = s.Padding ?? "medium",
+            ContentWidth = s.ContentWidth ?? "normal",
+            TextColor = s.TextColor ?? "dark",
+            MobileLayout = s.MobileLayout ?? "stack",
+            BlockLayoutMode = s.BlockLayoutMode ?? "stack",
+            BlockGridColumns = Math.Clamp(s.BlockGridColumns ?? 12, 1, 12),
+            BlockGap = s.BlockGap ?? "medium"
+        };
+
+    private static PublicSectionButtonDto MapButton(SectionButtonModel b) => new()
+    {
+        Id = b.Id,
+        Label = b.Label ?? new(),
+        Action = b.Action ?? string.Empty,
+        Href = b.Href,
+        Style = b.Style ?? "filled",
+        Visible = b.Visible,
+        Order = b.Order
+    };
+}
+
+
+
+
+
+
+
+
+
+

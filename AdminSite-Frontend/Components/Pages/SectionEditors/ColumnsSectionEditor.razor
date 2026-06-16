@@ -1,0 +1,85 @@
+﻿@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div class="alert alert-info">
+    <i class="fas fa-info-circle"></i>
+    Add blocks to each column slot using the Blocks tab above.
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div class="form-group">
+        <label class="form-label">Column Count</label>
+        <DxComboBox Data="_counts" @bind-Value="_columnCount" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">Column Ratio</label>
+        <DxComboBox Data="_ratios" @bind-Value="_columnRatio" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">Gap</label>
+        <DxComboBox Data="_gaps" @bind-Value="_gap" CssClass="w-100" />
+    </div>
+</div>
+
+<div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <DxCheckBox @bind-Checked="_stackOnMobile" /> Stack on Mobile
+    </label>
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+    </button>
+</div>
+
+@code {
+    [Parameter] public SectionModel  Section { get; set; } = new();
+    [Parameter] public string        PageId  { get; set; } = string.Empty;
+    [Parameter] public List<string>  Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private int    _columnCount  = 2;
+    private string _columnRatio  = "equal";
+    private string _gap          = "medium";
+    private bool   _stackOnMobile = true;
+    private bool   _saving;
+    private string? _loadedSectionId;
+
+    private List<int>    _counts = new() { 2, 3 };
+    private List<string> _ratios = new() { "equal", "60-40", "40-60", "70-30", "30-70", "thirds", "quarters" };
+    private List<string> _gaps = new() { "none", "small", "medium", "large" };
+
+    protected override void OnParametersSet()
+    {
+        if (_saving || _loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+
+        _columnCount   = Section.ColumnCount   ?? 2;
+        _columnRatio   = Section.ColumnRatio   ?? "equal";
+        _gap           = Section.Gap           ?? "medium";
+        _stackOnMobile = Section.StackOnMobile ?? true;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new ColumnsSectionUpdateDto
+            {
+                ColumnCount = _columnCount,
+                ColumnRatio = _columnRatio,
+                Gap = _gap,
+                StackOnMobile = _stackOnMobile,
+                Visible = Section.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

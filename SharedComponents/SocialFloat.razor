@@ -1,0 +1,44 @@
+@using SharedComponents.Models
+@using Contracts.Global
+@using System.Globalization
+
+<div class="sc-social @(_open ? "sc-social--open" : "")">
+    <button class="sc-social__toggle" @onclick="Toggle">
+        <i class="fas fa-share-alt"></i>
+    </button>
+    <div class="sc-social__buttons">
+        @foreach (var item in Buttons.OrderBy(b => b.Order).Select((button, index) => new { button, index }))
+        {
+            <a href="@item.button.Href"
+                   target="_blank"
+                   rel="noopener"
+                   class="sc-social__btn"
+                   title="@item.button.Label"
+                   style="@SatelliteStyle(item.index, Buttons.Count)">
+                <i class="@item.button.Icon"></i>
+            </a>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<PublicSocialButton> Buttons { get; set; } = default!;
+
+    private bool _open = false;
+    private void Toggle() => _open = !_open;
+
+    private static string SatelliteStyle(int index, int count)
+    {
+        var safeCount = Math.Max(count, 1);
+        var start = 165d;
+        var end = safeCount == 1 ? 165d : 280d;
+        var angle = start + ((end - start) * index / Math.Max(safeCount - 1, 1));
+        var radians = angle * Math.PI / 180d;
+        var radius = 80d;
+        var x = Math.Cos(radians) * radius;
+        var y = Math.Sin(radians) * radius;
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"--tx:{x:0.#}px;--ty:{y:0.#}px");
+    }
+}

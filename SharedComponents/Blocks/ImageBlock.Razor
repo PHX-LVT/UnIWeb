@@ -1,0 +1,16 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-block--image">
+    @if (!string.IsNullOrEmpty(Block.ImageUrl))
+    {
+        <img src="@Block.ImageUrl"
+             alt="@StyleHelper.Lang(Block.AltText, Lang)"
+             class="sc-block__image" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicImageBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

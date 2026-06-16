@@ -1,0 +1,170 @@
+﻿@page "/global/social"
+@inject SocialService SocialService
+@inject IHttpService Http
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-share-alt"></i> Social Buttons</h1>
+    <div class="page-actions">
+        @if (_group is not null)
+        {
+            <button class="visibility-toggle @(_group.Visible ? "visible" : "hidden")"
+                    @onclick="ToggleGroup">
+                <i class="fas @(_group.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                Group @(_group.Visible ? "Visible" : "Hidden")
+            </button>
+        }
+        <button class="btn-admin btn-primary" @onclick="() => OpenModal(null)"
+                disabled="@(_group?.Buttons.Count >= 4)">
+            <i class="fas fa-plus"></i> Add
+        </button>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="admin-card" style="text-align:center;padding:2rem">
+        <div class="spinner" style="margin:0 auto"></div>
+    </div>
+}
+else if (_group is not null)
+{
+    <div class="admin-card">
+        @if (!_group.Buttons.Any())
+        {
+            <p class="text-muted">No social buttons yet.</p>
+        }
+        else
+        {
+            @foreach (var btn in _group.Buttons.OrderBy(b => b.Order))
+            {
+                <div style="display:flex;align-items:center;gap:1rem;
+                    padding:.75rem 0;border-bottom:1px solid var(--border)">
+                    <i class="@btn.Icon" style="width:24px;text-align:center;
+                    color:var(--primary-light)"></i>
+                    <div style="flex:1">
+                        <div style="font-weight:500">@btn.Label</div>
+                        <div class="text-muted" style="font-size:.8rem">@btn.Href</div>
+                    </div>
+                    <button class="visibility-toggle @(btn.Visible ? "visible" : "hidden")"
+                            @onclick="() => ToggleButton(btn)">
+                        <i class="fas @(btn.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                    </button>
+                    <button class="btn-admin btn-ghost" @onclick="() => OpenModal(btn)">
+                        <i class="fas fa-pencil-alt"></i>
+                    </button>
+                    <button class="btn-admin btn-danger" @onclick="() => Delete(btn.Id)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            }
+        }
+    </div>
+}
+
+@if (_showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@(_editing is null ? "Add Social Button" : "Edit Social Button")</span>
+                <button class="btn-admin btn-ghost" @onclick="CloseModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label required">Label</label>
+                    <DxTextBox @bind-Text="_form.Label" CssClass="w-100"
+                               NullText="Facebook, Instagram..." />
+                </div>
+                <div class="form-group">
+                    <label class="form-label required">URL</label>
+                    <DxTextBox @bind-Text="_form.Href" CssClass="w-100" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Bootstrap Icon class</label>
+                    <DxTextBox @bind-Text="_form.Icon" CssClass="w-100"
+                               NullText="fab fa-facebook" />
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <DxCheckBox @bind-Checked="_form.Visible" /> Visible
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseModal">Cancel</button>
+                <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+                    @(_saving ? "Saving..." : "Save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private SocialGroupModel? _group;
+    private SocialButtonModel? _editing;
+    private SocialButtonRequest _form = new();
+    private bool _loading = true;
+    private bool _saving = false;
+    private bool _showModal = false;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        var res = await SocialService.GetAsync();
+        _group = res.Data;
+        _loading = false;
+    }
+
+    private void OpenModal(SocialButtonModel? btn)
+    {
+        _editing = btn;
+        _form = btn is null ? new() : new()
+        {
+            Label = btn.Label,
+            Href = btn.Href,
+            Icon = btn.Icon,
+            Visible = btn.Visible
+        };
+        _showModal = true;
+    }
+
+    private void CloseModal() => _showModal = false;
+
+    private async Task Save()
+    {
+        _saving = true;
+        ApiResponse<SocialButtonModel> res;
+        if (_editing is null)
+            res = await SocialService.CreateAsync(_form);
+        else
+            res = await SocialService.UpdateAsync(_editing.Id, _form);
+
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) { CloseModal(); await Load(); }
+        _saving = false;
+    }
+
+    private async Task ToggleButton(SocialButtonModel btn)
+    {
+        var res = await SocialService.SetButtonVisibilityAsync(btn.Id, !btn.Visible);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) btn.Visible = !btn.Visible;
+    }
+
+    private async Task ToggleGroup()
+    {
+        var res = await SocialService.SetGroupVisibilityAsync(!_group!.Visible);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) _group.Visible = !_group.Visible;
+    }
+
+    private async Task Delete(string id)
+    {
+        var res = await SocialService.DeleteAsync(id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) await Load();
+    }
+}

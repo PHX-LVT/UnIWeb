@@ -1,0 +1,199 @@
+﻿@using Contracts.Admin
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+@inject AdminLanguageService AdminLanguageState
+@*@inject AdminStyleService StyleService *@
+
+
+<div class="ez-right-panel">
+    <div class="ez-right-panel__header">
+        <span class="ez-right-panel__title">
+            <i class="fas fa-sliders-h"></i>
+            @Section.Type?.ToUpper() @T("Content")
+        </span>
+        <button class="ez-icon-btn" @onclick="OnClose">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="ez-right-panel__tabs">
+        <button class="ez-panel-tab @(_tab == "style" ? "active" : "")"
+                @onclick='() => _tab = "style"'>
+            @T("Style")
+        </button>
+        <button class="ez-panel-tab @(_tab == "content" ? "active" : "")"
+                @onclick='() => _tab = "content"'>
+            @T("Content")
+        </button>
+        <button class="ez-panel-tab @(_tab == "blocks" ? "active" : "")"
+                @onclick='() => _tab = "blocks"'>
+            @T("Blocks")
+        </button>
+    </div>
+
+    <div class="ez-right-panel__body">
+        @if (_tab == "style")
+        {
+            <SectionStylePanel PageId="@EffectivePageId"
+                               SectionId="@Section.Id"
+                               Style="@(Section.Style ?? new())"
+                               OnSaved="OnSectionSaved"
+                               OnClose="OnClose" />
+        }
+        else if (_tab == "content")
+        {
+            <div class="ez-editor-language-notice">
+                <i class="fas fa-language"></i>
+                <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
+            </div>
+
+            @if (Section.Type == "hero")
+            {
+                <HeroSectionEditor Section="Section"
+                                   PageId="@EffectivePageId"
+                                   Languages="_languages"
+                                   OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "cta")
+            {
+                <CtaSectionEditor Section="Section"
+                                  PageId="@EffectivePageId"
+                                  Languages="_languages"
+                                  OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "list")
+            {
+                <ListSectionEditor Section="Section"
+                                   PageId="@EffectivePageId"
+                                   Languages="_languages"
+                                   OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "showcase")
+            {
+                <ShowcaseSectionEditor Section="Section"
+                                          PageId="@EffectivePageId"
+                                          Languages="_languages"
+                                          OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "library")
+            {
+                <LibrarySectionEditor @key="Section.Id"
+                                      Section="Section"
+                                      PageId="@EffectivePageId"
+                                      Languages="_languages"
+                                      OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "gallery")
+            {
+                <GallerySectionEditor Section="Section"
+                                      PageId="@EffectivePageId"
+                                      Languages="_languages"
+                                      OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "html")
+            {
+                <HtmlSectionEditor Section="Section"
+                                   PageId="@EffectivePageId"
+                                   Languages="_languages"
+                                   OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "columns")
+            {
+                <ColumnsSectionEditor Section="Section"
+                                      PageId="@EffectivePageId"
+                                      Languages="_languages"
+                                      OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "stats")
+            {
+                <StatsSectionEditor Section="Section"
+                                    PageId="@EffectivePageId"
+                                    Languages="_languages"
+                                    OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "carousel")
+            {
+                <CarouselSectionEditor Section="Section"
+                                       PageId="@EffectivePageId"
+                                       Languages="_languages"
+                                       OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "network-map")
+            {
+                <NetworkMapSectionEditor Section="Section"
+                                         PageId="@EffectivePageId"
+                                         Languages="_languages"
+                                         OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "testimonial")
+            {
+                <TestimonialSectionEditor Section="Section"
+                                          PageId="@EffectivePageId"
+                                          Languages="_languages"
+                                          OnSaved="OnSectionSaved" />
+            }
+            else if (Section.Type == "canvas")
+            {
+                <CanvasSectionEditor Section="Section"
+                                     PageId="@EffectivePageId"
+                                     OnSaved="OnSectionSaved"
+                                     OnSectionsChanged="OnSectionsChanged" />
+            }
+            else
+            {
+                <p class="text-muted" style="padding:1rem;font-size:.85rem">
+                    @T("NoEditorForType"): @Section.Type
+                </p>
+            }
+        }
+        else if (_tab == "blocks")
+        {
+            <div class="ez-editor-language-notice">
+                <i class="fas fa-language"></i>
+                <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
+            </div>
+
+            <BlockEditor PageId="@EffectivePageId"
+                         SectionId="@Section.Id"
+                         SectionType="@Section.Type"
+                         Languages="_languages"
+                         OnChanged="OnBlocksChanged" />
+        }
+    </div>
+
+    <div class="ez-right-panel__footer">
+        <button class="btn-admin btn-ghost" @onclick="OnClose">
+            <i class="fas fa-times"></i> @T("Close")
+        </button>
+    </div>
+</div>
+
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter, EditorRequired] public SectionModel Section { get; set; } = default!;
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSectionSaved { get; set; }
+    [Parameter] public EventCallback OnSectionsChanged { get; set; }
+    [Parameter] public EventCallback OnBlocksChanged { get; set; }
+
+    private string _tab = "style";
+    private List<string> _languages = new() { "en" };
+    private string? _loadedSectionId;
+    private string EffectivePageId => !string.IsNullOrWhiteSpace(PageId) ? PageId : Section.PageId;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AdminLanguageState.LoadSettingsAsync();
+        _languages = AdminLanguageState.SupportedLanguages.ToList();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+        _tab = "style";
+    }
+}

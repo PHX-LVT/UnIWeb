@@ -1,0 +1,98 @@
+@inject AdminBlockService BlockService
+@inject IHttpService Http
+@using Contracts.Admin
+
+<div class="form-group">
+    <label class="form-label">File</label>
+    @if (!string.IsNullOrEmpty(_fileUrl))
+    {
+        <div style="display:flex;align-items:center;gap:.75rem;
+            padding:.75rem;background:var(--bg);border-radius:6px;
+            border:1px solid var(--border);margin-bottom:.75rem">
+            <i class="fas fa-file-pdf"
+               style="font-size:1.5rem;color:var(--danger)"></i>
+            <div style="flex:1">
+                <div style="font-weight:500">@_fileName</div>
+                <div class="text-muted" style="font-size:.8rem">@_mimeType</div>
+            </div>
+            <button class="btn-admin btn-ghost"
+                    @onclick="() => { _fileUrl = null; _fileName = null; }">
+                <i class="fas fa-times"></i> Remove
+            </button>
+        </div>
+    }
+    <InputFile OnChange="OnFileSelected" accept=".pdf,.doc,.docx,.xls,.xlsx" />
+    <div class="form-hint">Max 10MB. PDF, Word, Excel.</div>
+</div>
+
+<div class="form-group">
+    <label class="form-label">Display Name</label>
+    <DxTextBox @bind-Text="_fileName" CssClass="w-100"
+               NullText="e.g. Annual Report 2025.pdf" />
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+    </button>
+</div>
+
+@code {
+    [Parameter] public BlockModel Block { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string? _fileUrl;
+    private string? _fileName;
+    private string? _mimeType;
+    private bool _saving;
+
+    protected override void OnParametersSet()
+    {
+        _fileUrl = Block.FileUrl;
+        _fileName = Block.FileName;
+        _mimeType = Block.FileType;
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 10 * 1024 * 1024) return;
+
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=file-blocks", file, maxBytes: 10 * 1024 * 1024);
+        if (res.Success && res.Data is not null)
+        {
+            _fileUrl = res.Data.Url;
+            _mimeType = res.Data.ContentType;
+            if (string.IsNullOrEmpty(_fileName))
+                _fileName = res.Data.FileName;
+            Http.Toast("File uploaded.", res.StatusCode);
+        }
+        else
+        {
+            Http.Toast(res.Message ?? "File upload failed.", res.StatusCode);
+        }
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new FileBlockUpdateDto
+            {
+                FileUrl = _fileUrl,
+                Filename = _fileName ?? string.Empty,
+                FileType = _mimeType ?? string.Empty,
+                Visible = Block.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -1,0 +1,34 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@SectionClass"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+    <div style="position: relative; z-index: 1" class="@HtmlClass">
+        @((MarkupString)(StyleHelper.Lang(Section.HtmlContent, Lang)))
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicHtmlSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private string ResolvedHtml => StyleHelper.Lang(Section.HtmlContent, Lang);
+
+    private string SectionClass =>
+        ResolvedHtml.Contains("sc-industry-logic", StringComparison.OrdinalIgnoreCase)
+            ? $"{StyleHelper.GetSectionClass(Section.Style)} sc-section--sticky-html"
+            : StyleHelper.GetSectionClass(Section.Style);
+
+    private string HtmlClass =>
+        ResolvedHtml.Contains("sc-insight-subscribe", StringComparison.OrdinalIgnoreCase)
+            ? "sc-html sc-html--insight-subscribe"
+            : "sc-html";
+}

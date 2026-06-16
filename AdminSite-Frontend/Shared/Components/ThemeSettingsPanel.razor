@@ -1,0 +1,539 @@
+@using AdminSite.Models
+@using AdminSite.Services
+@using DevExpress.Blazor
+@using Microsoft.JSInterop
+@inject ThemeService ThemeService
+@inject IHttpService Http
+@inject IJSRuntime JS
+
+@if (_model is not null)
+{
+    <style>@((MarkupString)ThemeService.ToCssVariables(_model))</style>
+}
+
+@if (_loading)
+{
+    <div class="theme-settings-panel__loading">
+        <div class="spinner"></div>
+    </div>
+}
+else if (_model is not null)
+{
+    <div class="theme-settings-panel">
+        <section class="theme-settings-panel__section">
+            <h3>@T("ThemeText")</h3>
+            @SliderRow("EyebrowTextSize", EyebrowTextSizePx, 10, 24, "px", v => EyebrowTextSizePx = v)
+            @SliderRow("HeadingTextSize", HeadingTextSizePx, 24, 72, "px", v => HeadingTextSizePx = v)
+            @SliderRow("SubheadingTextSize", SubheadingTextSizePx, 12, 32, "px", v => SubheadingTextSizePx = v)
+            @SliderRow("BodyTextSize", BodyTextSizePx, 12, 24, "px", v => BodyTextSizePx = v)
+            @SliderRow("SmallTextSize", SmallTextSizePx, 10, 18, "px", v => SmallTextSizePx = v)
+            @SliderRow("ItemTitleTextSize", ItemTitleTextSizePx, 14, 34, "px", v => ItemTitleTextSizePx = v)
+        </section>
+
+        <section class="theme-settings-panel__section">
+            <h3>@T("ThemeColors")</h3>
+            @ColorRow("PrimaryColor", nameof(_model.ColorPrimary), _model.ColorPrimary, value => _model.ColorPrimary = value)
+            @ColorRow("AccentColor", nameof(_model.ColorAccent), _model.ColorAccent, value => _model.ColorAccent = value)
+            @ColorRow("BackgroundColor", nameof(_model.ColorBackground), _model.ColorBackground, value => _model.ColorBackground = value)
+            @ColorRow("TextColor", nameof(_model.ColorText), _model.ColorText, value => _model.ColorText = value)
+        </section>
+
+        <section class="theme-settings-panel__section">
+            <h3>@T("Buttons")</h3>
+            @SliderRow("ButtonPaddingRadius", ButtonSizePercent, 80, 140, "%", v => ButtonSizePercent = v)
+            @SliderRow("ButtonLabelTextSize", ButtonTextSizePx, 11, 22, "px", v => ButtonTextSizePx = v)
+        </section>
+
+        <section class="theme-settings-panel__section">
+            <h3>@T("Motion")</h3>
+            <label>
+                <span>@T("AnimationSpeed")</span>
+                <select class="form-control theme-settings-panel__select"
+                        value="@AnimationSpeedValue"
+                        @onchange="ChangeAnimationSpeed">
+                    @foreach (var animation in _animations)
+                    {
+                        <option value="@animation">@T(AnimationLabelKey(animation))</option>
+                    }
+                </select>
+            </label>
+        </section>
+
+        <div class="theme-settings-panel__actions">
+            <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+                <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("SaveTheme"))
+            </button>
+            <button class="btn-admin theme-settings-panel__reset" @onclick="ResetToDefault" disabled="@(_saving || _resetting)">
+                <i class="fas fa-rotate-left"></i> @(_resetting ? T("Resetting") : T("ResetToDefault"))
+            </button>
+        </div>
+    </div>
+}
+
+<style>
+    .theme-settings-panel {
+        display: grid;
+        gap: .9rem;
+        padding-bottom: 1rem;
+    }
+
+    .theme-settings-panel__loading {
+        display: flex;
+        justify-content: center;
+        padding: 1.25rem 0;
+    }
+
+    .theme-settings-panel__section {
+        display: grid;
+        gap: .74rem;
+        padding: .85rem;
+        border: 1px solid rgba(255, 255, 255, .12);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, .06);
+    }
+
+    .theme-settings-panel__section h3 {
+        margin: 0;
+        color: #fff;
+        font-size: .9rem;
+        font-weight: 800;
+    }
+
+    .theme-settings-panel__section label,
+    .theme-settings-panel__row {
+        display: grid;
+        gap: .34rem;
+        margin: 0;
+        color: rgba(255, 255, 255, .72);
+        font-size: .76rem;
+        font-weight: 700;
+    }
+
+    .theme-settings-panel__range-header {
+        display: flex;
+        justify-content: space-between;
+        gap: .75rem;
+    }
+
+    .theme-settings-panel__value {
+        color: #fff;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .theme-settings-panel__range {
+        width: 100%;
+        accent-color: var(--theme-color-accent, #e5c076);
+    }
+
+    .theme-settings-panel__color-row {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .theme-settings-panel__color-cube {
+        width: 34px;
+        height: 34px;
+        padding: 2px;
+        border: 1px solid rgba(255, 255, 255, .22);
+        border-radius: 7px;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .theme-settings-panel__hex {
+        width: 100%;
+        height: 34px;
+        border: 1px solid rgba(255, 255, 255, .18);
+        border-radius: 7px;
+        padding: 0 .65rem;
+        background: #fff;
+        color: #0f172a;
+        font-weight: 700;
+    }
+
+    .theme-settings-panel__select {
+        min-height: 34px;
+        border: 1px solid rgba(255, 255, 255, .18);
+        border-radius: 7px;
+        background: #fff;
+        color: #0f172a;
+        font-weight: 700;
+    }
+
+    .theme-settings-panel__actions {
+        display: grid;
+        gap: .5rem;
+    }
+
+    .theme-settings-panel__actions .btn-admin {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .theme-settings-panel__reset {
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, .24);
+        background: rgba(255, 255, 255, .08);
+    }
+</style>
+
+@code {
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private ThemeModel? _model;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _resetting;
+
+    private readonly List<string> _animations = new() { "off", "subtle", "normal", "expressive" };
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private int EyebrowTextSizePx
+    {
+        get => ParsePx(_model?.TextSizeEyebrow, 13);
+        set => SetPx(v => _model!.TextSizeEyebrow = v, value, 10, 24);
+    }
+
+    private int HeadingTextSizePx
+    {
+        get => ParsePx(_model?.TextSizeHeading, 40);
+        set => SetPx(v => _model!.TextSizeHeading = v, value, 24, 72);
+    }
+
+    private int SubheadingTextSizePx
+    {
+        get => ParsePx(_model?.TextSizeSubheading, 17);
+        set => SetPx(v => _model!.TextSizeSubheading = v, value, 12, 32);
+    }
+
+    private int BodyTextSizePx
+    {
+        get => ParsePx(_model?.TextSizeBody, ParsePx(_model?.TextSizeBase, 16));
+        set
+        {
+            SetPx(v => _model!.TextSizeBody = v, value, 12, 24);
+            if (_model is not null)
+                _model.TextSizeBase = _model.TextSizeBody;
+        }
+    }
+
+    private int SmallTextSizePx
+    {
+        get => ParsePx(_model?.TextSizeSmall, 13);
+        set => SetPx(v => _model!.TextSizeSmall = v, value, 10, 18);
+    }
+
+    private int ItemTitleTextSizePx
+    {
+        get => ParsePx(_model?.TextSizeItemTitle, 20);
+        set => SetPx(v => _model!.TextSizeItemTitle = v, value, 14, 34);
+    }
+
+    private int ButtonTextSizePx
+    {
+        get => ParsePx(_model?.ButtonTextSize, 15);
+        set => SetPx(v => _model!.ButtonTextSize = v, value, 11, 22);
+    }
+
+    private int ButtonSizePercent
+    {
+        get => (int)Math.Round(ParseScale(_model?.ButtonSizeScale, 1) * 100);
+        set
+        {
+            if (_model is not null)
+                _model.ButtonSizeScale = (Math.Clamp(value, 80, 140) / 100d).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private string AnimationSpeedValue
+    {
+        get => _model?.AnimationSpeed ?? "normal";
+        set
+        {
+            if (_model is null) return;
+
+            _model.AnimationSpeed = string.IsNullOrWhiteSpace(value) ? "normal" : value;
+            _model.AnimationsEnabled = !string.Equals(_model.AnimationSpeed, "off", StringComparison.OrdinalIgnoreCase);
+            ApplyLivePreview();
+        }
+    }
+
+    private void ChangeAnimationSpeed(ChangeEventArgs e)
+    {
+        AnimationSpeedValue = e.Value?.ToString() ?? "normal";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await ThemeService.GetAsync();
+        _model = Normalize(res.Data ?? new ThemeModel());
+        _loading = false;
+    }
+
+    private async Task Save()
+    {
+        if (_model is null) return;
+
+        _model = Normalize(_model);
+        _saving = true;
+        StateHasChanged();
+
+        var res = await ThemeService.UpdateAsync(_model);
+        if (res.Data is not null)
+        {
+            _model = Normalize(res.Data);
+        }
+
+        Http.Toast(res.Message, res.StatusCode);
+        _saving = false;
+
+        try
+        {
+            await JS.InvokeVoidAsync("reloadPreviewIframe");
+        }
+        catch
+        {
+            // The next dashboard render will refresh the preview if iframe JS is unavailable.
+        }
+
+        await OnSaved.InvokeAsync();
+        StateHasChanged();
+    }
+
+    private async Task ResetToDefault()
+    {
+        _resetting = true;
+        _model = CreateDefaultTheme();
+        ApplyLivePreview();
+        StateHasChanged();
+
+        var res = await ThemeService.UpdateAsync(_model);
+        if (res.Data is not null)
+        {
+            _model = Normalize(res.Data);
+            ApplyLivePreview();
+        }
+
+        Http.Toast(res.Message, res.StatusCode);
+        _resetting = false;
+
+        try
+        {
+            await JS.InvokeVoidAsync("reloadPreviewIframe");
+        }
+        catch
+        {
+            // The next dashboard render will refresh the preview if iframe JS is unavailable.
+        }
+
+        await OnSaved.InvokeAsync();
+        StateHasChanged();
+    }
+
+    private RenderFragment SliderRow(string labelKey, int value, int min, int max, string unit, Action<int> setValue) => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "theme-settings-panel__row");
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "theme-settings-panel__range-header");
+        builder.OpenElement(seq++, "span");
+        builder.AddContent(seq++, T(labelKey));
+        builder.CloseElement();
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "theme-settings-panel__value");
+        builder.AddContent(seq++, $"{value}{unit}");
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.OpenElement(seq++, "input");
+        builder.AddAttribute(seq++, "class", "theme-settings-panel__range");
+        builder.AddAttribute(seq++, "type", "range");
+        builder.AddAttribute(seq++, "min", min);
+        builder.AddAttribute(seq++, "max", max);
+        builder.AddAttribute(seq++, "step", 1);
+        builder.AddAttribute(seq++, "value", value);
+        builder.AddAttribute(seq++, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+        {
+            if (int.TryParse(e.Value?.ToString(), out var next))
+            {
+                setValue(next);
+                ApplyLivePreview();
+            }
+        }));
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment ColorRow(string labelKey, string name, string? value, Action<string> setValue) => builder =>
+    {
+        var normalized = NormalizeColor(value, "#000000");
+        var seq = 0;
+        builder.OpenElement(seq++, "label");
+        builder.OpenElement(seq++, "span");
+        builder.AddContent(seq++, T(labelKey));
+        builder.CloseElement();
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "theme-settings-panel__color-row");
+        builder.OpenElement(seq++, "input");
+        builder.AddAttribute(seq++, "class", "theme-settings-panel__color-cube");
+        builder.AddAttribute(seq++, "type", "color");
+        builder.AddAttribute(seq++, "name", $"{name}-color");
+        builder.AddAttribute(seq++, "value", normalized);
+        builder.AddAttribute(seq++, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+        {
+            setValue(NormalizeColor(e.Value?.ToString(), normalized));
+            ApplyLivePreview();
+        }));
+        builder.CloseElement();
+        builder.OpenElement(seq++, "input");
+        builder.AddAttribute(seq++, "class", "theme-settings-panel__hex");
+        builder.AddAttribute(seq++, "type", "text");
+        builder.AddAttribute(seq++, "name", $"{name}-hex");
+        builder.AddAttribute(seq++, "value", normalized);
+        builder.AddAttribute(seq++, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+        {
+            setValue(NormalizeColor(e.Value?.ToString(), normalized));
+            ApplyLivePreview();
+        }));
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private static ThemeModel Normalize(ThemeModel model)
+    {
+        model.FontBody = string.IsNullOrWhiteSpace(model.FontBody) ? "Inter" : model.FontBody;
+        model.FontHeading = string.IsNullOrWhiteSpace(model.FontHeading) ? "Inter" : model.FontHeading;
+        model.TextSizeEyebrow = $"{ParsePx(model.TextSizeEyebrow, 13)}px";
+        model.TextSizeHeading = $"{ParsePx(model.TextSizeHeading, 40)}px";
+        model.TextSizeSubheading = $"{ParsePx(model.TextSizeSubheading, 17)}px";
+        model.TextSizeBody = $"{ParsePx(model.TextSizeBody, ParsePx(model.TextSizeBase, 16))}px";
+        model.TextSizeBase = model.TextSizeBody;
+        model.TextSizeSmall = $"{ParsePx(model.TextSizeSmall, 13)}px";
+        model.TextSizeItemTitle = $"{ParsePx(model.TextSizeItemTitle, 20)}px";
+        model.ColorPrimary = NormalizeColor(model.ColorPrimary, "#001a33");
+        model.ColorAccent = NormalizeColor(model.ColorAccent, "#e5c076");
+        model.ColorBackground = NormalizeColor(model.ColorBackground, "#ffffff");
+        model.ColorText = NormalizeColor(model.ColorText, "#111827");
+        model.BorderRadius = $"{ParsePx(model.BorderRadius, 10)}px";
+        model.ButtonSizeScale = ParseScale(model.ButtonSizeScale, 1).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        model.ButtonTextSize = $"{ParsePx(model.ButtonTextSize, 15)}px";
+        model.AnimationSpeed = string.IsNullOrWhiteSpace(model.AnimationSpeed) ? "normal" : model.AnimationSpeed;
+        model.AnimationsEnabled = !string.Equals(model.AnimationSpeed, "off", StringComparison.OrdinalIgnoreCase);
+        model.SpacingScale = ParseScale(model.SpacingScale, 1).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        return model;
+    }
+
+    private static ThemeModel CreateDefaultTheme() => new()
+    {
+        FontBody = "Inter",
+        FontHeading = "Inter",
+        TextSizeBase = "16px",
+        TextSizeEyebrow = "13px",
+        TextSizeHeading = "40px",
+        TextSizeSubheading = "17px",
+        TextSizeBody = "16px",
+        TextSizeSmall = "13px",
+        TextSizeItemTitle = "20px",
+        ColorPrimary = "#001a33",
+        ColorAccent = "#e5c076",
+        ColorBackground = "#ffffff",
+        ColorText = "#111827",
+        BorderRadius = "10px",
+        ButtonSizeScale = "1",
+        ButtonTextSize = "15px",
+        AnimationsEnabled = true,
+        AnimationSpeed = "normal",
+        SpacingScale = "1"
+    };
+
+    private void ApplyLivePreview()
+    {
+        if (_model is null) return;
+        _model = Normalize(_model);
+        _ = InvokeAsync(async () =>
+        {
+            await ApplyLivePreviewAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task ApplyLivePreviewAsync()
+    {
+        if (_model is null) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("applyPreviewThemeCss", ThemeService.ToCssVariables(_model));
+        }
+        catch
+        {
+            // Live preview is best-effort; Save still persists the theme.
+        }
+    }
+
+    private void SetPx(Action<string> setter, int value, int min, int max)
+    {
+        if (_model is null) return;
+        setter($"{Math.Clamp(value, min, max)}px");
+    }
+
+    private static int ParsePx(string? value, int fallback)
+    {
+        value = value?.Trim().ToLowerInvariant();
+        return value switch
+        {
+            "small" => 14,
+            "normal" => fallback,
+            "large" => 18,
+            "xl" => 20,
+            "sharp" => 0,
+            "soft" => 6,
+            "rounded" => fallback,
+            "pill" => 64,
+            null or "" => fallback,
+            _ when value.EndsWith("px") && int.TryParse(value[..^2], out var px) => Math.Clamp(px, 0, 300),
+            _ when int.TryParse(value, out var raw) => Math.Clamp(raw, 0, 300),
+            _ => fallback
+        };
+    }
+
+    private static double ParseScale(string? value, double fallback)
+    {
+        value = value?.Trim().ToLowerInvariant();
+        return value switch
+        {
+            "compact" => 0.85,
+            "normal" => fallback,
+            "spacious" => 1.2,
+            null or "" => fallback,
+            _ when double.TryParse(value, System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                => Math.Clamp(parsed, 0.5, 2),
+            _ => fallback
+        };
+    }
+
+    private static string NormalizeColor(string? value, string fallback)
+    {
+        value = value?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+
+        if (value.StartsWith("#") && (value.Length == 4 || value.Length == 7))
+            return value;
+
+        return fallback;
+    }
+
+    private static string AnimationLabelKey(string value) => value.ToLowerInvariant() switch
+    {
+        "off" => "AnimationOff",
+        "subtle" => "AnimationSubtle",
+        "expressive" => "AnimationExpressive",
+        _ => "AnimationNormal"
+    };
+}

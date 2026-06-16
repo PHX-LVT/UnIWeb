@@ -1,0 +1,92 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    <div style="position: relative; z-index: 1"
+         class="sc-carousel sc-carousel--@CarouselLayout"
+         data-sc-carousel
+         data-autoplay="@((Section.Autoplay == true).ToString().ToLowerInvariant())">
+        @if (Section.SectionTitle is not null)
+        {
+            <h2 class="sc-carousel__title">@StyleHelper.Lang(Section.SectionTitle, Lang)</h2>
+        }
+
+        <div class="sc-carousel__viewport">
+            <div class="sc-carousel__track sc-carousel__track--@(Math.Clamp(Section.Columns ?? 3, 1, 5))">
+                @foreach (var item in Section.Items?.OrderBy(i => i.Order) ?? Enumerable.Empty<PublicCarouselItemDto>())
+                {
+                    <article class="sc-carousel__item">
+                        @if (CarouselLayout == "case-metrics")
+                        {
+                            <div class="sc-carousel__case-head">
+                                @if (!string.IsNullOrWhiteSpace(StyleHelper.Lang(item.Tag, Lang)))
+                                {
+                                    <span class="sc-carousel__case-tag">@StyleHelper.Lang(item.Tag, Lang)</span>
+                                }
+                                <h3>@StyleHelper.Lang(item.Title, Lang)</h3>
+                            </div>
+                            <div class="sc-carousel__case-body">
+                                @foreach (var metric in item.Metrics.OrderBy(m => m.Order))
+                                {
+                                    <div class="sc-carousel__case-metric sc-carousel__case-metric--@MetricTone(metric.Tone)">
+                                        <strong>@StyleHelper.Lang(metric.Value, Lang)</strong>
+                                        <span>@StyleHelper.Lang(metric.Label, Lang)</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(item.LinkHref))
+                                {
+                                    <a href="@item.LinkHref" class="sc-list__card-link">View details</a>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            @if (!string.IsNullOrEmpty(item.ImageUrl))
+                            {
+                                <img src="@item.ImageUrl"
+                                     alt="@StyleHelper.Lang(item.Title, Lang)" />
+                            }
+                            <div class="sc-carousel__body">
+                                <h3>@StyleHelper.Lang(item.Title, Lang)</h3>
+                                <p>@StyleHelper.Lang(item.Description, Lang)</p>
+                                @if (!string.IsNullOrEmpty(item.LinkHref))
+                                {
+                                    <a href="@item.LinkHref" class="sc-list__card-link">View details</a>
+                                }
+                            </div>
+                        }
+                    </article>
+                }
+            </div>
+        </div>
+
+        @if (Section.ShowArrows != false)
+        {
+            <button type="button" class="sc-carousel__nav sc-carousel__nav--prev" data-sc-carousel-prev aria-label="Previous">‹</button>
+            <button type="button" class="sc-carousel__nav sc-carousel__nav--next" data-sc-carousel-next aria-label="Next">›</button>
+        }
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicCarouselSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private string CarouselLayout => Section.Layout == "case-metrics" ? "case-metrics" : "cards";
+
+    private static string MetricTone(string? tone) => tone switch
+    {
+        "negative" => "negative",
+        "neutral" => "neutral",
+        _ => "positive"
+    };
+}

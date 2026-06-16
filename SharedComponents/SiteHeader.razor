@@ -1,0 +1,176 @@
+@using SharedComponents.Models
+@using SharedComponents.Helpers
+@using Contracts.Global
+@implements IDisposable
+@inject NavigationManager Navigation
+
+<header class="sc-header @(Scrolled ? "sc-header--scrolled" : "") @(_menuOpen ? "sc-header--menu-open" : "")">
+    <div class="sc-header__inner">
+        <a href="@Branding.Href" class="sc-header__brand" @onclick="CloseMenu">
+            @if (!string.IsNullOrEmpty(Branding.LogoUrl))
+            {
+                <img src="@Branding.LogoUrl"
+                     alt="@Branding.CompanyName" />
+            }
+            @if (!string.IsNullOrWhiteSpace(Branding.CompanyName))
+            {
+                <span class="sc-header__brand-name">@Branding.CompanyName</span>
+            }
+        </a>
+
+        <nav class="sc-header__nav @(_menuOpen ? "sc-header__nav--open" : "")">
+            @foreach (var page in Nav.OrderBy(p => p.Order))
+            {
+                <a href="/@(page.Slug)" class="sc-nav-link" @onclick="CloseMenu">
+                    @StyleHelper.Lang(page.Name, Lang)
+                </a>
+            }
+
+            @if ((GlobalButtons?.Any(b => b.Position == GlobalButtonPosition.HeaderRight) == true) || Languages.Any())
+            {
+                <div class="sc-header__mobile-actions">
+                    @if (Languages.Any())
+                    {
+                        <select class="sc-lang-select"
+                                aria-label="Select language"
+                                value="@CurrentLang"
+                                @onchange="HandleLanguageChanged">
+                            @foreach (var lang in Languages)
+                            {
+                                <option value="@lang">@lang.ToUpperInvariant()</option>
+                            }
+                        </select>
+                    }
+
+                    @foreach (var btn in (GlobalButtons ?? Enumerable.Empty<PublicGlobalButton>()).Where(b =>
+                        b.Position == GlobalButtonPosition.HeaderRight).OrderBy(b => b.Order))
+                    {
+                        <a href="@GetButtonHref(btn)"
+                           class="sc-btn sc-btn--filled"
+                           target="@GetButtonTarget(btn)"
+                           rel="@GetButtonRel(btn)"
+                           @onclick="CloseMenu">
+                            @GetButtonLabel(btn)
+                        </a>
+                    }
+                </div>
+            }
+        </nav>
+
+        @if ((GlobalButtons?.Any(b => b.Position == GlobalButtonPosition.HeaderRight) == true) || Languages.Any())
+        {
+            <div class="sc-header__actions">
+                @if (Languages.Any())
+                {
+                    <select class="sc-lang-select"
+                            aria-label="Select language"
+                            value="@CurrentLang"
+                            @onchange="HandleLanguageChanged">
+                        @foreach (var lang in Languages)
+                        {
+                            <option value="@lang">@lang.ToUpperInvariant()</option>
+                        }
+                    </select>
+                }
+
+                @foreach (var btn in (GlobalButtons ?? Enumerable.Empty<PublicGlobalButton>()).Where(b =>
+                    b.Position == GlobalButtonPosition.HeaderRight).OrderBy(b => b.Order))
+                {
+                    <a href="@GetButtonHref(btn)"
+                       class="sc-btn sc-btn--filled"
+                       target="@GetButtonTarget(btn)"
+                       rel="@GetButtonRel(btn)"
+                       @onclick="CloseMenu">
+                        @GetButtonLabel(btn)
+                    </a>
+                }
+            </div>
+        }
+
+        <button class="sc-hamburger"
+                type="button"
+                aria-label="@(_menuOpen ? "Close navigation menu" : "Open navigation menu")"
+                aria-expanded="@_menuOpen"
+                @onclick="ToggleMenu">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public PublicBranding Branding { get; set; } = default!;
+    [Parameter, EditorRequired] public List<PublicNavItem> Nav { get; set; } = default!;
+    [Parameter] public List<PublicGlobalButton>? GlobalButtons { get; set; }
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public IReadOnlyList<string> Languages { get; set; } = Array.Empty<string>();
+    [Parameter] public EventCallback<string> OnLanguageChanged { get; set; }
+    [Parameter] public bool Scrolled { get; set; }
+
+    private string CurrentLang =>
+        Languages.Any(lang => string.Equals(lang, Lang, StringComparison.OrdinalIgnoreCase))
+            ? Lang
+            : Languages.FirstOrDefault() ?? "en";
+
+    private bool _menuOpen = false;
+    private void ToggleMenu() => _menuOpen = !_menuOpen;
+    private void CloseMenu() => _menuOpen = false;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (_menuOpen)
+        {
+            _menuOpen = false;
+            _ = InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleLanguageChanged(ChangeEventArgs e)
+    {
+        var next = e.Value?.ToString();
+        if (!string.IsNullOrWhiteSpace(next) && next != Lang && OnLanguageChanged.HasDelegate)
+        {
+            await OnLanguageChanged.InvokeAsync(next);
+        }
+    }
+
+    private static string GetButtonHref(PublicGlobalButton button)
+    {
+        if (button.Action == GlobalButtonAction.OpenModal)
+        {
+            return string.IsNullOrWhiteSpace(button.Href) ? "modal:default" : button.Href;
+        }
+
+        if (string.IsNullOrWhiteSpace(button.Href))
+        {
+            return "#";
+        }
+
+        if (button.Action == GlobalButtonAction.LinkToPage && !button.Href.StartsWith("/"))
+        {
+            return $"/{button.Href.TrimStart('/')}";
+        }
+
+        return button.Href;
+    }
+
+    private static string? GetButtonTarget(PublicGlobalButton button) =>
+        button.Action == GlobalButtonAction.ExternalUrl ? "_blank" : null;
+
+    private static string? GetButtonRel(PublicGlobalButton button) =>
+        button.Action == GlobalButtonAction.ExternalUrl ? "noopener noreferrer" : null;
+
+    private string GetButtonLabel(PublicGlobalButton button)
+    {
+        return StyleHelper.Lang(button.LabelText, Lang);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

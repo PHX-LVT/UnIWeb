@@ -1,0 +1,145 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-block--form">
+    @foreach (var field in Block.Fields?.OrderBy(f => f.Order) ?? Enumerable.Empty<PublicFormFieldDto>())
+    {
+        var key = FieldKey(field);
+        var label = StyleHelper.Lang(field.Label, Lang);
+
+        <div class="sc-form-field">
+            <label class="sc-form-label">
+                @label
+                @if (field.Required == true)
+                {
+                    <span class="sc-required">*</span>
+                }
+            </label>
+
+            @switch (field.Type)
+            {
+                case "textarea":
+                    <textarea class="sc-form-input"
+                              name="@field.Name"
+                              placeholder="@label"
+                              required="@(field.Required == true)"
+                              value="@_data.GetValueOrDefault(key)"
+                              @onchange="e => SetField(key, e.Value)">
+                    </textarea>
+                        break;
+
+                case "select":
+                            <select class="sc-form-input"
+                                    name="@field.Name"
+                                    value="@_data.GetValueOrDefault(key)"
+                                    @onchange="e => SetField(key, e.Value)">
+                                <option value="">— select —</option>
+                                @foreach (var opt in field.Options ?? new())
+                                {
+                                    <option value="@opt">@opt</option>
+                                }
+                            </select>
+                            break;
+
+                        case "checkbox":
+                            <input type="checkbox"
+                                   name="@field.Name"
+                                   checked="@IsChecked(key)"
+                                   @onchange="e => SetField(key, e.Value)" />
+                            break;
+
+                        default:
+                            <input type="@field.Type"
+                                   class="sc-form-input"
+                                   name="@field.Name"
+                                   placeholder="@label"
+                                   required="@(field.Required == true)"
+                                   value="@_data.GetValueOrDefault(key)"
+                                   @onchange="e => SetField(key, e.Value)" />
+                            break;
+                        }
+                    </div>
+            }
+
+            <button class="sc-btn sc-btn--filled" @onclick="Submit">
+                @StyleHelper.Lang(Block.SubmitButtonLabel, Lang)
+            </button>
+
+            @if (_submitted)
+            {
+                <p class="sc-form-success">Thank you, your message has been sent.</p>
+            }
+            @if (_error)
+            {
+                <p class="sc-form-error">@(_errorMessage ?? "Something went wrong. Please try again.")</p>
+            }
+        </div>
+
+@code {
+    [Parameter, EditorRequired] public PublicFormBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public Func<Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private Dictionary<string, string> _data = new();
+    private bool _submitted = false;
+    private bool _error = false;
+    private string? _errorMessage;
+
+    protected override void OnParametersSet()
+    {
+        var next = new Dictionary<string, string>();
+        foreach (var field in Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
+        {
+            var key = FieldKey(field);
+            next[key] = _data.TryGetValue(key, out var existing) ? existing : string.Empty;
+        }
+
+        _data = next;
+    }
+
+    private async Task Submit()
+    {
+        _submitted = false;
+        _error = false;
+        _errorMessage = null;
+
+        var missingRequired = (Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
+            .Any(f => f.Required == true &&
+                      string.IsNullOrWhiteSpace(_data.GetValueOrDefault(FieldKey(f))));
+
+        if (missingRequired)
+        {
+            _error = true;
+            _errorMessage = "Please complete all required fields.";
+            return;
+        }
+
+        if (OnSubmit is null) return;
+        var success = await OnSubmit(_data);
+        if (success)
+        {
+            _submitted = true;
+            _data = (Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
+                .ToDictionary(FieldKey, _ => string.Empty);
+        }
+        else
+        {
+            _error = true;
+        }
+    }
+
+    private void SetField(string key, object? value)
+    {
+        _data[key] = value switch
+        {
+            bool b => b ? "true" : "false",
+            null => string.Empty,
+            _ => value.ToString() ?? string.Empty
+        };
+    }
+
+    private bool IsChecked(string key) => _data.GetValueOrDefault(key) == "true";
+
+    private static string FieldKey(PublicFormFieldDto field) =>
+        !string.IsNullOrWhiteSpace(field.Name) ? field.Name : $"field_{field.Order}";
+}

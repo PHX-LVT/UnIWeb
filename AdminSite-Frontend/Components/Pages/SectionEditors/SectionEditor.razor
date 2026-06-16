@@ -1,0 +1,40 @@
+<DxTabs>
+
+    <DxTabPage Text="Content" CssClass="fas fa-edit">
+        <div style="padding-top:1rem">
+            <SectionContentTab Section="@Section"
+                               PageId="@PageId"
+                               Languages="@Languages"
+                               OnSaved="@OnSaved" />
+        </div>
+    </DxTabPage>
+
+    <DxTabPage Text="Style" CssClass="fas fa-paint-roller">
+        <div style="padding-top:1rem">
+            <SectionStylePanel PageId="@PageId"
+                               SectionId="@Section.Id"
+                               Style="@Section.Style"
+                               OnSaved="@OnSaved" />
+        </div>
+    </DxTabPage>
+
+    <DxTabPage Text="Blocks" CssClass="fas fa-cubes">
+        <div style="padding-top: 1rem">
+            <SectionBlocksTab Section="@Section"
+                              PageId="@PageId"
+                              Languages="@Languages" />
+        </div>
+    </DxTabPage>
+
+</DxTabs>
+
+@code {
+    [Parameter] public SectionModel  Section   { get; set; } = new();
+    [Parameter] public string        PageId    { get; set; } = string.Empty;
+    [Parameter] public List<string>  Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved   { get; set; }
+}
+
+
+
+

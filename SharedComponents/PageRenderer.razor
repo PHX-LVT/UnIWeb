@@ -1,0 +1,75 @@
+
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Sections
+
+@foreach (var section in Page.Sections
+    .Where(s => ShowInvisible || s.Visible)
+    .OrderBy(s => s.Order))
+{
+    @RenderSection(section)
+}
+
+@code {
+    [Parameter, EditorRequired] public PublicPageDto Page { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, string, string, Dictionary<string, string>, Task<bool>>? OnFormSubmit { get; set; }
+
+    // Change parameter type to accept the base abstract class PublicSectionDto
+    private RenderFragment RenderSection(PublicSectionDto section)
+    {
+        Func<string, Dictionary<string, string>, Task<bool>>? submitForSection = OnFormSubmit is null
+            ? null
+            : (blockId, data) => OnFormSubmit(Page.Id, section.Id, blockId, data);
+
+        // Pattern match directly on the class types from your Contracts hierarchy!
+        return section switch
+        {
+            PublicHeroSectionDto heroDto =>
+                @<HeroSection Section="heroDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+                
+            PublicCtaSectionDto ctaDto =>
+                @<CtaSection Section="ctaDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+                
+            PublicListSectionDto listDto =>
+                @<ListSection Section="listDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+                
+            PublicGallerySectionDto galleryDto =>
+                @<GallerySection Section="galleryDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+                
+            PublicHtmlSectionDto htmlDto =>
+                @<HtmlSection Section="htmlDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+                
+            PublicColumnsSectionDto columnsDto =>
+                @<ColumnsSection Section="columnsDto" Lang="@Lang" OnSubmit="submitForSection" />,
+                
+            PublicShowcaseSectionDto detailsDto =>
+                @<ShowcaseSection Section="detailsDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+
+            PublicLibrarySectionDto libraryDto =>
+                @<LibrarySection Section="libraryDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+
+            PublicStatsSectionDto statsDto =>
+                @<StatsSection Section="statsDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+
+            PublicCarouselSectionDto carouselDto =>
+                @<CarouselSection Section="carouselDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+
+            PublicNetworkMapSectionDto mapDto =>
+                @<NetworkMapSection Section="mapDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+
+            PublicTestimonialSectionDto testimonialDto =>
+                @<TestimonialSection Section="testimonialDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+
+            PublicCanvasSectionDto canvasDto =>
+                @<CanvasSection Section="canvasDto" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="submitForSection" />,
+                
+            
+                
+            _ =>
+                @<text></text>
+        };
+    }
+
+}

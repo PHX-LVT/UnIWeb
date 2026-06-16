@@ -1,0 +1,75 @@
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div class="form-group"><label class="form-label">Section Title</label><LangField @bind-Value="_title" Languages="Languages" /></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+    <DxSpinEdit @bind-Value="_centerLat" CssClass="w-100" />
+    <DxSpinEdit @bind-Value="_centerLng" CssClass="w-100" />
+    <DxSpinEdit @bind-Value="_zoom" MinValue="1" MaxValue="18" CssClass="w-100" />
+</div>
+@foreach (var (pin, i) in _pins.Select((x, i) => (x, i)))
+{
+    <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin:.5rem 0">
+        <div style="display:flex;justify-content:space-between"><strong>Pin @(i + 1)</strong><button class="btn-admin btn-danger" @onclick="() => _pins.RemoveAt(i)"><i class="fas fa-trash"></i></button></div>
+        <DxTextBox @bind-Text="pin.Label" NullText="Label" CssClass="w-100" />
+        <DxSpinEdit @bind-Value="pin.Lat" CssClass="w-100" />
+        <DxSpinEdit @bind-Value="pin.Lng" CssClass="w-100" />
+        <DxTextBox @bind-Text="pin.Href" NullText="/contact" CssClass="w-100" />
+    </div>
+}
+<button class="btn-admin btn-outline" @onclick="AddPin"><i class="fas fa-plus"></i> Add Pin</button>
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem"><button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">Save</button></div>
+
+@code {
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+    private Dictionary<string, string> _title = new();
+    private double _centerLat = 15.87;
+    private double _centerLng = 100.99;
+    private int _zoom = 4;
+    private List<NetworkMapPinModel> _pins = new();
+    private bool _saving;
+    private string? _loadedSectionId;
+    protected override void OnParametersSet()
+    {
+        if (_saving || _loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+
+        _title = new(Section.SectionTitle ?? new()); _centerLat = Section.CenterLat ?? 15.87; _centerLng = Section.CenterLng ?? 100.99; _zoom = Section.DefaultZoom ?? 4;
+        _pins = Section.MapPins?.Select(x => new NetworkMapPinModel { Label = x.Label, Lat = x.Lat, Lng = x.Lng, Href = x.Href, Visible = x.Visible, Order = x.Order }).ToList() ?? new();
+    }
+    private void AddPin() => _pins.Add(new NetworkMapPinModel { Visible = true, Order = _pins.Count });
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new NetworkMapSectionUpdateDto
+            {
+                SectionTitle = _title,
+                CenterLat = _centerLat,
+                CenterLng = _centerLng,
+                DefaultZoom = _zoom,
+                Pins = _pins.Select(MapPin).ToList(),
+                Visible = Section.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode); if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static NetworkMapPinDto MapPin(NetworkMapPinModel pin) => new()
+    {
+        Label = pin.Label ?? string.Empty,
+        Lat = pin.Lat,
+        Lng = pin.Lng,
+        Href = pin.Href,
+        Visible = pin.Visible,
+        Order = pin.Order
+    };
+}

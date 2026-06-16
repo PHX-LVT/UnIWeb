@@ -1,0 +1,179 @@
+@using Contracts.Public
+
+@if (ZoneBlocks.Any())
+{
+    <div class="@GetContainerClass()" style="@GetContainerStyle()">
+        @foreach (var block in ZoneBlocks.OrderBy(b => b.Order))
+        {
+            <div class="@GetBlockClass(block)"
+                 data-block-id="@block.Id"
+                 data-block-section-id="@GetSectionId()"
+                 style="@GetBlockStyle(block)">
+                @RenderBlock(block)
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<PublicBlockDto>? Blocks { get; set; }
+    [Parameter] public PublicSectionStyleDto? Style { get; set; }
+    [Parameter] public string? SectionId { get; set; }
+    [Parameter] public string BlockZone { get; set; } = "default";
+    [Parameter] public string? ParentBlockId { get; set; }
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private IEnumerable<PublicBlockDto> ZoneBlocks =>
+        (Blocks ?? new())
+            .Where(b => ShowInvisible || b.Visible)
+            .Where(b => string.IsNullOrWhiteSpace(ParentBlockId)
+                ? string.IsNullOrWhiteSpace(b.ParentBlockId)
+                : string.Equals(b.ParentBlockId, ParentBlockId, StringComparison.Ordinal))
+            .Where(b => NormalizeZone(b.BlockZone) == NormalizeZone(BlockZone));
+
+    private string LayoutMode => Style?.BlockLayoutMode switch
+    {
+        "grid" => "grid",
+        "split" => "split",
+        "freeform" => "freeform",
+        _ => "stack"
+    };
+
+    private string GetContainerClass()
+    {
+        var gap = Style?.BlockGap switch
+        {
+            "none" => "none",
+            "small" => "small",
+            "large" => "large",
+            _ => "medium"
+        };
+
+        return $"sc-section-blocks sc-section-blocks--{LayoutMode} sc-section-blocks--gap-{gap}";
+    }
+
+    private string GetContainerStyle()
+    {
+        var columns = LayoutMode == "split"
+            ? 2
+            : Math.Clamp(Style?.BlockGridColumns ?? 12, 1, 12);
+        var styles = new List<string>
+        {
+            $"--sc-block-grid-columns: {columns}"
+        };
+
+        if (LayoutMode == "freeform")
+        {
+            var height = Math.Clamp(Style?.CustomMinHeightPx ?? 640, 120, 3000);
+            styles.Add($"--sc-freeform-min-height: {height}px");
+        }
+
+        return string.Join("; ", styles);
+    }
+
+    private static string GetBlockClass(PublicBlockDto block)
+    {
+        var layout = block.Layout ?? new PublicBlockLayoutDto();
+        var span = Math.Clamp(layout.ColumnSpan, 1, 12);
+
+        return string.Join(" ", new[]
+        {
+            "sc-block-frame",
+            $"sc-block-frame--span-{span}",
+            $"sc-block-frame--width-{Normalize(layout.Width, "auto")}",
+            $"sc-block-frame--align-{Normalize(layout.Align, "stretch")}",
+            $"sc-block-frame--justify-{Normalize(layout.Justify, "start")}",
+            $"sc-block-frame--pad-{Normalize(layout.Padding, "none")}",
+            $"sc-block-frame--margin-{Normalize(layout.Margin, "none")}",
+            $"sc-block-frame--radius-{Normalize(layout.BorderRadius, "none")}"
+        });
+    }
+
+    private static string GetBlockStyle(PublicBlockDto block)
+    {
+        var layout = block.Layout ?? new PublicBlockLayoutDto();
+        var x = Math.Clamp(layout.X, 0, 11);
+        var w = Math.Clamp(layout.W, 1, 12);
+        var y = Math.Clamp(layout.Y, 0, 60);
+        var h = Math.Clamp(layout.H, 1, 40);
+        var left = (x / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        var width = (w / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        var parts = new List<string>
+        {
+            $"--sc-block-column-span: {Math.Clamp(layout.ColumnSpan, 1, 12)}",
+            $"--sc-block-left: {left}%",
+            $"--sc-block-width: {width}%",
+            $"--sc-block-top: {y * 48}px",
+            $"--sc-block-min-height: {h * 48}px",
+            $"z-index: {Math.Clamp(layout.ZIndex, 0, 20)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(layout.BackgroundColor))
+            parts.Add($"background-color: {layout.BackgroundColor}");
+
+        return string.Join("; ", parts);
+    }
+
+    private static string Normalize(string? value, string fallback) =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    private string GetSectionId() => SectionId ?? string.Empty;
+
+    private static string NormalizeZone(string? zone) =>
+        string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();
+
+    private RenderFragment RenderBlock(PublicBlockDto block)
+    {
+        return block switch
+        {
+            PublicTextBlockDto textBlock =>
+                @<TextBlock Block="textBlock" Lang="@Lang" />,
+
+            PublicImageBlockDto imageBlock =>
+                @<ImageBlock Block="imageBlock" Lang="@Lang" />,
+
+            PublicVideoBlockDto videoBlock =>
+                @<VideoBlock Block="videoBlock" Lang="@Lang" />,
+
+            PublicFileBlockDto fileBlock =>
+                @<FileBlock Block="fileBlock" Lang="@Lang" />,
+
+            PublicMapBlockDto mapBlock =>
+                @<MapBlock Block="mapBlock" Lang="@Lang" />,
+
+            PublicFormBlockDto formBlock =>
+                @<FormBlock Block="formBlock" Lang="@Lang"
+                    OnSubmit="OnSubmit is null ? null : data => OnSubmit(formBlock.Id, data)" />,
+
+            PublicCardBlockDto cardBlock =>
+                @<CardBlock Block="cardBlock" Lang="@Lang" />,
+
+            PublicButtonBlockDto buttonBlock =>
+                @<ButtonBlock Block="buttonBlock" Lang="@Lang" />,
+
+            PublicMetricBlockDto metricBlock =>
+                @<MetricBlock Block="metricBlock" Lang="@Lang" />,
+
+            PublicBulletListBlockDto bulletListBlock =>
+                @<BulletListBlock Block="bulletListBlock" Lang="@Lang" />,
+
+            PublicStepBlockDto stepBlock =>
+                @<StepBlock Block="stepBlock" Lang="@Lang" />,
+
+            PublicIconBlockDto iconBlock =>
+                @<IconBlock Block="iconBlock" Lang="@Lang" />,
+
+            PublicContainerBlockDto containerBlock =>
+                @<ContainerBlock Block="containerBlock"
+                                 SectionId="@SectionId"
+                                 Lang="@Lang"
+                                 ShowInvisible="@ShowInvisible"
+                                 OnSubmit="@OnSubmit" />,
+
+            _ =>
+                @<text></text>
+        };
+    }
+}

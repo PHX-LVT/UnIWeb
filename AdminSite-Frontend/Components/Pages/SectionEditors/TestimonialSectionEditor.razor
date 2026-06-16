@@ -1,0 +1,157 @@
+﻿@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div style="display:grid;grid-template-columns:1fr;gap:1rem">
+    <div class="form-group">
+        <label class="form-label">@T("Eyebrow")</label>
+        <LangField @bind-Value="_eyebrow" Languages="Languages" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">@T("SectionTitle")</label>
+        <LangField @bind-Value="_title" Languages="Languages" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">@T("Subheading")</label>
+        <LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" />
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem">
+        <div class="form-group">
+            <label class="form-label">@T("Layout")</label>
+            <DxComboBox Data="@_layouts" @bind-Value="_layout" CssClass="w-100" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("HeadingPosition")</label>
+            <DxComboBox Data="@_alignments" @bind-Value="_headerAlignment" CssClass="w-100" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("Columns")</label>
+            <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="5" CssClass="w-100" />
+        </div>
+    </div>
+</div>
+
+@foreach (var (item, i) in _items.Select((x, i) => (x, i)))
+{
+    <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin-bottom:.75rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+            <strong>@T("Card") @(i + 1)</strong>
+            <button class="btn-admin btn-danger" @onclick="() => RemoveItem(i)"><i class="fas fa-trash"></i></button>
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("IconClass")</label>
+            <DxTextBox @bind-Text="item.Icon" CssClass="w-100" NullText="fa-warehouse" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("Title")</label>
+            <LangField Value="@(item.Title ?? new())" ValueChanged="v => item.Title = v" Languages="Languages" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("Description")</label>
+            <LangField Value="@(item.Description ?? new())" ValueChanged="v => item.Description = v" Languages="Languages" Multiline="true" />
+        </div>
+        <label style="display:flex;gap:.5rem;align-items:center;font-size:.85rem">
+            <input type="checkbox" @bind="item.Visible" /> @T("Visible")
+        </label>
+    </div>
+}
+
+<button class="btn-admin btn-outline" @onclick="AddItem"><i class="fas fa-plus"></i> @T("AddCard")</button>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving"><i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))</button>
+</div>
+
+@code {
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private Dictionary<string, string> _eyebrow = new();
+    private Dictionary<string, string> _title = new();
+    private Dictionary<string, string> _subheading = new();
+    private string _layout = "cards";
+    private string _headerAlignment = "center";
+    private int _columns = 4;
+    private readonly List<string> _layouts = new() { "cards", "feature-grid" };
+    private readonly List<string> _alignments = new() { "left", "center", "right" };
+    private List<TestimonialItemModel> _items = new();
+    private bool _saving;
+    private string? _loadedSectionId;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override void OnParametersSet()
+    {
+        if (_saving || _loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+
+        _eyebrow = new(Section.Eyebrow ?? new());
+        _title = new(Section.SectionTitle ?? new());
+        _subheading = new(Section.Subheading ?? new());
+        _layout = string.IsNullOrWhiteSpace(Section.Layout) ? "cards" : Section.Layout;
+        _headerAlignment = string.IsNullOrWhiteSpace(Section.HeaderAlignment) ? "center" : Section.HeaderAlignment;
+        _columns = Section.Columns ?? 4;
+        _items = Section.Testimonials?.Select(x => new TestimonialItemModel
+        {
+            Id = x.Id,
+            Icon = x.Icon,
+            Title = new(x.Title ?? new()),
+            Description = new(x.Description ?? new()),
+            ImageUrl = x.ImageUrl,
+            Visible = x.Visible,
+            Order = x.Order
+        }).ToList() ?? new();
+    }
+
+    private void AddItem() => _items.Add(new TestimonialItemModel
+    {
+        Icon = "fa-check",
+        Title = new(),
+        Description = new(),
+        Visible = true,
+        Order = _items.Count
+    });
+
+    private void RemoveItem(int index)
+    {
+        if (index < 0 || index >= _items.Count) return;
+        _items.RemoveAt(index);
+        for (var i = 0; i < _items.Count; i++) _items[i].Order = i;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new TestimonialSectionUpdateDto
+            {
+                Eyebrow = _eyebrow,
+                SectionTitle = _title,
+                Subheading = _subheading,
+                Layout = _layout,
+                HeaderAlignment = _headerAlignment,
+                Columns = _columns,
+                Items = _items.Select(MapItem).ToList(),
+                Visible = Section.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static TestimonialItemDto MapItem(TestimonialItemModel item) => new()
+    {
+        Icon = item.Icon ?? string.Empty,
+        Title = item.Title ?? new(),
+        Description = item.Description ?? new(),
+        ImageUrl = item.ImageUrl,
+        Visible = item.Visible,
+        Order = item.Order
+    };
+}

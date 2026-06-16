@@ -1,0 +1,35 @@
+/* -- Canvas Layout ----------------------------------------- */
+.ez-canvas {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+.ez-canvas__frame {
+    max-width: 900px;
+    margin: 1.5rem auto;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    padding: 0 1rem 2rem;
+}
+
+.ez-canvas__section-wrap {
+    position: relative;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    transition: border-color .15s;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+    .ez-canvas__section-wrap:hover {
+        border-color: var(--primary-light);
+    }
+
+    .ez-canvas__section-wrap.ez-selected {
+        border-color: var(--primary);
+    }

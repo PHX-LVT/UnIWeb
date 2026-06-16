@@ -1,0 +1,191 @@
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div class="form-group">
+        <label class="form-label">Layout</label>
+        <DxComboBox Data="_layouts" @bind-Value="_layout" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">Columns</label>
+        <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="4" CssClass="w-100" />
+    </div>
+</div>
+
+<div class="form-group">
+    <label class="form-label">Section Title</label>
+    <LangField @bind-Value="_title" Languages="Languages" />
+</div>
+
+<div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <DxCheckBox @bind-Checked="_showIcon" /> Show Icons
+    </label>
+</div>
+
+<div class="form-group">
+    <label class="form-label">Items</label>
+
+    @foreach (var (item, i) in _items.Select((x, i) => (x, i)))
+    {
+        <div style="border:1px solid var(--border);border-radius:8px;
+            padding:.75rem;margin-bottom:.5rem;background:var(--bg)">
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-bottom:.5rem">
+                <span style="font-weight:500;font-size:.85rem">Item @(i + 1)</span>
+                <button class="btn-admin btn-danger"
+                        @onclick="() => _items.RemoveAt(i)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            @if (_showIcon)
+            {
+                <div class="form-group">
+                    <label class="form-label">Icon class</label>
+                    <DxTextBox @bind-Text="item.Icon" CssClass="w-100"
+                               NullText="fas fa-star" />
+                </div>
+            }
+            <div class="form-group">
+                <label class="form-label">Title</label>
+                <LangField Value="@(item.Title ?? new())"
+                           ValueChanged="@(v => item.Title = v)"
+                           Languages="Languages" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <LangField Value="@(item.Description ?? new())"
+                           ValueChanged="@(v => item.Description = v)"
+                           Languages="Languages" Multiline="true" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">Image</label>
+                @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                {
+                    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
+                        <img src="@item.ImageUrl"
+                             style="width:96px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />
+                        <button type="button" class="btn-admin btn-ghost"
+                                @onclick="() => ClearItemImage(item)">
+                            <i class="fas fa-times"></i> Remove
+                        </button>
+                    </div>
+                }
+                <InputFile OnChange="@(e => OnItemImageSelected(e, item))" accept="image/*" />
+            </div>
+        </div>
+    }
+
+    <button class="btn-admin btn-outline" @onclick="AddItem">
+        <i class="fas fa-plus"></i> Add Item
+    </button>
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+    </button>
+</div>
+
+@code {
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string _layout = "cards";
+    private int _columns = 3;
+    private bool _showIcon = true;
+    private Dictionary<string, string> _title = new();
+    private List<ListItemModel> _items = new();
+    private bool _saving;
+    private string? _loadedSectionId;
+
+    private List<string> _layouts = new() { "cards", "rows", "numbered" };
+
+    protected override void OnParametersSet()
+    {
+        if (_saving || _loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+
+        _layout = Section.Layout ?? "cards";
+        _columns = Section.Columns ?? 3;
+        _showIcon = Section.ShowIcon ?? true;
+        _title = new(Section.SectionTitle ?? new());
+        _items = Section.Items?.Select(x => new ListItemModel
+        {
+            Id = x.Id,
+            Icon = x.Icon,
+            Visible = x.Visible,
+            Order = x.Order,
+            Title = new(x.Title ?? new()),
+            Description = new(x.Description ?? new()),
+            ImageUrl = x.ImageUrl,
+            LinkHref = x.LinkHref
+        }).ToList() ?? new();
+    }
+
+    private void AddItem() => _items.Add(new ListItemModel
+    {
+        Visible = true,
+        Order = _items.Count,
+        Title = new(),
+        Description = new()
+    });
+
+    private async Task OnItemImageSelected(InputFileChangeEventArgs e, ListItemModel item)
+    {
+        var file = e.File;
+        if (file.Size > 5 * 1024 * 1024) return;
+
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=list-items", file, maxBytes: 5 * 1024 * 1024);
+        if (res.Success && res.Data is not null)
+        {
+            item.ImageUrl = res.Data.Url;
+            Http.Toast("List image uploaded.", res.StatusCode);
+        }
+        else
+        {
+            Http.Toast(res.Message ?? "List image upload failed.", res.StatusCode);
+        }
+    }
+
+    private static void ClearItemImage(ListItemModel item)
+    {
+        item.ImageUrl = string.Empty;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new ListSectionUpdateDto
+            {
+                Layout = _layout,
+                Columns = _columns,
+                SectionTitle = _title,
+                ShowIcon = _showIcon,
+                Items = _items.Select(MapItem).ToList(),
+                Visible = Section.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static ListItemDto MapItem(ListItemModel item) => new()
+    {
+        Icon = item.Icon ?? string.Empty,
+        Title = item.Title ?? new(),
+        Description = item.Description ?? new(),
+        ImageUrl = item.ImageUrl,
+        LinkHref = item.LinkHref,
+        Visible = item.Visible,
+        Order = item.Order
+    };
+}

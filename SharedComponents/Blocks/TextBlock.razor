@@ -1,0 +1,32 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-block--text">
+    @if (Block.Title is not null)
+    {
+        <h3 class="sc-block__title">@StyleHelper.Lang(Block.Title, Lang)</h3>
+    }
+    @if (Block.Content is not null)
+    {
+        <div class="sc-block__content">
+            @((MarkupString)StyleHelper.Lang(Block.Content, Lang))
+        </div>
+    }
+    @if (Block.Buttons?.Any() == true)
+    {
+        <div class="sc-btn-group">
+            @foreach (var btn in Block.Buttons.OrderBy(b => b.Order))
+            {
+                <a href="@btn.Href" class="sc-btn sc-btn--filled">
+                    @StyleHelper.Lang(btn.Label, Lang)
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicTextBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+   
+}

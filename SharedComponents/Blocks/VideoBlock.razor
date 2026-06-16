@@ -1,0 +1,27 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="sc-block sc-block--video">
+    <div class="sc-video-wrap">
+        @if (!string.IsNullOrWhiteSpace(_embedUrl))
+        {
+            <iframe src="@_embedUrl"
+                    title="Embedded video"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen></iframe>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicVideoBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+
+    private string? _embedUrl;
+
+    protected override void OnParametersSet()
+    {
+        _embedUrl = VideoUrlHelper.ToEmbedUrl(Block.EmbedUrl);
+    }
+}

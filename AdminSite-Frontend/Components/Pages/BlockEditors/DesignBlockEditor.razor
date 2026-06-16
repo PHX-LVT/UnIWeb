@@ -1,0 +1,384 @@
+@inject AdminBlockService BlockService
+@inject IHttpService Http
+@using Contracts.Admin
+@using Microsoft.AspNetCore.Components.Forms
+
+@if (Block.Type is "card" or "metric" or "step" or "icon")
+{
+    <div class="form-group">
+        <label class="form-label">@T("IconClass")</label>
+        <DxTextBox @bind-Text="_icon" CssClass="w-100" NullText="fas fa-star" />
+    </div>
+}
+
+@if (Block.Type == "card")
+{
+    <div class="form-group">
+        <label class="form-label">@T("Image")</label>
+        @if (!string.IsNullOrWhiteSpace(_imageUrl))
+        {
+            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
+                <img src="@_imageUrl"
+                     style="width:120px;height:78px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />
+                <button type="button" class="btn-admin btn-ghost" @onclick="ClearImage">
+                    <i class="fas fa-times"></i> @T("Remove")
+                </button>
+            </div>
+        }
+        <InputFile OnChange="OnImageSelected" accept="image/*" />
+    </div>
+}
+
+@if (Block.Type is "card" or "bullet-list" or "step" or "container")
+{
+    <div class="form-group">
+        <label class="form-label">@T("Title")</label>
+        <LangField @bind-Value="_title" Languages="Languages" />
+    </div>
+}
+
+@if (Block.Type == "container")
+{
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem">
+        <div class="form-group">
+            <label class="form-label">Layout</label>
+            <DxComboBox Data="_containerLayouts" @bind-Value="_layoutMode" CssClass="w-100" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">Columns</label>
+            <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="6" CssClass="w-100" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">Gap</label>
+            <DxComboBox Data="_gapOptions" @bind-Value="_gap" CssClass="w-100" />
+        </div>
+    </div>
+}
+
+@if (Block.Type is "button" or "metric" or "icon")
+{
+    <div class="form-group">
+        <label class="form-label">@T("Label")</label>
+        <LangField @bind-Value="_label" Languages="Languages" />
+    </div>
+}
+
+@if (Block.Type == "step")
+{
+    <div class="form-group">
+        <label class="form-label">@T("StepLabel")</label>
+        <LangField @bind-Value="_stepLabel" Languages="Languages" NullText="01" />
+    </div>
+}
+
+@if (Block.Type is "card" or "metric" or "step" or "icon")
+{
+    <div class="form-group">
+        <label class="form-label">@T("Description")</label>
+        <LangField @bind-Value="_description" Languages="Languages" Multiline="true" />
+    </div>
+}
+
+@if (Block.Type == "metric")
+{
+    <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:.75rem">
+        <div class="form-group">
+            <label class="form-label">@T("Prefix")</label>
+            <DxTextBox @bind-Text="_prefix" CssClass="w-100" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("Value")</label>
+            <DxTextBox @bind-Text="_value" CssClass="w-100" NullText="98" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("Suffix")</label>
+            <DxTextBox @bind-Text="_suffix" CssClass="w-100" />
+        </div>
+    </div>
+}
+
+@if (Block.Type is "button" or "card")
+{
+    @if (Block.Type == "card")
+    {
+        <div class="form-group">
+            <label class="form-label">@T("ButtonLabel")</label>
+            <LangField @bind-Value="_buttonLabel" Languages="Languages" NullText="Learn More" />
+        </div>
+    }
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:.75rem">
+        <div class="form-group">
+            <label class="form-label">Href</label>
+            <DxTextBox @bind-Text="_href" CssClass="w-100" NullText="/solutions" />
+        </div>
+        @if (Block.Type == "button")
+        {
+            <div class="form-group">
+                <label class="form-label">@T("Style")</label>
+                <DxComboBox Data="_buttonStyles" @bind-Value="_style" CssClass="w-100" />
+            </div>
+        }
+    </div>
+}
+
+@if (Block.Type == "bullet-list")
+{
+    <div class="form-group">
+        <label class="form-label">@T("Items")</label>
+        @foreach (var (item, i) in _items.Select((item, index) => (item, index)))
+        {
+            <div class="design-list-item">
+                <DxTextBox @bind-Text="item.Icon" NullText="fas fa-check" />
+                <LangField Value="@(item.Text ?? new())"
+                           ValueChanged="@(v => item.Text = v)"
+                           Languages="Languages" />
+                <button type="button" class="btn-admin btn-danger" @onclick="() => RemoveItem(i)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        }
+        <button type="button" class="btn-admin btn-outline" @onclick="AddItem">
+            <i class="fas fa-plus"></i> @T("AddItem")
+        </button>
+    </div>
+}
+
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
+    </button>
+</div>
+
+<style>
+    .design-list-item {
+        display: grid;
+        grid-template-columns: 150px minmax(0, 1fr) 42px;
+        gap: .5rem;
+        align-items: start;
+        margin-bottom: .5rem;
+    }
+</style>
+
+@code {
+    [Parameter] public BlockModel Block { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private string _icon = string.Empty;
+    private string? _imageUrl;
+    private Dictionary<string, string> _title = new();
+    private Dictionary<string, string> _label = new();
+    private Dictionary<string, string> _stepLabel = new();
+    private Dictionary<string, string> _description = new();
+    private Dictionary<string, string> _buttonLabel = new();
+    private string? _href;
+    private string _style = "filled";
+    private string? _value;
+    private string? _prefix;
+    private string? _suffix;
+    private List<BulletListItemModel> _items = new();
+    private bool _saving;
+    private List<string> _buttonStyles = new() { "filled", "outline", "ghost" };
+    private List<string> _containerLayouts = new() { "stack", "grid", "split" };
+    private List<string> _gapOptions = new() { "none", "small", "medium", "large" };
+    private string _layoutMode = "stack";
+    private int _columns = 2;
+    private string _gap = "medium";
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override void OnParametersSet()
+    {
+        _icon = Block.Icon ?? string.Empty;
+        _imageUrl = Block.ImageUrl;
+        _title = new(Block.Title ?? new());
+        _label = new(Block.Label ?? new());
+        _stepLabel = new(Block.StepLabel ?? new());
+        _description = new(Block.Description ?? new());
+        _buttonLabel = new(Block.ButtonLabel ?? new());
+        _href = Block.Href;
+        _style = NormalizeButtonStyle(Block.Style);
+        _value = Block.Value;
+        _prefix = Block.Prefix;
+        _suffix = Block.Suffix;
+        _layoutMode = NormalizeContainerLayout(Block.LayoutMode);
+        _columns = Math.Clamp(Block.Columns ?? 2, 1, 6);
+        _gap = NormalizeGap(Block.Gap);
+        _items = Block.BulletItems?.Select(i => new BulletListItemModel
+        {
+            Id = i.Id,
+            Icon = i.Icon,
+            Text = new(i.Text ?? new()),
+            Visible = i.Visible,
+            Order = i.Order
+        }).ToList() ?? new();
+    }
+
+    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 5 * 1024 * 1024) return;
+
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=card-blocks", file, maxBytes: 5 * 1024 * 1024);
+        if (res.Success && res.Data is not null)
+        {
+            _imageUrl = res.Data.Url;
+            Http.Toast("Card image uploaded.", res.StatusCode);
+        }
+        else
+        {
+            Http.Toast(res.Message ?? "Card image upload failed.", res.StatusCode);
+        }
+    }
+
+    private void ClearImage()
+    {
+        _imageUrl = string.Empty;
+    }
+
+    private void AddItem() => _items.Add(new BulletListItemModel
+    {
+        Icon = "fas fa-check",
+        Text = new(),
+        Visible = true,
+        Order = _items.Count
+    });
+
+    private void RemoveItem(int index)
+    {
+        if (index < 0 || index >= _items.Count) return;
+        _items.RemoveAt(index);
+        for (var i = 0; i < _items.Count; i++) _items[i].Order = i;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, BuildDto());
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private BlockUpdateDto BuildDto() => Block.Type switch
+    {
+        "card" => new CardBlockUpdateDto
+        {
+            Icon = _icon,
+            Title = _title,
+            Description = _description,
+            ImageUrl = _imageUrl,
+            ButtonLabel = _buttonLabel,
+            Href = _href,
+            Visible = Block.Visible,
+            Layout = ToLayoutDto()
+        },
+        "button" => new ButtonBlockUpdateDto
+        {
+            Label = _label,
+            Href = _href,
+            Style = NormalizeButtonStyle(_style),
+            Visible = Block.Visible,
+            Layout = ToLayoutDto()
+        },
+        "metric" => new MetricBlockUpdateDto
+        {
+            Icon = _icon,
+            Label = _label,
+            Value = _value ?? string.Empty,
+            Prefix = _prefix,
+            Suffix = _suffix,
+            Description = _description,
+            Visible = Block.Visible,
+            Layout = ToLayoutDto()
+        },
+        "bullet-list" => new BulletListBlockUpdateDto
+        {
+            Title = _title,
+            Items = _items.Select((item, i) => new BulletListItemDto
+            {
+                Id = item.Id,
+                Icon = item.Icon,
+                Text = item.Text ?? new(),
+                Visible = item.Visible,
+                Order = i
+            }).ToList(),
+            Visible = Block.Visible,
+            Layout = ToLayoutDto()
+        },
+        "step" => new StepBlockUpdateDto
+        {
+            Icon = _icon,
+            StepLabel = _stepLabel,
+            Title = _title,
+            Description = _description,
+            Visible = Block.Visible,
+            Layout = ToLayoutDto()
+        },
+        "icon" => new IconBlockUpdateDto
+        {
+            Icon = _icon,
+            Label = _label,
+            Description = _description,
+            Visible = Block.Visible,
+            Layout = ToLayoutDto()
+        },
+        "container" => new ContainerBlockUpdateDto
+        {
+            Title = _title,
+            LayoutMode = NormalizeContainerLayout(_layoutMode),
+            Columns = Math.Clamp(_columns, 1, 6),
+            Gap = NormalizeGap(_gap),
+            Visible = Block.Visible,
+            Layout = ToLayoutDto()
+        },
+        _ => new IconBlockUpdateDto { Visible = Block.Visible, Layout = ToLayoutDto() }
+    };
+
+    private BlockLayoutDto? ToLayoutDto() => Block.Layout is null ? null : new BlockLayoutDto
+    {
+        Width = Block.Layout.Width,
+        ColumnSpan = Block.Layout.ColumnSpan,
+        Align = Block.Layout.Align,
+        Justify = Block.Layout.Justify,
+        Padding = Block.Layout.Padding,
+        Margin = Block.Layout.Margin,
+        BackgroundColor = Block.Layout.BackgroundColor,
+        BorderRadius = Block.Layout.BorderRadius,
+        ZIndex = Block.Layout.ZIndex,
+        X = Block.Layout.X,
+        Y = Block.Layout.Y,
+        W = Block.Layout.W,
+        H = Block.Layout.H
+    };
+
+    private static string NormalizeButtonStyle(string? style) => style switch
+    {
+        "outline" => "outline",
+        "ghost" => "ghost",
+        _ => "filled"
+    };
+
+    private static string NormalizeContainerLayout(string? value) => value switch
+    {
+        "grid" => "grid",
+        "split" => "split",
+        _ => "stack"
+    };
+
+    private static string NormalizeGap(string? value) => value switch
+    {
+        "none" => "none",
+        "small" => "small",
+        "large" => "large",
+        _ => "medium"
+    };
+}

@@ -1,0 +1,104 @@
+/* -- Admin Appearance Presets ------------------------------- */
+.admin-appearance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+}
+
+.admin-appearance-card {
+    display: grid;
+    gap: .85rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+
+.admin-appearance-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--primary);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, .08);
+}
+
+.admin-appearance-card.is-selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.admin-appearance-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+}
+
+.admin-appearance-card__header strong,
+.admin-appearance-card__header small {
+    display: block;
+}
+
+.admin-appearance-card__header small {
+    margin-top: .2rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.admin-appearance-card__header i {
+    color: var(--success);
+    margin-top: .1rem;
+}
+
+.admin-appearance-card__swatches {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: .35rem;
+}
+
+.admin-appearance-card__swatches span {
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid rgba(15, 23, 42, .12);
+}
+
+.admin-appearance-card__sample {
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    min-height: 76px;
+    overflow: hidden;
+    border: 1px solid;
+    border-radius: 8px;
+}
+
+.admin-appearance-card__sample > span:first-child {
+    display: block;
+}
+
+.admin-appearance-card__sample > span:last-child {
+    display: grid;
+    align-content: center;
+    gap: .45rem;
+    padding: .65rem;
+}
+
+.admin-appearance-card__sample em {
+    display: block;
+    height: 9px;
+    border-radius: 99px;
+    border: 1px solid transparent;
+}
+
+.admin-appearance-card__sample em:first-child {
+    width: 78%;
+}
+
+.admin-appearance-card__sample em:nth-child(2) {
+    width: 48%;
+}
+
+.admin-appearance-card__sample em:nth-child(3) {
+    width: 30%;
+}

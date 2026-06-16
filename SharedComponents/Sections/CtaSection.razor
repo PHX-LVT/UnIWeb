@@ -1,0 +1,55 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+         class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    <div style="position: relative; z-index: 1" class="sc-cta sc-cta--@NormalizeLayout(Section.Layout)">
+        @if (Section.Heading is not null)
+        {
+            <h2 class="sc-cta__heading">
+                @StyleHelper.Lang(Section.Heading, Lang)
+            </h2>
+        }
+        @if (Section.Subtext is not null)
+        {
+            <p class="sc-cta__sub">
+                @StyleHelper.Lang(Section.Subtext, Lang)
+            </p>
+        }
+        @if (CtaButtons.Any())
+        {
+            <div class="sc-cta__actions">
+                @foreach (var btn in CtaButtons)
+                {
+                    <a href="@btn.Href" class="sc-btn sc-btn--@btn.Style">
+                        @StyleHelper.Lang(btn.Label, Lang)
+                    </a>
+                }
+            </div>
+        }
+        <SectionBlocks Blocks="Section.Blocks" BlockZone="right" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+    <SectionBlocks Blocks="Section.Blocks" BlockZone="below" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicCtaSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private IEnumerable<PublicSectionButtonDto> CtaButtons => Section.Buttons is { Count: > 0 }
+        ? Section.Buttons.Where(b => b.Visible).OrderBy(b => b.Order)
+        : Section.Button is not null && Section.Button.Visible
+            ? new[] { Section.Button }
+            : Array.Empty<PublicSectionButtonDto>();
+
+    private static string NormalizeLayout(string? layout) => string.IsNullOrWhiteSpace(layout) ? "center" : layout;
+}

@@ -1,0 +1,42 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+@using SharedComponents.Blocks
+
+<section data-section-id="@Section.Id"
+          class="@StyleHelper.GetSectionClass(Section.Style)"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+    @* Fixed: Removed Section.Layout since it doesn't exist in the DTO, and safely mapped Gap *@
+    <div style="position: relative; z-index: 1" class="sc-gallery sc-gallery--grid sc-gallery--gap-@(Section.Gap?.ToLower() ?? "small")">
+        
+        @* Fixed: Matches your DTO property name 'Columns' perfectly *@
+        <div class="sc-gallery__grid sc-gallery__grid--@(Section.Columns ?? 3)">
+            
+            @* Fixed: Uses your exact collection property 'Images' and type 'PublicGalleryImageDto' *@
+            @foreach (var img in Section.Images?.OrderBy(i => i.Order) ?? Enumerable.Empty<PublicGalleryImageDto>())
+            {
+                <figure class="sc-gallery__item">
+                    @if (!string.IsNullOrEmpty(img.ImageUrl))
+                    {
+                        <img src="@img.ImageUrl"
+                             alt="@StyleHelper.Lang(img.Caption, Lang)" />
+                    }
+                    @if (Section.ShowCaptions == true)
+                    {
+                        <figcaption>@StyleHelper.Lang(img.Caption, Lang)</figcaption>
+                    }
+                </figure>
+            }
+        </div>
+    </div>
+    <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicGallerySectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+}

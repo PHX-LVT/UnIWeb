@@ -1,0 +1,208 @@
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div class="form-group">
+    <label class="form-label">Section Title</label>
+    <LangField @bind-Value="_title" Languages="Languages" />
+</div>
+<div class="form-group">
+    <label class="form-label">Layout</label>
+    <DxComboBox Data="@_layouts" @bind-Value="_layout" CssClass="w-100" />
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+    <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="5" CssClass="w-100" />
+    <label><DxCheckBox @bind-Checked="_autoplay" /> Autoplay</label>
+    <label><DxCheckBox @bind-Checked="_showArrows" /> Arrows</label>
+</div>
+
+@foreach (var (item, i) in _items.Select((x, i) => (x, i)))
+{
+    <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin:.5rem 0">
+        <div style="display:flex;justify-content:space-between">
+            <strong>Slide @(i + 1)</strong>
+            <button class="btn-admin btn-danger" @onclick="() => _items.RemoveAt(i)"><i class="fas fa-trash"></i></button>
+        </div>
+        <label class="form-label">Title</label>
+        <LangField Value="@(item.Title ?? new())" ValueChanged="v => item.Title = v" Languages="Languages" />
+        <label class="form-label">Tag</label>
+        <LangField Value="@(item.Tag ?? new())" ValueChanged="v => item.Tag = v" Languages="Languages" />
+        <label class="form-label">Description</label>
+        <LangField Value="@(item.Description ?? new())" ValueChanged="v => item.Description = v" Languages="Languages" Multiline="true" />
+        <label class="form-label">Link</label>
+        <DxTextBox @bind-Text="item.LinkHref" NullText="/insights-detail" CssClass="w-100" />
+        @if (_layout == "case-metrics")
+        {
+            <div class="form-group" style="margin-top:.75rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem">
+                    <label class="form-label" style="margin:0">Metrics</label>
+                    <button type="button" class="btn-admin btn-outline" @onclick="() => AddMetric(item)">
+                        <i class="fas fa-plus"></i> Add Metric
+                    </button>
+                </div>
+                @foreach (var (metric, metricIndex) in (item.Metrics ?? new()).Select((x, idx) => (x, idx)))
+                {
+                    <div style="display:grid;grid-template-columns:1fr 1fr 120px auto;gap:.5rem;align-items:end;margin-top:.5rem">
+                        <div>
+                            <label class="form-label">Value</label>
+                            <LangField Value="@(metric.Value ?? new())" ValueChanged="v => metric.Value = v" Languages="Languages" />
+                        </div>
+                        <div>
+                            <label class="form-label">Label</label>
+                            <LangField Value="@(metric.Label ?? new())" ValueChanged="v => metric.Label = v" Languages="Languages" />
+                        </div>
+                        <div>
+                            <label class="form-label">Tone</label>
+                            <DxComboBox Data="@_metricTones" @bind-Value="metric.Tone" CssClass="w-100" />
+                        </div>
+                        <button type="button" class="btn-admin btn-danger" @onclick="() => RemoveMetric(item, metricIndex)">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+        <div class="form-group" style="margin-top:.75rem">
+            <label class="form-label">Image</label>
+            @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+            {
+                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
+                    <img src="@item.ImageUrl"
+                         style="width:120px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />
+                    <button type="button" class="btn-admin btn-ghost"
+                            @onclick="() => ClearItemImage(item)">
+                        <i class="fas fa-times"></i> Remove
+                    </button>
+                </div>
+            }
+            <InputFile OnChange="@(e => OnItemImageSelected(e, item))" accept="image/*" />
+        </div>
+    </div>
+}
+<button class="btn-admin btn-outline" @onclick="AddItem"><i class="fas fa-plus"></i> Add Slide</button>
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem"><button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">Save</button></div>
+
+@code {
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback OnSaved { get; set; }
+    private int _columns = 3;
+    private string _layout = "cards";
+    private bool _autoplay;
+    private bool _showArrows = true;
+    private Dictionary<string, string> _title = new();
+    private List<CarouselItemModel> _items = new();
+    private bool _saving;
+    private string? _loadedSectionId;
+    private readonly string[] _layouts = { "cards", "case-metrics" };
+    private readonly string[] _metricTones = { "positive", "negative", "neutral" };
+
+    protected override void OnParametersSet()
+    {
+        if (_saving || _loadedSectionId == Section.Id) return;
+        _loadedSectionId = Section.Id;
+
+        _columns = Section.Columns ?? 3;
+        _layout = string.IsNullOrWhiteSpace(Section.Layout) ? "cards" : Section.Layout;
+        _autoplay = Section.Autoplay ?? false;
+        _showArrows = Section.ShowArrows ?? true;
+        _title = new(Section.SectionTitle ?? new());
+        _items = Section.CarouselItems?.Select(x => new CarouselItemModel
+        {
+            Tag = new(x.Tag ?? new()),
+            Title = new(x.Title ?? new()),
+            Description = new(x.Description ?? new()),
+            LinkHref = x.LinkHref,
+            ImageUrl = x.ImageUrl,
+            Metrics = x.Metrics?.Select(m => new CarouselMetricModel
+            {
+                Id = m.Id,
+                Value = new(m.Value ?? new()),
+                Label = new(m.Label ?? new()),
+                Tone = string.IsNullOrWhiteSpace(m.Tone) ? "positive" : m.Tone,
+                Order = m.Order
+            }).ToList() ?? new(),
+            Visible = x.Visible,
+            Order = x.Order
+        }).ToList() ?? new();
+    }
+
+    private void AddItem() => _items.Add(new CarouselItemModel { Tag = new(), Title = new(), Description = new(), Metrics = new(), Visible = true, Order = _items.Count });
+
+    private static void AddMetric(CarouselItemModel item)
+    {
+        item.Metrics ??= new();
+        item.Metrics.Add(new CarouselMetricModel { Value = new(), Label = new(), Tone = "positive", Order = item.Metrics.Count });
+    }
+
+    private static void RemoveMetric(CarouselItemModel item, int index)
+    {
+        if (item.Metrics is null || index < 0 || index >= item.Metrics.Count) return;
+        item.Metrics.RemoveAt(index);
+    }
+
+    private async Task OnItemImageSelected(InputFileChangeEventArgs e, CarouselItemModel item)
+    {
+        var file = e.File;
+        if (file.Size > 5 * 1024 * 1024) return;
+
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=carousel", file, maxBytes: 5 * 1024 * 1024);
+        if (res.Success && res.Data is not null)
+        {
+            item.ImageUrl = res.Data.Url;
+            Http.Toast("Carousel image uploaded.", res.StatusCode);
+        }
+        else
+        {
+            Http.Toast(res.Message ?? "Carousel image upload failed.", res.StatusCode);
+        }
+    }
+
+    private static void ClearItemImage(CarouselItemModel item)
+    {
+        item.ImageUrl = string.Empty;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, new CarouselSectionUpdateDto
+            {
+                SectionTitle = _title,
+                Layout = _layout,
+                Columns = _columns,
+                Autoplay = _autoplay,
+                ShowDots = true,
+                ShowArrows = _showArrows,
+                Items = _items.Select(MapItem).ToList(),
+                Visible = Section.Visible
+            });
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static CarouselItemDto MapItem(CarouselItemModel item) => new()
+    {
+        Tag = item.Tag ?? new(),
+        Title = item.Title ?? new(),
+        Description = item.Description ?? new(),
+        ImageUrl = item.ImageUrl,
+        LinkHref = item.LinkHref,
+        Metrics = item.Metrics?.Select((m, i) => new CarouselMetricDto
+        {
+            Value = m.Value ?? new(),
+            Label = m.Label ?? new(),
+            Tone = string.IsNullOrWhiteSpace(m.Tone) ? "positive" : m.Tone,
+            Order = i
+        }).ToList() ?? new(),
+        Visible = item.Visible,
+        Order = item.Order
+    };
+}

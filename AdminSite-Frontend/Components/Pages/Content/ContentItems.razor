@@ -1,0 +1,582 @@
+@page "/content"
+@page "/content/all"
+@page "/content/my"
+@page "/content/submitted"
+@page "/content/published"
+@page "/content/deleted"
+@inject AdminContentService ContentService
+@inject AdminAuthService Auth
+@inject IHttpService Http
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="page-header">
+    <h1 class="page-title"><i class="@ViewIcon"></i> @T(ViewTitleKey)</h1>
+</div>
+
+<div class="admin-card" style="margin-bottom:1rem">
+    <div style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+            <input class="form-control"
+                   placeholder="@T("SearchContents")"
+                   value="@_search"
+                   @oninput="OnSearchChanged" />
+        </div>
+        @if (_view == "deleted")
+        {
+            <button class="btn-admin btn-danger"
+                    disabled="@(!_selectedIds.Any())"
+                    @onclick="AskPermanentDelete">
+                <i class="fas fa-trash"></i> @T("PermanentDeleteSelected") (@_selectedIds.Count)
+            </button>
+        }
+        else
+        {
+            <button class="btn-admin btn-primary" @onclick="AddContent">
+                <i class="fas fa-plus"></i> @T("AddContent")
+            </button>
+        }
+    </div>
+</div>
+
+<div class="content-stat-grid">
+    <div class="admin-card content-stat-card">
+        <div class="content-stat-label"><span class="content-status-dot"></span>@T("Total")</div>
+        <div class="content-stat-value">@NonDeletedItems.Count</div>
+    </div>
+    <div class="admin-card content-stat-card">
+        <div class="content-stat-label"><span class="content-status-dot is-published"></span>@T("Published")</div>
+        <div class="content-stat-value">@CountStatus("Published")</div>
+    </div>
+    <div class="admin-card content-stat-card">
+        <div class="content-stat-label"><span class="content-status-dot is-submitted"></span>@T("PendingReview")</div>
+        <div class="content-stat-value">@CountStatus("Submitted")</div>
+    </div>
+    <div class="admin-card content-stat-card">
+        <div class="content-stat-label"><span class="content-status-dot is-rejected"></span>@T("Rejected")</div>
+        <div class="content-stat-value">@CountStatus("Rejected")</div>
+    </div>
+</div>
+
+<div class="admin-card" style="margin-bottom:1rem">
+    <div class="content-filter-row">
+        <div class="content-filter-field">
+            <label>@T("Status")</label>
+            <select class="form-control" @bind="_statusFilter" @bind:after="OnFilterChanged" disabled="@(_view is "submitted" or "published" or "deleted")">
+                @foreach (var option in StatusOptions)
+                {
+                    <option value="@option.Value">@T(option.LabelKey)</option>
+                }
+            </select>
+        </div>
+        <div class="content-filter-field">
+            <label>@T("ContentType")</label>
+            <select class="form-control" @bind="_typeFilter" @bind:after="OnFilterChanged">
+                <option value="">@T("AllTypes")</option>
+                @foreach (var type in _types)
+                {
+                    <option value="@type.Key">@GetLang(type.Name)</option>
+                }
+            </select>
+        </div>
+        <div class="content-filter-field">
+            <label>@T("SortBy")</label>
+            <select class="form-control" @bind="_sort" @bind:after="OnFilterChanged">
+                <option value="newest">@T("Newest")</option>
+                <option value="oldest">@T("Oldest")</option>
+                <option value="title">@T("Title")</option>
+                <option value="author">@T("Author")</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="admin-card">
+    @if (_loading)
+    {
+        <p class="text-muted">@T("Loading")</p>
+    }
+    else if (!PagedItems.Any())
+    {
+        <p class="text-muted">@T("NoContentYet")</p>
+    }
+    else
+    {
+        <div style="overflow:auto">
+            <table class="table content-table" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width:38px">
+                            <input type="checkbox" checked="@AllPagedSelected" @onchange="ToggleAllPaged" />
+                        </th>
+                        <th>@T("Title")</th>
+                        <th>@T("ContentType")</th>
+                        <th>@T("Status")</th>
+                        <th>@T("Author")</th>
+                        <th>@T("Updated")</th>
+                        <th style="width:110px">@T("Actions")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in PagedItems)
+                    {
+                        <tr>
+                            <td>
+                                <input type="checkbox"
+                                       checked="@_selectedIds.Contains(item.Id)"
+                                       @onchange="e => ToggleSelected(item.Id, e)" />
+                            </td>
+                            <td>
+                                <a href="@EditHref(item.Id)" style="font-weight:600">@GetLang(item.Title)</a>
+                            </td>
+                            <td><span class="content-type-badge">@GetTypeLabel(item.ContentTypeKey)</span></td>
+                            <td><span class="content-status-pill @StatusPillClass(item.Status)">@DisplayStatus(item.Status)</span></td>
+                            <td>
+                                <a class="content-author" href="@AuthorHref(item.AuthorId)">
+                                    <span class="content-author-avatar">@AuthorInitials(item.AuthorId)</span>
+                                    <span>@DisplayAuthor(item.AuthorId)</span>
+                                </a>
+                            </td>
+                            <td>@item.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                            <td>
+                                <div class="content-row-actions">
+                                    <button class="btn-admin btn-ghost content-icon-btn" disabled title="@T("Preview")">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <a class="btn-admin btn-ghost content-icon-btn" href="@EditHref(item.Id)" title="@T("Edit")">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    @if (!IsDeleted(item))
+                                    {
+                                        <button class="btn-admin btn-danger content-icon-btn"
+                                                title="@T("Delete")"
+                                                @onclick="() => AskDelete(item.Id)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-top:1rem">
+            <span class="text-muted">@ShowingText</span>
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                @for (var page = 1; page <= TotalPages; page++)
+                {
+                    var pageNumber = page;
+                    <button class="btn-admin @(_page == pageNumber ? "btn-primary" : "btn-ghost")"
+                            @onclick="() => SetPage(pageNumber)">
+                        @pageNumber
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@if (_deleteId is not null)
+{
+    <div class="modal-backdrop" @onclick="() => _deleteId = null">
+        <div class="modal-box" style="max-width:360px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("ConfirmDelete")</div>
+            <div class="modal-body">
+                <p>@T("DeleteContentPrompt")</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="() => _deleteId = null">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" @onclick="ConfirmDelete">@T("Delete")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_confirmPermanentDelete)
+{
+    <div class="modal-backdrop" @onclick="() => _confirmPermanentDelete = false">
+        <div class="modal-box" style="max-width:400px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("PermanentDelete")</div>
+            <div class="modal-body">
+                <p>@T("PermanentDeleteContentPrompt")</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="() => _confirmPermanentDelete = false">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" @onclick="ConfirmPermanentDelete">@T("PermanentDelete")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private const int PageSize = 10;
+
+    private readonly List<ContentStatusOption> _baseChips = new()
+    {
+        new("", "All"),
+        new("Published", "Published"),
+        new("Submitted", "PendingReview"),
+        new("Draft", "Draft"),
+        new("Rejected", "Rejected")
+    };
+
+    private List<ContentTypeModel> _types = new();
+    private List<ContentItemModel> _items = new();
+    private string _view = "all";
+    private string _search = string.Empty;
+    private string _statusFilter = string.Empty;
+    private string _sort = "newest";
+    private string _typeFilter = string.Empty;
+    private string? _deleteId;
+    private HashSet<string> _selectedIds = new(StringComparer.OrdinalIgnoreCase);
+    private int _page = 1;
+    private bool _loading = true;
+    private bool _confirmPermanentDelete;
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string CurrentAdminId => Auth.CurrentUser?.AdminId ?? string.Empty;
+    private string CurrentAdminEmail => Auth.CurrentUser?.Email ?? string.Empty;
+
+    private string ViewTitleKey => _view switch
+    {
+        "my" => "MyContent",
+        "submitted" => "Submitted",
+        "published" => "Published",
+        "deleted" => "Deleted",
+        _ => "AllContent"
+    };
+
+    private string ViewIcon => _view switch
+    {
+        "my" => "fas fa-user-edit",
+        "submitted" => "fas fa-inbox",
+        "published" => "fas fa-check-circle",
+        "deleted" => "fas fa-trash-alt",
+        _ => "fas fa-newspaper"
+    };
+
+    private List<ContentStatusOption> StatusOptions =>
+        _view switch
+        {
+            "submitted" => new() { new("Submitted", "PendingReview") },
+            "published" => new() { new("Published", "Published") },
+            "deleted" => new() { new("Deleted", "Deleted") },
+            _ => _baseChips
+        };
+
+    private List<ContentItemModel> NonDeletedItems =>
+        _items.Where(i => !IsDeleted(i)).ToList();
+
+    private IEnumerable<ContentItemModel> ViewItems
+    {
+        get
+        {
+            var items = _items.AsEnumerable();
+
+            items = _view switch
+            {
+                "my" => items.Where(IsMine).Where(i => !IsDeleted(i)),
+                "submitted" => items.Where(i => SameStatus(i, "Submitted")),
+                "published" => items.Where(i => SameStatus(i, "Published")),
+                "deleted" => items.Where(i => SameStatus(i, "Deleted")),
+                _ => items.Where(i => !IsDeleted(i))
+            };
+
+            if (!string.IsNullOrWhiteSpace(_statusFilter) && _view is "all" or "my")
+                items = items.Where(i => SameStatus(i, _statusFilter));
+
+            if (!string.IsNullOrWhiteSpace(_typeFilter))
+                items = items.Where(i => string.Equals(i.ContentTypeKey, _typeFilter, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(_search))
+            {
+                var term = _search.Trim();
+                items = items.Where(i =>
+                    Contains(GetLang(i.Title), term) ||
+                    Contains(DisplayAuthor(i.AuthorId), term) ||
+                    Contains(GetTypeLabel(i.ContentTypeKey), term) ||
+                    Contains(i.ContentTypeKey, term));
+            }
+
+            items = _sort switch
+            {
+                "oldest" => items.OrderBy(i => i.CreatedAt),
+                "title" => items.OrderBy(i => GetLang(i.Title)),
+                "author" => items.OrderBy(i => DisplayAuthor(i.AuthorId)),
+                _ => items.OrderByDescending(i => i.UpdatedAt)
+            };
+
+            return items;
+        }
+    }
+
+    private List<ContentItemModel> FilteredItems => ViewItems.ToList();
+
+    private List<ContentItemModel> PagedItems =>
+        FilteredItems.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+
+    private bool AllPagedSelected =>
+        PagedItems.Any() && PagedItems.All(item => _selectedIds.Contains(item.Id));
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredItems.Count / (double)PageSize));
+
+    private string ShowingText
+    {
+        get
+        {
+            var total = FilteredItems.Count;
+            if (total == 0) return string.Format(T("ShowingRange"), 0, 0, 0);
+            var start = ((_page - 1) * PageSize) + 1;
+            var end = Math.Min(start + PageSize - 1, total);
+            return string.Format(T("ShowingRange"), start, end, total);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        Nav.LocationChanged += OnLocationChanged;
+        UpdateViewFromRoute();
+
+        var typeRes = await ContentService.GetTypesAsync();
+        _types = typeRes.Data ?? new();
+
+        await LoadItems();
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateViewFromRoute();
+    }
+
+    private void UpdateViewFromRoute()
+    {
+        var nextView = ResolveView();
+        if (_view == nextView) return;
+
+        _view = nextView;
+        _statusFilter = _view switch
+        {
+            "submitted" => "Submitted",
+            "published" => "Published",
+            "deleted" => "Deleted",
+            _ => string.Empty
+        };
+        _typeFilter = string.Empty;
+        _page = 1;
+        _selectedIds.Clear();
+    }
+
+    private async Task LoadItems()
+    {
+        _loading = true;
+        var res = await ContentService.GetAllAsync();
+        _items = res.Data ?? new();
+        _loading = false;
+        _selectedIds.RemoveWhere(id => !_items.Any(item => item.Id == id));
+    }
+
+    private string ResolveView()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
+        return path switch
+        {
+            "content/my" => "my",
+            "content/submitted" => "submitted",
+            "content/published" => "published",
+            "content/deleted" => "deleted",
+            _ => "all"
+        };
+    }
+
+    private void AddContent() => Nav.NavigateTo($"/content/new?return={Uri.EscapeDataString(CurrentReturnPath)}");
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+    }
+
+    private void OnFilterChanged()
+    {
+        _page = 1;
+        _selectedIds.Clear();
+    }
+
+    private void SetPage(int page)
+    {
+        _page = Math.Clamp(page, 1, TotalPages);
+        _selectedIds.Clear();
+    }
+
+    private void ToggleSelected(string id, ChangeEventArgs e)
+    {
+        if (e.Value is bool selected && selected)
+            _selectedIds.Add(id);
+        else
+            _selectedIds.Remove(id);
+    }
+
+    private void ToggleAllPaged(ChangeEventArgs e)
+    {
+        if (e.Value is bool selected && selected)
+        {
+            foreach (var item in PagedItems)
+                _selectedIds.Add(item.Id);
+        }
+        else
+        {
+            foreach (var item in PagedItems)
+                _selectedIds.Remove(item.Id);
+        }
+    }
+
+    private void AskDelete(string id)
+    {
+        _deleteId = id;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_deleteId is null) return;
+
+        var res = await ContentService.DeleteAsync(_deleteId);
+        Http.Toast(res.Message, res.StatusCode);
+        _deleteId = null;
+        await LoadItems();
+    }
+
+    private void AskPermanentDelete()
+    {
+        if (_view != "deleted" || !_selectedIds.Any()) return;
+        _confirmPermanentDelete = true;
+    }
+
+    private async Task ConfirmPermanentDelete()
+    {
+        if (!_selectedIds.Any()) return;
+
+        var res = await ContentService.PermanentDeleteAsync(_selectedIds.ToList());
+        Http.Toast(res.Message, res.StatusCode);
+        _confirmPermanentDelete = false;
+        _selectedIds.Clear();
+        await LoadItems();
+    }
+
+    private int CountStatus(string status) =>
+        _items.Count(i => SameStatus(i, status));
+
+    private bool IsMine(ContentItemModel item)
+    {
+        if (!string.IsNullOrWhiteSpace(CurrentAdminId) &&
+            string.Equals(item.AuthorId, CurrentAdminId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(CurrentAdminEmail) &&
+               string.Equals(item.AuthorId, CurrentAdminEmail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string DisplayStatus(string status) =>
+        string.Equals(status, "Submitted", StringComparison.OrdinalIgnoreCase)
+            ? T("PendingReview")
+            : T(status);
+
+    private static string StatusPillClass(string status) => status.ToLowerInvariant() switch
+    {
+        "published" => "is-published",
+        "submitted" => "is-submitted",
+        "rejected" => "is-rejected",
+        "deleted" => "is-deleted",
+        _ => "is-draft"
+    };
+
+    private string GetTypeLabel(string key)
+    {
+        var type = _types.FirstOrDefault(t => string.Equals(t.Key, key, StringComparison.OrdinalIgnoreCase));
+        return type is null ? key : GetLang(type.Name);
+    }
+
+    private string GetLang(Dictionary<string, string> values)
+    {
+        var lang = NormalizeLang(AdminLanguage);
+        if (values.TryGetValue(lang, out var value) && !string.IsNullOrWhiteSpace(value))
+            return value;
+        return values.TryGetValue("en", out var en) ? en : string.Empty;
+    }
+
+    private static bool IsDeleted(ContentItemModel item) => SameStatus(item, "Deleted");
+
+    private static bool SameStatus(ContentItemModel item, string status) =>
+        string.Equals(item.Status, status, StringComparison.OrdinalIgnoreCase);
+
+    private static bool Contains(string? value, string term) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeLang(string? lang)
+    {
+        if (string.Equals(lang, "vi", StringComparison.OrdinalIgnoreCase)) return "vi";
+        if (string.Equals(lang, "cn", StringComparison.OrdinalIgnoreCase)) return "cn";
+        return "en";
+    }
+
+    private string CurrentReturnPath => _view switch
+    {
+        "my" => "/content/my",
+        "submitted" => "/content/submitted",
+        "published" => "/content/published",
+        "deleted" => "/content/deleted",
+        _ => "/content/all"
+    };
+
+    private string EditHref(string id) =>
+        $"/content/edit/{Uri.EscapeDataString(id)}?return={Uri.EscapeDataString(CurrentReturnPath)}";
+
+    private static string AuthorHref(string authorId) => $"/employees/{Uri.EscapeDataString(authorId)}/content";
+
+    private string DisplayAuthor(string authorId)
+    {
+        if (string.IsNullOrWhiteSpace(authorId)) return "-";
+        if (!string.IsNullOrWhiteSpace(CurrentAdminId) &&
+            string.Equals(authorId, CurrentAdminId, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Admin";
+        }
+
+        if (!string.IsNullOrWhiteSpace(CurrentAdminEmail) &&
+            string.Equals(authorId, CurrentAdminEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Admin";
+        }
+
+        return authorId.Length <= 10 ? authorId : $"{authorId[..10]}...";
+    }
+
+    private string AuthorInitials(string authorId)
+    {
+        var display = DisplayAuthor(authorId);
+        if (display == "-") return "?";
+        var parts = display.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant();
+        return display[..Math.Min(2, display.Length)].ToUpperInvariant();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateViewFromRoute();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+
+    private sealed record ContentStatusOption(string Value, string LabelKey);
+}

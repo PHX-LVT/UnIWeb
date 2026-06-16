@@ -1,0 +1,46 @@
+/* -- Form Inputs & Validation ------------------------------ */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: var(--text);
+}
+
+    .form-label.required::after {
+        content: ' *';
+        color: var(--danger);
+    }
+
+.form-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 3px;
+}
+
+.visibility-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: inherit;
+    transition: background 0.12s;
+}
+
+    .visibility-toggle.visible {
+        color: var(--success);
+        border-color: #b2dfca;
+    }
+
+    .visibility-toggle.hidden {
+        color: var(--text-muted);
+    }

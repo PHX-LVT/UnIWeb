@@ -1,0 +1,898 @@
+﻿@page "/"
+@inject AdminPageService PageService
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+@inject IJSRuntime JS
+@using Contracts.Admin
+@implements IAsyncDisposable
+
+<div class="ez-dashboard">
+    <div class="ez-dashboard__header">
+        <h1 class="page-title">@T("Canvas")</h1>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="sc-loading">
+            <div class="sc-spinner"></div>
+        </div>
+    }
+    else
+    {
+        <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
+            @foreach (var page in RootPages)
+            {
+                <button class="ez-tab @(_activeParentPage?.Id == page.Id ? "ez-tab--active" : "")"
+                        data-root-page-id="@(page.Id)"
+                        @onclick="() => SelectPage(page)">
+                    @PageTitle(page)
+                    @if (_activeParentPage?.Id == page.Id)
+                    {
+                        <span class="ez-tab__action" title="Settings"
+                              @onclick:stopPropagation="true"
+                              @onclick="() => OpenSettings(page)">
+                            <i class="fas fa-cog"></i>
+                        </span>
+                        <span class="ez-tab__action ez-tab__action--danger" title="Delete"
+                              @onclick:stopPropagation="true"
+                              @onclick="() => _confirmDelete = page">
+                            <i class="fas fa-trash"></i>
+                        </span>
+                    }
+                </button>
+            }
+            <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+
+        <div class="ez-dashboard__canvas">
+            @if (_selectedPage is not null)
+            {
+                <Canvas Page="_selectedPage"
+                        ParentPage="@(_activeParentPage ?? _selectedPage)"
+                        ChildPages="_childPages"
+                        Sections="_sections"
+                        OnPageSelected="SelectPageById"
+                        OnSectionsChanged="ReloadSections"
+                        OnAddSection="ShowSectionPicker"
+                        OnAddChildPage="ShowCreateChildForm"
+                        OnManageChildPages="ShowChildPageManager"
+                        OnOpenPageSettings="OpenSettings"
+                        OnDeletePage="RequestDeletePage"
+                        OnPageStatusChanged="HandlePageStatusChanged" />
+            }
+        </div>
+    }
+</div>
+
+@if (_showPagePicker)
+{
+    <PageTemplatePicker OnPicked="OnTemplatePicked"
+                        OnCancel="() => _showPagePicker = false" />
+}
+
+@* -- Create child page modal -- *@
+@if (_showCreateChildForm && ChildCreateParent is not null)
+{
+    <div class="ez-modal-overlay" @onclick="() => _showCreateChildForm = false">
+        <div class="ez-modal" @onclick:stopPropagation="@true">
+            <div class="ez-modal__header">
+                <h2>@T("AddChildPage")</h2>
+                <button class="ez-icon-btn" @onclick="() => _showCreateChildForm = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ez-modal__body">
+                <p class="form-hint">
+                    @T("Parent"): @PageTitle(ChildCreateParent)
+                </p>
+                <div class="form-group">
+                    <label class="form-label">@T("Title")</label>
+                    <DxTextBox Text="@GetDisplayName(_childCreateForm.Name)"
+                               TextChanged="@((string v) => OnChildCreateTitleChanged(v))"
+                               CssClass="w-100"
+                               NullText="Child page title" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label d-flex align-items-center gap-2">
+                        <DxCheckBox @bind-Checked="_childCreateForm.Access" /> @T("PublicAccess")
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label d-flex align-items-center gap-2">
+                        <DxCheckBox @bind-Checked="_childCreateForm.Visible" /> @T("ShowInHeaderNavigation")
+                    </label>
+                </div>
+            </div>
+            <div class="ez-modal__footer">
+                <button class="btn-admin btn-ghost" @onclick="() => _showCreateChildForm = false">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="ConfirmCreateChild" disabled="@_saving">
+                    @(_saving ? T("Creating") : "Create Child Page")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showChildPageManager && _activeParentPage is not null)
+{
+    <div class="ez-modal-overlay" @onclick="CloseChildPageManager">
+        <div class="ez-modal" @onclick:stopPropagation="true">
+            <div class="ez-modal__header">
+                <h2>@T("ManageChildPages")</h2>
+                <button class="ez-icon-btn" @onclick="CloseChildPageManager">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ez-modal__body">
+                <p class="form-hint">
+                    @T("Parent"): @PageTitle(_activeParentPage)
+                </p>
+                @if (_childPages.Count == 0)
+                {
+                    <div class="ez-empty-state">@T("NoChildPages")</div>
+                }
+                else
+                {
+                    <div class="ez-child-page-manager" @ref="_childPageListRef">
+                        @foreach (var child in _childPages.OrderBy(p => p.Order))
+                        {
+                            <div class="ez-child-page-manager__row"
+                                 data-child-page-id="@child.Id"
+                                 @key="child.Id">
+                                <span class="ez-child-page-manager__drag" title="Drag to reorder">
+                                    <i class="fas fa-grip-vertical"></i>
+                                </span>
+                                <div class="ez-child-page-manager__content">
+                                    <strong>@PageTitle(child)</strong>
+                                    <span>/@(string.IsNullOrWhiteSpace(child.FullSlug) ? child.Slug : child.FullSlug)</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="ez-modal__footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseChildPageManager">@T("Close")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showSectionPicker)
+{
+    <SectionTemplatePicker OnPicked="CreateSection"
+                           OnCancel="() => _showSectionPicker = false" />
+}
+
+@* -- Create page modal (step 2 after template pick) -- *@
+@if (_showCreateForm)
+{
+    <div class="ez-modal-overlay" @onclick="() => _showCreateForm = false">
+        <div class="ez-modal" @onclick:stopPropagation="@true">
+            <div class="ez-modal__header">
+                <h2>@T("Create")</h2>
+                <button class="ez-icon-btn" @onclick="() => _showCreateForm = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ez-modal__body">
+                <div class="form-group">
+                    <label class="form-label">@T("Title")</label>
+                    <DxTextBox Text="@GetDisplayName(_createForm.Name)"
+                               TextChanged="@((string v) => OnCreateTitleChanged(v))"
+                               CssClass="w-100"        
+                               NullText="Slug-is-auto-generated-from-title" />
+                </div>
+               @* <div class="form-group">
+                    <label class="form-label">Slug</label>
+                    <DxTextBox @bind-Text="_createForm.Slug" 
+                               CssClass="w-100"
+                               NullText="auto-generated-from-title" />
+                    <small class="form-hint">URL: /@_createForm.Slug</small>
+                </div> *@
+                <div class="form-group">
+                    <label class="form-label d-flex align-items-center gap-2">
+                        <DxCheckBox @bind-Checked="_createForm.Access" /> @T("PublicAccess")
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label d-flex align-items-center gap-2">
+                        <DxCheckBox @bind-Checked="_createForm.Visible" /> @T("ShowInHeaderNavigation")
+                    </label>
+                </div>
+            </div>
+            <div class="ez-modal__footer">
+                <button class="btn-admin btn-ghost" @onclick="() => _showCreateForm = false">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="ConfirmCreate" disabled="@_saving">
+                    @(_saving ? T("Creating") : T("Create"))
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* -- Page settings modal -- *@
+@if (_showSettings && _editingPage is not null)
+{
+    <div class="ez-modal-overlay" @onclick="() => _showSettings = false">
+        <div class="ez-modal" @onclick:stopPropagation="true">
+            <div class="ez-modal__header">
+                <h2>@T("Settings")</h2>
+                <button class="ez-icon-btn" @onclick="() => _showSettings = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ez-modal__body">
+                <div class="form-group">
+                    <label class="form-label">@T("Title")</label>
+                    <DxTextBox Text="@GetDisplayName(_settingsForm.Name)"
+                               TextChanged="@((string v) => OnSettingsTitleChanged(v))"
+                               CssClass="w-100" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">@T("Slug")</label>
+                    <DxTextBox @bind-Text="_settingsForm.Slug"
+                               CssClass="w-100"
+                               NullText="auto-generated-from-title" />
+                    <small class="form-hint">URL: /@_settingsForm.Slug</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label d-flex align-items-center gap-2">
+                        <DxCheckBox @bind-Checked="_settingsForm.Access" /> @T("PublicAccess")
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label d-flex align-items-center gap-2">
+                        <DxCheckBox @bind-Checked="_settingsForm.Visible" /> @T("ShowInHeaderNavigation")
+                    </label>
+                </div>
+            </div>
+            <div class="ez-modal__footer">
+                <button class="btn-admin btn-ghost" @onclick="() => _showSettings = false">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="SaveSettings" disabled="@_saving">
+                    @(_saving ? T("Saving") : T("Save"))
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* -- Delete confirmation modal -- *@
+@if (_confirmDelete is not null)
+{
+    <div class="ez-modal-overlay" @onclick="() => _confirmDelete = null">
+        <div class="ez-modal ez-modal--sm" @onclick:stopPropagation="true">
+            <div class="ez-modal__header">
+                <h2>Delete page</h2>
+                <button class="ez-icon-btn" @onclick="() => _confirmDelete = null">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="ez-modal__body">
+                <p>
+                    Delete <strong>@PageTitle(_confirmDelete)</strong>?
+                    All its sections and blocks will be permanently removed.
+                </p>
+            </div>
+            <div class="ez-modal__footer">
+                <button class="btn-admin btn-ghost" @onclick="() => _confirmDelete = null">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" @onclick="ConfirmDelete">@T("Delete")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private List<PageModel> _pages = new();
+    private List<PageModel> _childPages = new();
+    private string? _selectedPageId;
+    private PageModel? _selectedPage;
+    private PageModel? _activeParentPage;
+    private List<SectionModel> _sections = new();
+    private bool _loading = true;
+    private bool _saving = false;
+    private bool _pageSortableInitialized = false;
+    private bool _childPageSortableInitialized = false;
+    private ElementReference _pageTabsRef;
+    private ElementReference _childPageListRef;
+    private DotNetObjectReference<Dashboard>? _dotNetRef;
+
+    // Create flow
+    private bool _showPagePicker = false;
+    private bool _showCreateForm = false;
+    private string _pendingTemplate = "blank";
+    private PageRequest _createForm = new();
+    private bool _showCreateChildForm = false;
+    private bool _showChildPageManager = false;
+    private PageModel? _childCreateParentPage;
+    private PageRequest _childCreateForm = new();
+
+    // Settings flow
+    private bool _showSettings = false;
+    private PageModel? _editingPage;
+    private PageRequest _settingsForm = new();
+
+    // Delete flow
+    private PageModel? _confirmDelete;
+
+    // Section picker
+    private bool _showSectionPicker = false;
+
+    private IEnumerable<PageModel> RootPages =>
+        _pages.Where(p => string.IsNullOrWhiteSpace(p.ParentPageId))
+            .OrderBy(p => p.Order);
+
+    private string PageTitle(PageModel? page) =>
+        GetLocalized(page?.Name, "Untitled");
+
+    private PageModel? ChildCreateParent => _childCreateParentPage ?? _selectedPage;
+
+    private string GetDisplayName(Dictionary<string, string> name) =>
+        GetLocalized(name, string.Empty);
+
+    private string GetLocalized(Dictionary<string, string>? value, string fallback)
+    {
+        if (value is null) return fallback;
+        if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+        if (value.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
+            return en;
+        return value.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private void OnSettingsTitleChanged(string value)
+    {
+        _settingsForm.Name[AdminLanguage] = value;
+    }
+
+
+    private async Task HandlePageStatusChanged()
+    {
+        if (_selectedPageId is null) return;
+
+        // Re-fetch the page to get updated Status and PublishedAt
+        var res = await PageService.GetByIdAsync(_selectedPageId);
+        if (res.Data is not null)
+        {
+            _selectedPage = res.Data;
+
+            // Also update the page in the tab list so the tab reflects changes
+            var idx = _pages.FindIndex(p => p.Id == _selectedPageId);
+            if (idx >= 0) _pages[idx] = res.Data;
+        }
+    }
+
+    
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPages();
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+        }
+
+        if (!_loading && !_pageSortableInitialized && _dotNetRef is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync(
+                    "initAdminSortable",
+                    "dashboard-root-pages",
+                    _pageTabsRef,
+                    _dotNetRef,
+                    nameof(OnRootPagesReordered),
+                    "data-root-page-id",
+                    ".ez-tab",
+                    null,
+                    ".ez-tab__action, .ez-tab--add, button:not(.ez-tab), a, input, select, textarea");
+                _pageSortableInitialized = true;
+            }
+            catch
+            {
+                Http.Toast("Page drag sorting failed to initialize.", 500);
+            }
+        }
+
+        if (_showChildPageManager &&
+            _childPages.Count > 0 &&
+            !_childPageSortableInitialized &&
+            _dotNetRef is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync(
+                    "initAdminSortable",
+                    "dashboard-child-pages",
+                    _childPageListRef,
+                    _dotNetRef,
+                    nameof(OnChildPagesReordered),
+                    "data-child-page-id",
+                    ".ez-child-page-manager__drag");
+                _childPageSortableInitialized = true;
+            }
+            catch
+            {
+                Http.Toast("Child page sorting failed to initialize.", 500);
+            }
+        }
+    }
+
+    private async Task LoadPages()
+    {
+        var res = await PageService.GetAllAsync();
+        _pages = res.Data ?? new();
+        _pageSortableInitialized = false;
+        if (_pages.Any() && _selectedPageId is null)
+            await SelectPageById(RootPages.FirstOrDefault()?.Id ?? _pages.First().Id);
+    }
+
+    [JSInvokable]
+    public async Task OnRootPagesReordered(List<string> orderedIds)
+    {
+        var rootIds = RootPages.Select(p => p.Id).ToHashSet();
+        var cleanOrderedIds = orderedIds
+            .Where(rootIds.Contains)
+            .Distinct()
+            .ToList();
+
+        if (cleanOrderedIds.Count != rootIds.Count)
+        {
+            return;
+        }
+
+        var res = await PageService.ReorderAsync(cleanOrderedIds);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            _pageSortableInitialized = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        for (var i = 0; i < cleanOrderedIds.Count; i++)
+        {
+            var page = _pages.FirstOrDefault(p => p.Id == cleanOrderedIds[i]);
+            if (page is not null)
+            {
+                page.Order = i;
+            }
+        }
+
+        _pageSortableInitialized = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnChildPagesReordered(List<string> orderedIds)
+    {
+        if (_activeParentPage is null)
+            return;
+
+        var childIds = _childPages.Select(p => p.Id).ToHashSet();
+        var cleanOrderedIds = orderedIds
+            .Where(childIds.Contains)
+            .Distinct()
+            .ToList();
+
+        if (cleanOrderedIds.Count != childIds.Count)
+            return;
+
+        var res = await PageService.ReorderChildrenAsync(_activeParentPage.Id, cleanOrderedIds);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            _childPageSortableInitialized = false;
+            await ReloadChildren();
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        for (var i = 0; i < cleanOrderedIds.Count; i++)
+        {
+            var child = _childPages.FirstOrDefault(p => p.Id == cleanOrderedIds[i]);
+            if (child is not null)
+            {
+                child.Order = i;
+            }
+
+            var page = _pages.FirstOrDefault(p => p.Id == cleanOrderedIds[i]);
+            if (page is not null)
+            {
+                page.Order = i;
+            }
+        }
+
+        _childPages = _childPages.OrderBy(p => p.Order).ToList();
+        _childPageSortableInitialized = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task SelectPage(PageModel page) => SelectPageById(page.Id);
+
+    private async Task SelectPageById(string pageId)
+    {
+        var page = _pages.FirstOrDefault(p => p.Id == pageId);
+        if (page is null)
+        {
+            var res = await PageService.GetByIdAsync(pageId);
+            page = res.Data;
+        }
+
+        if (page is null) return;
+
+        _selectedPageId = page.Id;
+        _selectedPage = page;
+
+        if (string.IsNullOrWhiteSpace(page.ParentPageId))
+        {
+            _activeParentPage = page;
+        }
+        else
+        {
+            _activeParentPage = _pages.FirstOrDefault(p => p.Id == page.ParentPageId);
+            if (_activeParentPage is null)
+            {
+                var parentRes = await PageService.GetByIdAsync(page.ParentPageId);
+                _activeParentPage = parentRes.Data;
+            }
+        }
+
+        await ReloadChildren();
+        await ReloadSections();
+    }
+
+    private async Task ReloadChildren()
+    {
+        _childPages = new();
+        if (_activeParentPage is null) return;
+
+        var res = await PageService.GetChildrenAsync(_activeParentPage.Id);
+        _childPages = res.Data?.OrderBy(p => p.Order).ToList() ?? new();
+
+        foreach (var child in _childPages)
+        {
+            var index = _pages.FindIndex(p => p.Id == child.Id);
+            if (index >= 0) _pages[index] = child;
+            else _pages.Add(child);
+        }
+    }
+
+    private async Task ReloadSections()
+    {
+        if (_selectedPageId is null) return;
+        var res = await SectionService.GetAllAsync(_selectedPageId);
+        _sections = res.Data?.OrderBy(s => s.Order).ToList() ?? new();
+    }
+
+    // -- Create flow ------------------------------------------
+
+    private void ShowPagePicker() => _showPagePicker = true;
+
+    private void ShowSectionPicker() => _showSectionPicker = true;
+
+    private void ShowCreateChildForm()
+    {
+        if (_selectedPage is null) return;
+
+        BeginCreateChild(_selectedPage);
+    }
+
+    private void BeginCreateChild(PageModel parent)
+    {
+        if (!string.IsNullOrWhiteSpace(parent.ParentPageId))
+        {
+            Http.Toast("Child pages cannot have child pages. Select the parent page to add another child page.", 400);
+            return;
+        }
+
+        _childCreateParentPage = parent;
+        _childCreateForm = new PageRequest
+        {
+            Access = true,
+            Visible = true,
+            Name = new Dictionary<string, string> {
+                { "en", "" },
+                { "vi", "" },
+                { "cn", "" }
+            }
+        };
+        _showCreateChildForm = true;
+    }
+
+    private void ShowChildPageManager()
+    {
+        if (_activeParentPage is null) return;
+        _showChildPageManager = true;
+        _childPageSortableInitialized = false;
+    }
+
+    private async Task CloseChildPageManager()
+    {
+        _showChildPageManager = false;
+        _childPageSortableInitialized = false;
+        try
+        {
+            await JS.InvokeVoidAsync("disposeAdminSortable", "dashboard-child-pages");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private void OnTemplatePicked(string template)
+    {
+        _showPagePicker = false;
+        _pendingTemplate = template;
+        _createForm = new PageRequest
+        {
+            Access = true,
+            Visible = true,
+            Name = new Dictionary<string, string> { 
+                { "en", "" },
+                { "vi", "" },
+                { "cn", "" }
+            }
+        }; _showCreateForm = true;
+    }
+
+    private void OnCreateTitleChanged(string value)
+    {
+        _createForm.Name[AdminLanguage] = value;
+        if (string.IsNullOrWhiteSpace(_createForm.Name.GetValueOrDefault("en")))
+            _createForm.Name["en"] = value;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _createForm.Slug = string.Empty;
+            return;
+        }
+        var slug = value.ToLower().Trim().Replace(" ", "-")
+                        .Replace("'", "").Replace("\"", "");
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        _createForm.Slug = slug;
+    }
+
+    private void OnChildCreateTitleChanged(string value)
+    {
+        _childCreateForm.Name[AdminLanguage] = value;
+        if (string.IsNullOrWhiteSpace(_childCreateForm.Name.GetValueOrDefault("en")))
+            _childCreateForm.Name["en"] = value;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _childCreateForm.Slug = string.Empty;
+            return;
+        }
+
+        var slug = value.ToLower().Trim().Replace(" ", "-")
+                        .Replace("'", "").Replace("\"", "");
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        _childCreateForm.Slug = slug;
+    }
+
+    private async Task ConfirmCreate()
+    {
+        _saving = true;
+        try
+        {
+            var en = _createForm.Name.GetValueOrDefault("en", string.Empty);
+            foreach (var code in new[] { "vi", "cn" })
+                if (!_createForm.Name.ContainsKey(code) || string.IsNullOrEmpty(_createForm.Name[code]))
+                    _createForm.Name[code] = en;
+
+            var res = await PageService.CreateAsync(_createForm);
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success && res.Data is not null)
+            {
+                await PageService.SeedTemplateAsync(res.Data.Id, _pendingTemplate);
+                _showCreateForm = false;
+                await LoadPages();
+                await SelectPage(res.Data);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ConfirmCreateChild()
+    {
+        var parent = ChildCreateParent;
+        if (parent is null) return;
+
+        if (!string.IsNullOrWhiteSpace(parent.ParentPageId))
+        {
+            Http.Toast("Child pages cannot have child pages. Select the parent page to add another child page.", 400);
+            _showCreateChildForm = false;
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var en = _childCreateForm.Name.GetValueOrDefault("en", string.Empty);
+            foreach (var code in new[] { "vi", "cn" })
+                if (!_childCreateForm.Name.ContainsKey(code) || string.IsNullOrEmpty(_childCreateForm.Name[code]))
+                    _childCreateForm.Name[code] = en;
+
+            var res = await PageService.CreateChildAsync(parent.Id, _childCreateForm);
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success && res.Data is not null)
+            {
+                _showCreateChildForm = false;
+                _childCreateParentPage = null;
+                await LoadPages();
+                await SelectPageById(res.Data.Id);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // -- Settings flow ----------------------------------------
+
+    private void OpenSettings(PageModel page)
+    {
+        _editingPage = page;
+        _settingsForm = new PageRequest
+        {
+            Name = new Dictionary<string, string>(page.Name),
+            Slug = page.Slug,
+            Access = page.Access,
+            Visible = page.Visible
+        };
+        _showSettings = true;
+    }
+
+    private void RequestDeletePage(PageModel page)
+    {
+        _confirmDelete = page;
+    }
+
+    private async Task SaveSettings()
+    {
+        if (_editingPage is null) return;
+        _saving = true;
+        try
+        {
+            var res = await PageService.UpdateAsync(_editingPage.Id, _settingsForm);
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success)
+            {
+                await LoadPages();
+                await SelectPageById(_editingPage.Id);
+                _showSettings = false;
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // -- Delete flow ------------------------------------------
+
+    private async Task ConfirmDelete()
+    {
+        if (_confirmDelete is null) return;
+        var deleting = _confirmDelete;
+        var deletedSelected = deleting.Id == _selectedPageId;
+        var parentId = deleting.ParentPageId;
+        var res = string.IsNullOrWhiteSpace(parentId)
+            ? await PageService.DeleteAsync(deleting.Id)
+            : await PageService.DeleteChildAsync(parentId, deleting.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            _confirmDelete = null;
+            await LoadPages();
+            if (deletedSelected)
+            {
+                _selectedPageId = null;
+                _selectedPage = null;
+                _activeParentPage = null;
+                _childPages = new();
+                _sections = new();
+                if (!string.IsNullOrWhiteSpace(parentId) && _pages.Any(p => p.Id == parentId))
+                {
+                    await SelectPageById(parentId);
+                }
+                else if (_pages.Any())
+                {
+                    await SelectPageById(RootPages.FirstOrDefault()?.Id ?? _pages.First().Id);
+                }
+            }
+        }
+        else
+        {
+            _confirmDelete = null;
+        }
+    }
+
+    // -- Section flow -----------------------------------------
+
+
+    private static SectionCreateDto CreateSectionDto(string type) => type switch
+    {
+        "hero" => new HeroSectionCreateDto(),
+        "cta" => new CtaSectionCreateDto(),
+        "list" => new ListSectionCreateDto(),
+        "showcase" => new ShowcaseSectionCreateDto(),
+        "library" => new LibrarySectionCreateDto(),
+        "gallery" => new GallerySectionCreateDto(),
+        "columns" => new ColumnsSectionCreateDto(),
+        "html" => new HtmlSectionCreateDto(),
+        "stats" => new StatsSectionCreateDto(),
+        "carousel" => new CarouselSectionCreateDto(),
+        "network-map" => new NetworkMapSectionCreateDto(),
+        "testimonial" => new TestimonialSectionCreateDto(),
+        "canvas" => new CanvasSectionCreateDto
+        {
+            Style = new SectionStyleDto
+            {
+                BackgroundType = "color",
+                BackgroundColor = "#ffffff",
+                Height = "custom",
+                CustomMinHeightPx = 640,
+                Padding = "none",
+                ContentWidth = "full",
+                BlockLayoutMode = "freeform",
+                BlockGap = "none"
+            }
+        },
+        _ => throw new InvalidOperationException($"Unsupported section type '{type}'.")
+    };
+    private async Task CreateSection(string type)
+    {
+        _showSectionPicker = false;
+        if (_selectedPageId is null) return;
+        var res = await SectionService.CreateAsync(_selectedPageId, CreateSectionDto(type));
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            return;
+        }
+
+        await ReloadSections();
+        await ReloadPreviewSafelyAsync();
+    }
+
+    private async Task ReloadPreviewSafelyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("reloadPreviewIframe");
+        }
+        catch
+        {
+            // The next Canvas render/navigation will refresh the preview.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("disposeAdminSortable", "dashboard-root-pages");
+            await JS.InvokeVoidAsync("disposeAdminSortable", "dashboard-child-pages");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}

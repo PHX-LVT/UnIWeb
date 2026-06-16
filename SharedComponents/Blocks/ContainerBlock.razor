@@ -1,0 +1,60 @@
+@using Contracts.Public
+@using SharedComponents.Helpers
+
+<div class="@GetContainerClass()">
+    @if (!string.IsNullOrWhiteSpace(TitleText))
+    {
+        <div class="sc-container-block__header">
+            <h3>@TitleText</h3>
+        </div>
+    }
+
+    <SectionBlocks Blocks="Block.Children"
+                   Style="@NestedStyle"
+                   SectionId="@SectionId"
+                   ParentBlockId="@Block.Id"
+                   Lang="@Lang"
+                   ShowInvisible="@ShowInvisible"
+                   OnSubmit="@OnSubmit" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicContainerBlockDto Block { get; set; } = default!;
+    [Parameter] public string? SectionId { get; set; }
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private string TitleText => StyleHelper.Lang(Block.Title, Lang);
+
+    private PublicSectionStyleDto NestedStyle => new()
+    {
+        BlockLayoutMode = NormalizeLayout(Block.LayoutMode),
+        BlockGridColumns = NormalizeLayout(Block.LayoutMode) == "grid"
+            ? Math.Clamp(Block.Columns ?? 2, 1, 6)
+            : 1,
+        BlockGap = NormalizeGap(Block.Gap)
+    };
+
+    private string GetContainerClass()
+    {
+        var layout = NormalizeLayout(Block.LayoutMode);
+        var gap = NormalizeGap(Block.Gap);
+        return $"sc-block sc-design-block sc-container-block sc-container-block--{layout} sc-container-block--gap-{gap}";
+    }
+
+    private static string NormalizeLayout(string? layout) => layout switch
+    {
+        "grid" => "grid",
+        "split" => "split",
+        _ => "stack"
+    };
+
+    private static string NormalizeGap(string? gap) => gap switch
+    {
+        "none" => "none",
+        "small" => "small",
+        "large" => "large",
+        _ => "medium"
+    };
+}

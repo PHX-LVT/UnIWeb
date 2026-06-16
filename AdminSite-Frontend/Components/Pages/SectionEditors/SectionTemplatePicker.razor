@@ -1,0 +1,67 @@
+<div class="ez-modal-overlay" @onclick="OnCancel">
+    <div class="ez-modal" @onclick:stopPropagation="true">
+        <div class="ez-modal__header">
+            <h2>Add Section</h2>
+            <button class="ez-icon-btn" @onclick="OnCancel">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="ez-modal__body">
+            @foreach (var group in _templates)
+            {
+                <div class="ez-picker-group">
+                    <h4 class="ez-picker-group__label">@group.Key</h4>
+                    <div class="ez-picker-grid">
+                        @foreach (var template in group.Value)
+                        {
+                            <button class="ez-picker-card"
+                                    @onclick="() => OnPicked.InvokeAsync(template.Type)">
+                                <div class="ez-picker-card__icon">
+                                    <i class="fas @template.Icon"></i>
+                                </div>
+                                <span>@template.Name</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnPicked { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private Dictionary<string, List<SectionTemplate>> _templates = new()
+    {
+        ["Hero & CTA"] = new()
+        {
+            new("hero",    "Hero Banner",    "fa-image"),
+            new("cta",     "Call to Action", "fa-bullhorn")
+        },
+        ["Content"] = new()
+        {
+            new("list",    "List / Cards",   "fa-th-large"),
+            new("gallery", "Gallery",        "fa-images"),
+            new("columns", "Columns",        "fa-columns"),
+            new("html",    "HTML Block",     "fa-code"),
+            new("stats", "Stats Counters", "fa-chart-line"),
+            new("carousel", "Carousel", "fa-window-restore"),
+            new("network-map", "Network Map", "fa-map-location-dot"),
+            new("testimonial", "Testimonial", "fa-comments")
+        },
+        ["Dynamic"] = new()
+        {
+            new("showcase", "Showcase",   "fa-sitemap"),
+            new("library", "Library", "fa-newspaper")
+        },
+        ["Composition"] = new()
+        {
+            new("canvas", "Canvas Section", "fa-object-group")
+        }
+    };
+
+    private record SectionTemplate(string Type, string Name, string Icon);
+}

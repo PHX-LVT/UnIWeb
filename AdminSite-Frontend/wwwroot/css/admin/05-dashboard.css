@@ -1,0 +1,106 @@
+/* -- Dashboard Base & Tabs ---------------------------------- */
+.ez-dashboard {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.ez-dashboard__header {
+    padding: 1rem 1.5rem 0;
+    flex-shrink: 0;
+}
+
+.ez-dashboard__tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: .75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow-x: auto;
+    background: var(--surface);
+}
+
+.ez-dashboard__canvas {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.ez-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: .85rem;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+    .ez-tab:hover {
+        background: var(--bg);
+        color: var(--text);
+    }
+
+.ez-tab--active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.ez-tab--add {
+    border-style: dashed;
+    color: var(--primary);
+    padding: 5px 10px;
+}
+
+    .ez-tab--add:hover {
+        background: #e8edf8;
+        border-color: var(--primary);
+    }
+
+.ez-tab__drag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 4px;
+    margin-left: -6px;
+    color: currentColor;
+    opacity: .55;
+    cursor: grab;
+}
+
+    .ez-tab__drag:active {
+        cursor: grabbing;
+    }
+
+    .ez-tab:hover .ez-tab__drag {
+        opacity: .9;
+    }
+
+.ez-tab__action {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin-left: 4px;
+    opacity: .75;
+    transition: opacity .15s, background .15s;
+}
+
+    .ez-tab__action:hover {
+        opacity: 1;
+        background: rgba(255,255,255,.15);
+    }
+
+.ez-tab__action--danger:hover {
+    background: rgba(220, 53, 69, .25);
+}

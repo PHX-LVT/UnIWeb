@@ -1,0 +1,24 @@
+@using Contracts.Public
+@using SharedComponents.Blocks
+@using SharedComponents.Helpers
+
+<section data-section-id="@Section.Id"
+         class="@($"{StyleHelper.GetSectionClass(Section.Style)} sc-canvas")"
+         style="@StyleHelper.GetSectionStyle(Section.Style)">
+    <div class="sc-section-overlay"
+         style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
+
+    <SectionBlocks Blocks="Section.Blocks"
+                   SectionId="@Section.Id"
+                   Style="Section.Style"
+                   Lang="@Lang"
+                   ShowInvisible="@ShowInvisible"
+                   OnSubmit="OnSubmit" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicCanvasSectionDto Section { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public bool ShowInvisible { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+}

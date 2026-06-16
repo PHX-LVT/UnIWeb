@@ -1,0 +1,21 @@
+@using Contracts.Public 
+
+<div class="sc-block sc-block--map">
+    <div class="sc-map-placeholder">
+        <p>Map centered at @Block.CenterLat, @Block.CenterLng</p>
+        @if (Block.Pins?.Any() == true)
+        {
+            <ul>
+                @foreach (var pin in Block.Pins)
+                {
+                    <li>@pin.Label</li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublicMapBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+}

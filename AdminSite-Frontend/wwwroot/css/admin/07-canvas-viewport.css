@@ -1,0 +1,61 @@
+/* -- Canvas Viewport ---------------------------------------- */
+.ez-canvas__viewport {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    position: relative;
+    background: #e8eaed;
+    padding: 1rem;
+}
+
+.ez-canvas__preview-shell {
+    position: relative;
+    width: 100%;
+    min-width: 980px;
+}
+
+.ez-canvas__preview-scale {
+    position: relative;
+    width: 142.857%;
+    transform: scale(.7);
+    transform-origin: top left;
+}
+
+.ez-canvas-empty {
+    position: absolute;
+    top: 96px;
+    left: 50%;
+    z-index: 12;
+    transform: translateX(-50%);
+    width: min(420px, calc(100vw - 4rem));
+    padding: 1.25rem;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .94);
+    color: var(--text);
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .12);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .45rem;
+    text-align: center;
+    pointer-events: none;
+}
+
+.ez-canvas-empty i {
+    color: var(--primary);
+    font-size: 1.35rem;
+}
+
+.ez-canvas-empty strong {
+    font-size: .95rem;
+}
+
+.ez-canvas-empty span {
+    color: var(--text-muted);
+    font-size: .8rem;
+}
+
+.ez-canvas-empty--loading {
+    opacity: .8;
+}

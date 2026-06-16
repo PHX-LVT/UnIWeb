@@ -1,0 +1,74 @@
+﻿@using AdminSite.Services
+
+@inject AdminLanguageService AdminLanguageState
+
+<div class="lang-field">
+    @if (Multiline)
+    {
+        <textarea class="form-control w-100"
+                  @key="ActiveLang"
+                  rows="4"
+                  placeholder="@PlaceholderText"
+                  @oninput="@((ChangeEventArgs e) => SetVal(ActiveLang, e.Value?.ToString() ?? string.Empty))">@GetRawVal(ActiveLang)</textarea>
+    }
+    else
+    {
+        <input class="form-control w-100"
+               @key="ActiveLang"
+               value="@GetRawVal(ActiveLang)"
+               placeholder="@PlaceholderText"
+               @oninput="@((ChangeEventArgs e) => SetVal(ActiveLang, e.Value?.ToString() ?? string.Empty))" />
+    }
+</div>
+
+<style>
+    .lang-field { display: grid; gap: 6px; }
+</style>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter] public Dictionary<string, string> Value { get; set; } = new();
+    [Parameter] public EventCallback<Dictionary<string, string>> ValueChanged { get; set; }
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public string? FallbackLanguage { get; set; }
+    [Parameter] public bool Multiline { get; set; }
+    [Parameter] public string? NullText { get; set; }
+
+    private string ActiveLang =>
+        Languages.Contains(AdminLanguage, StringComparer.OrdinalIgnoreCase)
+            ? AdminLanguage
+            : NormalizeFallback();
+
+    private string PlaceholderText
+    {
+        get
+        {
+            var fallbackLang = NormalizeFallback();
+            if (!string.Equals(ActiveLang, fallbackLang, StringComparison.OrdinalIgnoreCase))
+            {
+                var fallback = GetRawVal(fallbackLang);
+                if (!string.IsNullOrWhiteSpace(fallback))
+                {
+                    return fallback;
+                }
+            }
+
+            return NullText ?? string.Empty;
+        }
+    }
+
+    private string GetRawVal(string lang) =>
+        Value.TryGetValue(lang, out var value) ? value : string.Empty;
+
+    private string NormalizeFallback() =>
+        Languages.Contains(FallbackLanguage ?? AdminLanguageState.FallbackLanguage, StringComparer.OrdinalIgnoreCase)
+            ? (FallbackLanguage ?? AdminLanguageState.FallbackLanguage)
+            : Languages.FirstOrDefault() ?? "en";
+
+    private async Task SetVal(string lang, string value)
+    {
+        var updated = new Dictionary<string, string>(Value) { [lang] = value };
+        Value = updated;
+        await ValueChanged.InvokeAsync(updated);
+    }
+}

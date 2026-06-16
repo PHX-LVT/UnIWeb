@@ -1,0 +1,120 @@
+using FullProject.Models;
+using MongoDB.Driver;
+
+namespace FullProject.Services
+{
+    public class MongoIndexService
+    {
+        private readonly IMongoDatabase _database;
+        private readonly ILogger<MongoIndexService> _logger;
+
+        public MongoIndexService(IMongoDatabase database, ILogger<MongoIndexService> logger)
+        {
+            _database = database;
+            _logger = logger;
+        }
+
+        public async Task EnsureIndexesAsync()
+        {
+            await EnsurePageIndexesAsync("pages_draft");
+            await EnsurePageIndexesAsync("pages_published");
+            await EnsureSectionIndexesAsync("sections_draft");
+            await EnsureSectionIndexesAsync("sections_published");
+            await EnsureBlockIndexesAsync("blocks_draft");
+            await EnsureBlockIndexesAsync("blocks_published");
+            await EnsureContentIndexesAsync();
+            await EnsureUserIndexesAsync();
+            await EnsureSystemIndexesAsync();
+
+            _logger.LogInformation("MongoDB indexes verified.");
+        }
+
+        private async Task EnsurePageIndexesAsync(string collectionName)
+        {
+            var collection = _database.GetCollection<Page>(collectionName);
+            await collection.Indexes.CreateManyAsync(new[]
+            {
+                new CreateIndexModel<Page>(Builders<Page>.IndexKeys.Ascending(p => p.Slug)),
+                new CreateIndexModel<Page>(Builders<Page>.IndexKeys.Ascending(p => p.FullSlug)),
+                new CreateIndexModel<Page>(
+                    Builders<Page>.IndexKeys
+                        .Ascending(p => p.ParentPageId)
+                        .Ascending(p => p.Order)),
+                new CreateIndexModel<Page>(
+                    Builders<Page>.IndexKeys
+                        .Ascending(p => p.Slug)
+                        .Ascending(p => p.ParentPageId))
+            });
+        }
+
+        private async Task EnsureSectionIndexesAsync(string collectionName)
+        {
+            var collection = _database.GetCollection<Section>(collectionName);
+            await collection.Indexes.CreateOneAsync(new CreateIndexModel<Section>(
+                Builders<Section>.IndexKeys
+                    .Ascending(s => s.PageStableId)
+                    .Ascending(s => s.Order)));
+        }
+
+        private async Task EnsureBlockIndexesAsync(string collectionName)
+        {
+            var collection = _database.GetCollection<Block>(collectionName);
+            await collection.Indexes.CreateOneAsync(new CreateIndexModel<Block>(
+                Builders<Block>.IndexKeys
+                    .Ascending(b => b.PageStableId)
+                    .Ascending(b => b.SectionStableId)
+                    .Ascending(b => b.Order)));
+
+            await collection.Indexes.CreateOneAsync(new CreateIndexModel<Block>(
+                Builders<Block>.IndexKeys
+                    .Ascending(b => b.PageStableId)
+                    .Ascending(b => b.SectionStableId)
+                    .Ascending(b => b.ParentBlockId)
+                    .Ascending(b => b.BlockZone)
+                    .Ascending(b => b.Order)));
+        }
+
+        private async Task EnsureContentIndexesAsync()
+        {
+            var draft = _database.GetCollection<ContentItem>("content_draft");
+            var published = _database.GetCollection<ContentItem>("content_published");
+
+            var slugIndex = Builders<ContentItem>.IndexKeys
+                .Ascending(c => c.ContentTypeKey)
+                .Ascending(c => c.Slug);
+            var statusIndex = Builders<ContentItem>.IndexKeys
+                .Ascending(c => c.Status)
+                .Descending(c => c.UpdatedAt);
+
+            await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(slugIndex));
+            await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(statusIndex));
+            await published.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(slugIndex));
+
+            var contentTypes = _database.GetCollection<ContentType>("content_types");
+            await contentTypes.Indexes.CreateOneAsync(new CreateIndexModel<ContentType>(
+                Builders<ContentType>.IndexKeys.Ascending(t => t.Key),
+                new CreateIndexOptions { Unique = true }));
+        }
+
+        private async Task EnsureUserIndexesAsync()
+        {
+            var adminUsers = _database.GetCollection<AdminUser>("admin_users");
+            await adminUsers.Indexes.CreateOneAsync(new CreateIndexModel<AdminUser>(
+                Builders<AdminUser>.IndexKeys.Ascending(u => u.Email),
+                new CreateIndexOptions { Unique = true }));
+        }
+
+        private async Task EnsureSystemIndexesAsync()
+        {
+            var logs = _database.GetCollection<ContentAuditLog>("content_audit_logs");
+            await logs.Indexes.CreateOneAsync(new CreateIndexModel<ContentAuditLog>(
+                Builders<ContentAuditLog>.IndexKeys
+                    .Ascending(l => l.ContentStableId)
+                    .Descending(l => l.CreatedAt)));
+
+            var submissions = _database.GetCollection<FormSubmission>("form_submissions");
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys.Descending(s => s.SubmittedAt)));
+        }
+    }
+}

@@ -1,0 +1,485 @@
+﻿@page "/global/footer"
+@inject FooterService FooterService
+@inject IHttpService Http
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-grip-horizontal"></i> Footer</h1>
+    <div class="page-actions">
+        <button class="btn-admin btn-primary" @onclick="() => OpenGroupModal(null)">
+            <i class="fas fa-plus"></i> Add Group
+        </button>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="admin-card" style="text-align:center;padding:2rem">
+        <div class="spinner" style="margin:0 auto"></div>
+    </div>
+}
+else if (_footer is not null)
+{
+    <div class="admin-card">
+        <div class="admin-card-title">Footer Company Identity</div>
+        <div style="display:flex;gap:1rem;align-items:flex-end">
+            <div class="form-group" style="flex:1;margin:0">
+                <DxTextBox @bind-Text="_footer.CompanyName" CssClass="w-100"
+                           NullText="U&I Logistics Corporation" />
+            </div>
+            <button class="btn-admin btn-primary" @onclick="SaveMeta">
+                <i class="fas fa-save"></i> Save
+            </button>
+        </div>
+    </div>
+
+    <div class="footer-groups-sortable" @ref="_groupsRef">
+    @foreach (var group in _footer.Groups.OrderBy(g => g.Order))
+    {
+        <div @key="group.Id" class="admin-card footer-group-card" data-footer-group-id="@group.Id">
+            <div class="admin-card-title" style="display:flex;align-items:center;gap:.75rem">
+                <button type="button"
+                        class="footer-group-drag"
+                        title="Drag to reorder group">
+                    <i class="fas fa-grip-vertical"></i>
+                </button>
+                <span style="flex:1">@group.Label</span>
+                <button class="visibility-toggle @(group.Visible ? "visible" : "hidden")"
+                        @onclick="() => ToggleGroup(group)">
+                    <i class="fas @(group.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                </button>
+                <button class="btn-admin btn-ghost" @onclick="() => OpenGroupModal(group)">
+                    <i class="fas fa-pencil-alt"></i>
+                </button>
+                <button class="btn-admin btn-danger" @onclick="() => DeleteGroup(group.Id)">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button class="btn-admin btn-outline" @onclick="() => OpenLinkModal(group, null)">
+                    <i class="fas fa-plus"></i> Link
+                </button>
+            </div>
+
+            <div class="footer-links-sortable" data-footer-links-group-id="@group.Id">
+            @foreach (var link in group.Links.OrderBy(l => l.Order))
+            {
+                <div @key="link.Id" class="footer-link-row" data-footer-link-id="@link.Id">
+                    <button type="button"
+                            class="footer-link-drag"
+                            title="Drag to reorder link">
+                        <i class="fas fa-grip-vertical"></i>
+                    </button>
+                    <div style="flex:1">
+                        <span>@link.Label</span>
+                        <span class="text-muted" style="margin-left:.5rem;font-size:.8rem">
+                            @link.Href
+                        </span>
+                    </div>
+                    <button class="visibility-toggle @(link.Visible ? "visible" : "hidden")"
+                            @onclick="() => ToggleLink(group.Id, link)">
+                        <i class="fas @(link.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                    </button>
+                    <button class="btn-admin btn-ghost"
+                            @onclick="() => OpenLinkModal(group, link)">
+                        <i class="fas fa-pencil-alt"></i>
+                    </button>
+                    <button class="btn-admin btn-danger"
+                            @onclick="() => DeleteLink(group.Id, link.Id)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            }
+            </div>
+        </div>
+    }
+    </div>
+}
+
+@if (_showGroupModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModals">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@(_editingGroup is null ? "Add Group" : "Edit Group")</span>
+                <button class="btn-admin btn-ghost" @onclick="CloseModals">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label required">Group Label</label>
+                    <DxTextBox @bind-Text="_groupForm.Label" CssClass="w-100" />
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <DxCheckBox @bind-Checked="_groupForm.Visible" /> Visible
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseModals">Cancel</button>
+                <button class="btn-admin btn-primary" @onclick="SaveGroup">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showLinkModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModals">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@(_editingLink is null ? "Add Link" : "Edit Link")</span>
+                <button class="btn-admin btn-ghost" @onclick="CloseModals">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label required">Label</label>
+                    <DxTextBox @bind-Text="_linkForm.Label" CssClass="w-100" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label required">URL</label>
+                    <DxTextBox @bind-Text="_linkForm.Href" CssClass="w-100" />
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <DxCheckBox @bind-Checked="_linkForm.Visible" /> Visible
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseModals">Cancel</button>
+                <button class="btn-admin btn-primary" @onclick="SaveLink">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .footer-groups-sortable {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .footer-group-card {
+        margin: 0;
+    }
+
+    .footer-group-drag {
+        width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text-muted);
+        cursor: grab;
+    }
+
+    .footer-group-drag:active {
+        cursor: grabbing;
+    }
+
+    .footer-links-sortable {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .footer-link-row {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .5rem 0;
+        border-bottom: 1px solid var(--border);
+        user-select: none;
+    }
+
+    .footer-link-drag {
+        width: 26px;
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text-muted);
+        cursor: grab;
+        touch-action: none;
+    }
+
+    .footer-link-drag:active {
+        cursor: grabbing;
+    }
+</style>
+
+@code {
+    private FooterModel? _footer;
+    private bool _loading = true;
+    private bool _sortableInitialized;
+    private ElementReference _groupsRef;
+    private DotNetObjectReference<Footer>? _dotNetRef;
+
+    // Group modal
+    private bool _showGroupModal = false;
+    private FooterGroupModel? _editingGroup;
+    private FooterGroupRequest _groupForm = new();
+
+    // Link modal
+    private bool _showLinkModal = false;
+    private FooterGroupModel? _activeGroup;
+    private FooterLinkModel? _editingLink;
+    private FooterLinkRequest _linkForm = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+        }
+
+        if (!_loading && _footer is not null && !_sortableInitialized && _dotNetRef is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initFooterLinkSortables", _groupsRef, _dotNetRef);
+            }
+            catch (Exception ex)
+            {
+                Http.Toast($"Footer link sorting failed to initialize: {ex.Message}", 500);
+            }
+
+            try
+            {
+                await JS.InvokeVoidAsync(
+                    "initAdminSortable",
+                    "footer-groups",
+                    _groupsRef,
+                    _dotNetRef,
+                    nameof(OnFooterGroupsReordered),
+                    "data-footer-group-id",
+                    ".footer-group-drag");
+            }
+            catch
+            {
+                Http.Toast("Footer drag sorting failed to initialize.", 500);
+            }
+
+            _sortableInitialized = true;
+        }
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        var res = await FooterService.GetAsync();
+        _footer = res.Data;
+        _sortableInitialized = false;
+        _loading = false;
+    }
+
+    [JSInvokable]
+    public async Task OnFooterGroupsReordered(List<string> orderedIds)
+    {
+        if (_footer is null) return;
+
+        var groupIds = _footer.Groups.Select(g => g.Id).ToHashSet();
+        var cleanOrderedIds = orderedIds
+            .Where(groupIds.Contains)
+            .Distinct()
+            .ToList();
+
+        if (cleanOrderedIds.Count != groupIds.Count)
+        {
+            _sortableInitialized = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var res = await FooterService.ReorderGroupsAsync(cleanOrderedIds);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            _sortableInitialized = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (res.Data is not null)
+        {
+            _footer = res.Data;
+        }
+        else
+        {
+            var orderedGroups = cleanOrderedIds
+                .Select(id => _footer.Groups.First(g => g.Id == id))
+                .ToList();
+
+            for (var i = 0; i < orderedGroups.Count; i++)
+            {
+                orderedGroups[i].Order = i;
+            }
+
+            _footer.Groups = orderedGroups;
+        }
+
+        _sortableInitialized = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnFooterLinksReordered(string groupId, List<string> orderedIds)
+    {
+        if (_footer is null) return;
+
+        var group = _footer.Groups.FirstOrDefault(g => g.Id == groupId);
+        if (group is null) return;
+
+        var linkIds = group.Links.Select(l => l.Id).ToHashSet();
+        var cleanOrderedIds = orderedIds
+            .Where(linkIds.Contains)
+            .Distinct()
+            .ToList();
+
+        if (cleanOrderedIds.Count != linkIds.Count)
+        {
+            _sortableInitialized = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var res = await FooterService.ReorderLinksAsync(groupId, cleanOrderedIds);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            _sortableInitialized = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (res.Data is not null)
+        {
+            _footer = res.Data;
+        }
+        else
+        {
+            var orderedLinks = cleanOrderedIds
+                .Select(id => group.Links.First(l => l.Id == id))
+                .ToList();
+
+            for (var i = 0; i < orderedLinks.Count; i++)
+            {
+                orderedLinks[i].Order = i;
+            }
+
+            group.Links = orderedLinks;
+        }
+
+        _sortableInitialized = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveMeta()
+    {
+        var res = await FooterService.UpdateMetaAsync(
+            new FooterMetaRequest { CompanyName = _footer!.CompanyName }); 
+        if (res.Data is not null) _footer = res.Data;
+        Http.Toast(res.Message ?? "Footer identity saved.", res.StatusCode);
+    }
+
+    // Groups
+    private void OpenGroupModal(FooterGroupModel? g)
+    {
+        _editingGroup = g;
+        _groupForm = g is null ? new() : new() { Label = g.Label, Visible = g.Visible };
+        _showGroupModal = true;
+    }
+
+    private async Task SaveGroup()
+    {
+        ApiResponse<FooterModel> res;
+        if (_editingGroup is null)
+            res = await FooterService.CreateGroupAsync(_groupForm);
+        else
+            res = await FooterService.UpdateGroupAsync(_editingGroup.Id, _groupForm);
+
+        if (res.Data is not null) _footer = res.Data;  
+        Http.Toast(res.Message ?? (_editingGroup is null ? "Footer group created." : "Footer group saved."), res.StatusCode);
+        if (res.Success) CloseModals();
+    }
+
+    private async Task ToggleGroup(FooterGroupModel g)
+    {
+        var res = await FooterService.SetGroupVisibilityAsync(g.Id, !g.Visible);
+        if (res.Data is not null) _footer = res.Data;  
+        Http.Toast(res.Message ?? $"Footer group {(res.Success ? "updated" : "could not be updated")}.", res.StatusCode);
+    }
+
+    private async Task DeleteGroup(string id)
+    {
+        var res = await FooterService.DeleteGroupAsync(id);
+        if (res.Data is not null) _footer = res.Data; 
+        Http.Toast(res.Message ?? "Footer group deleted.", res.StatusCode);
+    }
+    // Links
+    private void OpenLinkModal(FooterGroupModel group, FooterLinkModel? link)
+    {
+        _activeGroup = group;
+        _editingLink = link;
+        _linkForm = link is null ? new() : new() { Label = link.Label, Href = link.Href, Visible = link.Visible };
+        _showLinkModal = true;
+    }
+
+    private async Task SaveLink()
+    {
+        ApiResponse<FooterModel> res;
+        if (_editingLink is null)
+            res = await FooterService.CreateLinkAsync(_activeGroup!.Id, _linkForm);
+        else
+            res = await FooterService.UpdateLinkAsync(_activeGroup!.Id, _editingLink.Id, _linkForm);
+
+        if (res.Data is not null) _footer = res.Data;  
+        Http.Toast(res.Message ?? (_editingLink is null ? "Footer link created." : "Footer link saved."), res.StatusCode);
+        if (res.Success) CloseModals();
+    }
+
+    private async Task ToggleLink(string groupId, FooterLinkModel link)
+    {
+        var res = await FooterService.SetLinkVisibilityAsync(groupId, link.Id, !link.Visible);
+        if (res.Data is not null) _footer = res.Data; 
+        Http.Toast(res.Message ?? $"Footer link {(res.Success ? "updated" : "could not be updated")}.", res.StatusCode);
+    }
+
+    private async Task DeleteLink(string groupId, string linkId)
+    {
+        var res = await FooterService.DeleteLinkAsync(groupId, linkId);
+        if (res.Data is not null) _footer = res.Data;  // ← replace Load()
+        Http.Toast(res.Message ?? "Footer link deleted.", res.StatusCode);
+    }
+
+    private void CloseModals()
+    {
+        _showGroupModal = false;
+        _showLinkModal = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("disposeAdminSortable", "footer-groups");
+            await JS.InvokeVoidAsync("disposeFooterLinkSortables");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}
