@@ -28,10 +28,10 @@ else if (Auth.IsAuthenticated)
             <aside class="ez-sidebar">
 
                 @* Logo *@
-                <div class="ez-sidebar-brand">
+                <a class="ez-sidebar-brand" href="/dashboard" @onclick="GoToDashboard" @onclick:preventDefault>
                     <i class="fas fa-layer-group"></i>
                     <span>MySite CMS</span>
-                </div>
+                </a>
 
                 <div class="ez-sidebar-language">
                     <label for="admin-language-select">@AdminUiLocalizer.T("AdminLanguage", _adminLang)</label>
@@ -153,6 +153,13 @@ else if (Auth.IsAuthenticated)
     private void CloseThemeSettings()
     {
         _sidebarMode = SidebarMode.Normal;
+    }
+
+    private void GoToDashboard()
+    {
+        _menuOpen = false;
+        _sidebarMode = SidebarMode.Normal;
+        Nav.NavigateTo("/dashboard");
     }
 
     private async Task ChangeAdminLanguage(ChangeEventArgs e)

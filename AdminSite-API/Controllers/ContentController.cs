@@ -194,6 +194,7 @@ namespace FullProject.Controllers
             Title = item.Title,
             Summary = item.Summary,
             BodyHtml = item.BodyHtml,
+            BodyItems = item.BodyItems.Select(MapBodyItem).ToList(),
             HeroImageUrl = item.HeroImageUrl,
             HeroImageAlt = item.HeroImageAlt,
             ThumbnailUrl = item.ThumbnailUrl,
@@ -220,6 +221,21 @@ namespace FullProject.Controllers
             Url = attachment.Url,
             ContentType = attachment.ContentType,
             SizeBytes = attachment.SizeBytes
+        };
+
+        private static ContentBodyItemDto MapBodyItem(ContentBodyItem item) => new()
+        {
+            Id = item.Id,
+            Type = item.Type,
+            Content = item.Content,
+            Caption = item.Caption,
+            Url = item.Url,
+            FileName = item.FileName,
+            ContentType = item.ContentType,
+            SizeBytes = item.SizeBytes,
+            Style = item.Style,
+            Visible = item.Visible,
+            Order = item.Order
         };
 
         private static ContentAuditLogResponseDto MapLog(ContentAuditLog log) => new()

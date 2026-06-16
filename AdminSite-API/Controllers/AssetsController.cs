@@ -1,4 +1,5 @@
 using Contracts.Admin;
+using FullProject.Security;
 using FullProject.Services;
 using FullProject.Settings;
 using FullProject.Utils;
@@ -37,8 +38,8 @@ namespace FullProject.Controllers
             if (file.Length > _settings.MaxUploadBytes)
                 return UnprocessableEntity(ApiResult.BadRequest($"File must be {_settings.MaxUploadBytes / 1024 / 1024}MB or smaller."));
 
-            if (!IsAllowedContentType(file.ContentType))
-                return UnprocessableEntity(ApiResult.BadRequest("Only image and PDF uploads are supported here."));
+            if (!UploadSecurityPolicy.IsAllowedUpload(file.FileName, file.ContentType))
+                return UnprocessableEntity(ApiResult.BadRequest(UploadSecurityPolicy.UnsupportedUploadMessage));
 
             await using var stream = file.OpenReadStream();
             var url = await _storage.UploadAsync(stream, file.FileName, file.ContentType, folder, HttpContext.RequestAborted);
@@ -56,11 +57,5 @@ namespace FullProject.Controllers
             public IFormFile? File { get; set; }
         }
 
-        private static bool IsAllowedContentType(string? contentType)
-        {
-            if (string.IsNullOrWhiteSpace(contentType)) return false;
-            return contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase);
-        }
     }
 }

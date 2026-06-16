@@ -1,0 +1,100 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="content-rich-editor">
+    <div class="content-rich-toolbar" aria-label="Rich text toolbar">
+        <select class="content-rich-select" value="p" @onchange="SetBlock">
+            <option value="p">Body</option>
+            <option value="h2">Heading</option>
+            <option value="h3">Subheading</option>
+        </select>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("bold")' title="Bold"><i class="fas fa-bold"></i></button>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("italic")' title="Italic"><i class="fas fa-italic"></i></button>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("underline")' title="Underline"><i class="fas fa-underline"></i></button>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("insertUnorderedList")' title="Bullet list"><i class="fas fa-list-ul"></i></button>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("insertOrderedList")' title="Numbered list"><i class="fas fa-list-ol"></i></button>
+        <button type="button" class="content-rich-btn" @onclick="CreateLink" title="Link"><i class="fas fa-link"></i></button>
+        <label class="content-rich-color" title="Text color">
+            <i class="fas fa-palette"></i>
+            <input type="color" value="#0f3460" @onchange="SetColor" />
+        </label>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("removeFormat")' title="Clear formatting"><i class="fas fa-eraser"></i></button>
+    </div>
+    <div @ref="_editor"
+         class="content-rich-surface"
+         contenteditable="true"
+         data-placeholder="@Placeholder"></div>
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = string.Empty;
+
+    private readonly string _id = $"content-rich-{Guid.NewGuid():N}";
+    private DotNetObjectReference<ContentRichTextEditor>? _dotNetRef;
+    private ElementReference _editor;
+    private string _lastValue = string.Empty;
+    private bool _initialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("contentRichTextEditor.init", _id, _editor, _dotNetRef, Value ?? string.Empty);
+            _lastValue = Value ?? string.Empty;
+            _initialized = true;
+            return;
+        }
+
+        if (_initialized && !string.Equals(Value ?? string.Empty, _lastValue, StringComparison.Ordinal))
+        {
+            await JS.InvokeVoidAsync("contentRichTextEditor.setValue", _id, Value ?? string.Empty);
+            _lastValue = Value ?? string.Empty;
+        }
+    }
+
+    private async Task Exec(string command)
+    {
+        await JS.InvokeVoidAsync("contentRichTextEditor.exec", _id, command);
+    }
+
+    private async Task SetBlock(ChangeEventArgs e)
+    {
+        await JS.InvokeVoidAsync("contentRichTextEditor.setBlock", _id, e.Value?.ToString() ?? "p");
+    }
+
+    private async Task SetColor(ChangeEventArgs e)
+    {
+        await JS.InvokeVoidAsync("contentRichTextEditor.setColor", _id, e.Value?.ToString() ?? "#0f3460");
+    }
+
+    private async Task CreateLink()
+    {
+        await JS.InvokeVoidAsync("contentRichTextEditor.createLink", _id);
+    }
+
+    [JSInvokable]
+    public async Task OnEditorInput(string html)
+    {
+        _lastValue = html ?? string.Empty;
+        await ValueChanged.InvokeAsync(_lastValue);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_initialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("contentRichTextEditor.dispose", _id);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}

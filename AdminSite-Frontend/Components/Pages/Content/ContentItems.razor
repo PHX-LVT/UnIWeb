@@ -24,6 +24,11 @@
         </div>
         @if (_view == "deleted")
         {
+            <button class="btn-admin btn-ghost"
+                    disabled="@(!_selectedIds.Any())"
+                    @onclick="RestoreSelected">
+                <i class="fas fa-undo"></i> @T("Restore") (@_selectedIds.Count)
+            </button>
             <button class="btn-admin btn-danger"
                     disabled="@(!_selectedIds.Any())"
                     @onclick="AskPermanentDelete">
@@ -32,6 +37,11 @@
         }
         else
         {
+            <button class="btn-admin btn-danger"
+                    disabled="@(!_selectedIds.Any())"
+                    @onclick="AskBulkDelete">
+                <i class="fas fa-trash"></i> @T("DeleteSelected") (@_selectedIds.Count)
+            </button>
             <button class="btn-admin btn-primary" @onclick="AddContent">
                 <i class="fas fa-plus"></i> @T("AddContent")
             </button>
@@ -113,6 +123,7 @@
                         <th>@T("ContentType")</th>
                         <th>@T("Status")</th>
                         <th>@T("Author")</th>
+                        <th>@T("Created")</th>
                         <th>@T("Updated")</th>
                         <th style="width:110px">@T("Actions")</th>
                     </tr>
@@ -137,12 +148,22 @@
                                     <span>@DisplayAuthor(item.AuthorId)</span>
                                 </a>
                             </td>
+                            <td>@item.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td>
                             <td>@item.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
                             <td>
                                 <div class="content-row-actions">
-                                    <button class="btn-admin btn-ghost content-icon-btn" disabled title="@T("Preview")">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
+                                    @if (CanPreview(item))
+                                    {
+                                        <a class="btn-admin btn-ghost content-icon-btn" href="@PreviewHref(item)" target="_blank" rel="noopener" title="@T("Preview")">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn-admin btn-ghost content-icon-btn" disabled title="@T("Preview")">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    }
                                     <a class="btn-admin btn-ghost content-icon-btn" href="@EditHref(item.Id)" title="@T("Edit")">
                                         <i class="fas fa-edit"></i>
                                     </a>
@@ -210,6 +231,22 @@
     </div>
 }
 
+@if (_confirmBulkDelete)
+{
+    <div class="modal-backdrop" @onclick="() => _confirmBulkDelete = false">
+        <div class="modal-box" style="max-width:400px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("DeleteSelected")</div>
+            <div class="modal-body">
+                <p>@T("DeleteSelectedContentPrompt")</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="() => _confirmBulkDelete = false">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" @onclick="ConfirmBulkDelete">@T("Delete")</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
@@ -236,6 +273,7 @@
     private int _page = 1;
     private bool _loading = true;
     private bool _confirmPermanentDelete;
+    private bool _confirmBulkDelete;
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentAdminId => Auth.CurrentUser?.AdminId ?? string.Empty;
@@ -440,6 +478,12 @@
         _deleteId = id;
     }
 
+    private void AskBulkDelete()
+    {
+        if (_view == "deleted" || !_selectedIds.Any()) return;
+        _confirmBulkDelete = true;
+    }
+
     private async Task ConfirmDelete()
     {
         if (_deleteId is null) return;
@@ -447,6 +491,22 @@
         var res = await ContentService.DeleteAsync(_deleteId);
         Http.Toast(res.Message, res.StatusCode);
         _deleteId = null;
+        await LoadItems();
+    }
+
+    private async Task ConfirmBulkDelete()
+    {
+        if (!_selectedIds.Any()) return;
+
+        foreach (var id in _selectedIds.ToList())
+        {
+            var res = await ContentService.DeleteAsync(id);
+            if (!res.Success)
+                Http.Toast(res.Message, res.StatusCode);
+        }
+
+        _confirmBulkDelete = false;
+        _selectedIds.Clear();
         await LoadItems();
     }
 
@@ -463,6 +523,21 @@
         var res = await ContentService.PermanentDeleteAsync(_selectedIds.ToList());
         Http.Toast(res.Message, res.StatusCode);
         _confirmPermanentDelete = false;
+        _selectedIds.Clear();
+        await LoadItems();
+    }
+
+    private async Task RestoreSelected()
+    {
+        if (_view != "deleted" || !_selectedIds.Any()) return;
+
+        foreach (var id in _selectedIds.ToList())
+        {
+            var res = await ContentService.RestoreAsync(id);
+            if (!res.Success)
+                Http.Toast(res.Message, res.StatusCode);
+        }
+
         _selectedIds.Clear();
         await LoadItems();
     }
@@ -539,6 +614,23 @@
         $"/content/edit/{Uri.EscapeDataString(id)}?return={Uri.EscapeDataString(CurrentReturnPath)}";
 
     private static string AuthorHref(string authorId) => $"/employees/{Uri.EscapeDataString(authorId)}/content";
+
+    private static bool CanPreview(ContentItemModel item) =>
+        SameStatus(item, "Published") && !string.IsNullOrWhiteSpace(item.Slug);
+
+    private static string PreviewHref(ContentItemModel item) =>
+        $"/insights/{ContentTypeRoute(item.ContentTypeKey)}/{Uri.EscapeDataString(item.Slug)}";
+
+    private static string ContentTypeRoute(string type) => type switch
+    {
+        "article" => "articles",
+        "case-study" => "case-studies",
+        "whitepaper" => "whitepapers",
+        "video" => "videos",
+        "tool" => "tools",
+        "technology" => "technology",
+        _ => $"{type}s"
+    };
 
     private string DisplayAuthor(string authorId)
     {

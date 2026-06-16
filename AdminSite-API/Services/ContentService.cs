@@ -1,10 +1,12 @@
 using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
-using Ganss.Xss;
+using FullProject.Security;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using System.Net;
 using System.Text.RegularExpressions;
+using static FullProject.Security.ContentSecurityPolicy;
 
 namespace FullProject.Services
 {
@@ -13,12 +15,11 @@ namespace FullProject.Services
         private static readonly string[] RequiredLanguages = ["en", "vi", "cn"];
 
         private readonly MongoDbContext _context;
-        private readonly HtmlSanitizer _sanitizer = new();
+        private readonly ContentSanitizer _contentSanitizer = new();
 
         public ContentService(MongoDbContext context)
         {
             _context = context;
-            ConfigureSanitizer();
         }
 
         public async Task<List<ContentType>> GetTypesAsync()
@@ -160,6 +161,7 @@ namespace FullProject.Services
             var typeKey = NormalizeKey(dto.ContentTypeKey);
             var enTitle = dto.Title.GetValueOrDefault("en", string.Empty).Trim();
             var slug = await UniqueSlugAsync(typeKey, NormalizeSlug(dto.Slug, enTitle));
+            var bodyItems = NormalizeBodyItems(dto.BodyItems, dto.BodyHtml);
 
             var item = new ContentItem
             {
@@ -168,7 +170,8 @@ namespace FullProject.Services
                 Slug = slug,
                 Title = NormalizeLang(dto.Title),
                 Summary = NormalizeLang(dto.Summary, false),
-                BodyHtml = SanitizeLang(dto.BodyHtml),
+                BodyItems = bodyItems,
+                BodyHtml = BuildBodyHtmlMirror(bodyItems, dto.BodyHtml),
                 HeroImageUrl = CleanUrl(dto.HeroImageUrl),
                 HeroImageAlt = dto.HeroImageAlt?.Trim(),
                 ThumbnailUrl = CleanUrl(dto.ThumbnailUrl),
@@ -209,6 +212,9 @@ namespace FullProject.Services
                 updates.Add(Builders<ContentItem>.Update.Set(c => c.ContentTypeKey, typeKey));
             }
 
+            var validation = await ValidateContentUpdateAsync(existing, dto, typeKey);
+            if (validation.Count > 0) return (null, validation);
+
             if (dto.Title is not null)
             {
                 var normalizedTitle = NormalizeLang(dto.Title);
@@ -223,7 +229,18 @@ namespace FullProject.Services
             }
 
             if (dto.Summary is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.Summary, NormalizeLang(dto.Summary, false)));
-            if (dto.BodyHtml is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.BodyHtml, SanitizeLang(dto.BodyHtml)));
+            if (dto.BodyItems is not null)
+            {
+                var normalizedBodyItems = NormalizeBodyItems(dto.BodyItems, dto.BodyHtml ?? existing.BodyHtml);
+                updates.Add(Builders<ContentItem>.Update.Set(c => c.BodyItems, normalizedBodyItems));
+                updates.Add(Builders<ContentItem>.Update.Set(c => c.BodyHtml, BuildBodyHtmlMirror(normalizedBodyItems, dto.BodyHtml ?? existing.BodyHtml)));
+            }
+            else if (dto.BodyHtml is not null)
+            {
+                var bodyHtml = SanitizeLang(dto.BodyHtml);
+                updates.Add(Builders<ContentItem>.Update.Set(c => c.BodyHtml, bodyHtml));
+                updates.Add(Builders<ContentItem>.Update.Set(c => c.BodyItems, NormalizeBodyItems(null, bodyHtml)));
+            }
             if (dto.HeroImageUrl is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageUrl, CleanUrl(dto.HeroImageUrl)));
             if (dto.HeroImageAlt is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageAlt, dto.HeroImageAlt.Trim()));
             if (dto.ThumbnailUrl is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.ThumbnailUrl, CleanUrl(dto.ThumbnailUrl)));
@@ -354,9 +371,71 @@ namespace FullProject.Services
             var errors = new List<string>();
             if (!await TypeExistsAsync(dto.ContentTypeKey)) errors.Add("Content type does not exist.");
             if (string.IsNullOrWhiteSpace(dto.Title.GetValueOrDefault("en"))) errors.Add("English title is required.");
-            if (dto.BodyHtml.Values.Any(v => v.Length > 100_000)) errors.Add("Body HTML is too large.");
-            if (dto.Attachments.Count > 20) errors.Add("A content item can have at most 20 attachments.");
+            ValidateContentFields(dto.Title, dto.Summary, dto.BodyHtml, dto.BodyItems, dto.Tags, dto.Attachments, dto.HeroImageUrl, dto.ThumbnailUrl, dto.VideoUrl, dto.ExternalUrl, errors);
             return errors;
+        }
+
+        private async Task<List<string>> ValidateContentUpdateAsync(ContentItem existing, ContentUpdateDto dto, string typeKey)
+        {
+            var errors = new List<string>();
+            if (!await TypeExistsAsync(typeKey)) errors.Add("Content type does not exist.");
+            ValidateContentFields(
+                dto.Title ?? existing.Title,
+                dto.Summary ?? existing.Summary,
+                dto.BodyHtml ?? existing.BodyHtml,
+                dto.BodyItems ?? existing.BodyItems.Select(ToDto).ToList(),
+                dto.Tags ?? existing.Tags,
+                dto.Attachments ?? existing.Attachments.Select(ToDto).ToList(),
+                dto.HeroImageUrl ?? existing.HeroImageUrl,
+                dto.ThumbnailUrl ?? existing.ThumbnailUrl,
+                dto.VideoUrl ?? existing.VideoUrl,
+                dto.ExternalUrl ?? existing.ExternalUrl,
+                errors);
+            return errors;
+        }
+
+        private static void ValidateContentFields(
+            Dictionary<string, string> title,
+            Dictionary<string, string> summary,
+            Dictionary<string, string> bodyHtml,
+            List<ContentBodyItemDto> bodyItems,
+            List<string> tags,
+            List<ContentAttachmentDto> attachments,
+            string? heroImageUrl,
+            string? thumbnailUrl,
+            string? videoUrl,
+            string? externalUrl,
+            List<string> errors)
+        {
+            if (title.Values.Any(v => v?.Length > MaxTitleLength)) errors.Add($"Title must be {MaxTitleLength} characters or fewer per language.");
+            if (summary.Values.Any(v => v?.Length > MaxSummaryLength)) errors.Add($"Summary must be {MaxSummaryLength} characters or fewer per language.");
+            if (bodyHtml.Values.Any(v => v?.Length > MaxBodyHtmlLength)) errors.Add("Body HTML is too large.");
+            if (bodyItems.Count > MaxBodyItems) errors.Add($"A content item can have at most {MaxBodyItems} body items.");
+            if (bodyItems.SelectMany(i => i.Content.Values).Any(v => v?.Length > MaxBodyItemLength)) errors.Add($"Each body item must be {MaxBodyItemLength} characters or fewer per language.");
+            if (tags.Count > MaxTags) errors.Add($"A content item can have at most {MaxTags} tags.");
+            if (tags.Any(t => t.Length > MaxTagLength)) errors.Add($"Tags must be {MaxTagLength} characters or fewer.");
+            if (attachments.Count > MaxAttachments) errors.Add($"A content item can have at most {MaxAttachments} attachments.");
+
+            ValidateOptionalUrl(heroImageUrl, "Hero image URL", errors);
+            ValidateOptionalUrl(thumbnailUrl, "Thumbnail URL", errors);
+            ValidateOptionalUrl(externalUrl, "External URL", errors);
+            if (!string.IsNullOrWhiteSpace(videoUrl) && !IsAllowedVideoUrl(videoUrl)) errors.Add("Video URL must be a YouTube URL.");
+
+            foreach (var attachment in attachments)
+            {
+                ValidateOptionalUrl(attachment.Url, "Attachment URL", errors);
+                if (!IsAllowedAttachment(attachment.FileName, attachment.ContentType))
+                    errors.Add("Attachments must be PDF, Word, Excel, PowerPoint, or plain text files.");
+            }
+
+            foreach (var item in bodyItems)
+            {
+                var type = NormalizeBodyType(item.Type);
+                if (type is "image" or "file") ValidateOptionalUrl(item.Url, "Body item URL", errors);
+                if (type == "video" && !string.IsNullOrWhiteSpace(item.Url) && !IsAllowedVideoUrl(item.Url)) errors.Add("Body video URL must be a YouTube URL.");
+                if (type == "file" && !IsAllowedAttachment(item.FileName ?? string.Empty, item.ContentType ?? string.Empty))
+                    errors.Add("Body file items must be PDF, Word, Excel, PowerPoint, or plain text files.");
+            }
         }
 
         private async Task<List<string>> ValidatePublishAsync(ContentItem item)
@@ -474,6 +553,7 @@ namespace FullProject.Services
             Title = new(item.Title),
             Summary = new(item.Summary),
             BodyHtml = new(item.BodyHtml),
+            BodyItems = item.BodyItems.Select(CloneBodyItem).ToList(),
             HeroImageUrl = item.HeroImageUrl,
             HeroImageAlt = item.HeroImageAlt,
             ThumbnailUrl = item.ThumbnailUrl,
@@ -500,16 +580,173 @@ namespace FullProject.Services
             PublishedAt = publishedAt
         };
 
-        private void ConfigureSanitizer()
+        private Dictionary<string, string> SanitizeLang(Dictionary<string, string> values) =>
+            NormalizeLang(values, false).ToDictionary(kv => kv.Key, kv => _contentSanitizer.SanitizeHtml(kv.Value));
+
+        private List<ContentBodyItem> NormalizeBodyItems(IEnumerable<ContentBodyItemDto>? items, Dictionary<string, string>? fallbackBodyHtml)
         {
-            _sanitizer.AllowedSchemes.Add("data");
-            _sanitizer.AllowedAttributes.Add("class");
-            _sanitizer.AllowedAttributes.Add("target");
-            _sanitizer.AllowedAttributes.Add("rel");
+            var normalized = (items ?? [])
+                .OrderBy(i => i.Order)
+                .Take(MaxBodyItems)
+                .Select((item, index) => NormalizeBodyItem(item, index))
+                .Where(item => BodyItemHasContent(item))
+                .ToList();
+
+            if (normalized.Count == 0 && fallbackBodyHtml is not null && fallbackBodyHtml.Values.Any(v => !string.IsNullOrWhiteSpace(v)))
+            {
+                normalized.Add(new ContentBodyItem
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Type = "text",
+                    Content = SanitizeLang(fallbackBodyHtml),
+                    Visible = true,
+                    Order = 0
+                });
+            }
+
+            return normalized;
         }
 
-        private Dictionary<string, string> SanitizeLang(Dictionary<string, string> values) =>
-            NormalizeLang(values, false).ToDictionary(kv => kv.Key, kv => _sanitizer.Sanitize(kv.Value));
+        private ContentBodyItem NormalizeBodyItem(ContentBodyItemDto dto, int index)
+        {
+            var type = NormalizeBodyType(dto.Type);
+            return new ContentBodyItem
+            {
+                Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString("N") : dto.Id.Trim(),
+                Type = type,
+                Content = type == "text" ? SanitizeLang(dto.Content) : NormalizeLang(dto.Content, false),
+                Caption = NormalizeLang(dto.Caption, false),
+                Url = CleanUrl(dto.Url),
+                FileName = dto.FileName?.Trim(),
+                ContentType = dto.ContentType?.Trim(),
+                SizeBytes = Math.Max(0, dto.SizeBytes),
+                Style = string.IsNullOrWhiteSpace(dto.Style) ? null : dto.Style.Trim(),
+                Visible = dto.Visible,
+                Order = index
+            };
+        }
+
+        private static string NormalizeBodyType(string? type)
+        {
+            var value = (type ?? string.Empty).Trim().ToLowerInvariant();
+            return value switch
+            {
+                "image" => "image",
+                "video" => "video",
+                "file" => "file",
+                "quote" => "quote",
+                "cta" => "cta",
+                "divider" => "divider",
+                _ => "text"
+            };
+        }
+
+        private static bool BodyItemHasContent(ContentBodyItem item) =>
+            item.Type == "divider" ||
+            item.Content.Values.Any(v => !string.IsNullOrWhiteSpace(v)) ||
+            item.Caption.Values.Any(v => !string.IsNullOrWhiteSpace(v)) ||
+            !string.IsNullOrWhiteSpace(item.Url);
+
+        private static ContentBodyItem CloneBodyItem(ContentBodyItem item) => new()
+        {
+            Id = item.Id,
+            Type = item.Type,
+            Content = new(item.Content),
+            Caption = new(item.Caption),
+            Url = item.Url,
+            FileName = item.FileName,
+            ContentType = item.ContentType,
+            SizeBytes = item.SizeBytes,
+            Style = item.Style,
+            Visible = item.Visible,
+            Order = item.Order
+        };
+
+        private static Dictionary<string, string> BuildBodyHtmlMirror(List<ContentBodyItem> items, Dictionary<string, string>? fallbackBodyHtml)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var lang in RequiredLanguages)
+            {
+                var html = string.Join(Environment.NewLine, items
+                    .Where(i => i.Visible)
+                    .OrderBy(i => i.Order)
+                    .Select(i => RenderBodyItemHtml(i, lang))
+                    .Where(h => !string.IsNullOrWhiteSpace(h)));
+
+                result[lang] = string.IsNullOrWhiteSpace(html)
+                    ? fallbackBodyHtml?.GetValueOrDefault(lang, string.Empty) ?? string.Empty
+                    : html;
+            }
+
+            return result;
+        }
+
+        private static string RenderBodyItemHtml(ContentBodyItem item, string lang)
+        {
+            var content = LangValue(item.Content, lang, string.Empty);
+            var caption = LangValue(item.Caption, lang, string.Empty);
+            var url = item.Url ?? string.Empty;
+            var fileName = !string.IsNullOrWhiteSpace(item.FileName) ? item.FileName! : "Download";
+
+            return item.Type switch
+            {
+                "image" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<figure class=\"sc-content-body-image\"><img src=\"{H(url)}\" alt=\"{H(caption)}\" />{RenderCaption(caption)}</figure>",
+                "video" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<div class=\"sc-content-body-video\"><iframe src=\"{H(ToEmbedVideoUrl(url))}\" title=\"{H(caption)}\" loading=\"lazy\" allowfullscreen></iframe>{RenderCaption(caption)}</div>",
+                "file" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<p><a class=\"sc-insight-download\" href=\"{H(url)}\" target=\"_blank\" rel=\"noopener\"><span><strong>{H(fileName)}</strong>{RenderFileMeta(item)}</span><b>Download</b></a></p>",
+                "quote" when !string.IsNullOrWhiteSpace(content) =>
+                    $"<blockquote class=\"sc-content-body-quote\">{H(content)}</blockquote>",
+                "cta" when !string.IsNullOrWhiteSpace(content) =>
+                    $"<div class=\"sc-content-body-cta\">{content}</div>",
+                "divider" => "<hr class=\"sc-content-body-divider\" />",
+                _ => PlainTextToParagraphHtml(content)
+            };
+        }
+
+        private static string RenderCaption(string caption) =>
+            string.IsNullOrWhiteSpace(caption) ? string.Empty : $"<figcaption>{H(caption)}</figcaption>";
+
+        private static string RenderFileMeta(ContentBodyItem item)
+        {
+            var parts = new[] { FormatBytes(item.SizeBytes), item.ContentType }
+                .Where(p => !string.IsNullOrWhiteSpace(p));
+            var meta = string.Join(" / ", parts);
+            return string.IsNullOrWhiteSpace(meta) ? string.Empty : $"<small>{H(meta)}</small>";
+        }
+
+        private static string ToEmbedVideoUrl(string url)
+        {
+            if (url.Contains("youtube.com/embed/", StringComparison.OrdinalIgnoreCase))
+                return url;
+
+            var match = Regex.Match(url, @"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{6,})", RegexOptions.IgnoreCase);
+            return match.Success ? $"https://www.youtube.com/embed/{match.Groups[1].Value}" : url;
+        }
+
+        private static string PlainTextToParagraphHtml(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            if (Regex.IsMatch(value, @"<\s*(p|h[1-6]|ul|ol|blockquote|div|figure|table|br)\b", RegexOptions.IgnoreCase))
+                return value;
+
+            var paragraphs = Regex.Split(value.Trim(), @"(?:\r?\n){2,}")
+                .Select(p => p.Trim())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(p => $"<p>{H(p).Replace("\n", "<br />")}</p>");
+
+            return string.Join(Environment.NewLine, paragraphs);
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            if (bytes <= 0) return string.Empty;
+            if (bytes < 1024 * 1024) return $"{Math.Max(1, bytes / 1024)} KB";
+            return $"{bytes / 1024d / 1024d:0.0} MB";
+        }
 
         private static Dictionary<string, string> NormalizeLang(Dictionary<string, string> values, bool requireFallback = true)
         {
@@ -523,6 +760,17 @@ namespace FullProject.Services
             return result;
         }
 
+        private static string LangValue(Dictionary<string, string> values, string lang, string fallback)
+        {
+            if (values.TryGetValue(lang, out var value) && !string.IsNullOrWhiteSpace(value))
+                return value;
+            if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
+                return en;
+            return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+        }
+
+        private static string H(string value) => WebUtility.HtmlEncode(value);
+
         private static List<string> NormalizeTags(IEnumerable<string> tags) =>
             tags.Select(t => t.Trim())
                 .Where(t => !string.IsNullOrWhiteSpace(t))
@@ -533,7 +781,7 @@ namespace FullProject.Services
         private static List<ContentAttachment> NormalizeAttachments(IEnumerable<ContentAttachmentDto> attachments) =>
             attachments
                 .Where(a => !string.IsNullOrWhiteSpace(a.Url))
-                .Take(20)
+                .Take(MaxAttachments)
                 .Select(a => new ContentAttachment
                 {
                     Id = string.IsNullOrWhiteSpace(a.Id) ? Guid.NewGuid().ToString("N") : a.Id,
@@ -544,6 +792,30 @@ namespace FullProject.Services
                 })
                 .Where(a => !string.IsNullOrWhiteSpace(a.Url))
                 .ToList();
+
+        private static ContentBodyItemDto ToDto(ContentBodyItem item) => new()
+        {
+            Id = item.Id,
+            Type = item.Type,
+            Content = new(item.Content),
+            Caption = new(item.Caption),
+            Url = item.Url,
+            FileName = item.FileName,
+            ContentType = item.ContentType,
+            SizeBytes = item.SizeBytes,
+            Style = item.Style,
+            Visible = item.Visible,
+            Order = item.Order
+        };
+
+        private static ContentAttachmentDto ToDto(ContentAttachment attachment) => new()
+        {
+            Id = attachment.Id,
+            FileName = attachment.FileName,
+            Url = attachment.Url,
+            ContentType = attachment.ContentType,
+            SizeBytes = attachment.SizeBytes
+        };
 
         private static string NormalizeKey(string value) =>
             NormalizeSlug(value, "content-type");

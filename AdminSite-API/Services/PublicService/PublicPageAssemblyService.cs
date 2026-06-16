@@ -430,7 +430,7 @@ namespace FullProject.Services.PublicService
                         Visible = true,
                         Order = 2,
                         Style = ContentCtaStyle(),
-                        Layout = "stacked",
+                        Layout = "final-card",
                         Heading = new Dictionary<string, string>
                         {
                             ["en"] = "Ready to move in sync?",
@@ -542,7 +542,9 @@ namespace FullProject.Services.PublicService
 
         private static string BuildContentDetailBodyHtml(ContentItem item, string typeRoute, string lang)
         {
-            var body = LangValue(item.BodyHtml, lang, string.Empty);
+            var body = BuildContentBodyItemsHtml(item, lang);
+            if (string.IsNullOrWhiteSpace(body))
+                body = LangValue(item.BodyHtml, lang, string.Empty);
             if (string.IsNullOrWhiteSpace(body))
                 body = $"<p>{H(LangValue(item.Summary, lang, string.Empty))}</p>";
 
@@ -562,6 +564,79 @@ namespace FullProject.Services.PublicService
                 </div>
                 <p class="sc-insight-back"><a href="/insights">{H(backLabel)}</a></p>
                 """;
+        }
+
+        private static string BuildContentBodyItemsHtml(ContentItem item, string lang)
+        {
+            if (item.BodyItems.Count == 0)
+                return string.Empty;
+
+            return string.Join(Environment.NewLine, item.BodyItems
+                .Where(i => i.Visible)
+                .OrderBy(i => i.Order)
+                .Select(i => RenderContentBodyItemHtml(i, lang))
+                .Where(html => !string.IsNullOrWhiteSpace(html)));
+        }
+
+        private static string RenderContentBodyItemHtml(ContentBodyItem item, string lang)
+        {
+            var content = LangValue(item.Content, lang, string.Empty);
+            var caption = LangValue(item.Caption, lang, string.Empty);
+            var url = item.Url ?? string.Empty;
+            var fileName = !string.IsNullOrWhiteSpace(item.FileName) ? item.FileName! : "Download";
+
+            return item.Type switch
+            {
+                "image" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<figure class=\"sc-content-body-item sc-content-body-image\"><img src=\"{H(url)}\" alt=\"{H(caption)}\" />{RenderContentCaption(caption)}</figure>",
+                "video" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<div class=\"sc-content-body-item sc-content-body-video\"><iframe src=\"{H(ToEmbedVideoUrl(url))}\" title=\"{H(caption)}\" loading=\"lazy\" allowfullscreen></iframe>{RenderContentCaption(caption)}</div>",
+                "file" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<div class=\"sc-content-body-item\"><a class=\"sc-insight-download\" href=\"{H(url)}\" target=\"_blank\" rel=\"noopener\"><span><strong>{H(fileName)}</strong>{RenderContentFileMeta(item)}</span><b>Download</b></a></div>",
+                "quote" when !string.IsNullOrWhiteSpace(content) =>
+                    $"<blockquote class=\"sc-content-body-item sc-content-body-quote\">{H(content)}</blockquote>",
+                "cta" when !string.IsNullOrWhiteSpace(content) =>
+                    $"<div class=\"sc-content-body-item sc-content-body-cta\">{content}</div>",
+                "divider" => "<hr class=\"sc-content-body-item sc-content-body-divider\" />",
+                _ when !string.IsNullOrWhiteSpace(content) => $"<div class=\"sc-content-body-item sc-content-body-text\">{PlainTextToParagraphHtml(content)}</div>",
+                _ => string.Empty
+            };
+        }
+
+        private static string RenderContentCaption(string caption) =>
+            string.IsNullOrWhiteSpace(caption) ? string.Empty : $"<figcaption>{H(caption)}</figcaption>";
+
+        private static string RenderContentFileMeta(ContentBodyItem item)
+        {
+            var parts = new[] { FormatBytes(item.SizeBytes), item.ContentType }
+                .Where(p => !string.IsNullOrWhiteSpace(p));
+            var meta = string.Join(" / ", parts);
+            return string.IsNullOrWhiteSpace(meta) ? string.Empty : $"<small>{H(meta)}</small>";
+        }
+
+        private static string ToEmbedVideoUrl(string url)
+        {
+            if (url.Contains("youtube.com/embed/", StringComparison.OrdinalIgnoreCase))
+                return url;
+
+            var match = Regex.Match(url, @"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{6,})", RegexOptions.IgnoreCase);
+            return match.Success ? $"https://www.youtube.com/embed/{match.Groups[1].Value}" : url;
+        }
+
+        private static string PlainTextToParagraphHtml(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            if (Regex.IsMatch(value, @"<\s*(p|h[1-6]|ul|ol|blockquote|div|figure|table|br)\b", RegexOptions.IgnoreCase))
+                return value;
+
+            var paragraphs = Regex.Split(value.Trim(), @"(?:\r?\n){2,}")
+                .Select(p => p.Trim())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(p => $"<p>{H(p).Replace("\n", "<br />")}</p>");
+
+            return string.Join(Environment.NewLine, paragraphs);
         }
 
         private static string BuildContentDetailSidebarHtml(ContentItem item, string typeRoute, string lang)
@@ -707,11 +782,11 @@ namespace FullProject.Services.PublicService
         private static PublicSectionStyleDto ContentCtaStyle() => new()
         {
             BackgroundType = "color",
-            BackgroundColor = "#0f3460",
+            BackgroundColor = "#ffffff",
             Height = "auto",
             Padding = "large",
             ContentWidth = "normal",
-            TextColor = "light",
+            TextColor = "dark",
             MobileLayout = "stack",
             BlockLayoutMode = "stack",
             BlockGridColumns = 12,

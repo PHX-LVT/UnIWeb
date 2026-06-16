@@ -125,7 +125,7 @@ else
                 @if (ShowsHero)
                 {
                     <div class="content-editor-media">
-                        <h2 style="font-size:1rem;margin:0 0 1rem">@T("HeroImage")</h2>
+                        <h2 style="font-size:1rem;margin:0 0 1rem">@T("CoverImage")</h2>
                         @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
                         {
                             <img class="content-editor-preview" src="@_edit.HeroImageUrl" alt="" />
@@ -155,11 +155,133 @@ else
 
                 @if (ShowsBody)
                 {
-                    <label style="margin-top:.75rem">@T("Body")</label>
-                    <textarea class="form-control content-editor-input"
-                              rows="14"
-                              value="@GetValue(_edit.BodyHtml, CurrentLang)"
-                              @oninput="e => SetValue(_edit.BodyHtml, CurrentLang, e.Value?.ToString())"></textarea>
+                    <div class="content-body-editor">
+                        <div class="content-body-editor__header">
+                            <label>@T("Body")</label>
+                            <span>@_edit.BodyItems.Count/10</span>
+                        </div>
+
+                        @foreach (var item in _edit.BodyItems.OrderBy(i => i.Order).ToList())
+                        {
+                            var expanded = IsBodyItemExpanded(item);
+                            <article class="content-body-item">
+                                <div class="content-body-item__toolbar">
+                                    <button type="button"
+                                            class="content-body-item__summary"
+                                            @onclick="() => ToggleBodyItem(item)">
+                                        <i class="fas @(expanded ? "fa-chevron-down" : "fa-chevron-right")"></i>
+                                        <strong>@BodyItemLabel(item.Type) @(item.Order + 1)</strong>
+                                        @if (!expanded)
+                                        {
+                                            <span>@BodyItemPreview(item)</span>
+                                        }
+                                    </button>
+                                    <div>
+                                        <button class="btn-admin btn-ghost content-icon-btn" disabled="@(item.Order == 0)" @onclick="() => MoveBodyItem(item, -1)" title="@T("MoveUp")">
+                                            <i class="fas fa-arrow-up"></i>
+                                        </button>
+                                        <button class="btn-admin btn-ghost content-icon-btn" disabled="@(item.Order >= _edit.BodyItems.Count - 1)" @onclick="() => MoveBodyItem(item, 1)" title="@T("MoveDown")">
+                                            <i class="fas fa-arrow-down"></i>
+                                        </button>
+                                        <button class="btn-admin btn-danger content-icon-btn" disabled="@(_edit.BodyItems.Count <= 1)" @onclick="() => RemoveBodyItem(item)" title="@T("Remove")">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                @if (expanded)
+                                {
+                                    @switch (NormalizeBodyType(item.Type))
+                                    {
+                                        case "image":
+                                            @if (!string.IsNullOrWhiteSpace(item.Url))
+                                            {
+                                                <img class="content-editor-preview" src="@item.Url" alt="" />
+                                            }
+                                            <div class="content-body-upload-row">
+                                                <InputFile class="content-editor-file-input"
+                                                           id="@($"content-body-image-{item.Id}")"
+                                                           OnChange="e => UploadBodyImage(item, e)"
+                                                           accept="image/*" />
+                                                <label class="btn-admin btn-ghost" for="@($"content-body-image-{item.Id}")">
+                                                    <i class="fas fa-image"></i> @T("UploadImage")
+                                                </label>
+                                                <input class="form-control content-editor-input"
+                                                       placeholder="@T("ImageUrl")"
+                                                       value="@item.Url"
+                                                       @oninput="e => item.Url = e.Value?.ToString()" />
+                                            </div>
+                                            <input class="form-control content-editor-input"
+                                                   style="margin-top:.75rem"
+                                                   placeholder="@T("ImageDescription")"
+                                                   value="@GetValue(item.Caption, CurrentLang)"
+                                                   @oninput="e => SetValue(item.Caption, CurrentLang, e.Value?.ToString())" />
+                                            break;
+                                        case "video":
+                                            <input class="form-control content-editor-input"
+                                                   placeholder="@T("VideoUrl")"
+                                                   value="@item.Url"
+                                                   @oninput="e => item.Url = e.Value?.ToString()" />
+                                            <input class="form-control content-editor-input"
+                                                   style="margin-top:.75rem"
+                                                   placeholder="@T("Caption")"
+                                                   value="@GetValue(item.Caption, CurrentLang)"
+                                                   @oninput="e => SetValue(item.Caption, CurrentLang, e.Value?.ToString())" />
+                                            break;
+                                        case "file":
+                                            <div class="content-body-upload-row">
+                                                <InputFile class="content-editor-file-input"
+                                                           id="@($"content-body-file-{item.Id}")"
+                                                           OnChange="e => UploadBodyFile(item, e)"
+                                                           accept="application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" />
+                                                <label class="btn-admin btn-ghost" for="@($"content-body-file-{item.Id}")">
+                                                    <i class="fas fa-file"></i> @T("UploadFile")
+                                                </label>
+                                                <input class="form-control content-editor-input"
+                                                       placeholder="@T("FileUrl")"
+                                                       value="@item.Url"
+                                                       @oninput="e => item.Url = e.Value?.ToString()" />
+                                            </div>
+                                            <input class="form-control content-editor-input"
+                                                   style="margin-top:.75rem"
+                                                   placeholder="@T("FileName")"
+                                                   value="@item.FileName"
+                                                   @oninput="e => item.FileName = e.Value?.ToString()" />
+                                            break;
+                                        case "quote":
+                                            <textarea class="form-control content-editor-input"
+                                                      rows="4"
+                                                      value="@GetBodyText(item.Content, CurrentLang)"
+                                                      @oninput="e => SetBodyText(item.Content, CurrentLang, e.Value?.ToString())"></textarea>
+                                            break;
+                                        case "cta":
+                                            <textarea class="form-control content-editor-input"
+                                                      rows="4"
+                                                      value="@GetValue(item.Content, CurrentLang)"
+                                                      @oninput="e => SetValue(item.Content, CurrentLang, e.Value?.ToString())"></textarea>
+                                            break;
+                                        case "divider":
+                                            <div class="content-body-divider-preview"></div>
+                                            break;
+                                        default:
+                                            <ContentRichTextEditor Value="@GetValue(item.Content, CurrentLang)"
+                                                                   ValueChanged="html => SetBodyRichText(item.Content, CurrentLang, html)"
+                                                                   Placeholder="@T("Body")" />
+                                            break;
+                                    }
+                                }
+                            </article>
+                        }
+
+                        <div class="content-body-actions">
+                            <button class="btn-admin btn-ghost" disabled="@BodyLimitReached" @onclick='() => AddBodyItem("text")'><i class="fas fa-align-left"></i> @T("AddText")</button>
+                            <button class="btn-admin btn-ghost" disabled="@BodyLimitReached" @onclick='() => AddBodyItem("image")'><i class="fas fa-image"></i> @T("AddImage")</button>
+                            <button class="btn-admin btn-ghost" disabled="@BodyLimitReached" @onclick='() => AddBodyItem("video")'><i class="fas fa-play"></i> @T("AddVideo")</button>
+                            <button class="btn-admin btn-ghost" disabled="@BodyLimitReached" @onclick='() => AddBodyItem("file")'><i class="fas fa-file"></i> @T("AddFile")</button>
+                            <button class="btn-admin btn-ghost" disabled="@BodyLimitReached" @onclick='() => AddBodyItem("quote")'><i class="fas fa-quote-left"></i> @T("AddQuote")</button>
+                            <button class="btn-admin btn-ghost" disabled="@BodyLimitReached" @onclick='() => AddBodyItem("divider")'><i class="fas fa-minus"></i> @T("AddDivider")</button>
+                        </div>
+                    </div>
                 }
             </div>
 
@@ -248,6 +370,7 @@ else
     private string _fileContentType = "application/pdf";
     private long _fileSize;
     private bool _loading = true;
+    private HashSet<string> _expandedBodyItemIds = new(StringComparer.OrdinalIgnoreCase);
 
     private bool IsNew => string.IsNullOrWhiteSpace(Id);
     private string CurrentLang => NormalizeLang(AdminLanguage);
@@ -259,6 +382,7 @@ else
     private bool ShowsFile => SelectedType?.RequiresFile == true || ClickBehavior == "download";
     private bool ShowsVideo => SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video";
     private bool ShowsThumbnail => ShowsFile || ShowsVideo;
+    private bool BodyLimitReached => _edit.BodyItems.Count >= 10;
     private string ReturnUrl => GetReturnUrl();
     private bool IsDraft => string.Equals(_status, "Draft", StringComparison.OrdinalIgnoreCase);
     private bool IsSubmitted => string.Equals(_status, "Submitted", StringComparison.OrdinalIgnoreCase);
@@ -310,6 +434,7 @@ else
             Title = EnsureLangs(item.Title),
             Summary = EnsureLangs(item.Summary),
             BodyHtml = EnsureLangs(item.BodyHtml),
+            BodyItems = NormalizeBodyItems(item.BodyItems, item.BodyHtml),
             HeroImageUrl = item.HeroImageUrl,
             HeroImageAlt = item.HeroImageAlt,
             ThumbnailUrl = item.ThumbnailUrl,
@@ -328,6 +453,7 @@ else
         _fileName = file?.FileName ?? string.Empty;
         _fileContentType = string.IsNullOrWhiteSpace(file?.ContentType) ? "application/pdf" : file.ContentType;
         _fileSize = file?.SizeBytes ?? 0;
+        _expandedBodyItemIds = _edit.BodyItems.Take(1).Select(i => i.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task Save()
@@ -406,6 +532,12 @@ else
         EnsureEnglishFallback(_edit.Title);
         EnsureEnglishFallback(_edit.Summary);
         EnsureEnglishFallback(_edit.BodyHtml);
+        EnsureBodyItems();
+        foreach (var item in _edit.BodyItems)
+        {
+            EnsureEnglishFallback(item.Content);
+            EnsureEnglishFallback(item.Caption);
+        }
         AddPendingTag();
         _edit.Tags = _tags.ToList();
         _tagsText = string.Join(", ", _tags);
@@ -464,6 +596,112 @@ else
         }
     }
 
+    private async Task UploadBodyImage(ContentBodyItemModel item, InputFileChangeEventArgs e)
+    {
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-body", e.File, maxBytes: 5 * 1024 * 1024);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null)
+            item.Url = res.Data.Url;
+    }
+
+    private async Task UploadBodyFile(ContentBodyItemModel item, InputFileChangeEventArgs e)
+    {
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-files", e.File, maxBytes: 20 * 1024 * 1024);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null)
+        {
+            item.Url = res.Data.Url;
+            item.FileName = res.Data.FileName;
+            item.ContentType = res.Data.ContentType;
+            item.SizeBytes = res.Data.Size;
+        }
+    }
+
+    private void AddBodyItem(string type)
+    {
+        if (BodyLimitReached) return;
+        EnsureBodyItems();
+        var item = NewBodyItem(type, _edit.BodyItems.Count);
+        _edit.BodyItems.Add(item);
+        _expandedBodyItemIds.Add(item.Id);
+        ReorderBodyItems();
+    }
+
+    private void RemoveBodyItem(ContentBodyItemModel item)
+    {
+        if (_edit.BodyItems.Count <= 1) return;
+        _edit.BodyItems.Remove(item);
+        _expandedBodyItemIds.Remove(item.Id);
+        ReorderBodyItems();
+    }
+
+    private void MoveBodyItem(ContentBodyItemModel item, int direction)
+    {
+        var ordered = _edit.BodyItems.OrderBy(i => i.Order).ToList();
+        var index = ordered.FindIndex(i => i.Id == item.Id);
+        var target = index + direction;
+        if (index < 0 || target < 0 || target >= ordered.Count) return;
+
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        _edit.BodyItems = ordered;
+        ReorderBodyItems();
+    }
+
+    private void EnsureBodyItems()
+    {
+        _edit.BodyItems = NormalizeBodyItems(_edit.BodyItems, _edit.BodyHtml);
+    }
+
+    private void ReorderBodyItems()
+    {
+        _edit.BodyItems = _edit.BodyItems
+            .Select((item, index) =>
+            {
+                item.Order = index;
+                return item;
+            })
+            .ToList();
+    }
+
+    private string BodyItemLabel(string type) => NormalizeBodyType(type) switch
+    {
+        "image" => T("Image"),
+        "video" => T("Video"),
+        "file" => T("File"),
+        "quote" => T("Quote"),
+        "cta" => "CTA",
+        "divider" => T("Divider"),
+        _ => T("Text")
+    };
+
+    private bool IsBodyItemExpanded(ContentBodyItemModel item) =>
+        _expandedBodyItemIds.Contains(item.Id);
+
+    private void ToggleBodyItem(ContentBodyItemModel item)
+    {
+        if (!_expandedBodyItemIds.Add(item.Id))
+            _expandedBodyItemIds.Remove(item.Id);
+    }
+
+    private string BodyItemPreview(ContentBodyItemModel item)
+    {
+        var type = NormalizeBodyType(item.Type);
+        var value = type switch
+        {
+            "image" => GetValue(item.Caption, CurrentLang, fallback: true),
+            "video" => item.Url ?? GetValue(item.Caption, CurrentLang, fallback: true),
+            "file" => item.FileName ?? item.Url ?? string.Empty,
+            "divider" => T("Divider"),
+            _ => HtmlToEditorText(GetValue(item.Content, CurrentLang, fallback: true))
+        };
+
+        if (string.IsNullOrWhiteSpace(value))
+            value = T("Empty");
+
+        value = value.ReplaceLineEndings(" ").Trim();
+        return value.Length > 90 ? $"{value[..90]}..." : value;
+    }
+
     private void RemoveFile()
     {
         _fileUrl = string.Empty;
@@ -515,9 +753,25 @@ else
         return fallback && values.TryGetValue("en", out var en) ? en : string.Empty;
     }
 
+    private static string GetBodyText(Dictionary<string, string> values, string lang)
+    {
+        var value = GetValue(values, lang);
+        return HtmlToEditorText(value);
+    }
+
     private static void SetValue(Dictionary<string, string> values, string lang, string? value)
     {
         values[lang] = value ?? string.Empty;
+    }
+
+    private static void SetBodyText(Dictionary<string, string> values, string lang, string? value)
+    {
+        values[lang] = value ?? string.Empty;
+    }
+
+    private static void SetBodyRichText(Dictionary<string, string> values, string lang, string html)
+    {
+        values[lang] = html ?? string.Empty;
     }
 
     private void EnsureEnglishFallback(Dictionary<string, string> values)
@@ -536,6 +790,84 @@ else
         foreach (var lang in new[] { "en", "vi", "cn" })
             result.TryAdd(lang, string.Empty);
         return result;
+    }
+
+    private static string HtmlToEditorText(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var text = value
+            .Replace("\r", string.Empty)
+            .Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("<br/>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("<br />", "\n", StringComparison.OrdinalIgnoreCase);
+
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"</p>\s*<p[^>]*>", "\n\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*<p[^>]*>", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"</p>\s*$", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"<[^>]+>", string.Empty);
+
+        return System.Net.WebUtility.HtmlDecode(text).Trim();
+    }
+
+    private static List<ContentBodyItemModel> NormalizeBodyItems(List<ContentBodyItemModel>? source, Dictionary<string, string>? fallbackBodyHtml)
+    {
+        var items = (source ?? new())
+            .OrderBy(i => i.Order)
+            .Take(10)
+            .Select((item, index) =>
+            {
+                item.Id = string.IsNullOrWhiteSpace(item.Id) ? Guid.NewGuid().ToString("N") : item.Id;
+                item.Type = NormalizeBodyType(item.Type);
+                item.Content = EnsureLangs(item.Content);
+                item.Caption = EnsureLangs(item.Caption);
+                item.Visible = true;
+                item.Order = index;
+                return item;
+            })
+            .ToList();
+
+        if (items.Count == 0)
+        {
+            var fallback = EnsureLangs(fallbackBodyHtml);
+            items.Add(new ContentBodyItemModel
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Type = "text",
+                Content = fallback,
+                Caption = EnsureLangs(null),
+                Visible = true,
+                Order = 0
+            });
+        }
+
+        return items;
+    }
+
+    private static ContentBodyItemModel NewBodyItem(string type, int order) => new()
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Type = NormalizeBodyType(type),
+        Content = EnsureLangs(null),
+        Caption = EnsureLangs(null),
+        Visible = true,
+        Order = order
+    };
+
+    private static string NormalizeBodyType(string? type)
+    {
+        var value = (type ?? string.Empty).Trim().ToLowerInvariant();
+        return value switch
+        {
+            "image" => "image",
+            "video" => "video",
+            "file" => "file",
+            "quote" => "quote",
+            "cta" => "cta",
+            "divider" => "divider",
+            _ => "text"
+        };
     }
 
     private static string NormalizeLang(string? lang)
@@ -575,6 +907,7 @@ else
         Title = EnsureLangs(null),
         Summary = EnsureLangs(null),
         BodyHtml = EnsureLangs(null),
+        BodyItems = new() { NewBodyItem("text", 0) },
         Visible = true
     };
 }

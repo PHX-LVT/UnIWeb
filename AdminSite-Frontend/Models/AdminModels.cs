@@ -669,6 +669,21 @@ namespace AdminSite.Models
         public long SizeBytes { get; set; }
     }
 
+    public class ContentBodyItemModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Content { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public string? Url { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long SizeBytes { get; set; }
+        public string? Style { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
     public class ContentItemModel
     {
         public string Id { get; set; } = string.Empty;
@@ -678,6 +693,7 @@ namespace AdminSite.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemModel> BodyItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
@@ -704,6 +720,7 @@ namespace AdminSite.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemModel> BodyItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }

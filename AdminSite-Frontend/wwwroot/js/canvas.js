@@ -18,6 +18,80 @@ window.initSortable = (container, dotnet) => {
     });
 };
 
+window.contentRichTextEditor = (() => {
+    const editors = {};
+
+    const focus = (entry) => {
+        if (entry && entry.el) entry.el.focus();
+    };
+
+    const sanitizeLink = (value) => {
+        if (!value) return null;
+        const trimmed = value.trim();
+        if (/^(https?:\/\/|mailto:|\/)/i.test(trimmed)) return trimmed;
+        return null;
+    };
+
+    return {
+        init(id, element, dotnet, value) {
+            if (!id || !element || !dotnet) return;
+            if (editors[id]) this.dispose(id);
+
+            element.innerHTML = value || "";
+            const onInput = () => {
+                dotnet.invokeMethodAsync("OnEditorInput", element.innerHTML || "").catch(() => {});
+            };
+            element.addEventListener("input", onInput);
+            editors[id] = { el: element, dotnet, onInput };
+        },
+        setValue(id, value) {
+            const entry = editors[id];
+            if (!entry || document.activeElement === entry.el) return;
+            if ((entry.el.innerHTML || "") !== (value || "")) entry.el.innerHTML = value || "";
+        },
+        exec(id, command) {
+            const entry = editors[id];
+            if (!entry || !command) return;
+            focus(entry);
+            document.execCommand(command, false, null);
+            entry.onInput();
+        },
+        setBlock(id, tag) {
+            const entry = editors[id];
+            if (!entry) return;
+            focus(entry);
+            document.execCommand("formatBlock", false, tag || "p");
+            entry.onInput();
+        },
+        setColor(id, color) {
+            const entry = editors[id];
+            if (!entry || !/^#[0-9a-f]{6}$/i.test(color || "")) return;
+            focus(entry);
+            document.execCommand("foreColor", false, color);
+            entry.onInput();
+        },
+        createLink(id) {
+            const entry = editors[id];
+            if (!entry) return;
+            const href = sanitizeLink(window.prompt("Enter link URL"));
+            if (!href) return;
+            focus(entry);
+            document.execCommand("createLink", false, href);
+            entry.el.querySelectorAll("a[href]").forEach(a => {
+                a.setAttribute("target", "_blank");
+                a.setAttribute("rel", "noopener");
+            });
+            entry.onInput();
+        },
+        dispose(id) {
+            const entry = editors[id];
+            if (!entry) return;
+            entry.el.removeEventListener("input", entry.onInput);
+            delete editors[id];
+        }
+    };
+})();
+
 window.initSlotSortable = (slotContainer, dotnet, slotId) => {
     if (!slotContainer || typeof Sortable === "undefined") return;
 

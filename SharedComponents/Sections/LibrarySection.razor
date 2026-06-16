@@ -1,6 +1,7 @@
 @using Contracts.Public
 @using SharedComponents.Helpers
 @using SharedComponents.Blocks
+@inject NavigationManager Navigation
 
 <section data-section-id="@Section.Id"
          class="@StyleHelper.GetSectionClass(Section.Style)"
@@ -229,8 +230,15 @@
 
     protected override void OnParametersSet()
     {
+        var requestedType = RequestedContentType();
+
         if (TabsEnabled && !SourceTypes.Contains(_activeTab, StringComparer.OrdinalIgnoreCase))
-            _activeTab = SourceTypes.FirstOrDefault() ?? string.Empty;
+            _activeTab = SourceTypes.Contains(requestedType, StringComparer.OrdinalIgnoreCase)
+                ? requestedType
+                : SourceTypes.FirstOrDefault() ?? string.Empty;
+
+        if (TabsEnabled && SourceTypes.Contains(requestedType, StringComparer.OrdinalIgnoreCase))
+            _activeTab = requestedType;
 
         if (!TabsEnabled)
             _activeTab = string.Empty;
@@ -461,4 +469,39 @@
         "technology" => "technology",
         _ => $"{type}s"
     };
+
+    private string RequestedContentType()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var query = uri.Query.TrimStart('?');
+        if (string.IsNullOrWhiteSpace(query))
+            return string.Empty;
+
+        foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (pair.Length != 2 || !string.Equals(Uri.UnescapeDataString(pair[0]), "type", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return NormalizeContentTypeQuery(Uri.UnescapeDataString(pair[1]));
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizeContentTypeQuery(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "articles" => "article",
+            "case-studies" => "case-study",
+            "whitepapers" => "whitepaper",
+            "reports" => "whitepaper",
+            "videos" => "video",
+            "webinars" => "video",
+            "tools" => "tool",
+            _ => normalized
+        };
+    }
 }

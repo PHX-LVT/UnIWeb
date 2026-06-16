@@ -378,6 +378,21 @@ namespace FullProject.DTOs
         public long SizeBytes { get; set; }
     }
 
+    public class ContentBodyItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Content { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public string? Url { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long SizeBytes { get; set; }
+        public string? Style { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
     public class ContentCreateDto
     {
         public string ContentTypeKey { get; set; } = "article";
@@ -385,6 +400,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemDto> BodyItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
@@ -403,6 +419,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Summary { get; set; }
         public Dictionary<string, string>? BodyHtml { get; set; }
+        public List<ContentBodyItemDto>? BodyItems { get; set; }
         public string? HeroImageUrl { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
@@ -434,6 +451,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemDto> BodyItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
