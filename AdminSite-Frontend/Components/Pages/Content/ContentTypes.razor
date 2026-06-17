@@ -2,11 +2,20 @@
 @inject AdminContentService ContentService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
+@inject AdminAuthService Auth
 
 <div class="page-header">
     <h1 class="page-title"><i class="fas fa-tags"></i> @T("ContentTypes")</h1>
 </div>
 
+@if (!Auth.CanManageAllContent)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoPermission")</p>
+    </div>
+}
+else
+{
 <div style="display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:1rem;align-items:start">
     <div class="admin-card">
         <h2 style="font-size:1rem;margin:0 0 1rem">@T(_editingId is null ? "CreateType" : "EditType")</h2>
@@ -127,6 +136,7 @@
         }
     </div>
 </div>
+}
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
@@ -142,6 +152,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
         await AdminLanguageState.LoadSettingsAsync();
         _languages = AdminLanguageState.SupportedLanguages.ToList();
         _edit = NewRequest();

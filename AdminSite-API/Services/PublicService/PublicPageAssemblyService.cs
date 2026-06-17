@@ -67,7 +67,13 @@ namespace FullProject.Services.PublicService
         public async Task<PublicPageDto?> GetContentPageAsync(string typeKey, string slug)
         {
             var item = await _contentService.GetPublishedBySlugAsync(typeKey, slug);
-            return item is null ? null : BuildContentDetailPage(item);
+            if (item is null)
+                return null;
+
+            var contentType = (await _contentService.GetTypesAsync())
+                .FirstOrDefault(t => string.Equals(t.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase));
+
+            return BuildContentDetailPage(item, contentType);
         }
 
         private async Task<List<object>> BuildVisibleSectionDtosAsync(Page page)
@@ -149,6 +155,8 @@ namespace FullProject.Services.PublicService
                         ? 200
                         : Math.Clamp(library.Limit, 1, 24);
                     var items = await _contentService.GetPublishedLibraryItemsAsync(library.ContentTypes, itemLimit, library.SortMode);
+                    var typesByKey = (await _contentService.GetTypesAsync())
+                        .ToDictionary(t => t.Key, StringComparer.OrdinalIgnoreCase);
 
                     sectionDtos.Add(new PublicLibrarySectionDto
                     {
@@ -177,7 +185,8 @@ namespace FullProject.Services.PublicService
                         ShowFilters = library.ShowFilters,
                         SearchPlaceholder = library.SearchPlaceholder,
                         SortMode = library.SortMode,
-                        Items = items.Select(MapLibraryItem).ToList()
+                        Items = items.Select(item =>
+                            MapLibraryItem(item, typesByKey.TryGetValue(item.ContentTypeKey, out var type) ? type : null)).ToList()
                     });
                     continue;
                 }
@@ -366,7 +375,7 @@ namespace FullProject.Services.PublicService
             return mapped;
         }
 
-        private static PublicLibraryItemDto MapLibraryItem(ContentItem item) => new()
+        private static PublicLibraryItemDto MapLibraryItem(ContentItem item, ContentType? type) => new()
         {
             Id = item.Id,
             StableId = item.StableId,
@@ -378,7 +387,7 @@ namespace FullProject.Services.PublicService
             ThumbnailUrl = item.ThumbnailUrl,
             VideoUrl = item.VideoUrl,
             ExternalUrl = item.ExternalUrl,
-            ClickBehavior = ResolveLibraryClickBehavior(item),
+            ClickBehavior = ResolveLibraryClickBehavior(item, type),
             Tags = item.Tags,
             Attachments = item.Attachments.Select(a => new PublicLibraryAttachmentDto
             {
@@ -393,7 +402,7 @@ namespace FullProject.Services.PublicService
             PublishedAt = item.PublishedAt
         };
 
-        public PublicPageDto BuildContentDetailPage(ContentItem item)
+        public PublicPageDto BuildContentDetailPage(ContentItem item, ContentType? type = null)
         {
             var typeRoute = ContentTypeRoute(item.ContentTypeKey);
             var fullSlug = $"insights/{typeRoute}/{item.Slug}";
@@ -421,7 +430,7 @@ namespace FullProject.Services.PublicService
                         Visible = true,
                         Order = 1,
                         Style = ContentBodyStyle(),
-                        HtmlContent = BuildContentDetailBodyHtml(item, typeRoute)
+                        HtmlContent = BuildContentDetailBodyHtml(item, typeRoute, type)
                     },
                     new PublicCtaSectionDto
                     {
@@ -531,18 +540,20 @@ namespace FullProject.Services.PublicService
                 """;
         }
 
-        private static Dictionary<string, string> BuildContentDetailBodyHtml(ContentItem item, string typeRoute)
+        private static Dictionary<string, string> BuildContentDetailBodyHtml(ContentItem item, string typeRoute, ContentType? type)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var lang in new[] { "en", "vi", "cn" })
-                result[lang] = BuildContentDetailBodyHtml(item, typeRoute, lang);
+                result[lang] = BuildContentDetailBodyHtml(item, typeRoute, lang, type);
 
             return result;
         }
 
-        private static string BuildContentDetailBodyHtml(ContentItem item, string typeRoute, string lang)
+        private static string BuildContentDetailBodyHtml(ContentItem item, string typeRoute, string lang, ContentType? type)
         {
-            var body = BuildContentBodyItemsHtml(item, lang);
+            var body = type?.RequiresBody == false
+                ? BuildResourceContentHtml(item, type, lang)
+                : BuildContentBodyItemsHtml(item, lang);
             if (string.IsNullOrWhiteSpace(body))
                 body = LangValue(item.BodyHtml, lang, string.Empty);
             if (string.IsNullOrWhiteSpace(body))
@@ -564,6 +575,60 @@ namespace FullProject.Services.PublicService
                 </div>
                 <p class="sc-insight-back"><a href="/insights">{H(backLabel)}</a></p>
                 """;
+        }
+
+        private static string BuildResourceContentHtml(ContentItem item, ContentType type, string lang)
+        {
+            var title = H(LangValue(item.Title, lang, item.Slug));
+            var summary = H(LangValue(item.Summary, lang, string.Empty));
+            var behavior = ResolveLibraryClickBehavior(item, type);
+            var href = ResolveResourceHref(item, behavior);
+            var buttonLabel = behavior switch
+            {
+                "video" => "Watch Video",
+                "external" => "Open Link",
+                _ => "Open File"
+            };
+
+            var action = string.IsNullOrWhiteSpace(href)
+                ? "<p class=\"sc-insight-resource-note\">No file, video, or external URL is attached yet.</p>"
+                : $"<a class=\"sc-insight-download\" href=\"{H(href)}\" target=\"_blank\" rel=\"noopener\"><span><strong>{title}</strong>{ResourceMeta(item, behavior)}</span><b>{H(buttonLabel)}</b></a>";
+
+            return $"""
+                <div class="sc-insight-resource-card">
+                    <h2>{title}</h2>
+                    <p>{summary}</p>
+                    {action}
+                </div>
+                """;
+        }
+
+        private static string ResolveResourceHref(ContentItem item, string behavior) =>
+            behavior switch
+            {
+                "video" => item.VideoUrl
+                    ?? item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url
+                    ?? string.Empty,
+                "external" => item.ExternalUrl ?? string.Empty,
+                _ => item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url))?.Url
+                    ?? item.BodyItems.FirstOrDefault(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url))?.Url
+                    ?? string.Empty
+            };
+
+        private static string ResourceMeta(ContentItem item, string behavior)
+        {
+            if (behavior == "video")
+                return "<small>Video / Webinar</small>";
+            if (behavior == "external")
+                return "<small>External resource</small>";
+
+            var file = item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url));
+            if (file is null)
+                return "<small>Downloadable resource</small>";
+
+            var meta = string.Join(" / ", new[] { FormatBytes(file.SizeBytes), file.ContentType }
+                .Where(v => !string.IsNullOrWhiteSpace(v)));
+            return string.IsNullOrWhiteSpace(meta) ? string.Empty : $"<small>{H(meta)}</small>";
         }
 
         private static string BuildContentBodyItemsHtml(ContentItem item, string lang)
@@ -746,7 +811,7 @@ namespace FullProject.Services.PublicService
             "video" => "videos",
             "tool" => "tools",
             "technology" => "technology",
-            _ => $"{typeKey}s"
+            _ => typeKey
         };
 
         private static string ContentTypeLabel(string typeKey) => typeKey switch
@@ -793,11 +858,24 @@ namespace FullProject.Services.PublicService
             BlockGap = "medium"
         };
 
-        private static string ResolveLibraryClickBehavior(ContentItem item)
+        private static string ResolveLibraryClickBehavior(ContentItem item, ContentType? type = null)
         {
+            var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
+            if (type?.RequiresBody == false && configured is "download" or "video" or "external")
+                return configured;
+            if (type?.RequiresBody == false)
+            {
+                if (!string.IsNullOrWhiteSpace(item.VideoUrl) ||
+                    item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))
+                    return "video";
+                if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
+                    return "external";
+                return "download";
+            }
             if (string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase))
                 return "video";
             if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) ||
+                item.BodyItems.Any(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url)) ||
                 string.Equals(item.ContentTypeKey, "whitepaper", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(item.ContentTypeKey, "tool", StringComparison.OrdinalIgnoreCase))
                 return "download";

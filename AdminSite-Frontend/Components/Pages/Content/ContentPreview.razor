@@ -1,0 +1,326 @@
+@page "/content/preview"
+@page "/content/preview/{ContentId}"
+@inject AdminContentService ContentService
+@inject AdminAuthService Auth
+@inject IHttpService Http
+@inject NavigationManager Nav
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-eye"></i> @T("ContentPreview")</h1>
+</div>
+
+@if (!Auth.CanManageContent)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoPermission")</p>
+    </div>
+}
+else if (_loading)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("Loading")</p>
+    </div>
+}
+else
+{
+    <div class="content-preview-workspace">
+        <aside class="admin-card content-preview-list">
+            <div class="content-filter-row" style="margin-bottom:1rem">
+                <div class="content-filter-field">
+                    <label>@T("ContentType")</label>
+                    <select class="form-control" @bind="_typeFilter" @bind:after="ApplySelection">
+                        <option value="">@T("AllTypes")</option>
+                        @foreach (var type in _types)
+                        {
+                            <option value="@type.Key">@GetLang(type.Name)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <input class="form-control"
+                   style="margin-bottom:1rem"
+                   placeholder="@T("SearchContents")"
+                   value="@_search"
+                   @oninput="OnSearchChanged" />
+
+            <div class="content-preview-list__items">
+                @foreach (var item in FilteredItems)
+                {
+                    <button type="button"
+                            class="content-preview-list__item @(item.Id == _selected?.Id ? "is-active" : "")"
+                            @onclick="() => SelectContent(item.Id)">
+                        <span>@GetLang(item.Title)</span>
+                        <small>@GetTypeLabel(item.ContentTypeKey) &middot; @T("Published")</small>
+                    </button>
+                }
+            </div>
+        </aside>
+
+        <section class="admin-card content-preview-iframe-shell">
+            @if (_selected is null)
+            {
+                <div class="content-preview-empty">
+                    <p class="text-muted">@T("NoContentYet")</p>
+                </div>
+            }
+            else if (!CanPreviewOnUserSite(_selected) && !IsResourceContent(_selected))
+            {
+                <div class="content-preview-empty">
+                    <h3>@T("ContentPreview")</h3>
+                    <p class="text-muted">Only published content with a slug can be previewed as a real UserSite article.</p>
+                </div>
+            }
+            else if (IsResourceContent(_selected))
+            {
+                <div class="content-preview-empty content-preview-resource">
+                    <span class="content-type-badge">@GetTypeLabel(_selected.ContentTypeKey)</span>
+                    <h3>@GetLang(_selected.Title)</h3>
+                    @if (!string.IsNullOrWhiteSpace(GetLang(_selected.Summary)))
+                    {
+                        <p class="text-muted">@GetLang(_selected.Summary)</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(ResourceHref(_selected)))
+                    {
+                        <a class="btn-admin btn-primary"
+                           href="@ResourceHref(_selected)"
+                           target="_blank"
+                           rel="noopener">
+                            @ResourceButtonText(_selected)
+                        </a>
+                    }
+                    else
+                    {
+                        <p class="text-muted">This resource does not have a file, video, or external URL yet.</p>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="content-preview-toolbar">
+                    <div>
+                        <strong>@GetLang(_selected.Title)</strong>
+                        <span>@GetTypeLabel(_selected.ContentTypeKey)</span>
+                    </div>
+                    <a class="btn-admin btn-secondary"
+                       href="@BuildUserSiteHref(_selected)"
+                       target="_blank"
+                       rel="noopener">
+                        @T("Open")
+                    </a>
+                </div>
+                <div class="content-preview-viewport" @ref="_previewViewport">
+                    <div class="content-preview-stage" data-content-preview-stage>
+                        <iframe class="content-preview-iframe"
+                                src="@BuildUserSiteHref(_selected)"
+                                title="@GetLang(_selected.Title)">
+                        </iframe>
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public string? ContentId { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private readonly List<ContentTypeModel> _types = new();
+    private readonly List<ContentItemModel> _items = new();
+    private ContentItemModel? _selected;
+    private bool _loading = true;
+    private bool _previewViewportInitialized;
+    private ElementReference _previewViewport;
+    private string _search = string.Empty;
+    private string _typeFilter = string.Empty;
+    private const int PreviewDesktopWidth = 1440;
+
+    private string UserSiteBaseUrl =>
+        (Config["UserSiteBaseUrl"] ?? "https://localhost:7113").TrimEnd('/');
+
+    private IEnumerable<ContentItemModel> FilteredItems =>
+        _items
+            .Where(item => string.Equals(item.Status, "Published", StringComparison.OrdinalIgnoreCase))
+            .Where(item => string.IsNullOrWhiteSpace(_typeFilter) || string.Equals(item.ContentTypeKey, _typeFilter, StringComparison.OrdinalIgnoreCase))
+            .Where(item => string.IsNullOrWhiteSpace(_search) ||
+                           GetLang(item.Title).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                           GetLang(item.Summary).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                           GetTypeLabel(item.ContentTypeKey).Contains(_search, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.UpdatedAt);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_selected is null || IsResourceContent(_selected) || !CanPreviewOnUserSite(_selected))
+            return;
+
+        if (!_previewViewportInitialized)
+        {
+            await JS.InvokeVoidAsync("contentPreviewViewport.init", "content-preview", _previewViewport, PreviewDesktopWidth);
+            _previewViewportInitialized = true;
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("contentPreviewViewport.refresh", "content-preview");
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        var typeRes = await ContentService.GetTypesAsync();
+        if (typeRes.Success && typeRes.Data is not null)
+        {
+            _types.Clear();
+            _types.AddRange(typeRes.Data);
+        }
+
+        var itemRes = await ContentService.GetAllAsync(status: "Published", scope: "all");
+        if (itemRes.Success && itemRes.Data is not null)
+        {
+            _items.Clear();
+            _items.AddRange(itemRes.Data);
+        }
+        else
+        {
+            Http.Toast(itemRes.Message, itemRes.StatusCode);
+        }
+
+        ApplySelection();
+        _loading = false;
+    }
+
+    private void ApplySelection()
+    {
+        _selected = !string.IsNullOrWhiteSpace(ContentId)
+            ? _items.FirstOrDefault(item => item.Id == ContentId)
+            : null;
+
+        if (_selected is not null && !FilteredItems.Any(item => item.Id == _selected.Id))
+            _selected = null;
+
+        _selected ??= FilteredItems.FirstOrDefault();
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        ApplySelection();
+    }
+
+    private void SelectContent(string id)
+    {
+        _previewViewportInitialized = false;
+        Nav.NavigateTo($"/content/preview/{Uri.EscapeDataString(id)}");
+    }
+
+    private bool CanPreviewOnUserSite(ContentItemModel item) =>
+        string.Equals(item.Status, "Published", StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(item.Slug);
+
+    private bool IsResourceContent(ContentItemModel item)
+    {
+        var type = FindType(item.ContentTypeKey);
+        if (type is not null && !type.RequiresBody)
+            return true;
+
+        return ResourceClickBehavior(item) is "download" or "video" or "external";
+    }
+
+    private string ResourceClickBehavior(ContentItemModel item)
+    {
+        var configured = FindType(item.ContentTypeKey)?.ClickBehavior?.Trim().ToLowerInvariant();
+        if (configured is "download" or "video" or "external")
+            return configured;
+        if (!string.IsNullOrWhiteSpace(item.VideoUrl) || item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))
+            return "video";
+        if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) || item.BodyItems.Any(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url)))
+            return "download";
+        if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
+            return "external";
+        return "detail";
+    }
+
+    private string ResourceHref(ContentItemModel item)
+    {
+        var behavior = ResourceClickBehavior(item);
+        return behavior switch
+        {
+            "video" => item.VideoUrl
+                ?? item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url
+                ?? string.Empty,
+            "external" => item.ExternalUrl ?? string.Empty,
+            "download" => item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url))?.Url
+                ?? item.BodyItems.FirstOrDefault(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url))?.Url
+                ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
+    private string ResourceButtonText(ContentItemModel item) =>
+        ResourceClickBehavior(item) switch
+        {
+            "video" => "Watch Video",
+            "external" => "Open Link",
+            _ => "Open File"
+        };
+
+    private string BuildUserSiteHref(ContentItemModel item)
+    {
+        var typeRoute = ContentTypeRoute(item.ContentTypeKey);
+        var slug = Uri.EscapeDataString(item.Slug ?? string.Empty);
+        return $"{UserSiteBaseUrl}/insights/{typeRoute}/{slug}";
+    }
+
+    private static string ContentTypeRoute(string type) => type switch
+    {
+        "article" => "articles",
+        "case-study" => "case-studies",
+        "whitepaper" => "whitepapers",
+        "video" => "videos",
+        "tool" => "tools",
+        "technology" => "technology",
+        _ => type
+    };
+
+    private ContentTypeModel? FindType(string key) =>
+        _types.FirstOrDefault(type => string.Equals(type.Key, key, StringComparison.OrdinalIgnoreCase));
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private string GetLang(Dictionary<string, string>? value)
+    {
+        if (value is null) return string.Empty;
+        if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized)) return localized;
+        if (value.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en)) return en;
+        return value.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+    }
+
+    private string GetTypeLabel(string key) =>
+        GetLang(_types.FirstOrDefault(type => string.Equals(type.Key, key, StringComparison.OrdinalIgnoreCase))?.Name) is { Length: > 0 } label
+            ? label
+            : key;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("contentPreviewViewport.dispose", "content-preview");
+        }
+        catch
+        {
+            // Component can be disposed after the circuit/browser context is already gone.
+        }
+    }
+}

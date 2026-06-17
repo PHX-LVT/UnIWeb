@@ -142,11 +142,15 @@ namespace FullProject.Services
         {
             var normalizedType = NormalizeRouteType(typeKey);
             var normalizedSlug = NormalizeSlug(slug, string.Empty);
+            var candidateTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { normalizedType };
+            if (normalizedType.EndsWith("s", StringComparison.OrdinalIgnoreCase) && normalizedType.Length > 1)
+                candidateTypes.Add(normalizedType[..^1]);
 
-            return await _context.ContentPublished.Find(c =>
-                    c.Visible &&
-                    c.ContentTypeKey == normalizedType &&
-                    c.Slug == normalizedSlug)
+            var filter = Builders<ContentItem>.Filter.Eq(c => c.Visible, true) &
+                         Builders<ContentItem>.Filter.In(c => c.ContentTypeKey, candidateTypes) &
+                         Builders<ContentItem>.Filter.Eq(c => c.Slug, normalizedSlug);
+
+            return await _context.ContentPublished.Find(filter)
                 .FirstOrDefaultAsync();
         }
 

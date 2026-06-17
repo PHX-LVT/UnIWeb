@@ -144,13 +144,73 @@ namespace FullProject.Models
     // AUTH
     // ═══════════════════════════════════════════════════════════
 
+    [BsonIgnoreExtraElements]
     public class AdminUser
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string FullName { get; set; } = "Admin";
         public string PasswordHash { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.String)]
+        public AdminRole Role { get; set; } = AdminRole.AdminAdmin;
+        [BsonRepresentation(BsonType.String)]
+        public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
+        public List<string> Permissions { get; set; } = new();
+        public int TokenVersion { get; set; } = 1;
+        public int FailedLoginAttempts { get; set; }
+        public DateTime? LockedUntil { get; set; }
+        public DateTime? LastLoginAt { get; set; }
+        public string? LastLoginIp { get; set; }
+        public DateTime? DisabledAt { get; set; }
+        public string? DisabledById { get; set; }
+        public string? CreatedById { get; set; }
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    public class AdminSessionRecord
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string AdminId { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string TokenId { get; set; } = string.Empty;
+        public int TokenVersion { get; set; } = 1;
+        public DateTime LoginAt { get; set; } = DateTime.UtcNow;
+        public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiresAt { get; set; } = DateTime.UtcNow;
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
+        public string BrowserName { get; set; } = "Unknown";
+        public string OperatingSystem { get; set; } = "Unknown";
+        public bool IsRevoked { get; set; }
+        public DateTime? RevokedAt { get; set; }
+        public string? RevokedById { get; set; }
+        [BsonRepresentation(BsonType.String)]
+        public AdminSessionRevokeReason? RevokeReason { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    public class AdminAuditLog
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.String)]
+        public AdminAuditArea Area { get; set; } = AdminAuditArea.Auth;
+        public string Action { get; set; } = string.Empty;
+        public string ActorId { get; set; } = string.Empty;
+        public string ActorEmail { get; set; } = string.Empty;
+        public string? TargetId { get; set; }
+        public string? TargetEmail { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 

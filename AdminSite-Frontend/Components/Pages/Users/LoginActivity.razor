@@ -1,0 +1,172 @@
+@page "/users/sessions"
+@inject AdminUserService Users
+@inject AdminAuthService Auth
+@inject IHttpService Http
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-clock"></i> @T("LoginActivity")</h1>
+    @if (Auth.IsAdminAdmin && _sessions.Any())
+    {
+        <button class="btn-admin btn-danger"
+                disabled="@(!_selectedSessionIds.Any() || _deleting)"
+                @onclick="DeleteSelectedSessions">
+            <i class="fas fa-trash"></i> @T("DeleteSelectedLogs")
+        </button>
+    }
+</div>
+
+<div class="admin-card">
+    @if (!Auth.CanViewLogs)
+    {
+        <p class="text-muted">@T("NoPermission")</p>
+    }
+    else if (_loading)
+    {
+        <p class="text-muted">@T("Loading")</p>
+    }
+    else if (!_sessions.Any())
+    {
+        <p class="text-muted">@T("NoSessions")</p>
+    }
+    else
+    {
+        <div style="overflow:auto">
+            <table class="table" style="width:100%">
+                <thead>
+                    <tr>
+                        @if (Auth.IsAdminAdmin)
+                        {
+                            <th style="width:42px">
+                                <input type="checkbox" checked="@AllSessionsSelected" @onchange="ToggleAllSessions" />
+                            </th>
+                        }
+                        <th>@T("Email")</th>
+                        <th>@T("LoginTime")</th>
+                        <th>@T("LastActivity")</th>
+                        <th>@T("Expires")</th>
+                        <th>@T("IpAddress")</th>
+                        <th>@T("Device")</th>
+                        <th>@T("Status")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _sessions)
+                    {
+                        <tr>
+                            @if (Auth.IsAdminAdmin)
+                            {
+                                <td>
+                                    <input type="checkbox"
+                                           checked="@_selectedSessionIds.Contains(item.Id)"
+                                           @onchange="e => ToggleSession(item.Id, e)" />
+                                </td>
+                            }
+                            <td>@item.Email</td>
+                            <td>@FormatDate(item.LoginAt)</td>
+                            <td>@FormatDate(item.LastActivityAt)</td>
+                            <td>@FormatDate(item.ExpiresAt)</td>
+                            <td>@item.IpAddress</td>
+                            <td>@DisplayDevice(item)</td>
+                            <td>
+                                @if (item.IsRevoked)
+                                {
+                                    <span class="content-status-pill is-deleted">@T("Revoked")</span>
+                                }
+                                else
+                                {
+                                    <span class="content-status-pill is-published">@T("Active")</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private readonly List<AdminSessionResponse> _sessions = new();
+    private readonly HashSet<string> _selectedSessionIds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _loading = true;
+    private bool _deleting;
+
+    private bool AllSessionsSelected =>
+        _sessions.Any() && _sessions.All(item => _selectedSessionIds.Contains(item.Id));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+
+        if (Auth.CanViewLogs)
+        {
+            await LoadAsync();
+        }
+
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        var res = await Users.GetSessionsAsync();
+        if (res.Success && res.Data is not null)
+        {
+            _sessions.Clear();
+            _sessions.AddRange(res.Data);
+            _selectedSessionIds.RemoveWhere(id => _sessions.All(item => item.Id != id));
+        }
+        else
+        {
+            Http.Toast(res.Message, res.StatusCode);
+        }
+    }
+
+    private void ToggleSession(string id, ChangeEventArgs e)
+    {
+        var selected = e.Value is bool value && value;
+        if (selected)
+            _selectedSessionIds.Add(id);
+        else
+            _selectedSessionIds.Remove(id);
+    }
+
+    private void ToggleAllSessions(ChangeEventArgs e)
+    {
+        var selected = e.Value is bool value && value;
+        _selectedSessionIds.Clear();
+        if (selected)
+        {
+            foreach (var item in _sessions)
+                _selectedSessionIds.Add(item.Id);
+        }
+    }
+
+    private async Task DeleteSelectedSessions()
+    {
+        if (!_selectedSessionIds.Any()) return;
+
+        _deleting = true;
+        var res = await Users.DeleteSessionsAsync(_selectedSessionIds);
+        Http.Toast(res.Message, res.StatusCode);
+        _deleting = false;
+        if (!res.Success) return;
+
+        _selectedSessionIds.Clear();
+        await LoadAsync();
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private static string FormatDate(DateTime? value) =>
+        value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
+
+    private static string DisplayDevice(AdminSessionResponse item)
+    {
+        var browser = string.IsNullOrWhiteSpace(item.BrowserName) ? "Browser" : item.BrowserName;
+        var os = string.IsNullOrWhiteSpace(item.OperatingSystem) ? "Unknown OS" : item.OperatingSystem;
+        return $"{browser} / {os}";
+    }
+}

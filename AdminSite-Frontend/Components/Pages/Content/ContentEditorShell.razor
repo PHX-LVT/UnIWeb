@@ -3,6 +3,7 @@
 @inject AdminContentService ContentService
 @inject IHttpService Http
 @inject NavigationManager Nav
+@inject AdminAuthService Auth
 
 <div class="page-header content-editor-header">
     <h1 class="page-title"><i class="fas fa-pen-nib"></i> @T(IsNew ? "NewContent" : "EditContent")</h1>
@@ -57,7 +58,7 @@ else
             </div>
 
             <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem">
-                <input type="checkbox" @bind="_edit.Visible" />
+                <input type="checkbox" @bind="_edit.Visible" disabled="@(!Auth.CanManageAllContent)" />
                 @T("Visible")
             </label>
 
@@ -83,6 +84,10 @@ else
                     @if (CanSubmit)
                     {
                         <button class="btn-admin btn-ghost" @onclick="Submit">@T(IsRejected ? "SubmitAgain" : "SubmitForReview")</button>
+                    }
+                    @if (CanReturnToDraft)
+                    {
+                        <button class="btn-admin btn-ghost" @onclick="ReturnToDraft">@T("Draft")</button>
                     }
                     @if (CanPublish)
                     {
@@ -389,12 +394,13 @@ else
     private bool IsPublished => string.Equals(_status, "Published", StringComparison.OrdinalIgnoreCase);
     private bool IsRejected => string.Equals(_status, "Rejected", StringComparison.OrdinalIgnoreCase);
     private bool IsDeleted => string.Equals(_status, "Deleted", StringComparison.OrdinalIgnoreCase);
-    private bool CanSaveDraft => !IsDeleted;
-    private bool CanSubmit => !IsSubmitted && !IsPublished && !IsDeleted;
-    private bool CanPublish => !IsDeleted && !IsNew;
-    private bool CanReject => IsSubmitted;
-    private bool CanDelete => !IsDeleted && !IsNew;
-    private bool CanRestore => IsDeleted && !IsNew;
+    private bool CanSaveDraft => (Auth.CanManageAllContent || Auth.IsWriter) && !IsDeleted;
+    private bool CanSubmit => (Auth.CanManageAllContent || Auth.IsWriter) && !IsSubmitted && !IsPublished && !IsDeleted;
+    private bool CanReturnToDraft => (Auth.CanManageAllContent || Auth.IsWriter) && !IsNew && !IsDraft && !IsDeleted;
+    private bool CanPublish => Auth.CanManageAllContent && !IsDeleted && !IsNew;
+    private bool CanReject => Auth.CanManageAllContent && IsSubmitted;
+    private bool CanDelete => Auth.CanManageAllContent && !IsDeleted && !IsNew;
+    private bool CanRestore => Auth.CanManageAllContent && IsDeleted && !IsNew;
     private string StatusClass => _status.ToLowerInvariant() switch
     {
         "submitted" => "is-submitted",
@@ -408,6 +414,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
         var typeRes = await ContentService.GetTypesAsync();
         _types = typeRes.Data ?? new();
         _edit.ContentTypeKey = _types.FirstOrDefault()?.Key ?? "article";
@@ -483,6 +491,7 @@ else
     }
 
     private async Task Submit() => await SetStatus("Submitted");
+    private async Task ReturnToDraft() => await SetStatus("Draft");
     private async Task Reject() => await SetStatus("Rejected");
 
     private async Task Publish()

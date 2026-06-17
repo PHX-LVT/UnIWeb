@@ -4,6 +4,7 @@ using FullProject.SectionServices;
 using FullProject.Services;
 using FullProject.Settings;
 using FullProject.Data;
+using FullProject.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
@@ -294,6 +295,7 @@ app.UseCors("AllowFrontends");
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<AdminSessionValidationMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 

@@ -1,0 +1,400 @@
+@page "/users"
+@inject AdminUserService Users
+@inject AdminAuthService Auth
+@inject IHttpService Http
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-users-cog"></i> @T("UserManagement")</h1>
+</div>
+
+@if (!Auth.CanManageUsers)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoPermission")</p>
+    </div>
+}
+else
+{
+    <div class="admin-card" style="margin-bottom:1rem">
+        <div style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
+            <input class="form-control"
+                   style="max-width:360px"
+                   placeholder="@T("SearchUsers")"
+                   value="@_search"
+                   @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+            <button class="btn-admin btn-primary" @onclick="OpenCreate">
+                <i class="fas fa-user-plus"></i> @T("AddUser")
+            </button>
+        </div>
+    </div>
+
+    <div class="admin-card">
+        @if (_loading)
+        {
+            <p class="text-muted">@T("Loading")</p>
+        }
+        else if (!FilteredUsers.Any())
+        {
+            <p class="text-muted">@T("NoUsers")</p>
+        }
+        else
+        {
+            <div style="overflow:auto">
+                <table class="table" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>@T("Name")</th>
+                            <th>@T("Email")</th>
+                            <th>@T("Role")</th>
+                            <th>@T("Status")</th>
+                            <th>@T("LastLogin")</th>
+                            <th>@T("Updated")</th>
+                            <th style="width:240px">@T("Actions")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in FilteredUsers)
+                        {
+                            <tr>
+                                <td style="font-weight:700">@user.FullName</td>
+                                <td>@user.Email</td>
+                                <td><span class="content-type-badge">@user.Role</span></td>
+                                <td><span class="content-status-pill @StatusClass(user.Status)">@user.Status</span></td>
+                                <td>@FormatDate(user.LastLoginAt)</td>
+                                <td>@FormatDate(user.UpdatedAt)</td>
+                                <td>
+                                    <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                                        <button class="btn-admin btn-ghost content-icon-btn" title="@T("Edit")" @onclick="() => OpenEdit(user)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn-admin btn-ghost content-icon-btn" title="@T("ResetPassword")" @onclick="() => OpenReset(user)">
+                                            <i class="fas fa-key"></i>
+                                        </button>
+                                        @if (user.Status == AdminUserStatus.Active)
+                                        {
+                                            <button class="btn-admin btn-danger content-icon-btn"
+                                                    title="@T("Disable")"
+                                                    disabled="@(user.Id == Auth.CurrentUser?.AdminId)"
+                                                    @onclick="() => DisableUser(user)">
+                                                <i class="fas fa-user-slash"></i>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn-admin btn-primary content-icon-btn" title="@T("Enable")" @onclick="() => EnableUser(user)">
+                                                <i class="fas fa-user-check"></i>
+                                            </button>
+                                        }
+                                        @if (Auth.IsAdminAdmin)
+                                        {
+                                            <button class="btn-admin btn-danger content-icon-btn"
+                                                    title="@T("DeleteAccount")"
+                                                    disabled="@(user.Id == Auth.CurrentUser?.AdminId)"
+                                                    @onclick="() => OpenDelete(user)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@if (_editing)
+{
+    <div class="modal-backdrop" @onclick="CloseEditor">
+        <div class="modal-box" style="max-width:760px" @onclick:stopPropagation="true">
+            <div class="modal-header">@(_editingId is null ? T("AddUser") : T("EditUser"))</div>
+            <div class="modal-body">
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem">
+                    <label>
+                        <span>@T("Name")</span>
+                        <input class="form-control" @bind="_edit.FullName" />
+                    </label>
+                    <label>
+                        <span>@T("Email")</span>
+                        <input class="form-control" @bind="_edit.Email" disabled="@(_editingId is not null)" />
+                    </label>
+                    @if (_editingId is null)
+                    {
+                        <label>
+                            <span>@T("Password")</span>
+                            <input class="form-control" type="password" @bind="_createPassword" />
+                        </label>
+                    }
+                    <label>
+                        <span>@T("Role")</span>
+                        <select class="form-control" @bind="_edit.Role">
+                            @foreach (var role in Enum.GetValues<AdminRole>())
+                            {
+                                <option value="@role">@role</option>
+                            }
+                        </select>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:.5rem;margin-top:1.65rem">
+                        <input type="checkbox" @bind="_edit.Active" />
+                        <span>@T("AccountEnabled")</span>
+                    </label>
+                </div>
+
+                <div style="margin-top:1rem">
+                    <div style="font-weight:700;margin-bottom:.5rem">@T("ExtraPermissions")</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.5rem">
+                        @foreach (var permission in AdminPermissionKeys.All)
+                        {
+                            <label style="display:flex;align-items:center;gap:.5rem;margin:0">
+                                <input type="checkbox"
+                                       checked="@_edit.Permissions.Contains(permission)"
+                                       @onchange="e => TogglePermission(permission, e)" />
+                                <span>@PermissionLabel(permission)</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseEditor">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" disabled="@_saving" @onclick="SaveUser">
+                    <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_deleteUser is not null)
+{
+    <div class="modal-backdrop" @onclick="CloseDelete">
+        <div class="modal-box" style="max-width:460px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("DeleteAccount")</div>
+            <div class="modal-body">
+                <p>@string.Format(T("DeleteAccountPrompt"), _deleteUser.Email)</p>
+                <p class="text-muted">@T("DeleteAccountTokenHint")</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseDelete">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" disabled="@_saving" @onclick="DeleteUser">
+                    <i class="fas fa-trash"></i> @T("DeleteAccount")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_resetUser is not null)
+{
+    <div class="modal-backdrop" @onclick="CloseReset">
+        <div class="modal-box" style="max-width:420px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("ResetPassword")</div>
+            <div class="modal-body">
+                <p class="text-muted">@_resetUser.Email</p>
+                <input class="form-control" type="password" placeholder="@T("NewPassword")" @bind="_resetPassword" />
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseReset">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" disabled="@_saving" @onclick="ResetPassword">@T("ResetPassword")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private readonly List<AdminUserResponse> _users = new();
+    private bool _loading = true;
+    private bool _saving;
+    private bool _editing;
+    private string? _editingId;
+    private string _createPassword = string.Empty;
+    private string _search = string.Empty;
+    private AdminUserEditModel _edit = new();
+    private AdminUserResponse? _resetUser;
+    private AdminUserResponse? _deleteUser;
+    private string _resetPassword = string.Empty;
+
+    private IEnumerable<AdminUserResponse> FilteredUsers =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _users.OrderBy(u => u.Email)
+            : _users.Where(u =>
+                    u.Email.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    u.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    u.Role.ToString().Contains(_search, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(u => u.Email);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var res = await Users.GetUsersAsync();
+        if (res.Success && res.Data is not null)
+        {
+            _users.Clear();
+            _users.AddRange(res.Data);
+        }
+        else
+        {
+            Http.Toast(res.Message, res.StatusCode);
+        }
+        _loading = false;
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _createPassword = string.Empty;
+        _edit = new AdminUserEditModel { Role = AdminRole.Writer, Active = true };
+        _editing = true;
+    }
+
+    private void OpenEdit(AdminUserResponse user)
+    {
+        _editingId = user.Id;
+        _edit = new AdminUserEditModel
+        {
+            Email = user.Email,
+            FullName = user.FullName,
+            Role = user.Role,
+            Active = user.Status == AdminUserStatus.Active,
+            Permissions = new List<string>(user.Permissions)
+        };
+        _editing = true;
+    }
+
+    private void CloseEditor() => _editing = false;
+
+    private async Task SaveUser()
+    {
+        _saving = true;
+        ApiResponse<AdminUserResponse> res;
+
+        if (_editingId is null)
+        {
+            res = await Users.CreateUserAsync(new AdminUserCreateRequest
+            {
+                Email = _edit.Email,
+                FullName = _edit.FullName,
+                Password = _createPassword,
+                Role = _edit.Role,
+                Permissions = _edit.Permissions,
+                Active = _edit.Active
+            });
+        }
+        else
+        {
+            res = await Users.UpdateUserAsync(_editingId, new AdminUserUpdateRequest
+            {
+                FullName = _edit.FullName,
+                Role = _edit.Role,
+                Permissions = _edit.Permissions,
+                Active = _edit.Active
+            });
+        }
+
+        Http.Toast(res.Message, res.StatusCode);
+        _saving = false;
+        if (!res.Success) return;
+
+        _editing = false;
+        await LoadAsync();
+    }
+
+    private void OpenReset(AdminUserResponse user)
+    {
+        _resetUser = user;
+        _resetPassword = string.Empty;
+    }
+
+    private void CloseReset() => _resetUser = null;
+
+    private void OpenDelete(AdminUserResponse user) => _deleteUser = user;
+
+    private void CloseDelete() => _deleteUser = null;
+
+    private async Task ResetPassword()
+    {
+        if (_resetUser is null) return;
+        _saving = true;
+        var res = await Users.ResetPasswordAsync(_resetUser.Id, _resetPassword);
+        Http.Toast(res.Message, res.StatusCode);
+        _saving = false;
+        if (res.Success)
+        {
+            CloseReset();
+            await LoadAsync();
+        }
+    }
+
+    private async Task EnableUser(AdminUserResponse user)
+    {
+        var res = await Users.EnableUserAsync(user.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) await LoadAsync();
+    }
+
+    private async Task DisableUser(AdminUserResponse user)
+    {
+        var res = await Users.DisableUserAsync(user.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success) await LoadAsync();
+    }
+
+    private async Task DeleteUser()
+    {
+        if (_deleteUser is null) return;
+
+        _saving = true;
+        var res = await Users.DeleteUserAsync(_deleteUser.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        _saving = false;
+        if (!res.Success) return;
+
+        CloseDelete();
+        await LoadAsync();
+    }
+
+    private void TogglePermission(string permission, ChangeEventArgs e)
+    {
+        var enabled = e.Value is bool b && b;
+        if (enabled && !_edit.Permissions.Contains(permission))
+            _edit.Permissions.Add(permission);
+        else if (!enabled)
+            _edit.Permissions.Remove(permission);
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private static string PermissionLabel(string permission) =>
+        permission.Replace("-", " ", StringComparison.OrdinalIgnoreCase);
+
+    private static string StatusClass(AdminUserStatus status) => status switch
+    {
+        AdminUserStatus.Active => "is-published",
+        AdminUserStatus.Locked => "is-submitted",
+        AdminUserStatus.Disabled => "is-deleted",
+        _ => string.Empty
+    };
+
+    private static string FormatDate(DateTime? value) =>
+        value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
+
+    private sealed class AdminUserEditModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public AdminRole Role { get; set; } = AdminRole.Writer;
+        public bool Active { get; set; } = true;
+        public List<string> Permissions { get; set; } = new();
+    }
+}

@@ -8,6 +8,7 @@
 @inject AdminAuthService Auth
 @inject IHttpService Http
 @inject NavigationManager Nav
+@inject IConfiguration Config
 @implements IDisposable
 
 <div class="page-header">
@@ -22,7 +23,7 @@
                    value="@_search"
                    @oninput="OnSearchChanged" />
         </div>
-        @if (_view == "deleted")
+        @if (_view == "deleted" && CanManageAllContent)
         {
             <button class="btn-admin btn-ghost"
                     disabled="@(!_selectedIds.Any())"
@@ -35,16 +36,22 @@
                 <i class="fas fa-trash"></i> @T("PermanentDeleteSelected") (@_selectedIds.Count)
             </button>
         }
-        else
+        else if (CanCreateContent || CanManageAllContent)
         {
-            <button class="btn-admin btn-danger"
-                    disabled="@(!_selectedIds.Any())"
-                    @onclick="AskBulkDelete">
-                <i class="fas fa-trash"></i> @T("DeleteSelected") (@_selectedIds.Count)
-            </button>
-            <button class="btn-admin btn-primary" @onclick="AddContent">
-                <i class="fas fa-plus"></i> @T("AddContent")
-            </button>
+            @if (CanManageAllContent)
+            {
+                <button class="btn-admin btn-danger"
+                        disabled="@(!_selectedIds.Any())"
+                        @onclick="AskBulkDelete">
+                    <i class="fas fa-trash"></i> @T("DeleteSelected") (@_selectedIds.Count)
+                </button>
+            }
+            @if (CanCreateContent)
+            {
+                <button class="btn-admin btn-primary" @onclick="AddContent">
+                    <i class="fas fa-plus"></i> @T("AddContent")
+                </button>
+            }
         }
     </div>
 </div>
@@ -72,7 +79,7 @@
     <div class="content-filter-row">
         <div class="content-filter-field">
             <label>@T("Status")</label>
-            <select class="form-control" @bind="_statusFilter" @bind:after="OnFilterChanged" disabled="@(_view is "submitted" or "published" or "deleted")">
+            <select class="form-control" @bind="_statusFilter" @bind:after="OnFilterChanged" disabled="@(!CanManageAllContent || _view is "submitted" or "published" or "deleted")">
                 @foreach (var option in StatusOptions)
                 {
                     <option value="@option.Value">@T(option.LabelKey)</option>
@@ -116,29 +123,38 @@
             <table class="table content-table" style="width:100%">
                 <thead>
                     <tr>
-                        <th style="width:38px">
-                            <input type="checkbox" checked="@AllPagedSelected" @onchange="ToggleAllPaged" />
-                        </th>
+                        @if (CanSelectRows)
+                        {
+                            <th style="width:38px">
+                                <input type="checkbox" checked="@AllPagedSelected" @onchange="ToggleAllPaged" />
+                            </th>
+                        }
                         <th>@T("Title")</th>
                         <th>@T("ContentType")</th>
                         <th>@T("Status")</th>
                         <th>@T("Author")</th>
                         <th>@T("Created")</th>
                         <th>@T("Updated")</th>
-                        <th style="width:110px">@T("Actions")</th>
+                        @if (ShowActionsColumn)
+                        {
+                            <th style="width:110px">@T("Actions")</th>
+                        }
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in PagedItems)
                     {
                         <tr>
+                            @if (CanSelectRows)
+                            {
+                                <td>
+                                    <input type="checkbox"
+                                           checked="@_selectedIds.Contains(item.Id)"
+                                           @onchange="e => ToggleSelected(item.Id, e)" />
+                                </td>
+                            }
                             <td>
-                                <input type="checkbox"
-                                       checked="@_selectedIds.Contains(item.Id)"
-                                       @onchange="e => ToggleSelected(item.Id, e)" />
-                            </td>
-                            <td>
-                                <a href="@EditHref(item.Id)" style="font-weight:600">@GetLang(item.Title)</a>
+                                <a href="@TitleHref(item)" target="@TitleTarget(item)" rel="@TitleRel(item)" style="font-weight:600">@GetLang(item.Title)</a>
                             </td>
                             <td><span class="content-type-badge">@GetTypeLabel(item.ContentTypeKey)</span></td>
                             <td><span class="content-status-pill @StatusPillClass(item.Status)">@DisplayStatus(item.Status)</span></td>
@@ -150,33 +166,33 @@
                             </td>
                             <td>@item.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td>
                             <td>@item.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
-                            <td>
-                                <div class="content-row-actions">
-                                    @if (CanPreview(item))
-                                    {
-                                        <a class="btn-admin btn-ghost content-icon-btn" href="@PreviewHref(item)" target="_blank" rel="noopener" title="@T("Preview")">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                    }
-                                    else
-                                    {
-                                        <button class="btn-admin btn-ghost content-icon-btn" disabled title="@T("Preview")">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                    }
-                                    <a class="btn-admin btn-ghost content-icon-btn" href="@EditHref(item.Id)" title="@T("Edit")">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                    @if (!IsDeleted(item))
-                                    {
-                                        <button class="btn-admin btn-danger content-icon-btn"
-                                                title="@T("Delete")"
-                                                @onclick="() => AskDelete(item.Id)">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    }
-                                </div>
-                            </td>
+                            @if (ShowActionsColumn)
+                            {
+                                <td>
+                                    <div class="content-row-actions">
+                                        @if (CanPreview(item) && CanUseAdminPreview(item))
+                                        {
+                                            <a class="btn-admin btn-ghost content-icon-btn" href="@PreviewHref(item)" target="_blank" rel="noopener" title="@T("Preview")">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        }
+                                        @if (CanEditItem(item))
+                                        {
+                                            <a class="btn-admin btn-ghost content-icon-btn" href="@EditHref(item.Id)" title="@T("Edit")">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                        }
+                                        @if (CanDeleteItem(item))
+                                        {
+                                            <button class="btn-admin btn-danger content-icon-btn"
+                                                    title="@T("Delete")"
+                                                    @onclick="() => AskDelete(item.Id)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            }
                         </tr>
                     }
                 </tbody>
@@ -278,6 +294,10 @@
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentAdminId => Auth.CurrentUser?.AdminId ?? string.Empty;
     private string CurrentAdminEmail => Auth.CurrentUser?.Email ?? string.Empty;
+    private bool CanManageAllContent => Auth.CanManageAllContent;
+    private bool CanCreateContent => CanManageAllContent || Auth.IsWriter;
+    private bool CanSelectRows => CanManageAllContent;
+    private bool ShowActionsColumn => CanManageAllContent || (_view is "my" or "submitted" && Auth.IsWriter);
 
     private string ViewTitleKey => _view switch
     {
@@ -318,10 +338,12 @@
             items = _view switch
             {
                 "my" => items.Where(IsMine).Where(i => !IsDeleted(i)),
-                "submitted" => items.Where(i => SameStatus(i, "Submitted")),
+                "submitted" => items.Where(i => SameStatus(i, "Submitted")).Where(i => CanManageAllContent || IsMine(i)),
                 "published" => items.Where(i => SameStatus(i, "Published")),
                 "deleted" => items.Where(i => SameStatus(i, "Deleted")),
-                _ => items.Where(i => !IsDeleted(i))
+                _ => CanManageAllContent
+                    ? items.Where(i => !IsDeleted(i))
+                    : items.Where(i => SameStatus(i, "Published"))
             };
 
             if (!string.IsNullOrWhiteSpace(_statusFilter) && _view is "all" or "my")
@@ -412,7 +434,7 @@
     private async Task LoadItems()
     {
         _loading = true;
-        var res = await ContentService.GetAllAsync();
+        var res = await ContentService.GetAllAsync(scope: _view);
         _items = res.Data ?? new();
         _loading = false;
         _selectedIds.RemoveWhere(id => !_items.Any(item => item.Id == id));
@@ -421,7 +443,7 @@
     private string ResolveView()
     {
         var path = new Uri(Nav.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
-        return path switch
+        var resolved = path switch
         {
             "content/my" => "my",
             "content/submitted" => "submitted",
@@ -429,6 +451,14 @@
             "content/deleted" => "deleted",
             _ => "all"
         };
+
+        if (!CanManageAllContent && resolved is "published" or "deleted")
+            return "all";
+
+        if (!CanCreateContent && resolved is "my" or "submitted")
+            return "all";
+
+        return resolved;
     }
 
     private void AddContent() => Nav.NavigateTo($"/content/new?return={Uri.EscapeDataString(CurrentReturnPath)}");
@@ -475,12 +505,13 @@
 
     private void AskDelete(string id)
     {
+        if (!CanManageAllContent) return;
         _deleteId = id;
     }
 
     private void AskBulkDelete()
     {
-        if (_view == "deleted" || !_selectedIds.Any()) return;
+        if (!CanManageAllContent || _view == "deleted" || !_selectedIds.Any()) return;
         _confirmBulkDelete = true;
     }
 
@@ -512,7 +543,7 @@
 
     private void AskPermanentDelete()
     {
-        if (_view != "deleted" || !_selectedIds.Any()) return;
+        if (!CanManageAllContent || _view != "deleted" || !_selectedIds.Any()) return;
         _confirmPermanentDelete = true;
     }
 
@@ -529,7 +560,7 @@
 
     private async Task RestoreSelected()
     {
-        if (_view != "deleted" || !_selectedIds.Any()) return;
+        if (!CanManageAllContent || _view != "deleted" || !_selectedIds.Any()) return;
 
         foreach (var id in _selectedIds.ToList())
         {
@@ -616,10 +647,39 @@
     private static string AuthorHref(string authorId) => $"/employees/{Uri.EscapeDataString(authorId)}/content";
 
     private static bool CanPreview(ContentItemModel item) =>
-        SameStatus(item, "Published") && !string.IsNullOrWhiteSpace(item.Slug);
+        !SameStatus(item, "Deleted");
 
     private static string PreviewHref(ContentItemModel item) =>
-        $"/insights/{ContentTypeRoute(item.ContentTypeKey)}/{Uri.EscapeDataString(item.Slug)}";
+        $"/content/preview/{Uri.EscapeDataString(item.Id)}";
+
+    private bool CanUseAdminPreview(ContentItemModel item) =>
+        CanManageAllContent || (Auth.IsWriter && IsMine(item));
+
+    private bool CanEditItem(ContentItemModel item) =>
+        CanManageAllContent ||
+        (Auth.IsWriter && IsMine(item) && !IsDeleted(item));
+
+    private bool CanDeleteItem(ContentItemModel item) =>
+        CanManageAllContent && !IsDeleted(item);
+
+    private string TitleHref(ContentItemModel item) =>
+        CanEditItem(item) && _view is not "all"
+            ? EditHref(item.Id)
+            : PublicContentHref(item);
+
+    private string? TitleTarget(ContentItemModel item) =>
+        TitleHref(item).StartsWith("/content/edit", StringComparison.OrdinalIgnoreCase) ? null : "_blank";
+
+    private string? TitleRel(ContentItemModel item) =>
+        TitleTarget(item) is null ? null : "noopener";
+
+    private string PublicContentHref(ContentItemModel item) =>
+        string.IsNullOrWhiteSpace(item.Slug)
+            ? "#"
+            : $"{UserSiteBaseUrl}/insights/{ContentTypeRoute(item.ContentTypeKey)}/{Uri.EscapeDataString(item.Slug)}";
+
+    private string UserSiteBaseUrl =>
+        (Config["UserSiteBaseUrl"] ?? "https://localhost:7113").TrimEnd('/');
 
     private static string ContentTypeRoute(string type) => type switch
     {
@@ -629,7 +689,7 @@
         "video" => "videos",
         "tool" => "tools",
         "technology" => "technology",
-        _ => $"{type}s"
+        _ => type
     };
 
     private string DisplayAuthor(string authorId)

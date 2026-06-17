@@ -434,7 +434,8 @@
             }
             catch
             {
-                Http.Toast("Language sorting failed to initialize.", 500);
+                _languageSortableInitialized = true;
+                Http.Toast("Language reorder drag failed to initialize.", 500);
             }
         }
     }

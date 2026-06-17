@@ -3,6 +3,7 @@
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 @inject IJSRuntime JS
+@inject AdminAuthService Auth
 @using Contracts.Admin
 @implements IAsyncDisposable
 
@@ -26,7 +27,7 @@
                         data-root-page-id="@(page.Id)"
                         @onclick="() => SelectPage(page)">
                     @PageTitle(page)
-                    @if (_activeParentPage?.Id == page.Id)
+                    @if (CanEditDashboard && _editMode && _activeParentPage?.Id == page.Id)
                     {
                         <span class="ez-tab__action" title="Settings"
                               @onclick:stopPropagation="true"
@@ -41,9 +42,12 @@
                     }
                 </button>
             }
-            <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
-                <i class="fas fa-plus"></i>
-            </button>
+            @if (CanEditDashboard && _editMode)
+            {
+                <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
+                    <i class="fas fa-plus"></i>
+                </button>
+            }
         </div>
 
         <div class="ez-dashboard__canvas">
@@ -60,7 +64,10 @@
                         OnManageChildPages="ShowChildPageManager"
                         OnOpenPageSettings="OpenSettings"
                         OnDeletePage="RequestDeletePage"
-                        OnPageStatusChanged="HandlePageStatusChanged" />
+                        OnPageStatusChanged="HandlePageStatusChanged"
+                        EditMode="@_editMode"
+                        CanEdit="@CanEditDashboard"
+                        OnModeChanged="SetMode" />
             }
         </div>
     }
@@ -297,9 +304,12 @@
     private bool _saving = false;
     private bool _pageSortableInitialized = false;
     private bool _childPageSortableInitialized = false;
+    private bool _editMode = true;
     private ElementReference _pageTabsRef;
     private ElementReference _childPageListRef;
     private DotNetObjectReference<Dashboard>? _dotNetRef;
+
+    private bool CanEditDashboard => Auth.CanUsePageBuilder;
 
     // Create flow
     private bool _showPagePicker = false;
@@ -372,6 +382,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        _editMode = CanEditDashboard;
         await LoadPages();
         _loading = false;
     }
@@ -383,7 +396,7 @@
             _dotNetRef = DotNetObjectReference.Create(this);
         }
 
-        if (!_loading && !_pageSortableInitialized && _dotNetRef is not null)
+        if (!_loading && CanEditDashboard && _editMode && !_pageSortableInitialized && _dotNetRef is not null)
         {
             try
             {
@@ -407,6 +420,8 @@
 
         if (_showChildPageManager &&
             _childPages.Count > 0 &&
+            CanEditDashboard &&
+            _editMode &&
             !_childPageSortableInitialized &&
             _dotNetRef is not null)
         {
@@ -629,6 +644,22 @@
         catch (JSDisconnectedException)
         {
         }
+    }
+
+    private async Task SetMode(bool editMode)
+    {
+        if (editMode && !CanEditDashboard)
+            return;
+
+        _editMode = editMode;
+        _pageSortableInitialized = false;
+        _childPageSortableInitialized = false;
+        if (!editMode)
+        {
+            await JS.InvokeVoidAsync("disposeAdminSortable", "dashboard-root-pages");
+            await JS.InvokeVoidAsync("disposeAdminSortable", "dashboard-child-pages");
+        }
+        StateHasChanged();
     }
 
     private void OnTemplatePicked(string template)

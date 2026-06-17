@@ -23,13 +23,15 @@ namespace AdminSite.Services
         public Task<ApiResponse<object>> DeleteTypeAsync(string id) =>
             _http.DeleteAsync<object>($"api/admin/content/types/{id}");
 
-        public Task<ApiResponse<List<ContentItemModel>>> GetAllAsync(string? typeKey = null, string? status = null)
+        public Task<ApiResponse<List<ContentItemModel>>> GetAllAsync(string? typeKey = null, string? status = null, string? scope = null)
         {
             var query = new List<string>();
             if (!string.IsNullOrWhiteSpace(typeKey))
                 query.Add($"typeKey={Uri.EscapeDataString(typeKey)}");
             if (!string.IsNullOrWhiteSpace(status))
                 query.Add($"status={Uri.EscapeDataString(status)}");
+            if (!string.IsNullOrWhiteSpace(scope))
+                query.Add($"scope={Uri.EscapeDataString(scope)}");
 
             var suffix = query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
             return _http.GetAsync<List<ContentItemModel>>($"api/admin/content{suffix}");

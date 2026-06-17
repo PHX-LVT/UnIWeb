@@ -1,0 +1,134 @@
+@page "/account"
+@inject AdminUserService Users
+@inject AdminAuthService Auth
+@inject IHttpService Http
+@inject NavigationManager Nav
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-user-circle"></i> @T("AccountManagement")</h1>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(280px,420px) minmax(0,1fr);gap:1rem;align-items:start">
+    <div class="admin-card">
+        <div class="admin-card-title">@T("Profile")</div>
+        <div style="display:grid;gap:.5rem">
+            <div><strong>@T("Name"):</strong> @Auth.CurrentUser?.FullName</div>
+            <div><strong>@T("Email"):</strong> @Auth.CurrentUser?.Email</div>
+            <div><strong>@T("Role"):</strong> @Auth.CurrentUser?.Role</div>
+        </div>
+
+        <hr />
+
+        <div class="admin-card-title">@T("ChangePassword")</div>
+        <div style="display:grid;gap:.75rem">
+            <input class="form-control" type="password" placeholder="@T("CurrentPassword")" @bind="_currentPassword" />
+            <input class="form-control" type="password" placeholder="@T("NewPassword")" @bind="_newPassword" />
+            <button class="btn-admin btn-primary" disabled="@_saving" @onclick="ChangePassword">
+                <i class="fas fa-key"></i> @(_saving ? T("Saving") : T("ChangePassword"))
+            </button>
+            <p class="text-muted" style="margin:0">@T("ChangePasswordSignsOutHint")</p>
+        </div>
+    </div>
+
+    <div class="admin-card">
+        <div class="admin-card-title">@T("MyLoginActivity")</div>
+        @if (_loading)
+        {
+            <p class="text-muted">@T("Loading")</p>
+        }
+        else if (!_sessions.Any())
+        {
+            <p class="text-muted">@T("NoSessions")</p>
+        }
+        else
+        {
+            <div style="overflow:auto">
+                <table class="table" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>@T("LoginTime")</th>
+                            <th>@T("LastActivity")</th>
+                            <th>@T("IpAddress")</th>
+                            <th>@T("Device")</th>
+                            <th>@T("Status")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _sessions)
+                        {
+                            <tr>
+                                <td>@FormatDate(item.LoginAt)</td>
+                                <td>@FormatDate(item.LastActivityAt)</td>
+                                <td>@item.IpAddress</td>
+                                <td>@DisplayDevice(item)</td>
+                                <td>
+                                    @if (item.IsRevoked)
+                                    {
+                                        <span class="content-status-pill is-deleted">@T("Revoked")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="content-status-pill is-published">@T("Active")</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private readonly List<AdminSessionResponse> _sessions = new();
+    private bool _loading = true;
+    private bool _saving;
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        await LoadSessionsAsync();
+    }
+
+    private async Task LoadSessionsAsync()
+    {
+        var res = await Users.GetMySessionsAsync();
+        if (res.Success && res.Data is not null)
+            _sessions.AddRange(res.Data);
+        else
+            Http.Toast(res.Message, res.StatusCode);
+
+        _loading = false;
+    }
+
+    private async Task ChangePassword()
+    {
+        _saving = true;
+        var res = await Users.UpdatePasswordAsync(_currentPassword, _newPassword);
+        Http.Toast(res.Message, res.StatusCode);
+        _saving = false;
+
+        if (!res.Success) return;
+
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login");
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private static string FormatDate(DateTime? value) =>
+        value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
+
+    private static string DisplayDevice(AdminSessionResponse item)
+    {
+        var browser = string.IsNullOrWhiteSpace(item.BrowserName) ? "Browser" : item.BrowserName;
+        var os = string.IsNullOrWhiteSpace(item.OperatingSystem) ? "Unknown OS" : item.OperatingSystem;
+        return $"{browser} / {os}";
+    }
+}

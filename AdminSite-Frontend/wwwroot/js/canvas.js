@@ -92,6 +92,62 @@ window.contentRichTextEditor = (() => {
     };
 })();
 
+window.contentPreviewViewport = (() => {
+    const entries = {};
+    const desktopWidth = 1440;
+
+    const update = (root, width) => {
+        if (!root) return;
+        const stage = root.querySelector("[data-content-preview-stage]");
+        const iframe = root.querySelector("iframe");
+        if (!stage || !iframe) return;
+
+        const availableWidth = Math.max(root.clientWidth - 2, 320);
+        const scale = Math.min(1, availableWidth / width);
+        const viewportHeight = Math.max(root.clientHeight || 900, window.innerHeight * 0.72);
+        const iframeHeight = Math.max(1100, Math.ceil(viewportHeight / Math.max(scale, 0.1)));
+
+        stage.style.width = `${Math.ceil(width * scale)}px`;
+        stage.style.height = `${Math.ceil(iframeHeight * scale)}px`;
+        iframe.style.width = `${width}px`;
+        iframe.style.height = `${iframeHeight}px`;
+        iframe.style.transform = `scale(${scale})`;
+        iframe.style.transformOrigin = "top left";
+    };
+
+    return {
+        init(key, root, width) {
+            if (!key || !root) return;
+            this.dispose(key);
+
+            const previewWidth = Number(width) > 0 ? Number(width) : desktopWidth;
+            const resize = () => update(root, previewWidth);
+            const observer = typeof ResizeObserver !== "undefined"
+                ? new ResizeObserver(resize)
+                : null;
+
+            observer?.observe(root);
+            window.addEventListener("resize", resize);
+            entries[key] = { root, resize, observer };
+
+            resize();
+            setTimeout(resize, 50);
+            setTimeout(resize, 250);
+        },
+        refresh(key) {
+            const entry = entries[key];
+            if (entry) entry.resize();
+        },
+        dispose(key) {
+            const entry = entries[key];
+            if (!entry) return;
+            entry.observer?.disconnect();
+            window.removeEventListener("resize", entry.resize);
+            delete entries[key];
+        }
+    };
+})();
+
 window.initSlotSortable = (slotContainer, dotnet, slotId) => {
     if (!slotContainer || typeof Sortable === "undefined") return;
 

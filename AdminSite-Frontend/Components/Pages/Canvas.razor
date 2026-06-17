@@ -29,58 +29,69 @@
             </div>
         </div>
         <div class="ez-canvas__toolbar-right">
-            <button class="btn-admin btn-ghost" @onclick="OnAddSection">
-                <i class="fas fa-plus"></i>
-                <span>@T("AddSection")</span>
+            <button class="btn-admin btn-primary"
+                    type="button"
+                    disabled="@(!CanEdit && !EditMode)"
+                    title="@(!CanEdit && !EditMode ? T("EditModeRequiresPermission") : ActiveModeLabel)"
+                    @onclick="ToggleMode">
+                <i class="fas @ActiveModeIcon"></i>
+                <span>@ActiveModeLabel</span>
             </button>
-            <button class="btn-admin btn-ghost"
-                    title="@AddChildTitle"
-                    disabled="@(!CanAddChildPage)"
-                    @onclick="OnAddChildPage">
-                <i class="fas fa-sitemap"></i>
-                <span>@T("AddChildPage")</span>
-            </button>
-            @if (Page.Status == PageStatus.Published)
+            @if (CanModify)
             {
+                <button class="btn-admin btn-ghost" @onclick="OnAddSection">
+                    <i class="fas fa-plus"></i>
+                    <span>@T("AddSection")</span>
+                </button>
                 <button class="btn-admin btn-ghost"
-                        @onclick="ResetPage"
-                        disabled="@(_resetting || _publishing)">
-                    @if (_resetting)
+                        title="@AddChildTitle"
+                        disabled="@(!CanAddChildPage)"
+                        @onclick="OnAddChildPage">
+                    <i class="fas fa-sitemap"></i>
+                    <span>@T("AddChildPage")</span>
+                </button>
+                @if (Page.Status == PageStatus.Published)
+                {
+                    <button class="btn-admin btn-ghost"
+                            @onclick="ResetPage"
+                            disabled="@(_resetting || _publishing)">
+                        @if (_resetting)
+                        {
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>@T("Resetting")</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-undo"></i>
+                            <span>@T("Reset")</span>
+                        }
+                    </button>
+                }
+                <button class="btn-admin btn-primary"
+                        @onclick="PublishPage"
+                        disabled="@(_publishing || _resetting)">
+                    @if (_publishing)
                     {
                         <i class="fas fa-spinner fa-spin"></i>
-                        <span>@T("Resetting")</span>
+                        <span>@T("Publishing")</span>
                     }
                     else
                     {
-                        <i class="fas fa-undo"></i>
-                        <span>@T("Reset")</span>
+                        <i class="fas fa-globe"></i>
+                        <span>@T("Publish")</span>
                     }
                 </button>
-            }
-            <button class="btn-admin btn-primary"
-                    @onclick="PublishPage"
-                    disabled="@(_publishing || _resetting)">
-                @if (_publishing)
+                @if (IsChildPage)
                 {
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>@T("Publishing")</span>
+                    <button class="btn-admin btn-ghost" title="Child page settings"
+                            @onclick="() => OnOpenPageSettings.InvokeAsync(Page)">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button class="btn-admin btn-ghost btn-danger" title="Delete child page"
+                            @onclick="() => OnDeletePage.InvokeAsync(Page)">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 }
-                else
-                {
-                    <i class="fas fa-globe"></i>
-                    <span>@T("Publish")</span>
-                }
-            </button>
-            @if (IsChildPage)
-            {
-                <button class="btn-admin btn-ghost" title="Child page settings"
-                        @onclick="() => OnOpenPageSettings.InvokeAsync(Page)">
-                    <i class="fas fa-cog"></i>
-                </button>
-                <button class="btn-admin btn-ghost btn-danger" title="Delete child page"
-                        @onclick="() => OnDeletePage.InvokeAsync(Page)">
-                    <i class="fas fa-trash"></i>
-                </button>
             }
         </div>
     </div>
@@ -115,85 +126,88 @@
                     </div>
                 }
 
-                <div @ref="_overlayRef"
-                     style="position: absolute; top: 0; left: 0;
-                            width: 100%; height: 100%;
-                            pointer-events: none; z-index: 10;">
+                @if (CanModify)
+                {
+                    <div @ref="_overlayRef"
+                         style="position: absolute; top: 0; left: 0;
+                                width: 100%; height: 100%;
+                                pointer-events: none; z-index: 10;">
 
-                    @foreach (var pos in _sectionPositions)
-                    {
-                        var section = Sections.FirstOrDefault(s => s.Id == pos.Id);
-                        if (section is null) continue;
+                        @foreach (var pos in _sectionPositions)
+                        {
+                            var section = Sections.FirstOrDefault(s => s.Id == pos.Id);
+                            if (section is null) continue;
 
-                        <div class="ez-section-overlay @(!section.Visible ? "ez-section-overlay--hidden" : "")"
-                             data-section-id="@(section.Id)"
-                             style="position: absolute;
-                                    top: @(pos.Top)px;
-                                    left: 0;
-                                    width: 100%;
-                                    height: @(pos.Height)px;
-                                    pointer-events: none;">
+                            <div class="ez-section-overlay @(!section.Visible ? "ez-section-overlay--hidden" : "")"
+                                 data-section-id="@(section.Id)"
+                                 style="position: absolute;
+                                        top: @(pos.Top)px;
+                                        left: 0;
+                                        width: 100%;
+                                        height: @(pos.Height)px;
+                                        pointer-events: none;">
 
-                            <div class="ez-section-controls"
-                                 style="pointer-events: auto; position: relative; z-index: 2;"
-                                 @onclick:stopPropagation="true">
-                                <button class="ez-section-btn ez-section-handle" title="Drag to reorder">
-                                    <i class="fas fa-grip-vertical"></i>
-                                </button>
-                                <span class="ez-section-label">@(section.Type)</span>
-                                <button class="ez-section-btn" title="@T("Edit")"
-                                        @onclick="() => SelectSection(section)">
-                                    <i class="fas fa-pencil-alt"></i>
-                                </button>
-                                <button class="ez-section-btn" title="@(section.Visible ? T("Hide") : T("Show"))"
-                                        @onclick="() => ToggleVisibility(section)">
-                                    <i class="fas @(section.Visible ? "fa-eye" : "fa-eye-slash")"></i>
-                                </button>
-                                <button class="ez-section-btn ez-section-btn--danger" title="@T("Delete")"
-                                        @onclick="() => DeleteSection(section)">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <div class="ez-section-controls"
+                                     style="pointer-events: auto; position: relative; z-index: 2;"
+                                     @onclick:stopPropagation="true">
+                                    <button class="ez-section-btn ez-section-handle" title="Drag to reorder">
+                                        <i class="fas fa-grip-vertical"></i>
+                                    </button>
+                                    <span class="ez-section-label">@(section.Type)</span>
+                                    <button class="ez-section-btn" title="@T("Edit")"
+                                            @onclick="() => SelectSection(section)">
+                                        <i class="fas fa-pencil-alt"></i>
+                                    </button>
+                                    <button class="ez-section-btn" title="@(section.Visible ? T("Hide") : T("Show"))"
+                                            @onclick="() => ToggleVisibility(section)">
+                                        <i class="fas @(section.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                                    </button>
+                                    <button class="ez-section-btn ez-section-btn--danger" title="@T("Delete")"
+                                            @onclick="() => DeleteSection(section)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+
+                                <div style="position: absolute; inset: 0;
+                                            pointer-events: auto; cursor: pointer; z-index: 1;"
+                                     @onclick="() => SelectSection(section)">
+                                </div>
                             </div>
+                        }
 
-                            <div style="position: absolute; inset: 0;
-                                        pointer-events: @(AllowsIframeInteraction(section) ? "none" : "auto"); cursor: pointer; z-index: 1;"
-                                 @onclick="() => SelectSection(section)">
+                        @foreach (var block in _blockPositions)
+                        {
+                            <div class="ez-freeform-block-overlay"
+                                 data-section-id="@block.SectionId"
+                                 data-block-id="@block.Id"
+                                 data-section-left="@block.SectionLeft"
+                                 data-section-top="@block.SectionTop"
+                                 data-section-width="@block.SectionWidth"
+                                 data-section-height="@block.SectionHeight"
+                                 style="position: absolute;
+                                        top: @(block.Top)px;
+                                        left: @(block.Left)px;
+                                        width: @(block.Width)px;
+                                        height: @(block.Height)px;
+                                        pointer-events: auto;
+                                        z-index: 5;">
+                                <button type="button"
+                                        class="ez-freeform-block-handle"
+                                        title="Move block">
+                                    <i class="fas fa-arrows-alt"></i>
+                                </button>
+                                <span class="ez-freeform-block-label">block</span>
+                                <span class="ez-freeform-block-resize" title="Resize block"></span>
                             </div>
-                        </div>
-                    }
-
-                    @foreach (var block in _blockPositions)
-                    {
-                        <div class="ez-freeform-block-overlay"
-                             data-section-id="@block.SectionId"
-                             data-block-id="@block.Id"
-                             data-section-left="@block.SectionLeft"
-                             data-section-top="@block.SectionTop"
-                             data-section-width="@block.SectionWidth"
-                             data-section-height="@block.SectionHeight"
-                             style="position: absolute;
-                                    top: @(block.Top)px;
-                                    left: @(block.Left)px;
-                                    width: @(block.Width)px;
-                                    height: @(block.Height)px;
-                                    pointer-events: auto;
-                                    z-index: 5;">
-                            <button type="button"
-                                    class="ez-freeform-block-handle"
-                                    title="Move block">
-                                <i class="fas fa-arrows-alt"></i>
-                            </button>
-                            <span class="ez-freeform-block-label">block</span>
-                            <span class="ez-freeform-block-resize" title="Resize block"></span>
-                        </div>
-                    }
-                </div>
+                        }
+                    </div>
+                }
             </div>
         </div>
     </div>
 </div>
 
-<DxWindow Visible="@(_selectedSection is not null)"
+<DxWindow Visible="@(CanModify && _selectedSection is not null)"
           VisibleChanged="@((bool visible) => { if (!visible) ClosePanel(); })"
           Width="650px"
           Height="calc(100vh - 72px)"
@@ -235,6 +249,9 @@
     [Parameter] public EventCallback<PageModel> OnOpenPageSettings { get; set; }
     [Parameter] public EventCallback<PageModel> OnDeletePage { get; set; }
     [Parameter] public EventCallback OnPageStatusChanged { get; set; }
+    [Parameter] public bool EditMode { get; set; } = true;
+    [Parameter] public bool CanEdit { get; set; } = true;
+    [Parameter] public EventCallback<bool> OnModeChanged { get; set; }
 
     private SectionModel? _selectedSection;
     private bool _publishing = false;
@@ -250,9 +267,13 @@
     private string? _currentPageId;
     private string? _currentPreviewUrl;
     private string? _currentLang;
+    private bool? _currentCanModify;
     private int _previewVersion;
     private bool IsChildPage => !string.IsNullOrWhiteSpace(Page.ParentPageId);
     private bool CanAddChildPage => !IsChildPage;
+    private bool CanModify => CanEdit && EditMode;
+    private string ActiveModeLabel => EditMode ? T("EditMode") : T("PreviewMode");
+    private string ActiveModeIcon => EditMode ? "fa-edit" : "fa-eye";
     private string AddChildTitle => CanAddChildPage
         ? "Create a child page under this parent page."
         : "Child pages cannot have child pages. Select the parent page to add another child page.";
@@ -285,10 +306,15 @@
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
-    private static bool AllowsIframeInteraction(SectionModel section) =>
-        string.Equals(section.Type, "library", StringComparison.OrdinalIgnoreCase);
-
     private Task SelectPage(string id) => OnPageSelected.InvokeAsync(id);
+
+    private Task ToggleMode()
+    {
+        if (!CanEdit && !EditMode)
+            return Task.CompletedTask;
+
+        return OnModeChanged.InvokeAsync(!EditMode);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -308,7 +334,7 @@
             }
         }
 
-        if (!_sortableInitialized && _sectionPositions.Count > 0 && _dotNetRef is not null)
+        if (CanModify && !_sortableInitialized && _sectionPositions.Count > 0 && _dotNetRef is not null)
         {
             try
             {
@@ -326,8 +352,9 @@
     protected override void OnParametersSet()
     {
         var langChanged = _currentLang != AdminLanguage;
+        var modeChanged = _currentCanModify != CanModify;
         var previewUrl = PreviewUrl;
-        if (_currentPageId == Page.Id && _currentPreviewUrl == previewUrl && !langChanged) return;
+        if (_currentPageId == Page.Id && _currentPreviewUrl == previewUrl && !langChanged && !modeChanged) return;
 
         if (langChanged)
         {
@@ -337,6 +364,7 @@
 
         _currentPageId = Page.Id;
         _currentPreviewUrl = PreviewUrl;
+        _currentCanModify = CanModify;
         _sectionPositions = new();
         _blockPositions = new();
         _iframeHeight = 2000;

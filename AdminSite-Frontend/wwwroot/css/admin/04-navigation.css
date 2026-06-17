@@ -462,6 +462,149 @@
     background: #fafaf8;
 }
 
+.content-preview-workspace {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.content-preview-list {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 140px);
+    overflow: auto;
+}
+
+.content-preview-list__items {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.content-preview-list__item {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: .75rem;
+    text-align: left;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.content-preview-list__item span,
+.content-preview-list__item small {
+    display: block;
+}
+
+.content-preview-list__item span {
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.content-preview-list__item small {
+    margin-top: .25rem;
+    color: var(--text-muted);
+}
+
+.content-preview-list__item:hover,
+.content-preview-list__item.is-active {
+    border-color: var(--primary);
+    background: rgba(15, 42, 74, .04);
+}
+
+.content-preview-iframe-shell {
+    min-height: calc(100vh - 140px);
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.content-preview-toolbar {
+    min-height: 56px;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: var(--surface);
+}
+
+.content-preview-toolbar strong,
+.content-preview-toolbar span {
+    display: block;
+}
+
+.content-preview-toolbar strong {
+    color: var(--text);
+    line-height: 1.25;
+}
+
+.content-preview-toolbar span {
+    margin-top: .15rem;
+    color: var(--text-muted);
+    font-size: .84rem;
+}
+
+.content-preview-viewport {
+    width: 100%;
+    min-height: calc(100vh - 197px);
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 16px;
+    background: #edf2f7;
+}
+
+.content-preview-stage {
+    position: relative;
+    margin: 0 auto;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(15, 42, 74, .14);
+    overflow: hidden;
+}
+
+.content-preview-iframe {
+    position: absolute;
+    inset: 0 auto auto 0;
+    border: 0;
+    display: block;
+    background: #fff;
+}
+
+.content-preview-empty {
+    min-height: calc(100vh - 140px);
+    display: grid;
+    place-content: center;
+    padding: 2rem;
+    text-align: center;
+}
+
+.content-preview-resource {
+    max-width: 620px;
+    margin: 0 auto;
+    gap: .85rem;
+}
+
+.content-preview-resource h3 {
+    margin: 0;
+    color: var(--primary);
+    font-size: 1.5rem;
+}
+
+@media (max-width: 980px) {
+    .content-preview-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .content-preview-list {
+        position: static;
+        max-height: none;
+    }
+}
+
 .content-type-badge,
 .content-status-pill {
     display: inline-flex;

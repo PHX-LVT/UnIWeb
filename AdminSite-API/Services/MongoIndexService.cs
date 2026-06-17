@@ -102,6 +102,31 @@ namespace FullProject.Services
             await adminUsers.Indexes.CreateOneAsync(new CreateIndexModel<AdminUser>(
                 Builders<AdminUser>.IndexKeys.Ascending(u => u.Email),
                 new CreateIndexOptions { Unique = true }));
+
+            var adminSessions = _database.GetCollection<AdminSessionRecord>("admin_sessions");
+            await adminSessions.Indexes.CreateOneAsync(new CreateIndexModel<AdminSessionRecord>(
+                Builders<AdminSessionRecord>.IndexKeys.Ascending(s => s.TokenId),
+                new CreateIndexOptions { Unique = true }));
+            await adminSessions.Indexes.CreateOneAsync(new CreateIndexModel<AdminSessionRecord>(
+                Builders<AdminSessionRecord>.IndexKeys
+                    .Ascending(s => s.AdminId)
+                    .Descending(s => s.LoginAt)));
+            await adminSessions.Indexes.CreateOneAsync(new CreateIndexModel<AdminSessionRecord>(
+                Builders<AdminSessionRecord>.IndexKeys
+                    .Ascending(s => s.IsRevoked)
+                    .Ascending(s => s.ExpiresAt)));
+
+            var adminAuditLogs = _database.GetCollection<AdminAuditLog>("admin_audit_logs");
+            await adminAuditLogs.Indexes.CreateOneAsync(new CreateIndexModel<AdminAuditLog>(
+                Builders<AdminAuditLog>.IndexKeys.Descending(l => l.CreatedAt)));
+            await adminAuditLogs.Indexes.CreateOneAsync(new CreateIndexModel<AdminAuditLog>(
+                Builders<AdminAuditLog>.IndexKeys
+                    .Ascending(l => l.TargetId)
+                    .Descending(l => l.CreatedAt)));
+            await adminAuditLogs.Indexes.CreateOneAsync(new CreateIndexModel<AdminAuditLog>(
+                Builders<AdminAuditLog>.IndexKeys
+                    .Ascending(l => l.ActorId)
+                    .Descending(l => l.CreatedAt)));
         }
 
         private async Task EnsureSystemIndexesAsync()

@@ -38,6 +38,10 @@ namespace AdminSite.Services
             {
                 AdminId = response.Data.AdminId,
                 Email = response.Data.Email,
+                FullName = response.Data.FullName,
+                Role = response.Data.Role,
+                Status = response.Data.Status,
+                Permissions = response.Data.Permissions,
                 Token = response.Data.Token
             };
 
@@ -47,8 +51,59 @@ namespace AdminSite.Services
 
         public async Task LogoutAsync()
         {
+            if (IsAuthenticated)
+                await _http.PostAsync<string>("api/auth/logout", new { });
+
             CurrentUser = null;
             await _storage.RemoveItemAsync("admin_session");
         }
+
+        public async Task RefreshSessionAsync()
+        {
+            if (!IsAuthenticated) return;
+
+            var response = await _http.GetAsync<SessionResponse>("api/auth/session");
+            if (!response.Success || response.Data is null) return;
+
+            CurrentUser!.Email = response.Data.Email;
+            CurrentUser.FullName = response.Data.FullName;
+            CurrentUser.Role = response.Data.Role;
+            CurrentUser.Status = response.Data.Status;
+            CurrentUser.Permissions = response.Data.Permissions;
+
+            await _storage.SetItemAsync("admin_session", CurrentUser);
+        }
+
+        public bool HasPermission(string permission) =>
+            CurrentUser is not null &&
+            (CurrentUser.Role == AdminRole.AdminAdmin ||
+             CurrentUser.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase));
+
+        public bool IsAdminAdmin => CurrentUser?.Role == AdminRole.AdminAdmin;
+
+        public bool IsManager => CurrentUser?.Role == AdminRole.Manager;
+
+        public bool IsWriter => CurrentUser?.Role == AdminRole.Writer;
+
+        public bool IsViewer => CurrentUser?.Role == AdminRole.Viewer;
+
+        public bool CanManageAllContent => IsAdminAdmin || IsManager;
+
+        public bool CanViewContent => IsAuthenticated;
+
+        public bool CanUsePageBuilder => HasPermission(AdminPermissionKeys.PageBuilder);
+
+        public bool CanManageContent =>
+            CanManageAllContent ||
+            HasPermission(AdminPermissionKeys.ManageContent) ||
+            HasPermission(AdminPermissionKeys.PublishContent) ||
+            HasPermission(AdminPermissionKeys.DeleteContent) ||
+            IsWriter;
+
+        public bool CanManageSettings => HasPermission(AdminPermissionKeys.ManageSettings);
+
+        public bool CanManageUsers => HasPermission(AdminPermissionKeys.ManageUsers);
+
+        public bool CanViewLogs => HasPermission(AdminPermissionKeys.ViewLogs);
     }
 }

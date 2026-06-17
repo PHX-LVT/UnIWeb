@@ -10,6 +10,10 @@ namespace AdminSite.Models
     {
         public string AdminId { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public AdminRole Role { get; set; } = AdminRole.Viewer;
+        public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
+        public List<string> Permissions { get; set; } = new();
         public string Token { get; set; } = string.Empty;
     }
 
