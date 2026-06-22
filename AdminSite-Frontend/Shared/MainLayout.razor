@@ -204,15 +204,17 @@ else if (Auth.IsAuthenticated)
             path.StartsWith("/content/published", StringComparison.OrdinalIgnoreCase))
             return Auth.CanManageAllContent;
 
+        if (path.StartsWith("/content/preview", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanViewContent;
+
         if (path.StartsWith("/content/new", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/content/edit", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/content/my", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/content/submitted", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/content/preview", StringComparison.OrdinalIgnoreCase))
+            path.StartsWith("/content/submitted", StringComparison.OrdinalIgnoreCase))
             return Auth.CanManageContent;
 
         if (path.StartsWith("/content", StringComparison.OrdinalIgnoreCase))
-            return Auth.CanViewContent;
+            return Auth.CanManageContent;
 
         if (path.StartsWith("/global", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/settings", StringComparison.OrdinalIgnoreCase))

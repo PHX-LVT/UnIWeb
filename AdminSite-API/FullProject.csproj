@@ -8,21 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="JwtMiddleware.cs" />
-    <Compile Remove="SectionsDTOs.cs" />
-    <Compile Remove="SectionsModels.cs" />
-    <Compile Remove="Services\BlocksServices.cs" />
-    <Compile Remove="Services\SettingsServices%28Potential for Update%29.cs" />
-    <Compile Remove="Services\SettingsServices.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="AutoMapper" Version="16.1.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="DevExpress.Blazor" Version="25.2.6" />
-    <PackageReference Include="DevExpress.Xpo" Version="25.2.6" />
     <PackageReference Include="HtmlSanitizer" Version="9.1.923-beta" />
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.18.0" />
     <PackageReference Include="MongoDB.Driver" Version="2.25.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="6.6.2" />

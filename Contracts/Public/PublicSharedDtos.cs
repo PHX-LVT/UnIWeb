@@ -45,6 +45,7 @@ namespace Contracts.Public
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
@@ -54,7 +55,9 @@ namespace Contracts.Public
     {
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
+        public string Action { get; set; } = "linkToPage";
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
         public bool Visible { get; set; } = true;
         public int Order { get; set; }

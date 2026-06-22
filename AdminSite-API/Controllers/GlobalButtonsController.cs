@@ -82,6 +82,7 @@ namespace FullProject.Controllers
             LabelText = b.LabelText,
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Position = b.Position,
             Visible = b.Visible,
             Order = b.Order

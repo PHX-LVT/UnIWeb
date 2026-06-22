@@ -57,9 +57,9 @@ else if (_notFound)
      Dictionary<string, string> data)
     {
         if (!string.IsNullOrEmpty(ChildSlug))
-            return await Api.SubmitChildFormAsync(ParentSlug!, ChildSlug, sectionId, blockId, data);
+            return await Api.SubmitChildFormAsync(ParentSlug!, ChildSlug, sectionId, blockId, data, _lang);
 
-        return await Api.SubmitFormAsync(Slug!, sectionId, blockId, data);
+        return await Api.SubmitFormAsync(Slug!, sectionId, blockId, data, _lang);
     }
 
     private void HandleLanguageChanged(string lang)

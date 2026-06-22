@@ -1,10 +1,10 @@
 using FullProject.Models;
-using FullProject.SectionServices;
 using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
+using GlobalManager.Services.SectionServices;
 
 
 namespace FullProject.Controllers
@@ -380,6 +380,7 @@ namespace FullProject.Controllers
             Label = b.Label,
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Style = b.Style,
             Visible = b.Visible,
             Order = b.Order

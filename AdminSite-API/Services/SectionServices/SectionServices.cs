@@ -5,8 +5,9 @@ using FullProject.Services;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
+using GlobalManager.Services.AssetService;
 
-namespace FullProject.SectionServices
+namespace GlobalManager.Services.SectionServices
 {
     public class SectionService
     {
@@ -750,6 +751,7 @@ namespace FullProject.SectionServices
             Label = dto.Label,
             Action = dto.Action,
             Href = CleanUrl(dto.Href),
+            FormDefinitionId = dto.FormDefinitionId,
             Style = dto.Style,
             Visible = dto.Visible,
             Order = dto.Order

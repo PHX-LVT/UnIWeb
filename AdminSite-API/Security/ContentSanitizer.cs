@@ -13,6 +13,7 @@ namespace FullProject.Security
             _sanitizer.AllowedAttributes.Add("rel");
             _sanitizer.AllowedAttributes.Add("style");
             _sanitizer.AllowedCssProperties.Add("color");
+            _sanitizer.AllowedCssProperties.Add("font-size");
         }
 
         public string SanitizeHtml(string value) =>

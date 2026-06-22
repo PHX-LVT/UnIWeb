@@ -25,11 +25,70 @@ window.contentRichTextEditor = (() => {
         if (entry && entry.el) entry.el.focus();
     };
 
+    const rememberSelection = (entry) => {
+        const selection = window.getSelection();
+        if (!entry || !selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        if (entry.el.contains(range.commonAncestorContainer)) {
+            entry.range = range.cloneRange();
+        }
+    };
+
+    const restoreSelection = (entry) => {
+        if (!entry || !entry.range) {
+            focus(entry);
+            return;
+        }
+
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(entry.range);
+    };
+
+    const useCssFormatting = () => {
+        document.execCommand("styleWithCSS", false, true);
+    };
+
     const sanitizeLink = (value) => {
         if (!value) return null;
         const trimmed = value.trim();
         if (/^(https?:\/\/|mailto:|\/)/i.test(trimmed)) return trimmed;
         return null;
+    };
+
+    const rgbToHex = (value) => {
+        const match = String(value || "").match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+        if (!match) return /^#[0-9a-f]{6}$/i.test(value || "") ? value : null;
+        return "#" + [match[1], match[2], match[3]]
+            .map(part => Math.max(0, Math.min(255, Number.parseInt(part, 10) || 0)).toString(16).padStart(2, "0"))
+            .join("");
+    };
+
+    const getFormatElement = (entry) => {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            if (entry.el.contains(range.commonAncestorContainer)) {
+                let node = range.startContainer;
+                if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+                if (node && node.nodeType === Node.ELEMENT_NODE) return node;
+            }
+        }
+
+        return entry.el.querySelector("[style*='font-size'],[style*='color'],font[size],font[color],span,strong,b,em,i,u,a") ||
+            entry.el.firstElementChild ||
+            entry.el;
+    };
+
+    const reportFormat = (entry) => {
+        if (!entry || !entry.el || !entry.dotnet) return;
+        const element = getFormatElement(entry);
+        if (!element) return;
+
+        const style = window.getComputedStyle(element);
+        const fontSize = Math.round(Number.parseFloat(style.fontSize || "16")) || 16;
+        const color = rgbToHex(style.color) || "#0f3460";
+        entry.dotnet.invokeMethodAsync("OnFormatChanged", fontSize, color).catch(() => {});
     };
 
     return {
@@ -40,53 +99,99 @@ window.contentRichTextEditor = (() => {
             element.innerHTML = value || "";
             const onInput = () => {
                 dotnet.invokeMethodAsync("OnEditorInput", element.innerHTML || "").catch(() => {});
+                reportFormat(editors[id]);
+            };
+            const onSelectionChange = () => {
+                const entry = editors[id];
+                rememberSelection(entry);
+                reportFormat(entry);
             };
             element.addEventListener("input", onInput);
-            editors[id] = { el: element, dotnet, onInput };
+            element.addEventListener("mouseup", onSelectionChange);
+            element.addEventListener("keyup", onSelectionChange);
+            element.addEventListener("focus", onSelectionChange);
+            editors[id] = { el: element, dotnet, onInput, onSelectionChange, range: null };
+            setTimeout(() => reportFormat(editors[id]), 0);
         },
         setValue(id, value) {
             const entry = editors[id];
             if (!entry || document.activeElement === entry.el) return;
             if ((entry.el.innerHTML || "") !== (value || "")) entry.el.innerHTML = value || "";
+            reportFormat(entry);
+        },
+        async flushAll() {
+            const updates = Object.values(editors)
+                .filter(entry => entry && entry.el && entry.dotnet)
+                .map(entry => entry.dotnet.invokeMethodAsync("OnEditorInput", entry.el.innerHTML || "").catch(() => {}));
+            await Promise.all(updates);
         },
         exec(id, command) {
             const entry = editors[id];
             if (!entry || !command) return;
-            focus(entry);
+            restoreSelection(entry);
+            useCssFormatting();
             document.execCommand(command, false, null);
             entry.onInput();
+            rememberSelection(entry);
+            reportFormat(entry);
         },
-        setBlock(id, tag) {
+        setFontSize(id, size) {
             const entry = editors[id];
             if (!entry) return;
-            focus(entry);
-            document.execCommand("formatBlock", false, tag || "p");
+
+            const px = Math.min(72, Math.max(10, Number.parseInt(size, 10) || 16));
+            restoreSelection(entry);
+            useCssFormatting();
+            document.execCommand("fontSize", false, "7");
+            entry.el.querySelectorAll("span[style], font[size='7']").forEach(node => {
+                if (node.tagName === "FONT") {
+                    const span = document.createElement("span");
+                    span.style.fontSize = `${px}px`;
+                    while (node.firstChild) span.appendChild(node.firstChild);
+                    node.replaceWith(span);
+                    return;
+                }
+
+                if (node.style.fontSize === "xxx-large" || node.style.fontSize === "-webkit-xxx-large") {
+                    node.style.fontSize = `${px}px`;
+                }
+            });
             entry.onInput();
+            rememberSelection(entry);
+            reportFormat(entry);
         },
         setColor(id, color) {
             const entry = editors[id];
             if (!entry || !/^#[0-9a-f]{6}$/i.test(color || "")) return;
-            focus(entry);
+            restoreSelection(entry);
+            useCssFormatting();
             document.execCommand("foreColor", false, color);
             entry.onInput();
+            rememberSelection(entry);
+            reportFormat(entry);
         },
         createLink(id) {
             const entry = editors[id];
             if (!entry) return;
             const href = sanitizeLink(window.prompt("Enter link URL"));
             if (!href) return;
-            focus(entry);
+            restoreSelection(entry);
             document.execCommand("createLink", false, href);
             entry.el.querySelectorAll("a[href]").forEach(a => {
                 a.setAttribute("target", "_blank");
                 a.setAttribute("rel", "noopener");
             });
             entry.onInput();
+            rememberSelection(entry);
+            reportFormat(entry);
         },
         dispose(id) {
             const entry = editors[id];
             if (!entry) return;
             entry.el.removeEventListener("input", entry.onInput);
+            entry.el.removeEventListener("mouseup", entry.onSelectionChange);
+            entry.el.removeEventListener("keyup", entry.onSelectionChange);
+            entry.el.removeEventListener("focus", entry.onSelectionChange);
             delete editors[id];
         }
     };
@@ -452,5 +557,14 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
 
         window.addEventListener("pointermove", move);
         window.addEventListener("pointerup", up);
+    });
+};
+
+window.scrollAdminPageTabs = (container, direction) => {
+    if (!container) return;
+    const amount = Math.max(240, container.clientWidth * 0.7);
+    container.scrollBy({
+        left: (direction < 0 ? -1 : 1) * amount,
+        behavior: "smooth"
     });
 };

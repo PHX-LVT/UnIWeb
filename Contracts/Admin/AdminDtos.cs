@@ -100,6 +100,7 @@ namespace Contracts.Admin
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -111,6 +112,7 @@ namespace Contracts.Admin
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -815,6 +817,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Label { get; set; } = new();
         public BlockButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
 
@@ -826,6 +829,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Label { get; set; } = new();
         public BlockButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
     }
@@ -924,12 +928,16 @@ public class ColumnSlotResponseDto
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class ButtonBlockCreateDto : BlockCreateDto
     {
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
     }
 
@@ -1034,12 +1042,16 @@ public class ColumnSlotResponseDto
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class ButtonBlockUpdateDto : BlockUpdateDto
     {
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
     }
 
@@ -1202,6 +1214,8 @@ public class ColumnSlotResponseDto
         public string? Prefix { get; set; }
         public string? Suffix { get; set; }
         public string? Href { get; set; }
+        public string? Action { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }

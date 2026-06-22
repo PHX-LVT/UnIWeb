@@ -20,34 +20,63 @@
     }
     else
     {
-        <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
-            @foreach (var page in RootPages)
-            {
-                <button class="ez-tab @(_activeParentPage?.Id == page.Id ? "ez-tab--active" : "")"
-                        data-root-page-id="@(page.Id)"
-                        @onclick="() => SelectPage(page)">
-                    @PageTitle(page)
-                    @if (CanEditDashboard && _editMode && _activeParentPage?.Id == page.Id)
+        <div class="ez-dashboard__page-nav">
+            <button type="button"
+                    class="ez-page-scroll-btn"
+                    title="Previous pages"
+                    aria-label="Previous pages"
+                    @onclick="() => ScrollPageTabs(-1)">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+
+            <div class="ez-dashboard__page-scroll" @ref="_pageTabsScrollRef">
+                <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
+                    @foreach (var page in RootPages)
                     {
-                        <span class="ez-tab__action" title="Settings"
-                              @onclick:stopPropagation="true"
-                              @onclick="() => OpenSettings(page)">
-                            <i class="fas fa-cog"></i>
-                        </span>
-                        <span class="ez-tab__action ez-tab__action--danger" title="Delete"
-                              @onclick:stopPropagation="true"
-                              @onclick="() => _confirmDelete = page">
-                            <i class="fas fa-trash"></i>
-                        </span>
+                        <button class="ez-tab @(_activeParentPage?.Id == page.Id ? "ez-tab--active" : "")"
+                                data-root-page-id="@(page.Id)"
+                                @onclick="() => SelectPage(page)">
+                            @PageTitle(page)
+                            @if (CanEditDashboard && _editMode && _activeParentPage?.Id == page.Id)
+                            {
+                                <span class="ez-tab__action" title="Settings"
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => OpenSettings(page)">
+                                    <i class="fas fa-cog"></i>
+                                </span>
+                                <span class="ez-tab__action ez-tab__action--danger" title="Delete"
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => _confirmDelete = page">
+                                    <i class="fas fa-trash"></i>
+                                </span>
+                            }
+                        </button>
                     }
-                </button>
-            }
-            @if (CanEditDashboard && _editMode)
-            {
-                <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
-                    <i class="fas fa-plus"></i>
-                </button>
-            }
+                    @if (CanEditDashboard && _editMode)
+                    {
+                        <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <button type="button"
+                    class="ez-page-scroll-btn"
+                    title="Next pages"
+                    aria-label="Next pages"
+                    @onclick="() => ScrollPageTabs(1)">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+
+            <button class="btn-admin btn-primary ez-dashboard__mode-toggle"
+                    type="button"
+                    disabled="@(!CanEditDashboard && !_editMode)"
+                    title="@(!CanEditDashboard && !_editMode ? T("EditModeRequiresPermission") : ActiveModeLabel)"
+                    @onclick="ToggleMode">
+                <i class="fas @ActiveModeIcon"></i>
+                <span>@ActiveModeLabel</span>
+            </button>
         </div>
 
         <div class="ez-dashboard__canvas">
@@ -66,8 +95,7 @@
                         OnDeletePage="RequestDeletePage"
                         OnPageStatusChanged="HandlePageStatusChanged"
                         EditMode="@_editMode"
-                        CanEdit="@CanEditDashboard"
-                        OnModeChanged="SetMode" />
+                        CanEdit="@CanEditDashboard" />
             }
         </div>
     }
@@ -306,10 +334,13 @@
     private bool _childPageSortableInitialized = false;
     private bool _editMode = true;
     private ElementReference _pageTabsRef;
+    private ElementReference _pageTabsScrollRef;
     private ElementReference _childPageListRef;
     private DotNetObjectReference<Dashboard>? _dotNetRef;
 
     private bool CanEditDashboard => Auth.CanUsePageBuilder;
+    private string ActiveModeLabel => _editMode ? T("EditMode") : T("PreviewMode");
+    private string ActiveModeIcon => _editMode ? "fa-edit" : "fa-eye";
 
     // Create flow
     private bool _showPagePicker = false;
@@ -661,6 +692,11 @@
         }
         StateHasChanged();
     }
+
+    private Task ToggleMode() => SetMode(!_editMode);
+
+    private ValueTask ScrollPageTabs(int direction) =>
+        JS.InvokeVoidAsync("scrollAdminPageTabs", _pageTabsScrollRef, direction);
 
     private void OnTemplatePicked(string template)
     {

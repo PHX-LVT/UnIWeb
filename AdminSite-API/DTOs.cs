@@ -103,6 +103,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string>? LabelText { get; set; }
         public GlobalButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition Position { get; set; }
     }
 
@@ -111,6 +112,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string>? LabelText { get; set; }
         public GlobalButtonAction? Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition? Position { get; set; }
     }
 
@@ -120,6 +122,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string> LabelText { get; set; } = new();
         public GlobalButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition Position { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -493,16 +496,9 @@ namespace FullProject.DTOs
     public class FormSubmitDto
     {
         public Dictionary<string, string> Data { get; set; } = new();
-    }
-
-    public class FormSubmissionResponseDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string PageId { get; set; } = string.Empty;
-        public string SectionId { get; set; } = string.Empty;
-        public string BlockId { get; set; } = string.Empty;
-        public Dictionary<string, string> Data { get; set; } = new();
-        public DateTime SubmittedAt { get; set; }
+        public string Language { get; set; } = "en";
+        public string Honeypot { get; set; } = string.Empty;
+        public string? CaptchaToken { get; set; }
     }
 
     // ---------------------------------------------------------------------------------------------------------------------

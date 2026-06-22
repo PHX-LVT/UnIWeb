@@ -21,7 +21,8 @@
             <div class="sc-carousel__track sc-carousel__track--@(Math.Clamp(Section.Columns ?? 3, 1, 5))">
                 @foreach (var item in Section.Items?.OrderBy(i => i.Order) ?? Enumerable.Empty<PublicCarouselItemDto>())
                 {
-                    <article class="sc-carousel__item">
+                    var isVideo = IsVideoLink(item.LinkHref);
+                    <article class="sc-carousel__item @(isVideo ? "sc-carousel__item--video" : string.Empty)">
                         @if (CarouselLayout == "case-metrics")
                         {
                             <div class="sc-carousel__case-head">
@@ -41,9 +42,34 @@
                                 }
                                 @if (!string.IsNullOrEmpty(item.LinkHref))
                                 {
-                                    <a href="@item.LinkHref" class="sc-list__card-link">View details</a>
+                                    <ActionButton Href="@item.LinkHref" CssClass="sc-list__card-link">View details</ActionButton>
                                 }
                             </div>
+                        }
+                        else if (isVideo)
+                        {
+                            <button type="button"
+                                    class="sc-carousel__video-trigger"
+                                    data-sc-library-video
+                                    data-video-url="@item.LinkHref"
+                                    data-video-title="@StyleHelper.Lang(item.Title, Lang)"
+                                    aria-label="Watch @StyleHelper.Lang(item.Title, Lang)">
+                                @if (!string.IsNullOrEmpty(item.ImageUrl))
+                                {
+                                    <span class="sc-carousel__video-media">
+                                        <img src="@item.ImageUrl"
+                                             alt="@StyleHelper.Lang(item.Title, Lang)" />
+                                        <span class="sc-library__play" aria-hidden="true"></span>
+                                    </span>
+                                }
+                                <span class="sc-carousel__body">
+                                    <strong class="sc-carousel__video-title">@StyleHelper.Lang(item.Title, Lang)</strong>
+                                    @if (!string.IsNullOrWhiteSpace(StyleHelper.Lang(item.Description, Lang)))
+                                    {
+                                        <span class="sc-carousel__video-description">@StyleHelper.Lang(item.Description, Lang)</span>
+                                    }
+                                </span>
+                            </button>
                         }
                         else
                         {
@@ -57,7 +83,7 @@
                                 <p>@StyleHelper.Lang(item.Description, Lang)</p>
                                 @if (!string.IsNullOrEmpty(item.LinkHref))
                                 {
-                                    <a href="@item.LinkHref" class="sc-list__card-link">View details</a>
+                                    <ActionButton Href="@item.LinkHref" CssClass="sc-list__card-link">View details</ActionButton>
                                 }
                             </div>
                         }
@@ -89,4 +115,15 @@
         "neutral" => "neutral",
         _ => "positive"
     };
+
+    private static bool IsVideoLink(string? href)
+    {
+        if (!Uri.TryCreate(href, UriKind.Absolute, out var uri)) return false;
+        var host = uri.Host.ToLowerInvariant();
+        return host == "youtu.be" ||
+               host == "youtube.com" ||
+               host.EndsWith(".youtube.com", StringComparison.Ordinal) ||
+               host == "vimeo.com" ||
+               host.EndsWith(".vimeo.com", StringComparison.Ordinal);
+    }
 }

@@ -82,26 +82,28 @@ namespace AdminSite.Services
             try
             {
                 var session = await _storage.GetItemAsync<AdminSession>("admin_session");
-                if (session?.Token is not null)
+                var hasSessionToken = !string.IsNullOrWhiteSpace(session?.Token);
+                if (hasSessionToken && !IsLoginRequest(request))
                     request.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", session.Token);
+                        new AuthenticationHeaderValue("Bearer", session!.Token);
 
                 using var response = await _http.SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
-                    await _storage.RemoveItemAsync("admin_session");
-                    _nav.NavigateTo("/login");
-                    return ApiResponse<T>.Fail("Session expired.", 401);
+                    if (ShouldExpireSession(request, response, hasSessionToken))
+                    {
+                        await _storage.RemoveItemAsync("admin_session");
+                        _nav.NavigateTo("/login");
+                        return ApiResponse<T>.Fail("Session expired.", 401);
+                    }
+
+                    return await ReadApiResponse<T>(response)
+                           ?? ApiResponse<T>.Fail("Unauthorized.", 401);
                 }
 
-                var result = await response.Content
-                    .ReadFromJsonAsync<ApiResponse<T>>(_json);
-
-                if (result is { Success: false, Errors.Count: > 0 })
-                    result.Message = string.Join(" ", result.Errors);
-
-                return result ?? ApiResponse<T>.Fail("Empty response.", 500);
+                return await ReadApiResponse<T>(response)
+                       ?? ApiResponse<T>.Fail("Empty response.", 500);
             }
             catch (Exception ex)
             {
@@ -123,6 +125,44 @@ namespace AdminSite.Services
 
         private static StringContent Json(object body) =>
             new(JsonSerializer.Serialize(body, body.GetType(), _json), Encoding.UTF8, "application/json");
+
+        private static async Task<ApiResponse<T>?> ReadApiResponse<T>(HttpResponseMessage response)
+        {
+            ApiResponse<T>? result;
+            try
+            {
+                result = await response.Content
+                    .ReadFromJsonAsync<ApiResponse<T>>(_json);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+
+            if (result is { Success: false, Errors.Count: > 0 })
+                result.Message = string.Join(" ", result.Errors);
+
+            return result;
+        }
+
+        private static bool ShouldExpireSession(
+            HttpRequestMessage request,
+            HttpResponseMessage response,
+            bool hasSessionToken)
+        {
+            var sessionInvalid = response.Headers.TryGetValues("X-Admin-Session-Invalid", out var values) &&
+                                 values.Any(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
+            if (sessionInvalid) return true;
+            if (!hasSessionToken) return false;
+
+            return !IsLoginRequest(request);
+        }
+
+        private static bool IsLoginRequest(HttpRequestMessage request)
+        {
+            var uri = request.RequestUri?.OriginalString ?? string.Empty;
+            return uri.Contains("api/auth/login", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }
 

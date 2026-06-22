@@ -1,8 +1,8 @@
 using Contracts.Admin;
 using FullProject.Security;
-using FullProject.Services;
 using FullProject.Settings;
 using FullProject.Utils;
+using GlobalManager.Services.AssetService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -40,6 +40,21 @@ namespace FullProject.Controllers
 
             if (!UploadSecurityPolicy.IsAllowedUpload(file.FileName, file.ContentType))
                 return UnprocessableEntity(ApiResult.BadRequest(UploadSecurityPolicy.UnsupportedUploadMessage));
+
+            if (!UploadSecurityPolicy.IsAllowedFolder(folder))
+                return UnprocessableEntity(ApiResult.BadRequest(UploadSecurityPolicy.UnsupportedFolderMessage));
+
+            await using (var validationStream = file.OpenReadStream())
+            {
+                if (!await UploadSecurityPolicy.HasAllowedSignatureAsync(
+                    validationStream,
+                    file.FileName,
+                    file.ContentType,
+                    HttpContext.RequestAborted))
+                {
+                    return UnprocessableEntity(ApiResult.BadRequest(UploadSecurityPolicy.InvalidSignatureMessage));
+                }
+            }
 
             await using var stream = file.OpenReadStream();
             var url = await _storage.UploadAsync(stream, file.FileName, file.ContentType, folder, HttpContext.RequestAborted);

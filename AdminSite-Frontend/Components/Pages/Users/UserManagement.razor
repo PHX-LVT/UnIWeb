@@ -114,17 +114,17 @@ else
                 <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem">
                     <label>
                         <span>@T("Name")</span>
-                        <input class="form-control" @bind="_edit.FullName" />
+                        <input class="form-control" name="new-admin-full-name" autocomplete="off" @bind="_edit.FullName" />
                     </label>
                     <label>
                         <span>@T("Email")</span>
-                        <input class="form-control" @bind="_edit.Email" disabled="@(_editingId is not null)" />
+                        <input class="form-control" name="new-admin-email" autocomplete="new-email" @bind="_edit.Email" disabled="@(_editingId is not null)" />
                     </label>
                     @if (_editingId is null)
                     {
                         <label>
                             <span>@T("Password")</span>
-                            <input class="form-control" type="password" @bind="_createPassword" />
+                            <input class="form-control" name="new-admin-password" type="password" autocomplete="new-password" @bind="_createPassword" />
                         </label>
                     }
                     <label>
@@ -193,7 +193,7 @@ else
             <div class="modal-header">@T("ResetPassword")</div>
             <div class="modal-body">
                 <p class="text-muted">@_resetUser.Email</p>
-                <input class="form-control" type="password" placeholder="@T("NewPassword")" @bind="_resetPassword" />
+                <input class="form-control" name="reset-admin-password" type="password" autocomplete="new-password" placeholder="@T("NewPassword")" @bind="_resetPassword" />
             </div>
             <div class="modal-footer">
                 <button class="btn-admin btn-ghost" @onclick="CloseReset">@T("Cancel")</button>

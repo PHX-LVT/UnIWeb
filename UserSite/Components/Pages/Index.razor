@@ -42,7 +42,7 @@ else if (_notFound)
         string pageId, string sectionId, string blockId,
         Dictionary<string, string> data)
     {
-        return await Api.SubmitFormAsync(_page!.Slug, sectionId, blockId, data);
+        return await Api.SubmitFormAsync(_page!.Slug, sectionId, blockId, data, _lang);
     }
 
     private void HandleLanguageChanged(string lang)

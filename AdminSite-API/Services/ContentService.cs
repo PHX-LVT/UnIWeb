@@ -44,17 +44,24 @@ namespace FullProject.Services
             if (exists) return (null, ["Content type key already exists."]);
 
             var order = (int)await _context.ContentTypes.CountDocumentsAsync(_ => true);
+            var workflow = NormalizeContentTypeWorkflow(
+                dto.RequiresBody,
+                dto.RequiresHeroImage,
+                dto.RequiresFile,
+                dto.RequiresVideoUrl,
+                dto.AllowsAttachments,
+                dto.ClickBehavior);
             var type = new ContentType
             {
                 Key = key,
                 Name = NormalizeLang(dto.Name),
                 Description = NormalizeLang(dto.Description, false),
-                RequiresBody = dto.RequiresBody,
-                RequiresHeroImage = dto.RequiresHeroImage,
-                RequiresFile = dto.RequiresFile,
-                RequiresVideoUrl = dto.RequiresVideoUrl,
-                AllowsAttachments = dto.AllowsAttachments,
-                ClickBehavior = NormalizeClickBehavior(dto.ClickBehavior),
+                RequiresBody = workflow.RequiresBody,
+                RequiresHeroImage = workflow.RequiresHeroImage,
+                RequiresFile = workflow.RequiresFile,
+                RequiresVideoUrl = workflow.RequiresVideoUrl,
+                AllowsAttachments = workflow.AllowsAttachments,
+                ClickBehavior = workflow.ClickBehavior,
                 Visible = dto.Visible,
                 Order = order,
                 CreatedAt = DateTime.UtcNow,
@@ -77,12 +84,20 @@ namespace FullProject.Services
 
             if (dto.Name is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.Name, NormalizeLang(dto.Name)));
             if (dto.Description is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.Description, NormalizeLang(dto.Description, false)));
-            if (dto.RequiresBody is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresBody, dto.RequiresBody.Value));
-            if (dto.RequiresHeroImage is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresHeroImage, dto.RequiresHeroImage.Value));
-            if (dto.RequiresFile is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresFile, dto.RequiresFile.Value));
-            if (dto.RequiresVideoUrl is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresVideoUrl, dto.RequiresVideoUrl.Value));
-            if (dto.AllowsAttachments is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.AllowsAttachments, dto.AllowsAttachments.Value));
-            if (dto.ClickBehavior is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.ClickBehavior, NormalizeClickBehavior(dto.ClickBehavior)));
+            var workflow = NormalizeContentTypeWorkflow(
+                dto.RequiresBody ?? type.RequiresBody,
+                dto.RequiresHeroImage ?? type.RequiresHeroImage,
+                dto.RequiresFile ?? type.RequiresFile,
+                dto.RequiresVideoUrl ?? type.RequiresVideoUrl,
+                dto.AllowsAttachments ?? type.AllowsAttachments,
+                dto.ClickBehavior ?? type.ClickBehavior);
+            updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresBody, workflow.RequiresBody));
+            updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresHeroImage, workflow.RequiresHeroImage));
+            updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresFile, workflow.RequiresFile));
+            updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresVideoUrl, workflow.RequiresVideoUrl));
+            updates.Add(Builders<ContentType>.Update.Set(t => t.AllowsAttachments, workflow.AllowsAttachments));
+            updates.Add(Builders<ContentType>.Update.Set(t => t.ClickBehavior, workflow.ClickBehavior));
+
             if (dto.Visible is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.Visible, dto.Visible.Value));
             if (dto.Order is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.Order, Math.Max(0, dto.Order.Value)));
 
@@ -734,7 +749,7 @@ namespace FullProject.Services
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;
 
-            if (Regex.IsMatch(value, @"<\s*(p|h[1-6]|ul|ol|blockquote|div|figure|table|br)\b", RegexOptions.IgnoreCase))
+            if (ContainsHtmlMarkup(value))
                 return value;
 
             var paragraphs = Regex.Split(value.Trim(), @"(?:\r?\n){2,}")
@@ -744,6 +759,12 @@ namespace FullProject.Services
 
             return string.Join(Environment.NewLine, paragraphs);
         }
+
+        private static bool ContainsHtmlMarkup(string value) =>
+            Regex.IsMatch(
+                value,
+                @"<\s*(p|h[1-6]|ul|ol|li|blockquote|div|figure|figcaption|table|thead|tbody|tr|td|th|br|span|strong|b|em|i|u|a)\b",
+                RegexOptions.IgnoreCase);
 
         private static string FormatBytes(long bytes)
         {
@@ -866,6 +887,46 @@ namespace FullProject.Services
             var normalized = (value ?? "detail").Trim().ToLowerInvariant();
             return normalized is "detail" or "download" or "video" or "external" ? normalized : "detail";
         }
+
+        private static ContentTypeWorkflow NormalizeContentTypeWorkflow(
+            bool requiresBody,
+            bool requiresHeroImage,
+            bool requiresFile,
+            bool requiresVideoUrl,
+            bool allowsAttachments,
+            string? clickBehavior)
+        {
+            var behavior = NormalizeClickBehavior(clickBehavior);
+            if (requiresBody)
+            {
+                return new ContentTypeWorkflow(
+                    RequiresBody: true,
+                    RequiresHeroImage: requiresHeroImage,
+                    RequiresFile: false,
+                    RequiresVideoUrl: false,
+                    AllowsAttachments: allowsAttachments,
+                    ClickBehavior: "detail");
+            }
+
+            if (behavior == "detail")
+                behavior = "download";
+
+            return new ContentTypeWorkflow(
+                RequiresBody: false,
+                RequiresHeroImage: false,
+                RequiresFile: behavior == "download",
+                RequiresVideoUrl: behavior == "video",
+                AllowsAttachments: allowsAttachments || behavior == "download",
+                ClickBehavior: behavior);
+        }
+
+        private sealed record ContentTypeWorkflow(
+            bool RequiresBody,
+            bool RequiresHeroImage,
+            bool RequiresFile,
+            bool RequiresVideoUrl,
+            bool AllowsAttachments,
+            string ClickBehavior);
 
         private static string? CleanTemplateKey(string? value)
         {

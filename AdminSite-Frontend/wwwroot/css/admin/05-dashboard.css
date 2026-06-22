@@ -16,15 +16,71 @@
     flex-wrap: wrap;
 }
 
+.ez-dashboard__page-nav {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px auto;
+    align-items: center;
+    gap: 8px;
+    padding: .65rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+}
+
+.ez-dashboard__page-scroll {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) var(--bg);
+}
+
+.ez-dashboard__page-scroll::-webkit-scrollbar {
+    height: 7px;
+}
+
+.ez-dashboard__page-scroll::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-radius: 999px;
+}
+
+.ez-dashboard__page-scroll::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 999px;
+}
+
 .ez-dashboard__tabs {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: .75rem 1.5rem;
-    border-bottom: 1px solid var(--border);
+    width: max-content;
+    min-width: 100%;
+    padding: 0 0 6px;
     flex-shrink: 0;
-    overflow-x: auto;
+}
+
+.ez-page-scroll-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     background: var(--surface);
+    color: var(--primary);
+    cursor: pointer;
+}
+
+.ez-page-scroll-btn:hover {
+    border-color: var(--primary);
+    background: var(--bg);
+}
+
+.ez-dashboard__mode-toggle {
+    min-width: 118px;
+    justify-content: center;
+    white-space: nowrap;
 }
 
 .ez-dashboard__canvas {

@@ -265,12 +265,16 @@ namespace FullProject.Utils
                     Description = new Dictionary<string, string>(card.Description),
                     ImageUrl = card.ImageUrl,
                     ButtonLabel = new Dictionary<string, string>(card.ButtonLabel),
-                    Href = card.Href
+                    Href = card.Href,
+                    Action = card.Action,
+                    FormDefinitionId = card.FormDefinitionId
                 },
                 ButtonBlock button => new ButtonBlock
                 {
                     Label = new Dictionary<string, string>(button.Label),
                     Href = button.Href,
+                    Action = button.Action,
+                    FormDefinitionId = button.FormDefinitionId,
                     Style = button.Style
                 },
                 MetricBlock metric => new MetricBlock
@@ -329,6 +333,7 @@ namespace FullProject.Utils
                 Label = new Dictionary<string, string>(b.Label),
                 Action = b.Action,
                 Href = b.Href,
+                FormDefinitionId = b.FormDefinitionId,
                 Visible = b.Visible,
                 Order = b.Order
             }).ToList();
@@ -412,6 +417,7 @@ namespace FullProject.Utils
             Label = new Dictionary<string, string>(b.Label),
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Style = b.Style,
             Visible = b.Visible,
             Order = b.Order

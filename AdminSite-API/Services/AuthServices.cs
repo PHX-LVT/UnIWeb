@@ -16,6 +16,7 @@ namespace FullProject.Services
 
         private readonly IMongoCollection<AdminUser> _users;
         private readonly IMongoCollection<AdminSessionRecord> _sessions;
+        private readonly IMongoCollection<AdminLoginActivityRecord> _loginActivity;
         private readonly IMongoCollection<AdminAuditLog> _auditLogs;
         private readonly JwtSettings _jwt;
 
@@ -23,6 +24,7 @@ namespace FullProject.Services
         {
             _users = db.GetCollection<AdminUser>("admin_users");
             _sessions = db.GetCollection<AdminSessionRecord>("admin_sessions");
+            _loginActivity = db.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
             _auditLogs = db.GetCollection<AdminAuditLog>("admin_audit_logs");
             _jwt = jwt.Value;
         }
@@ -33,6 +35,7 @@ namespace FullProject.Services
             var user = await _users.Find(u => u.Email == normalizedEmail).FirstOrDefaultAsync();
             if (user is null)
             {
+                await RecordLoginActivityAsync(null, normalizedEmail, "login-denied", false, "Unknown admin email.", ipAddress, userAgent);
                 await LogAsync(AdminAuditArea.Auth, "login-denied", "anonymous", string.Empty, null, normalizedEmail, "Unknown admin email.", ipAddress, userAgent);
                 return null;
             }
@@ -40,6 +43,7 @@ namespace FullProject.Services
             NormalizeUserDefaults(user);
             if (!CanLogin(user))
             {
+                await RecordLoginActivityAsync(user, user.Email, "login-denied", false, "Account is disabled or locked.", ipAddress, userAgent);
                 await LogAsync(AdminAuditArea.Auth, "login-denied", user.Id, user.Email, user.Id, user.Email, "Account is disabled or locked.", ipAddress, userAgent);
                 return null;
             }
@@ -81,6 +85,7 @@ namespace FullProject.Services
             user.Status = AdminUserStatus.Active;
             user.FailedLoginAttempts = 0;
             user.LockedUntil = null;
+            await RecordLoginActivityAsync(user, user.Email, "login-success", true, "Admin logged in.", ipAddress, userAgent);
             await LogAsync(AdminAuditArea.Auth, "login-success", user.Id, user.Email, user.Id, user.Email, "Admin logged in.", ipAddress, userAgent);
 
             return new LoginResponseDto
@@ -131,6 +136,7 @@ namespace FullProject.Services
         {
             await RevokeSessionByTokenIdAsync(tokenId, adminId, AdminSessionRevokeReason.Logout, ipAddress);
             var user = await GetByIdAsync(adminId);
+            await RecordLoginActivityAsync(user, user?.Email ?? string.Empty, "logout", true, "Admin logged out.", ipAddress, userAgent);
             await LogAsync(AdminAuditArea.Auth, "logout", adminId, user?.Email ?? string.Empty, adminId, user?.Email, "Admin logged out.", ipAddress, userAgent);
         }
 
@@ -330,6 +336,32 @@ namespace FullProject.Services
                 .ToListAsync();
         }
 
+        public async Task<(List<AdminSessionRecord> Items, long TotalCount, int Page, int PageSize)> GetSessionsPageAsync(
+            int page,
+            int pageSize,
+            string? adminId = null,
+            bool includeRevoked = true)
+        {
+            var filter = Builders<AdminSessionRecord>.Filter.Empty;
+            if (!string.IsNullOrWhiteSpace(adminId))
+                filter &= Builders<AdminSessionRecord>.Filter.Eq(s => s.AdminId, adminId);
+            if (!includeRevoked)
+                filter &= Builders<AdminSessionRecord>.Filter.Eq(s => s.IsRevoked, false);
+
+            pageSize = Math.Clamp(pageSize, 10, 100);
+            var totalCount = await _sessions.CountDocumentsAsync(filter);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+            page = Math.Clamp(page, 1, totalPages);
+
+            var items = await _sessions.Find(filter)
+                .SortByDescending(s => s.LoginAt)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+
+            return (items, totalCount, page, pageSize);
+        }
+
         public async Task<List<AdminAuditLog>> GetAuditLogsAsync(string? targetId = null)
         {
             var filter = Builders<AdminAuditLog>.Filter.Empty;
@@ -342,13 +374,88 @@ namespace FullProject.Services
                 .ToListAsync();
         }
 
+        public async Task<(List<AdminAuditLog> Items, long TotalCount, int Page, int PageSize)> GetAuditLogsPageAsync(
+            int page,
+            int pageSize,
+            string? targetId = null)
+        {
+            var filter = Builders<AdminAuditLog>.Filter.Empty;
+            if (!string.IsNullOrWhiteSpace(targetId))
+                filter &= Builders<AdminAuditLog>.Filter.Eq(l => l.TargetId, targetId);
+
+            pageSize = Math.Clamp(pageSize, 10, 100);
+            var totalCount = await _auditLogs.CountDocumentsAsync(filter);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+            page = Math.Clamp(page, 1, totalPages);
+
+            var items = await _auditLogs.Find(filter)
+                .SortByDescending(l => l.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+
+            return (items, totalCount, page, pageSize);
+        }
+
+        public async Task<(List<AdminLoginActivityRecord> Items, long TotalCount, int Page, int PageSize)> GetLoginActivityPageAsync(
+            int page,
+            int pageSize,
+            string? adminId = null)
+        {
+            var filter = Builders<AdminLoginActivityRecord>.Filter.Empty;
+            if (!string.IsNullOrWhiteSpace(adminId))
+                filter &= Builders<AdminLoginActivityRecord>.Filter.Eq(l => l.AdminId, adminId);
+
+            pageSize = Math.Clamp(pageSize, 10, 100);
+            var totalCount = await _loginActivity.CountDocumentsAsync(filter);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+            page = Math.Clamp(page, 1, totalPages);
+
+            var items = await _loginActivity.Find(filter)
+                .SortByDescending(l => l.OccurredAt)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+
+            return (items, totalCount, page, pageSize);
+        }
+
+        public async Task<List<AdminLoginActivityRecord>> GetLoginActivityAsync(string? adminId = null)
+        {
+            var filter = Builders<AdminLoginActivityRecord>.Filter.Empty;
+            if (!string.IsNullOrWhiteSpace(adminId))
+                filter &= Builders<AdminLoginActivityRecord>.Filter.Eq(l => l.AdminId, adminId);
+
+            return await _loginActivity.Find(filter)
+                .SortByDescending(l => l.OccurredAt)
+                .Limit(300)
+                .ToListAsync();
+        }
+
         public async Task<long> DeleteSessionsAsync(IEnumerable<string> ids, AdminUser actor, string ipAddress, string userAgent)
         {
             var selectedIds = NormalizeIds(ids);
             if (selectedIds.Count == 0) return 0;
 
-            var result = await _sessions.DeleteManyAsync(Builders<AdminSessionRecord>.Filter.In(s => s.Id, selectedIds));
-            await LogAsync(AdminAuditArea.UserManagement, "sessions-deleted", actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} login session log(s).", ipAddress, userAgent);
+            var now = DateTime.UtcNow;
+            var filter = Builders<AdminSessionRecord>.Filter.And(
+                Builders<AdminSessionRecord>.Filter.In(s => s.Id, selectedIds),
+                Builders<AdminSessionRecord>.Filter.Or(
+                    Builders<AdminSessionRecord>.Filter.Eq(s => s.IsRevoked, true),
+                    Builders<AdminSessionRecord>.Filter.Lte(s => s.ExpiresAt, now)));
+
+            var result = await _sessions.DeleteManyAsync(filter);
+            await LogAsync(AdminAuditArea.UserManagement, "sessions-deleted", actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} inactive session record(s).", ipAddress, userAgent);
+            return result.DeletedCount;
+        }
+
+        public async Task<long> DeleteLoginActivityAsync(IEnumerable<string> ids, AdminUser actor, string ipAddress, string userAgent)
+        {
+            var selectedIds = NormalizeIds(ids);
+            if (selectedIds.Count == 0) return 0;
+
+            var result = await _loginActivity.DeleteManyAsync(Builders<AdminLoginActivityRecord>.Filter.In(l => l.Id, selectedIds));
+            await LogAsync(AdminAuditArea.UserManagement, "login-activity-deleted", actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} login activity log(s).", ipAddress, userAgent);
             return result.DeletedCount;
         }
 
@@ -463,6 +570,7 @@ namespace FullProject.Services
             }
 
             await _users.UpdateOneAsync(u => u.Id == user.Id, update);
+            await RecordLoginActivityAsync(user, user.Email, "login-denied", false, "Invalid password.", ipAddress, userAgent);
             await LogAsync(AdminAuditArea.Auth, "login-denied", user.Id, user.Email, user.Id, user.Email, "Invalid password.", ipAddress, userAgent);
         }
 
@@ -511,6 +619,23 @@ namespace FullProject.Services
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
                 CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        private async Task RecordLoginActivityAsync(AdminUser? user, string email, string eventType, bool success, string message, string ipAddress, string userAgent)
+        {
+            await _loginActivity.InsertOneAsync(new AdminLoginActivityRecord
+            {
+                AdminId = user?.Id,
+                Email = NormalizeEmail(email),
+                EventType = eventType,
+                Success = success,
+                Message = message,
+                IpAddress = ipAddress,
+                UserAgent = userAgent,
+                BrowserName = ParseBrowser(userAgent),
+                OperatingSystem = ParseOperatingSystem(userAgent),
+                OccurredAt = DateTime.UtcNow
             });
         }
 

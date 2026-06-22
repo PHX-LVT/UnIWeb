@@ -6,6 +6,15 @@ namespace SharedComponents.Helpers
     {
         public static string FallbackLanguage { get; private set; } = "en";
 
+        public static bool IsModalAction(string? href)
+        {
+            var value = (href ?? string.Empty).Trim();
+            return value.StartsWith("modal:", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("#modal", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("#quote", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("#expert", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static void SetFallbackLanguage(string? lang)
         {
             if (!string.IsNullOrWhiteSpace(lang))

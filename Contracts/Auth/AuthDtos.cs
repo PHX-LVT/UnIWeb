@@ -152,6 +152,21 @@ public class AdminSessionResponse
     public AdminSessionRevokeReason? RevokeReason { get; set; }
 }
 
+public class AdminLoginActivityResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string? AdminId { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string IpAddress { get; set; } = string.Empty;
+    public string UserAgent { get; set; } = string.Empty;
+    public string BrowserName { get; set; } = string.Empty;
+    public string OperatingSystem { get; set; } = string.Empty;
+    public DateTime OccurredAt { get; set; }
+}
+
 public class AdminAuditLogResponse
 {
     public string Id { get; set; } = string.Empty;
@@ -165,4 +180,13 @@ public class AdminAuditLogResponse
     public string IpAddress { get; set; } = string.Empty;
     public string UserAgent { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+}
+
+public class AdminPagedResponse<T>
+{
+    public List<T> Items { get; set; } = new();
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+    public long TotalCount { get; set; }
+    public int TotalPages { get; set; } = 1;
 }

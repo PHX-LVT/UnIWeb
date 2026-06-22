@@ -2,10 +2,10 @@
 @using SharedComponents.Helpers
 
 <div class="sc-block sc-design-block sc-button-block">
-    <a class="sc-btn sc-btn--@(string.IsNullOrWhiteSpace(Block.Style) ? "filled" : Block.Style)"
-       href="@(string.IsNullOrWhiteSpace(Block.Href) ? "#" : Block.Href)">
+    <ActionButton Action="@Block.Action" FormDefinitionId="@Block.FormDefinitionId" Href="@(string.IsNullOrWhiteSpace(Block.Href) ? "#" : Block.Href)"
+                  CssClass="@($"sc-btn sc-btn--{(string.IsNullOrWhiteSpace(Block.Style) ? "filled" : Block.Style)}")">
         @StyleHelper.Lang(Block.Label, Lang)
-    </a>
+    </ActionButton>
 </div>
 
 @code {

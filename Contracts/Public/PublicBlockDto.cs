@@ -74,12 +74,16 @@ namespace Contracts.Public
         public string? ImageUrl { get; set; }
         public Dictionary<string, string>? ButtonLabel { get; set; }
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class PublicButtonBlockDto : PublicBlockDto
     {
         public Dictionary<string, string>? Label { get; set; }
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
     }
 

@@ -36,7 +36,7 @@
         {
             <p class="text-muted">@T("Loading")</p>
         }
-        else if (!_sessions.Any())
+        else if (!_activity.Any())
         {
             <p class="text-muted">@T("NoSessions")</p>
         }
@@ -47,30 +47,32 @@
                     <thead>
                         <tr>
                             <th>@T("LoginTime")</th>
-                            <th>@T("LastActivity")</th>
+                            <th>@T("Action")</th>
                             <th>@T("IpAddress")</th>
                             <th>@T("Device")</th>
                             <th>@T("Status")</th>
+                            <th>@T("Message")</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var item in _sessions)
+                        @foreach (var item in _activity)
                         {
                             <tr>
-                                <td>@FormatDate(item.LoginAt)</td>
-                                <td>@FormatDate(item.LastActivityAt)</td>
+                                <td>@FormatDate(item.OccurredAt)</td>
+                                <td>@item.EventType</td>
                                 <td>@item.IpAddress</td>
                                 <td>@DisplayDevice(item)</td>
                                 <td>
-                                    @if (item.IsRevoked)
+                                    @if (item.Success)
                                     {
-                                        <span class="content-status-pill is-deleted">@T("Revoked")</span>
+                                        <span class="content-status-pill is-published">@T("Success")</span>
                                     }
                                     else
                                     {
-                                        <span class="content-status-pill is-published">@T("Active")</span>
+                                        <span class="content-status-pill is-rejected">@T("Denied")</span>
                                     }
                                 </td>
+                                <td>@item.Message</td>
                             </tr>
                         }
                     </tbody>
@@ -83,7 +85,7 @@
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
-    private readonly List<AdminSessionResponse> _sessions = new();
+    private readonly List<AdminLoginActivityResponse> _activity = new();
     private bool _loading = true;
     private bool _saving;
     private string _currentPassword = string.Empty;
@@ -93,14 +95,14 @@
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
-        await LoadSessionsAsync();
+        await LoadActivityAsync();
     }
 
-    private async Task LoadSessionsAsync()
+    private async Task LoadActivityAsync()
     {
-        var res = await Users.GetMySessionsAsync();
+        var res = await Users.GetMyLoginActivityAsync();
         if (res.Success && res.Data is not null)
-            _sessions.AddRange(res.Data);
+            _activity.AddRange(res.Data);
         else
             Http.Toast(res.Message, res.StatusCode);
 
@@ -125,7 +127,7 @@
     private static string FormatDate(DateTime? value) =>
         value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
 
-    private static string DisplayDevice(AdminSessionResponse item)
+    private static string DisplayDevice(AdminLoginActivityResponse item)
     {
         var browser = string.IsNullOrWhiteSpace(item.BrowserName) ? "Browser" : item.BrowserName;
         var os = string.IsNullOrWhiteSpace(item.OperatingSystem) ? "Unknown OS" : item.OperatingSystem;

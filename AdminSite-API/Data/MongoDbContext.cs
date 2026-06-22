@@ -27,7 +27,9 @@ namespace FullProject.Data
         public IMongoCollection<CanvasSectionPreset> CanvasSectionPresets => _database.GetCollection<CanvasSectionPreset>("canvas_section_presets");
 
         // System wide metadata collections
-        public IMongoCollection<AdminUser> Users => _database.GetCollection<AdminUser>("users");
+        public IMongoCollection<AdminUser> AdminUsers => _database.GetCollection<AdminUser>("admin_users");
+        public IMongoCollection<AdminLoginActivityRecord> AdminLoginActivity => _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
+        public IMongoCollection<FormDefinition> FormDefinitions => _database.GetCollection<FormDefinition>("form_definitions");
         public IMongoCollection<FormSubmission> FormSubmissions => _database.GetCollection<FormSubmission>("form_submissions");
         public IMongoCollection<ContentItem> ContentDraft => _database.GetCollection<ContentItem>("content_draft");
         public IMongoCollection<ContentItem> ContentPublished => _database.GetCollection<ContentItem>("content_published");

@@ -1,7 +1,8 @@
-﻿@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Forms
 @inject AdminSectionService SectionService
 @inject AdminPageService PageService
 @inject IHttpService Http
+@inject AdminFormSubmissionService FormService
 
 <div class="form-group">
     <label class="form-label">@T("SourcePage")</label>
@@ -48,25 +49,30 @@
 </div>
 
 <div class="showcase-action-editor">
-    <div class="form-group">
+    <div class="showcase-action-editor__label">
         <label class="form-label">@T("ButtonLabel")</label>
         <LangField @bind-Value="_actionButton.Label" Languages="Languages" NullText="View All" />
     </div>
 
-    <div style="display:grid;grid-template-columns:auto auto minmax(0,1fr) auto minmax(0,1fr);gap:.6rem;align-items:center">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;white-space:nowrap">
+    <div class="showcase-action-editor__options">
+        <label class="showcase-action-editor__visible">
             <DxCheckBox @bind-Checked="_actionButton.Visible" /> @T("Visible")
         </label>
-        <label class="form-label" style="margin:0;white-space:nowrap">@T("ButtonPosition")</label>
-        <DxComboBox Data="_buttonPositions" @bind-Value="_actionButtonPosition" CssClass="w-100" />
-        <label class="form-label" style="margin:0;white-space:nowrap">@T("Style")</label>
-        <DxComboBox Data="_buttonStyles" @bind-Value="_actionButton.Style" CssClass="w-100" />
+        <div class="showcase-action-editor__field">
+            <label class="form-label">@T("ButtonPosition")</label>
+            <DxComboBox Data="_buttonPositions" @bind-Value="_actionButtonPosition" CssClass="w-100" />
+        </div>
+        <div class="showcase-action-editor__field">
+            <label class="form-label">@T("Style")</label>
+            <DxComboBox Data="_buttonStyles" @bind-Value="_actionButton.Style" CssClass="w-100" />
+        </div>
     </div>
 
-    <div class="form-group">
-        <label class="form-label">Href</label>
-        <DxTextBox @bind-Text="_actionButton.Href" CssClass="w-100" NullText="/industry" />
-    </div>
+    <ButtonActionFields @bind-Action="_actionButton.Action"
+                        @bind-Href="_actionButton.Href"
+                        @bind-FormDefinitionId="_actionButton.FormDefinitionId"
+                        FormDefinitions="_formDefinitions"
+                        AdminLanguage="AdminLanguage" />
 </div>
 
 <div class="form-group">
@@ -205,6 +211,54 @@
     </button>
 </div>
 
+<style>
+    .showcase-action-editor {
+        display: grid;
+        gap: .75rem;
+        margin-bottom: 1rem;
+        padding: .75rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+    }
+
+    .showcase-action-editor__label,
+    .showcase-action-editor__field {
+        min-width: 0;
+        display: grid;
+        gap: 6px;
+    }
+
+    .showcase-action-editor__options {
+        display: grid;
+        grid-template-columns: auto minmax(170px, 1fr) minmax(140px, .75fr);
+        gap: .6rem;
+        align-items: end;
+    }
+
+    .showcase-action-editor__visible {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        margin: 0 0 9px;
+        white-space: nowrap;
+    }
+
+    .showcase-action-editor .form-label {
+        margin: 0;
+    }
+
+    @@media (max-width: 720px) {
+        .showcase-action-editor__options {
+            grid-template-columns: 1fr;
+        }
+
+        .showcase-action-editor__visible {
+            margin-bottom: 0;
+        }
+    }
+</style>
 @code {
     [Parameter] public SectionModel  Section   { get; set; } = new();
     [Parameter] public string        PageId    { get; set; } = string.Empty;
@@ -231,6 +285,7 @@
     private List<ShowcaseChildCardModel> _childCards = new();
     private bool _saving;
     private bool _loadingChildren;
+    private List<FormDefinitionModel> _formDefinitions = new();
     private string? _loadedSectionId;
     private string? _loadedChildrenSourceId;
     private string? _uploadingCardId;
@@ -242,6 +297,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var forms = await FormService.GetDefinitionsAsync();
+        _formDefinitions = forms.Data ?? new();
+
         var res = await PageService.GetAllAsync();
         _sourcePages = (res.Data ?? new())
             .Where(p => string.IsNullOrWhiteSpace(p.ParentPageId))
@@ -491,6 +549,7 @@
         Action = string.IsNullOrWhiteSpace(source?.Action) ? "linkToPage" : source!.Action,
         Href = string.IsNullOrWhiteSpace(source?.Href) ? href : source!.Href,
         Style = string.IsNullOrWhiteSpace(source?.Style) ? "filled" : source!.Style,
+        FormDefinitionId = source?.FormDefinitionId,
         Visible = source?.Visible ?? visible,
         Order = source?.Order ?? 0
     };
@@ -498,12 +557,20 @@
     private static SectionButtonDto ToActionDto(SectionButtonModel button, int order) => new()
     {
         Label = button.Label ?? new(),
-        Action = string.IsNullOrWhiteSpace(button.Action) ? "linkToPage" : button.Action,
-        Href = button.Href,
+        Action = NormalizeButtonAction(button.Action),
+        Href = IsOpenFormAction(button.Action) ? null : button.Href,
+        FormDefinitionId = IsOpenFormAction(button.Action) ? button.FormDefinitionId : null,
         Style = string.IsNullOrWhiteSpace(button.Style) ? "filled" : button.Style,
         Visible = button.Visible,
         Order = order
     };
+
+    private static string NormalizeButtonAction(string? action) => IsOpenFormAction(action) ? "openForm" : "linkToPage";
+
+    private static bool IsOpenFormAction(string? action) =>
+        string.Equals(action, "openForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenModal", StringComparison.OrdinalIgnoreCase);
 
     private sealed record PageSourceOption(string Id, string Label);
 

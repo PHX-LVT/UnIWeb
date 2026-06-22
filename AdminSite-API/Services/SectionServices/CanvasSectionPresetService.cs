@@ -5,7 +5,7 @@ using FullProject.Utils;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace FullProject.Services
+namespace GlobalManager.Services.SectionServices
 {
     public class CanvasSectionPresetService
     {

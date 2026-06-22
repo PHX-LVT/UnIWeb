@@ -2,6 +2,7 @@
 @namespace AdminSite.Pages
 @using AdminSite.Components
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@inject IConfiguration Configuration
 
 <!DOCTYPE html>
 <html lang="en">
@@ -40,7 +41,10 @@
     <script src="js/canvas.js" asp-append-version="true"></script>
     <script src="js/overlay.js" asp-append-version="true"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/js/cms-widgets.js"></script>
+    <script>
+        window.cmsPublicApiBaseUrl = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Configuration["ApiBaseUrl"] ?? ""));
+    </script>
+    <script src="_content/SharedComponents/cms-widgets.js" asp-append-version="true"></script>
     <script src="_framework/blazor.server.js"></script>
 </body>
 </html>

@@ -5,11 +5,11 @@
 
 <div class="page-header">
     <h1 class="page-title"><i class="fas fa-clock"></i> @T("LoginActivity")</h1>
-    @if (Auth.IsAdminAdmin && _sessions.Any())
+    @if (Auth.IsAdminAdmin && _activity.Any())
     {
         <button class="btn-admin btn-danger"
-                disabled="@(!_selectedSessionIds.Any() || _deleting)"
-                @onclick="DeleteSelectedSessions">
+                disabled="@(!_selectedActivityIds.Any() || _deleting)"
+                @onclick="DeleteSelectedActivity">
             <i class="fas fa-trash"></i> @T("DeleteSelectedLogs")
         </button>
     }
@@ -24,7 +24,7 @@
     {
         <p class="text-muted">@T("Loading")</p>
     }
-    else if (!_sessions.Any())
+    else if (!_activity.Any())
     {
         <p class="text-muted">@T("NoSessions")</p>
     }
@@ -37,50 +37,62 @@
                         @if (Auth.IsAdminAdmin)
                         {
                             <th style="width:42px">
-                                <input type="checkbox" checked="@AllSessionsSelected" @onchange="ToggleAllSessions" />
+                                <input type="checkbox" checked="@AllActivitySelected" @onchange="ToggleAllActivity" />
                             </th>
                         }
                         <th>@T("Email")</th>
                         <th>@T("LoginTime")</th>
-                        <th>@T("LastActivity")</th>
-                        <th>@T("Expires")</th>
+                        <th>@T("Action")</th>
                         <th>@T("IpAddress")</th>
                         <th>@T("Device")</th>
                         <th>@T("Status")</th>
+                        <th>@T("Message")</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var item in _sessions)
+                    @foreach (var item in _activity)
                     {
                         <tr>
                             @if (Auth.IsAdminAdmin)
                             {
                                 <td>
                                     <input type="checkbox"
-                                           checked="@_selectedSessionIds.Contains(item.Id)"
-                                           @onchange="e => ToggleSession(item.Id, e)" />
+                                           checked="@_selectedActivityIds.Contains(item.Id)"
+                                           @onchange="e => ToggleActivity(item.Id, e)" />
                                 </td>
                             }
                             <td>@item.Email</td>
-                            <td>@FormatDate(item.LoginAt)</td>
-                            <td>@FormatDate(item.LastActivityAt)</td>
-                            <td>@FormatDate(item.ExpiresAt)</td>
+                            <td>@FormatDate(item.OccurredAt)</td>
+                            <td>@item.EventType</td>
                             <td>@item.IpAddress</td>
                             <td>@DisplayDevice(item)</td>
                             <td>
-                                @if (item.IsRevoked)
+                                @if (item.Success)
                                 {
-                                    <span class="content-status-pill is-deleted">@T("Revoked")</span>
+                                    <span class="content-status-pill is-published">@T("Success")</span>
                                 }
                                 else
                                 {
-                                    <span class="content-status-pill is-published">@T("Active")</span>
+                                    <span class="content-status-pill is-rejected">@T("Denied")</span>
                                 }
                             </td>
+                            <td>@item.Message</td>
                         </tr>
                     }
                 </tbody>
             </table>
+        </div>
+        <div class="admin-pagination">
+            <span class="text-muted">@ShowingText</span>
+            <div class="admin-pagination__buttons">
+                <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="() => SetPage(_page - 1)" aria-label="Previous page">&lsaquo;</button>
+                @foreach (var page in VisiblePages)
+                {
+                    var pageNumber = page;
+                    <button class="btn-admin @(_page == pageNumber ? "btn-primary" : "btn-ghost")" @onclick="() => SetPage(pageNumber)">@pageNumber</button>
+                }
+                <button class="btn-admin btn-ghost" disabled="@(_page >= _totalPages)" @onclick="() => SetPage(_page + 1)" aria-label="Next page">&rsaquo;</button>
+            </div>
         </div>
     }
 </div>
@@ -88,13 +100,17 @@
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
-    private readonly List<AdminSessionResponse> _sessions = new();
-    private readonly HashSet<string> _selectedSessionIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<AdminLoginActivityResponse> _activity = new();
+    private readonly HashSet<string> _selectedActivityIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _loading = true;
     private bool _deleting;
+    private const int PageSize = 20;
+    private int _page = 1;
+    private int _totalPages = 1;
+    private long _totalCount;
 
-    private bool AllSessionsSelected =>
-        _sessions.Any() && _sessions.All(item => _selectedSessionIds.Contains(item.Id));
+    private bool AllActivitySelected =>
+        _activity.Any() && _activity.All(item => _selectedActivityIds.Contains(item.Id));
 
     protected override async Task OnInitializedAsync()
     {
@@ -111,50 +127,86 @@
 
     private async Task LoadAsync()
     {
-        var res = await Users.GetSessionsAsync();
+        _loading = true;
+        var res = await Users.GetLoginActivityAsync(_page, PageSize);
         if (res.Success && res.Data is not null)
         {
-            _sessions.Clear();
-            _sessions.AddRange(res.Data);
-            _selectedSessionIds.RemoveWhere(id => _sessions.All(item => item.Id != id));
+            _activity.Clear();
+            _activity.AddRange(res.Data.Items);
+            _page = res.Data.Page;
+            _totalPages = res.Data.TotalPages;
+            _totalCount = res.Data.TotalCount;
+            _selectedActivityIds.RemoveWhere(id => _activity.All(item => item.Id != id));
         }
         else
         {
             Http.Toast(res.Message, res.StatusCode);
         }
+        _loading = false;
     }
 
-    private void ToggleSession(string id, ChangeEventArgs e)
+    private IEnumerable<int> VisiblePages
     {
-        var selected = e.Value is bool value && value;
-        if (selected)
-            _selectedSessionIds.Add(id);
-        else
-            _selectedSessionIds.Remove(id);
-    }
-
-    private void ToggleAllSessions(ChangeEventArgs e)
-    {
-        var selected = e.Value is bool value && value;
-        _selectedSessionIds.Clear();
-        if (selected)
+        get
         {
-            foreach (var item in _sessions)
-                _selectedSessionIds.Add(item.Id);
+            var start = Math.Max(1, _page - 2);
+            var end = Math.Min(_totalPages, start + 4);
+            start = Math.Max(1, end - 4);
+            return Enumerable.Range(start, end - start + 1);
         }
     }
 
-    private async Task DeleteSelectedSessions()
+    private string ShowingText
     {
-        if (!_selectedSessionIds.Any()) return;
+        get
+        {
+            if (_totalCount == 0) return string.Format(T("ShowingRange"), 0, 0, 0);
+            var start = ((_page - 1) * PageSize) + 1;
+            var end = Math.Min(start + _activity.Count - 1, _totalCount);
+            return string.Format(T("ShowingRange"), start, end, _totalCount);
+        }
+    }
+
+    private async Task SetPage(int page)
+    {
+        var next = Math.Clamp(page, 1, _totalPages);
+        if (next == _page) return;
+        _page = next;
+        _selectedActivityIds.Clear();
+        await LoadAsync();
+    }
+
+    private void ToggleActivity(string id, ChangeEventArgs e)
+    {
+        var selected = e.Value is bool value && value;
+        if (selected)
+            _selectedActivityIds.Add(id);
+        else
+            _selectedActivityIds.Remove(id);
+    }
+
+    private void ToggleAllActivity(ChangeEventArgs e)
+    {
+        var selected = e.Value is bool value && value;
+        _selectedActivityIds.Clear();
+        if (selected)
+        {
+            foreach (var item in _activity)
+                _selectedActivityIds.Add(item.Id);
+        }
+    }
+
+    private async Task DeleteSelectedActivity()
+    {
+        if (!_selectedActivityIds.Any()) return;
 
         _deleting = true;
-        var res = await Users.DeleteSessionsAsync(_selectedSessionIds);
+        var res = await Users.DeleteLoginActivityAsync(_selectedActivityIds);
         Http.Toast(res.Message, res.StatusCode);
         _deleting = false;
         if (!res.Success) return;
 
-        _selectedSessionIds.Clear();
+        _selectedActivityIds.Clear();
         await LoadAsync();
     }
 
@@ -163,7 +215,7 @@
     private static string FormatDate(DateTime? value) =>
         value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
 
-    private static string DisplayDevice(AdminSessionResponse item)
+    private static string DisplayDevice(AdminLoginActivityResponse item)
     {
         var browser = string.IsNullOrWhiteSpace(item.BrowserName) ? "Browser" : item.BrowserName;
         var os = string.IsNullOrWhiteSpace(item.OperatingSystem) ? "Unknown OS" : item.OperatingSystem;

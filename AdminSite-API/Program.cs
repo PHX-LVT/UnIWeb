@@ -1,6 +1,5 @@
 ﻿using FullProject.Filters;
 using FullProject.Models;
-using FullProject.SectionServices;
 using FullProject.Services;
 using FullProject.Settings;
 using FullProject.Data;
@@ -14,6 +13,11 @@ using Swashbuckle.AspNetCore.Filters;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using GlobalManager.Services.SectionServices;
+using GlobalManager.Services.AssetService;
+using GlobalManager.Services.PublishAndResetService;
+using FullProject.Security.Forms;
+using FullProject.Services.FormServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +32,8 @@ builder.Services.Configure<CorsSettings>(
     builder.Configuration.GetSection("Cors"));
 builder.Services.Configure<R2StorageSettings>(
     builder.Configuration.GetSection("R2Storage"));
+builder.Services.Configure<FormSecuritySettings>(
+    builder.Configuration.GetSection("FormSecurity"));
 
 // â”€â”€ MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var mongoSettings = builder.Configuration
@@ -66,11 +72,17 @@ builder.Services.AddScoped<PublishService>();
 builder.Services.AddScoped<ResetService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<FormSubmissionService>();
+builder.Services.AddScoped<FormSubmissionSecurityService>();
+builder.Services.AddScoped<FormDefinitionService>();
+builder.Services.AddScoped<FormValidationService>();
+builder.Services.AddScoped<PublicFormSubmissionService>();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ContentService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicPageAssemblyService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicMetadataService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicFormSubmissionHandler>();
 builder.Services.AddHttpClient<R2StorageService>();
+builder.Services.AddScoped<AssetReferenceService>();
 builder.Services.AddScoped<R2AssetService>();
 
 // â”€â”€ Memory Cache (Phase 1 â€” Maybe Redis in Phase 2 idk) â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -79,14 +91,17 @@ builder.Services.AddMemoryCache();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("public-form", limiterOptions =>
-    {
-        limiterOptions.PermitLimit = 10;
-        limiterOptions.Window = TimeSpan.FromMinutes(1);
-        limiterOptions.QueueLimit = 0;
-        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiterOptions.AutoReplenishment = true;
-    });
+    options.AddPolicy("public-form", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"{context.Connection.RemoteIpAddress}:{context.Request.Path}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
 });
 
 // â”€â”€ JWT Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -110,6 +125,7 @@ if (string.IsNullOrWhiteSpace(jwtSettings.Secret) ||
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -237,13 +253,29 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 // rather than crashing the entire app.
 try
 {
-    await app.Services.GetRequiredService<MongoIndexService>().EnsureIndexesAsync();
+    await app.Services.GetRequiredService<MongoIndexService>()
+        .EnsureIndexesAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
 }
 catch (Exception ex)
 {
     logger.LogWarning(ex,
         "MongoDB index creation failed. App will continue but " +
         "some queries may be slower. Check MongoDB connectivity.");
+}
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<FormDefinitionService>()
+        .EnsureDefaultDefinitionsAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    logger.LogInformation("Default public form definitions checked.");
+}
+catch (Exception ex)
+{
+    logger.LogWarning(ex,
+        "Default form definition seed failed. Public modal forms may be unavailable until definitions are created.");
 }
 
 // â”€â”€ Seed admin user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -261,7 +293,8 @@ if (!string.IsNullOrEmpty(seedEmail) && !string.IsNullOrEmpty(seedPassword))
         using var scope = app.Services.CreateScope();
         var authService = scope.ServiceProvider
             .GetRequiredService<AuthService>();
-        await authService.SeedAdminAsync(seedEmail, seedPassword);
+        await authService.SeedAdminAsync(seedEmail, seedPassword)
+            .WaitAsync(TimeSpan.FromSeconds(10));
         logger.LogInformation(
             "Admin seed check complete for {Email}.", seedEmail);
     }

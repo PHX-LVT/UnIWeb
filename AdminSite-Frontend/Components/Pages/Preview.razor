@@ -116,7 +116,8 @@ else
             var sections = sectionsRes.Data ?? new();
             var blocksBySection = await LoadBlocksAsync(sections);
             var childrenBySourceId = await LoadShowcaseChildrenAsync(sections);
-            var libraryItems = await LoadLibraryItemsAsync(sections);
+            var contentTypes = await LoadContentTypesAsync(sections);
+            var libraryItems = await LoadLibraryItemsAsync(sections, contentTypes);
 
             _pageDto = new PublicPageDto
             {
@@ -184,7 +185,20 @@ else
         return childrenBySourceId;
     }
 
-    private async Task<List<PublicLibraryItemDto>> LoadLibraryItemsAsync(List<SectionModel> sections)
+    private async Task<Dictionary<string, ContentTypeModel>> LoadContentTypesAsync(List<SectionModel> sections)
+    {
+        if (!sections.Any(s => s.Type == "library"))
+            return new(StringComparer.OrdinalIgnoreCase);
+
+        var res = await ContentService.GetTypesAsync();
+        return (res.Data ?? new())
+            .GroupBy(t => t.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<List<PublicLibraryItemDto>> LoadLibraryItemsAsync(
+        List<SectionModel> sections,
+        IReadOnlyDictionary<string, ContentTypeModel> contentTypes)
     {
         if (!sections.Any(s => s.Type == "library"))
             return new();
@@ -192,7 +206,9 @@ else
         var res = await ContentService.GetAllAsync(status: "Published");
         return (res.Data ?? new())
             .Where(i => i.Visible)
-            .Select(MapLibraryItem)
+            .Select(item => MapLibraryItem(
+                item,
+                contentTypes.TryGetValue(item.ContentTypeKey, out var type) ? type : null))
             .ToList();
     }
 
@@ -528,12 +544,16 @@ else
                 Description = b.Description,
                 ImageUrl = b.ImageUrl,
                 ButtonLabel = b.ButtonLabel,
-                Href = b.Href
+                Href = b.Href,
+                Action = b.Action ?? "linkToPage",
+                FormDefinitionId = b.FormDefinitionId
             },
             "button" => new PublicButtonBlockDto
             {
                 Label = b.Label,
                 Href = b.Href,
+                Action = b.Action ?? "linkToPage",
+                FormDefinitionId = b.FormDefinitionId,
                 Style = b.Style
             },
             "metric" => new PublicMetricBlockDto
@@ -591,6 +611,20 @@ else
         dto.BlockZone = b.BlockZone;
         dto.ParentBlockId = b.ParentBlockId;
         dto.Layout = MapBlockLayout(b.Layout);
+        dto.Buttons = b.Buttons
+            .Where(button => button.Visible)
+            .OrderBy(button => button.Order)
+            .Select(button => new PublicBlockButtonDto
+            {
+                Id = button.Id,
+                Label = button.Label,
+                Action = button.Action ?? "linkToPage",
+                Href = button.Href,
+                FormDefinitionId = button.FormDefinitionId,
+                Visible = button.Visible,
+                Order = button.Order
+            })
+            .ToList();
         return dto;
     }
 
@@ -695,7 +729,7 @@ else
         return filtered.Take(limit).ToList();
     }
 
-    private static PublicLibraryItemDto MapLibraryItem(ContentItemModel item) => new()
+    private static PublicLibraryItemDto MapLibraryItem(ContentItemModel item, ContentTypeModel? type) => new()
     {
         Id = item.Id,
         StableId = item.StableId,
@@ -707,7 +741,7 @@ else
         ThumbnailUrl = item.ThumbnailUrl,
         VideoUrl = item.VideoUrl,
         ExternalUrl = item.ExternalUrl,
-        ClickBehavior = ResolveLibraryClickBehavior(item),
+        ClickBehavior = ResolveLibraryClickBehavior(item, type),
         Tags = item.Tags,
         Attachments = item.Attachments.Select(a => new PublicLibraryAttachmentDto
         {
@@ -722,8 +756,26 @@ else
         PublishedAt = item.PublishedAt
     };
 
-    private static string ResolveLibraryClickBehavior(ContentItemModel item)
+    private static string ResolveLibraryClickBehavior(ContentItemModel item, ContentTypeModel? type)
     {
+        var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
+        if (type?.RequiresBody == true)
+            return "detail";
+        if (type?.RequiresBody == false && configured is "download" or "video" or "external")
+            return configured;
+        if (type?.RequiresBody == false)
+        {
+            if (!string.IsNullOrWhiteSpace(item.VideoUrl) ||
+                item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))
+                return "video";
+            if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
+                return "external";
+            return "download";
+        }
+        if (string.Equals(item.ContentTypeKey, "article", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(item.ContentTypeKey, "case-study", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(item.ContentTypeKey, "technology", StringComparison.OrdinalIgnoreCase))
+            return "detail";
         if (string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase))
             return "video";
         if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) ||
@@ -781,6 +833,7 @@ else
         Label = b.Label ?? new(),
         Action = b.Action ?? string.Empty,
         Href = b.Href,
+        FormDefinitionId = b.FormDefinitionId,
         Style = b.Style ?? "filled",
         Visible = b.Visible,
         Order = b.Order

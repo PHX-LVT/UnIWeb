@@ -102,13 +102,45 @@ namespace FullProject.Controllers
         }
 
         [HttpGet("sessions")]
-        public async Task<IActionResult> GetSessions([FromQuery] string? adminId = null)
+        public async Task<IActionResult> GetSessions(
+            [FromQuery] string? adminId = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
             if (!CanViewLogs(actor)) return Forbid();
 
-            var sessions = await _auth.GetSessionsAsync(adminId);
-            return Ok(ApiResult.Ok(sessions.Select(MapSession).ToList()));
+            var result = await _auth.GetSessionsPageAsync(page, pageSize, adminId);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
+            return Ok(ApiResult.Ok(new AdminPagedResponse<AdminSessionResponse>
+            {
+                Items = result.Items.Select(MapSession).ToList(),
+                Page = result.Page,
+                PageSize = result.PageSize,
+                TotalCount = result.TotalCount,
+                TotalPages = totalPages
+            }));
+        }
+
+        [HttpGet("login-activity")]
+        public async Task<IActionResult> GetLoginActivity(
+            [FromQuery] string? adminId = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            var actor = await CurrentAdminAsync();
+            if (!CanViewLogs(actor)) return Forbid();
+
+            var result = await _auth.GetLoginActivityPageAsync(page, pageSize, adminId);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
+            return Ok(ApiResult.Ok(new AdminPagedResponse<AdminLoginActivityResponse>
+            {
+                Items = result.Items.Select(MapLoginActivity).ToList(),
+                Page = result.Page,
+                PageSize = result.PageSize,
+                TotalCount = result.TotalCount,
+                TotalPages = totalPages
+            }));
         }
 
         [HttpPost("sessions/delete")]
@@ -118,17 +150,38 @@ namespace FullProject.Controllers
             if (!IsAdminAdmin(actor)) return Forbid();
 
             var count = await _auth.DeleteSessionsAsync(dto.Ids, actor!, ClientIp, UserAgent);
-            return Ok(ApiResult.Ok(count, $"Deleted {count} login session log(s)."));
+            return Ok(ApiResult.Ok(count, $"Deleted {count} inactive session record(s)."));
+        }
+
+        [HttpPost("login-activity/delete")]
+        public async Task<IActionResult> DeleteLoginActivity([FromBody] AdminBulkDeleteRequest dto)
+        {
+            var actor = await CurrentAdminAsync();
+            if (!IsAdminAdmin(actor)) return Forbid();
+
+            var count = await _auth.DeleteLoginActivityAsync(dto.Ids, actor!, ClientIp, UserAgent);
+            return Ok(ApiResult.Ok(count, $"Deleted {count} login activity log(s)."));
         }
 
         [HttpGet("audit")]
-        public async Task<IActionResult> GetAuditLogs([FromQuery] string? targetId = null)
+        public async Task<IActionResult> GetAuditLogs(
+            [FromQuery] string? targetId = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
             if (!CanViewLogs(actor)) return Forbid();
 
-            var logs = await _auth.GetAuditLogsAsync(targetId);
-            return Ok(ApiResult.Ok(logs.Select(MapAudit).ToList()));
+            var result = await _auth.GetAuditLogsPageAsync(page, pageSize, targetId);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
+            return Ok(ApiResult.Ok(new AdminPagedResponse<AdminAuditLogResponse>
+            {
+                Items = result.Items.Select(MapAudit).ToList(),
+                Page = result.Page,
+                PageSize = result.PageSize,
+                TotalCount = result.TotalCount,
+                TotalPages = totalPages
+            }));
         }
 
         [HttpPost("audit/delete")]
@@ -149,6 +202,16 @@ namespace FullProject.Controllers
 
             var sessions = await _auth.GetSessionsAsync(actor.Id);
             return Ok(ApiResult.Ok(sessions.Select(MapSession).ToList()));
+        }
+
+        [HttpGet("me/login-activity")]
+        public async Task<IActionResult> GetMyLoginActivity()
+        {
+            var actor = await CurrentAdminAsync();
+            if (actor is null) return Unauthorized(ApiResult.Unauthorized<List<AdminLoginActivityResponse>>());
+
+            var activity = await _auth.GetLoginActivityAsync(actor.Id);
+            return Ok(ApiResult.Ok(activity.Select(MapLoginActivity).ToList()));
         }
 
         [HttpGet("me/audit")]
@@ -228,6 +291,21 @@ namespace FullProject.Controllers
             IsRevoked = session.IsRevoked,
             RevokedAt = session.RevokedAt,
             RevokeReason = session.RevokeReason
+        };
+
+        private static AdminLoginActivityResponse MapLoginActivity(AdminLoginActivityRecord activity) => new()
+        {
+            Id = activity.Id,
+            AdminId = activity.AdminId,
+            Email = activity.Email,
+            EventType = activity.EventType,
+            Success = activity.Success,
+            Message = activity.Message,
+            IpAddress = activity.IpAddress,
+            UserAgent = activity.UserAgent,
+            BrowserName = activity.BrowserName,
+            OperatingSystem = activity.OperatingSystem,
+            OccurredAt = activity.OccurredAt
         };
 
         private static AdminAuditLogResponse MapAudit(AdminAuditLog log) => new()

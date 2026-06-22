@@ -24,6 +24,7 @@ namespace FullProject.Services
                 LabelText = NormalizeLabel(dto.LabelText),
                 Action = dto.Action,
                 Href = dto.Href,
+                FormDefinitionId = dto.FormDefinitionId,
                 Position = dto.Position,
                 Order = (int)count
             };
@@ -41,6 +42,7 @@ namespace FullProject.Services
             }
             if (dto.Action != null) updates.Add(Builders<GlobalButton>.Update.Set(b => b.Action, dto.Action.Value));
             if (dto.Href != null) updates.Add(Builders<GlobalButton>.Update.Set(b => b.Href, dto.Href));
+            if (dto.FormDefinitionId != null) updates.Add(Builders<GlobalButton>.Update.Set(b => b.FormDefinitionId, dto.FormDefinitionId));
             if (dto.Position != null) updates.Add(Builders<GlobalButton>.Update.Set(b => b.Position, dto.Position.Value));
 
             if (!updates.Any())

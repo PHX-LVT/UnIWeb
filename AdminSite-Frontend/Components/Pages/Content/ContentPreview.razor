@@ -12,7 +12,7 @@
     <h1 class="page-title"><i class="fas fa-eye"></i> @T("ContentPreview")</h1>
 </div>
 
-@if (!Auth.CanManageContent)
+@if (!Auth.CanViewContent)
 {
     <div class="admin-card">
         <p class="text-muted">@T("NoPermission")</p>
@@ -232,15 +232,16 @@ else
     private bool IsResourceContent(ContentItemModel item)
     {
         var type = FindType(item.ContentTypeKey);
-        if (type is not null && !type.RequiresBody)
-            return true;
-
-        return ResourceClickBehavior(item) is "download" or "video" or "external";
+        return type is not null && !type.RequiresBody;
     }
 
     private string ResourceClickBehavior(ContentItemModel item)
     {
-        var configured = FindType(item.ContentTypeKey)?.ClickBehavior?.Trim().ToLowerInvariant();
+        var type = FindType(item.ContentTypeKey);
+        if (type is not null && type.RequiresBody)
+            return "detail";
+
+        var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
         if (configured is "download" or "video" or "external")
             return configured;
         if (!string.IsNullOrWhiteSpace(item.VideoUrl) || item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))

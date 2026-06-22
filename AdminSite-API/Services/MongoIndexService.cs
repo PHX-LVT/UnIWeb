@@ -34,6 +34,7 @@ namespace FullProject.Services
             var collection = _database.GetCollection<Page>(collectionName);
             await collection.Indexes.CreateManyAsync(new[]
             {
+                new CreateIndexModel<Page>(Builders<Page>.IndexKeys.Ascending(p => p.StableId)),
                 new CreateIndexModel<Page>(Builders<Page>.IndexKeys.Ascending(p => p.Slug)),
                 new CreateIndexModel<Page>(Builders<Page>.IndexKeys.Ascending(p => p.FullSlug)),
                 new CreateIndexModel<Page>(
@@ -50,28 +51,35 @@ namespace FullProject.Services
         private async Task EnsureSectionIndexesAsync(string collectionName)
         {
             var collection = _database.GetCollection<Section>(collectionName);
-            await collection.Indexes.CreateOneAsync(new CreateIndexModel<Section>(
-                Builders<Section>.IndexKeys
-                    .Ascending(s => s.PageStableId)
-                    .Ascending(s => s.Order)));
+            await collection.Indexes.CreateManyAsync(new[]
+            {
+                new CreateIndexModel<Section>(Builders<Section>.IndexKeys.Ascending(s => s.StableId)),
+                new CreateIndexModel<Section>(
+                    Builders<Section>.IndexKeys
+                        .Ascending(s => s.PageStableId)
+                        .Ascending(s => s.Order))
+            });
         }
 
         private async Task EnsureBlockIndexesAsync(string collectionName)
         {
             var collection = _database.GetCollection<Block>(collectionName);
-            await collection.Indexes.CreateOneAsync(new CreateIndexModel<Block>(
-                Builders<Block>.IndexKeys
-                    .Ascending(b => b.PageStableId)
-                    .Ascending(b => b.SectionStableId)
-                    .Ascending(b => b.Order)));
-
-            await collection.Indexes.CreateOneAsync(new CreateIndexModel<Block>(
-                Builders<Block>.IndexKeys
-                    .Ascending(b => b.PageStableId)
-                    .Ascending(b => b.SectionStableId)
-                    .Ascending(b => b.ParentBlockId)
-                    .Ascending(b => b.BlockZone)
-                    .Ascending(b => b.Order)));
+            await collection.Indexes.CreateManyAsync(new[]
+            {
+                new CreateIndexModel<Block>(Builders<Block>.IndexKeys.Ascending(b => b.StableId)),
+                new CreateIndexModel<Block>(
+                    Builders<Block>.IndexKeys
+                        .Ascending(b => b.PageStableId)
+                        .Ascending(b => b.SectionStableId)
+                        .Ascending(b => b.Order)),
+                new CreateIndexModel<Block>(
+                    Builders<Block>.IndexKeys
+                        .Ascending(b => b.PageStableId)
+                        .Ascending(b => b.SectionStableId)
+                        .Ascending(b => b.ParentBlockId)
+                        .Ascending(b => b.BlockZone)
+                        .Ascending(b => b.Order))
+            });
         }
 
         private async Task EnsureContentIndexesAsync()
@@ -88,7 +96,11 @@ namespace FullProject.Services
 
             await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(slugIndex));
             await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(statusIndex));
+            await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(
+                Builders<ContentItem>.IndexKeys.Ascending(c => c.StableId)));
             await published.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(slugIndex));
+            await published.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(
+                Builders<ContentItem>.IndexKeys.Ascending(c => c.StableId)));
 
             var contentTypes = _database.GetCollection<ContentType>("content_types");
             await contentTypes.Indexes.CreateOneAsync(new CreateIndexModel<ContentType>(
@@ -116,6 +128,18 @@ namespace FullProject.Services
                     .Ascending(s => s.IsRevoked)
                     .Ascending(s => s.ExpiresAt)));
 
+            var adminLoginActivity = _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
+            await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
+                Builders<AdminLoginActivityRecord>.IndexKeys.Descending(l => l.OccurredAt)));
+            await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
+                Builders<AdminLoginActivityRecord>.IndexKeys
+                    .Ascending(l => l.AdminId)
+                    .Descending(l => l.OccurredAt)));
+            await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
+                Builders<AdminLoginActivityRecord>.IndexKeys
+                    .Ascending(l => l.Success)
+                    .Descending(l => l.OccurredAt)));
+
             var adminAuditLogs = _database.GetCollection<AdminAuditLog>("admin_audit_logs");
             await adminAuditLogs.Indexes.CreateOneAsync(new CreateIndexModel<AdminAuditLog>(
                 Builders<AdminAuditLog>.IndexKeys.Descending(l => l.CreatedAt)));
@@ -140,6 +164,29 @@ namespace FullProject.Services
             var submissions = _database.GetCollection<FormSubmission>("form_submissions");
             await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
                 Builders<FormSubmission>.IndexKeys.Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.Status)
+                    .Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.FormKey)
+                    .Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.FormKey)
+                    .Ascending("Security.IpAddress")
+                    .Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.FormKey)
+                    .Ascending("Security.Fingerprint")
+                    .Descending(s => s.SubmittedAt)));
+
+            var formDefinitions = _database.GetCollection<FormDefinition>("form_definitions");
+            await formDefinitions.Indexes.CreateOneAsync(new CreateIndexModel<FormDefinition>(
+                Builders<FormDefinition>.IndexKeys.Ascending(f => f.Key),
+                new CreateIndexOptions { Unique = true }));
         }
     }
 }

@@ -400,6 +400,7 @@
 }
 
 .content-rich-select,
+.content-rich-size,
 .content-rich-btn,
 .content-rich-color {
     min-height: 32px;
@@ -412,6 +413,25 @@
 .content-rich-select {
     padding: 0 .5rem;
     font-size: .85rem;
+}
+
+.content-rich-size {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: 0 .4rem;
+    font-size: .78rem;
+}
+
+.content-rich-size input {
+    width: 42px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: right;
 }
 
 .content-rich-btn,
@@ -456,6 +476,27 @@
 .content-table {
     border-collapse: separate;
     border-spacing: 0;
+}
+
+.admin-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+.admin-pagination__buttons {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.admin-pagination__buttons .btn-admin {
+    min-width: 36px;
+    padding-right: .65rem;
+    padding-left: .65rem;
 }
 
 .content-table tbody tr:hover {

@@ -1,247 +1,695 @@
-﻿@page "/forms"
+@page "/forms"
 @inject AdminFormSubmissionService FormService
 @inject IHttpService Http
 
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-envelope-open-text"></i> @T("FormSubmissions")</h1>
+    <h1 class="page-title">@T("FormSubmissions")</h1>
 </div>
 
-@if (_loading)
+<div class="admin-card" style="margin-bottom:1rem">
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem">
+        <div class="form-stat"><strong>@_submissions.Count</strong><span>Total</span></div>
+        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.New)</strong><span>New</span></div>
+        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.InProgress)</strong><span>In Progress</span></div>
+        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.Resolved)</strong><span>Resolved</span></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 180px 180px auto;gap:.75rem;align-items:end">
+        <label class="form-filter">
+            <span>Search</span>
+            <input class="form-control" @bind="_search" @bind:event="oninput" placeholder="Name, email, source..." />
+        </label>
+        <label class="form-filter">
+            <span>Form</span>
+            <select class="form-control" @bind="_formKey">
+                <option value="">All forms</option>
+                @foreach (var definition in _definitions)
+                {
+                    <option value="@definition.Key">@Text(definition.Name, definition.Key)</option>
+                }
+            </select>
+        </label>
+        <label class="form-filter">
+            <span>Status</span>
+            <select class="form-control" @bind="_statusFilter">
+                <option value="">All statuses</option>
+                @foreach (var status in Enum.GetValues<FormSubmissionStatusModel>())
+                {
+                    <option value="@status">@StatusLabel(status)</option>
+                }
+            </select>
+        </label>
+        <button class="btn-admin btn-primary" @onclick="LoadAsync">Apply</button>
+    </div>
+</div>
+
+@if (_selectedIds.Count > 0)
 {
-    <div class="admin-card" style="text-align:center;padding:2rem">
-        <div class="spinner" style="margin:0 auto"></div>
+    <div class="admin-card" style="margin-bottom:1rem;display:flex;gap:.5rem;align-items:center">
+        <strong>@_selectedIds.Count selected</strong>
+        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Archived)">Archive</button>
+        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Spam)">Mark spam</button>
+        <button class="btn-admin btn-danger" @onclick="BulkDelete">Delete permanently</button>
     </div>
 }
-else if (!_submissions.Any())
-{
-    <div class="admin-card">
-        <p class="text-muted">@T("NoSubmissionsYet")</p>
+
+<div class="admin-card">
+    @if (_loading)
+    {
+        <div style="padding:2rem;text-align:center">Loading...</div>
+    }
+    else if (!_filteredSubmissions.Any())
+    {
+        <p class="text-muted">No submissions found.</p>
+    }
+    else
+    {
+        <DxGrid Data="@_filteredSubmissions"
+                CssClass="w-100"
+                PageSize="20">
+            <Columns>
+                <DxGridDataColumn Width="46px">
+                    <CellDisplayTemplate>
+                        @{
+                            var sub = (FormSubmissionModel)context.DataItem;
+                            <input type="checkbox"
+                                   checked="@_selectedIds.Contains(sub.Id)"
+                                   @onchange="e => ToggleSelected(sub.Id, e.Value)" />
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(FormSubmissionModel.SubmittedAt)"
+                                  Caption="Submitted Time"
+                                  DisplayFormat="{0:dd MMM yyyy HH:mm}"
+                                  Width="170px" />
+                <DxGridDataColumn Caption="Form" Width="170px">
+                    <CellDisplayTemplate>
+                        @{
+                            var sub = (FormSubmissionModel)context.DataItem;
+                            <span>@(string.IsNullOrWhiteSpace(sub.FormName) ? sub.FormKey : sub.FormName)</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn Caption="Status" Width="140px">
+                    <CellDisplayTemplate>
+                        @{
+                            var sub = (FormSubmissionModel)context.DataItem;
+                            <span class="status-pill status-@sub.Status.ToString().ToLowerInvariant()">@StatusLabel(sub.Status)</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn Caption="Source" Width="220px">
+                    <CellDisplayTemplate>
+                        @{
+                            var sub = (FormSubmissionModel)context.DataItem;
+                            <span>@sub.SourcePage</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn Caption="Data">
+                    <CellDisplayTemplate>
+                        @{
+                            var sub = (FormSubmissionModel)context.DataItem;
+                            <span>@Summary(sub)</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn Caption=" " Width="130px">
+                    <CellDisplayTemplate>
+                        @{
+                            var sub = (FormSubmissionModel)context.DataItem;
+                            <button class="btn-admin btn-secondary" @onclick="() => OpenDetail(sub)">View</button>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+        </DxGrid>
+    }
+</div>
+
+<div class="admin-card" style="margin-top:1rem">
+    <div class="definition-toolbar">
+        <h2 style="font-size:1.05rem;margin:0">Form Definitions</h2>
+        <div class="definition-editor-toolbar">
+            <div class="definition-usage">
+                <button type="button" class="definition-usage__button" disabled="@(!CanShowUsage)" @onclick="ToggleUsage">
+                    @UsageSummary
+                </button>
+                @if (_usageExpanded && _usage is not null)
+                {
+                    <div class="definition-usage__menu">
+                        @if (_usage.TotalCount == 0)
+                        {
+                            <div class="definition-usage__empty">Not used anywhere. Safe to delete.</div>
+                        }
+                        else
+                        {
+                            <strong>Used in @_usage.TotalCount place@(_usage.TotalCount == 1 ? string.Empty : "s")</strong>
+                            @foreach (var item in _usage.Items.Take(8))
+                            {
+                                <div class="definition-usage__item">
+                                    <span>@item.Location</span>
+                                    <small>@item.Source</small>
+                                </div>
+                            }
+                            @if (_usage.TotalCount > 8)
+                            {
+                                <div class="definition-usage__empty">+@(_usage.TotalCount - 8) more</div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+            <div class="definition-toolbar__actions">
+                <button class="btn-admin btn-primary" @onclick="NewDefinition">New form</button>
+                <button class="btn-admin btn-danger" disabled="@(!CanDeleteDefinition)" @onclick="DeleteDefinition">Permanent delete</button>
+            </div>
+        </div>
     </div>
-}
-else
-{
-    @if (FormSubmissions.Any())
-    {
-        <div class="admin-card">
-            <h2 style="font-size:1rem;margin:0 0 1rem">@T("FormSubmissions")</h2>
-            <DxGrid Data="@FormSubmissions"
-                    CssClass="w-100"
-                    PageSize="20">
-                <Columns>
-                    <DxGridDataColumn FieldName="@nameof(FormSubmissionDisplayModel.SubmittedAtVietnam)"
-                                      Caption="@T("SubmittedTime")"
-                                      DisplayFormat="{0:dd MMM yyyy HH:mm}"
-                                      Width="170px" />
-                    <DxGridDataColumn Caption="@T("Source")" Width="180px">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <span>@GetSourceLabel(sub.Submission)</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="@T("Name")" Width="160px">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <span>@GetData(sub.Submission, "Name")</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="@T("Email")" Width="210px">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                var email = GetData(sub.Submission, "Email");
-                                if (!string.IsNullOrWhiteSpace(email))
-                                {
-                                    <a href="mailto:@email">@email</a>
-                                }
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="@T("Data")">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <span>@GetDisplayData(sub.Submission)</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption=" " Width="80px">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <button class="btn-admin btn-danger"
-                                        @onclick="() => Delete(sub.Submission.Id)">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                </Columns>
-            </DxGrid>
-        </div>
-    }
 
-    @if (SyncHubLogins.Any())
-    {
-        <div class="admin-card" style="margin-top:1rem">
-            <h2 style="font-size:1rem;margin:0 0 1rem">@T("SyncHubLoginActivity")</h2>
-            <DxGrid Data="@SyncHubLogins"
-                    CssClass="w-100"
-                    PageSize="20">
-                <Columns>
-                    <DxGridDataColumn FieldName="@nameof(FormSubmissionDisplayModel.SubmittedAtVietnam)"
-                                      Caption="@T("SubmittedTime")"
-                                      DisplayFormat="{0:dd MMM yyyy HH:mm}"
-                                      Width="170px" />
-                    <DxGridDataColumn Caption="@T("Username")" Width="260px">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <span>@GetData(sub.Submission, "Username")</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="@T("Result")" Width="140px">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <span>@GetData(sub.Submission, "LoginResult")</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="@T("Source")">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <span>@GetSourceLabel(sub.Submission)</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption=" " Width="80px">
-                        <CellDisplayTemplate>
-                            @{
-                                var sub = (FormSubmissionDisplayModel)context.DataItem;
-                                <button class="btn-admin btn-danger"
-                                        @onclick="() => Delete(sub.Submission.Id)">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                </Columns>
-            </DxGrid>
+    <div style="display:grid;grid-template-columns:280px 1fr;gap:1rem">
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+            @foreach (var definition in _definitions)
+            {
+                <button class="definition-row @(_editingDefinition?.Id == definition.Id ? "active" : null)"
+                        @onclick="() => EditDefinition(definition)">
+                    <strong>@Text(definition.Name, definition.Key)</strong>
+                    <span>@definition.Key · @(definition.Active ? "Active" : "Disabled")</span>
+                </button>
+            }
         </div>
-    }
-}
 
-@if (_confirmDeleteId is not null)
+        @if (_editingDefinition is not null)
+        {
+            <div class="definition-editor">
+                @if (_definitionValidationErrors.Count > 0)
+                {
+                    <div class="alert alert-danger" role="alert">
+                        <strong>Please complete the required fields:</strong>
+                        <ul style="margin:.35rem 0 0;padding-left:1.25rem">
+                            @foreach (var error in _definitionValidationErrors)
+                            {
+                                <li>@error</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                <div style="display:grid;grid-template-columns:160px 1fr;gap:.75rem">
+                    <label class="form-filter">
+                        <span>Key <strong class="required-mark">*</strong></span>
+                        <input class="form-control" required @bind="_editingDefinition.Key" />
+                    </label>
+                    <div class="form-filter">
+                        <span>Name <strong class="required-mark">*</strong></span>
+                        <div class="definition-name-control">
+                            <input class="form-control" required value="@Text(_editingDefinition.Name, string.Empty)" @onchange="e => SetText(_editingDefinition.Name, e.Value)" />
+                            <button type="button"
+                                    class="definition-active-toggle @(_editingDefinition.Active ? "active" : "disabled")"
+                                    aria-pressed="@_editingDefinition.Active"
+                                    @onclick="ToggleDefinitionActive">
+                                <span class="definition-active-toggle__dot"></span>
+                                @(_editingDefinition.Active ? "Active" : "Disabled")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <label class="form-filter" style="margin-top:.75rem">
+                    <span>Introduction</span>
+                    <textarea class="form-control" rows="2" @onchange="e => SetText(_editingDefinition.Introduction, e.Value)">@Text(_editingDefinition.Introduction, string.Empty)</textarea>
+                </label>
+
+                <div class="definition-settings-row">
+                    <label class="form-filter">
+                        <span>Submit Button Label <strong class="required-mark">*</strong></span>
+                        <input class="form-control" required value="@Text(_editingDefinition.SubmitButtonLabel, string.Empty)" @onchange="e => SetText(_editingDefinition.SubmitButtonLabel, e.Value)" />
+                    </label>
+                    <label class="form-filter">
+                        <span>Modal Layout</span>
+                        <select class="form-control" @bind="_editingDefinition.Layout">
+                            <option value="@FormLayoutModel.Stacked">Stacked</option>
+                            <option value="@FormLayoutModel.TwoColumns">Two-Columns</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;margin:1rem 0 .5rem">
+                    <h3 style="font-size:1rem;margin:0">Fields</h3>
+                    <button class="btn-admin btn-secondary" @onclick="AddField">Add field</button>
+                </div>
+
+                <div class="@DefinitionFieldGridClass">
+                    @foreach (var field in _editingDefinition.Fields.OrderBy(f => f.Order))
+                    {
+                        <div class="@FieldCardClass(field)">
+                            <div class="field-card__controls">
+                                <label class="form-filter">
+                                    <span>Type</span>
+                                    <select class="form-control" @bind="field.Type">
+                                        @foreach (var type in FieldTypes)
+                                        {
+                                            <option value="@type">@type</option>
+                                        }
+                                    </select>
+                                </label>
+                                <label class="form-filter">
+                                    <span>Key <strong class="required-mark">*</strong></span>
+                                    <input class="form-control" required placeholder="name" @bind="field.Key" />
+                                </label>
+                                <label class="form-filter field-card__label-input">
+                                    <span>Label <strong class="required-mark">*</strong></span>
+                                    <input class="form-control" required placeholder="Field label" value="@Text(field.Label, string.Empty)" @onchange="e => SetText(field.Label, e.Value)" />
+                                </label>
+                                <label class="form-filter">
+                                    <span>Max</span>
+                                    <input class="form-control" type="number" min="1" max="2000" @bind="field.MaxLength" />
+                                </label>
+                                <label class="field-card__required">
+                                    <input type="checkbox" @bind="field.Required" />
+                                    Required
+                                </label>
+                                <button class="btn-admin btn-danger" @onclick="() => RemoveField(field)">Delete</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div style="display:flex;gap:.5rem;margin-top:1rem">
+                    <button class="btn-admin btn-primary" @onclick="SaveDefinition">Save definition</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@if (_detail is not null)
 {
-    <div class="modal-backdrop" @onclick="() => _confirmDeleteId = null">
-        <div class="modal-box" style="max-width:360px" @onclick:stopPropagation="true">
-            <div class="modal-header">@T("ConfirmDelete")</div>
+    <div class="modal-backdrop" @onclick="CloseDetail">
+        <div class="modal-box" style="max-width:680px" @onclick:stopPropagation="true">
+            <div class="modal-header">Submission Detail</div>
             <div class="modal-body">
-                <p>@T("DeleteSubmissionPrompt")</p>
+                <div style="display:grid;grid-template-columns:1fr 180px;gap:.75rem;margin-bottom:1rem">
+                    <div>
+                        <strong>@_detail.FormName</strong>
+                        <div class="text-muted">@_detail.SourcePage</div>
+                    </div>
+                    <select class="form-control" @bind="_detail.Status">
+                        @foreach (var status in Enum.GetValues<FormSubmissionStatusModel>())
+                        {
+                            <option value="@status">@StatusLabel(status)</option>
+                        }
+                    </select>
+                </div>
+
+                <div style="display:grid;gap:.5rem;margin-bottom:1rem">
+                    @foreach (var field in _detail.Fields.OrderBy(f => f.Order))
+                    {
+                        <div class="detail-field">
+                            <strong>@field.Label</strong>
+                            <span>@field.Value</span>
+                        </div>
+                    }
+                </div>
+
+                <label class="form-filter">
+                    <span>Internal notes</span>
+                    <textarea class="form-control" rows="4" @bind="_detail.InternalNotes"></textarea>
+                </label>
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost"
-                        @onclick="() => _confirmDeleteId = null">@T("Cancel")</button>
-                <button class="btn-admin btn-danger" @onclick="ConfirmDelete">
-                    @T("Delete")
-                </button>
+                <button class="btn-admin btn-ghost" @onclick="CloseDetail">Close</button>
+                <button class="btn-admin btn-primary" @onclick="SaveDetail">Save</button>
             </div>
         </div>
     </div>
 }
+
+<style>
+    .form-stat { border:1px solid #111827; border-radius:8px; padding:.9rem; background:#fff; display:flex; flex-direction:column; gap:.2rem; }
+    .form-stat strong { font-size:1.4rem; }
+    .form-stat span, .form-filter span { font-size:.78rem; color:#64748b; }
+    .form-filter { display:flex; flex-direction:column; gap:.25rem; }
+    .form-control { border:1px solid #cbd5e1; border-radius:6px; padding:.55rem .65rem; background:#fff; min-height:38px; }
+    .status-pill { display:inline-flex; border-radius:999px; padding:.22rem .55rem; font-size:.78rem; font-weight:700; background:#e2e8f0; color:#0f172a; }
+    .status-new { background:#dbeafe; color:#1d4ed8; }
+    .status-inprogress { background:#fef3c7; color:#92400e; }
+    .status-resolved { background:#dcfce7; color:#166534; }
+    .status-spam { background:#fee2e2; color:#991b1b; }
+    .status-archived { background:#e2e8f0; color:#475569; }
+    .definition-toolbar { display:grid; grid-template-columns:280px 1fr; gap:1rem; align-items:center; margin-bottom:1rem; }
+    .definition-editor-toolbar { position:relative; display:flex; justify-content:space-between; align-items:center; gap:1rem; min-width:0; }
+    .definition-toolbar__actions { display:flex; gap:.5rem; align-items:center; }
+    .definition-usage { position:relative; min-width:0; }
+    .definition-usage__button { border:1px solid #dbe3ef; border-radius:999px; background:#fff; color:#0f172a; padding:.45rem .75rem; font-weight:700; cursor:pointer; }
+    .definition-usage__button:disabled { opacity:.55; cursor:not-allowed; }
+    .definition-usage__menu { position:absolute; z-index:20; top:calc(100% + 8px); left:0; width:min(420px, 80vw); padding:.75rem; border:1px solid #dbe3ef; border-radius:8px; background:#fff; box-shadow:0 16px 38px rgba(15,23,42,.18); display:grid; gap:.45rem; }
+    .definition-usage__item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.75rem; align-items:center; padding:.35rem 0; border-top:1px solid #eef2f7; }
+    .definition-usage__item span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .definition-usage__item small, .definition-usage__empty { color:#64748b; font-size:.8rem; }
+    .definition-row { text-align:left; border:1px solid #dbe3ef; border-radius:8px; padding:.75rem; background:#fff; display:flex; flex-direction:column; gap:.25rem; }
+    .definition-row.active { border-color:#b99a4a; box-shadow:0 0 0 2px rgba(185,154,74,.18); }
+    .definition-row span { color:#64748b; font-size:.8rem; }
+    .definition-editor { border:1px solid #dbe3ef; border-radius:8px; padding:1rem; background:#f8fafc; }
+    .required-mark { color:#dc2626; font-weight:800; }
+    .definition-name-control { display:flex; gap:.5rem; align-items:stretch; }
+    .definition-name-control .form-control { flex:1 1 auto; min-width:0; }
+    .definition-active-toggle { min-width:112px; border:1px solid #94a3b8; border-radius:6px; padding:.5rem .7rem; display:inline-flex; align-items:center; justify-content:center; gap:.45rem; background:#fff; color:#475569; font-weight:700; cursor:pointer; }
+    .definition-active-toggle.active { border-color:#16a34a; background:#f0fdf4; color:#166534; }
+    .definition-active-toggle__dot { width:9px; height:9px; border-radius:50%; background:currentColor; flex:0 0 auto; }
+    .definition-settings-row { display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:.75rem; margin-top:.75rem; }
+    .definition-field-grid { display:grid; grid-template-columns:1fr; gap:.75rem; }
+    .definition-field-grid--two-columns { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .field-card { min-width:0; border:1px solid #dbe3ef; border-radius:8px; background:#fff; padding:.75rem; }
+    .field-card--full { grid-column:1 / -1; }
+    .field-card__controls { display:grid; grid-template-columns:120px 130px minmax(0,1fr) 86px auto auto; gap:.5rem; align-items:end; }
+    .field-card__label-input { min-width:0; }
+    .field-card__required { display:flex; gap:.35rem; align-items:center; color:#334155; font-size:.9rem; min-height:38px; }
+    .detail-field { display:grid; grid-template-columns:180px 1fr; gap:.75rem; border-bottom:1px solid #e2e8f0; padding:.45rem 0; }
+</style>
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
+    private static readonly string[] FieldTypes = ["text", "email", "tel", "textarea", "select", "checkbox", "date", "number", "url"];
     private List<FormSubmissionModel> _submissions = new();
-    private string? _confirmDeleteId;
+    private List<FormSubmissionModel> _filteredSubmissions = new();
+    private List<FormDefinitionModel> _definitions = new();
+    private HashSet<string> _selectedIds = new();
+    private FormSubmissionModel? _detail;
+    private FormDefinitionModel? _editingDefinition;
+    private FormDefinitionUsageModel? _usage;
+    private List<string> _definitionValidationErrors = new();
     private bool _loading = true;
+    private bool _usageExpanded;
+    private bool _usageLoading;
+    private string _search = string.Empty;
+    private string _formKey = string.Empty;
+    private string _statusFilter = string.Empty;
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
-    private List<FormSubmissionDisplayModel> FormSubmissions =>
-        _submissions.Where(s => !IsSyncHubLogin(s)).Select(FormSubmissionDisplayModel.FromUtc).ToList();
+    private bool CanShowUsage => _editingDefinition is not null && !string.IsNullOrWhiteSpace(_editingDefinition.Id);
 
-    private List<FormSubmissionDisplayModel> SyncHubLogins =>
-        _submissions.Where(IsSyncHubLogin).Select(FormSubmissionDisplayModel.FromUtc).ToList();
+    private string UsageSummary => !CanShowUsage
+        ? "Usage: Not saved yet"
+        : _usageLoading
+            ? "Usage: Loading..."
+            : _usage is null
+                ? "Usage: Not loaded"
+                : _usage.TotalCount == 0
+                    ? "Usage: Not used"
+                    : $"Usage: Used in {_usage.TotalCount} place{(_usage.TotalCount == 1 ? string.Empty : "s")}";
 
-    protected override async Task OnInitializedAsync()
+    private string DefinitionFieldGridClass => _editingDefinition?.Layout == FormLayoutModel.TwoColumns
+        ? "definition-field-grid definition-field-grid--two-columns"
+        : "definition-field-grid";
+
+    private static string FieldCardClass(FormFieldDefinitionModel field) => string.Equals(field.Type, "textarea", StringComparison.OrdinalIgnoreCase)
+        ? "field-card field-card--full"
+        : "field-card";
+
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
-        var res = await FormService.GetAllAsync();
-        _submissions = res.Data ?? new();
+        _loading = true;
+        var status = Enum.TryParse<FormSubmissionStatusModel>(_statusFilter, out var parsed) ? parsed : (FormSubmissionStatusModel?)null;
+        var submissions = await FormService.GetAllAsync(_formKey, status, _search);
+        var definitions = await FormService.GetDefinitionsAsync();
+        _submissions = submissions.Data ?? new();
+        _filteredSubmissions = _submissions;
+        _definitions = definitions.Data ?? new();
+        _selectedIds.Clear();
+
+        var selectedDefinition = _editingDefinition is null
+            ? _definitions.FirstOrDefault()
+            : _definitions.FirstOrDefault(definition => definition.Id == _editingDefinition.Id) ?? _definitions.FirstOrDefault();
+        _editingDefinition = selectedDefinition is null ? null : Clone(selectedDefinition);
         _loading = false;
+        await LoadUsageAsync();
     }
 
-    private void Delete(string id) => _confirmDeleteId = id;
+    private int Count(FormSubmissionStatusModel status) => _submissions.Count(s => s.Status == status);
 
-    private async Task ConfirmDelete()
+    private void ToggleSelected(string id, object? value)
     {
-        if (_confirmDeleteId is null) return;
-        var res = await FormService.DeleteAsync(_confirmDeleteId);
+        var selected = value is bool b && b;
+        if (selected) _selectedIds.Add(id);
+        else _selectedIds.Remove(id);
+    }
+
+    private async Task BulkStatus(FormSubmissionStatusModel status)
+    {
+        var res = await FormService.BulkStatusAsync(_selectedIds.ToList(), status);
         Http.Toast(res.Message, res.StatusCode);
-        if (res.Success)
-            _submissions.RemoveAll(s => s.Id == _confirmDeleteId);
-        _confirmDeleteId = null;
+        await LoadAsync();
     }
 
-    private string GetSourceLabel(FormSubmissionModel sub)
+    private async Task BulkDelete()
     {
-        if (string.Equals(sub.PageId, "modal:quote", StringComparison.OrdinalIgnoreCase))
-        {
-            return T("GetQuote");
-        }
-
-        if (string.Equals(sub.PageId, "modal:expert", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(sub.PageId, "modal:contact", StringComparison.OrdinalIgnoreCase))
-        {
-            return T("TalkToExpert");
-        }
-
-        if (string.Equals(sub.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase))
-        {
-            return T("LoginToSyncHub");
-        }
-
-        return string.IsNullOrWhiteSpace(sub.PageId) ? "Form" : sub.PageId;
+        var res = await FormService.BulkDeleteAsync(_selectedIds.ToList());
+        Http.Toast(res.Message, res.StatusCode);
+        await LoadAsync();
     }
 
-    private static string GetData(FormSubmissionModel sub, string key) =>
-        sub.Data.TryGetValue(key, out var value) ? value : string.Empty;
+    private void OpenDetail(FormSubmissionModel sub) => _detail = Clone(sub);
+    private void CloseDetail() => _detail = null;
 
-    private static bool IsSyncHubLogin(FormSubmissionModel sub) =>
-        string.Equals(sub.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase);
-
-    private static string GetDisplayData(FormSubmissionModel sub)
+    private async Task SaveDetail()
     {
-        var hiddenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        if (_detail is null) return;
+        var res = await FormService.UpdateAsync(_detail.Id, new FormSubmissionUpdateRequest
         {
-            "FormType",
-            "PageUrl",
-            "Password",
-            "PasswordProvided",
-            "LoginResult"
-        };
-
-        return string.Join(" · ", sub.Data
-            .Where(kv => !hiddenKeys.Contains(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
-            .Select(kv => $"{kv.Key}: {kv.Value}"));
+            Status = _detail.Status,
+            InternalNotes = _detail.InternalNotes
+        });
+        Http.Toast(res.Message, res.StatusCode);
+        _detail = null;
+        await LoadAsync();
     }
 
-    private sealed class FormSubmissionDisplayModel
+    private void NewDefinition()
     {
-        public required FormSubmissionModel Submission { get; init; }
-        public DateTime SubmittedAtVietnam { get; init; }
-
-        public static FormSubmissionDisplayModel FromUtc(FormSubmissionModel submission) => new()
+        _definitionValidationErrors.Clear();
+        _usage = null;
+        _usageExpanded = false;
+        _usageLoading = false;
+        _editingDefinition = new FormDefinitionModel
         {
-            Submission = submission,
-            SubmittedAtVietnam = DateTime.SpecifyKind(submission.SubmittedAt, DateTimeKind.Utc).AddHours(7)
+            Active = true,
+            Layout = FormLayoutModel.Stacked,
+            SubmitButtonLabel = new() { [AdminLanguage] = "Submit" },
+            Name = new() { [AdminLanguage] = "New form" },
+            Fields = [new FormFieldDefinitionModel
+            {
+                Key = "Name",
+                Type = "text",
+                Label = new() { [AdminLanguage] = "Name" },
+                Placeholder = new() { [AdminLanguage] = "Name" },
+                Required = true,
+                MaxLength = 150,
+                Order = 0
+            }]
         };
     }
+
+    private async Task EditDefinition(FormDefinitionModel definition)
+    {
+        _definitionValidationErrors.Clear();
+        _usageExpanded = false;
+        _editingDefinition = Clone(definition);
+        await LoadUsageAsync();
+    }
+
+    private async Task ToggleUsage()
+    {
+        if (!CanShowUsage) return;
+        if (_usage is null)
+            await LoadUsageAsync();
+        _usageExpanded = !_usageExpanded;
+    }
+
+    private async Task LoadUsageAsync()
+    {
+        if (!CanShowUsage || _editingDefinition is null)
+        {
+            _usage = null;
+            _usageExpanded = false;
+            return;
+        }
+
+        _usageLoading = true;
+        var result = await FormService.GetDefinitionUsageAsync(_editingDefinition.Id);
+        _usage = result.Data;
+        _usageLoading = false;
+    }
+
+    private void ToggleDefinitionActive()
+    {
+        if (_editingDefinition is not null)
+            _editingDefinition.Active = !_editingDefinition.Active;
+    }
+
+    private void AddField()
+    {
+        if (_editingDefinition is null) return;
+        var order = _editingDefinition.Fields.Count;
+        _editingDefinition.Fields.Add(new FormFieldDefinitionModel
+        {
+            Key = $"Field{order + 1}",
+            Type = "text",
+            Label = new() { [AdminLanguage] = $"Field {order + 1}" },
+            Placeholder = new() { [AdminLanguage] = $"Field {order + 1}" },
+            MaxLength = 500,
+            Order = order
+        });
+    }
+
+    private void RemoveField(FormFieldDefinitionModel field)
+    {
+        if (_editingDefinition is null) return;
+        _editingDefinition.Fields.Remove(field);
+        for (var i = 0; i < _editingDefinition.Fields.Count; i++)
+            _editingDefinition.Fields[i].Order = i;
+    }
+
+    private async Task SaveDefinition()
+    {
+        if (_editingDefinition is null) return;
+
+        _definitionValidationErrors = ValidateDefinition(_editingDefinition);
+        if (_definitionValidationErrors.Count > 0)
+        {
+            Http.Toast("Please fill in the required form fields.", 400);
+            return;
+        }
+
+        var res = await FormService.SaveDefinitionAsync(_editingDefinition);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.StatusCode is >= 200 and < 300)
+        {
+            _definitionValidationErrors.Clear();
+            await LoadAsync();
+        }
+    }
+
+    private static List<string> ValidateDefinition(FormDefinitionModel definition)
+    {
+        var errors = new List<string>();
+        var key = definition.Key?.Trim() ?? string.Empty;
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^[a-z][a-z0-9-]{1,63}$"))
+            errors.Add("Enter a valid key using lowercase letters, numbers, and hyphens.");
+        if (!definition.Name.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            errors.Add("Form name is required.");
+        if (!definition.SubmitButtonLabel.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            errors.Add("Submit button label is required.");
+        if (definition.Fields.Count == 0)
+            errors.Add("Add at least one form field.");
+        if (definition.Fields.Any(field => !System.Text.RegularExpressions.Regex.IsMatch(field.Key ?? string.Empty, "^[A-Za-z][A-Za-z0-9_-]{0,99}$")))
+            errors.Add("Every field must have a valid key.");
+        if (definition.Fields.GroupBy(field => field.Key, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            errors.Add("Form field keys must be unique.");
+        if (definition.Fields.Any(field => !FieldTypes.Contains(field.Type, StringComparer.OrdinalIgnoreCase)))
+            errors.Add("Every field must use a supported field type.");
+        if (definition.Fields.Any(field => !field.Label.Values.Any(value => !string.IsNullOrWhiteSpace(value))))
+            errors.Add("Every field must have a label.");
+        if (definition.Fields.Any(field => field.MaxLength is < 1 or > 2_000))
+            errors.Add("Every field maximum length must be between 1 and 2000.");
+
+        return errors;
+    }
+
+    private bool CanDeleteDefinition => _editingDefinition is not null
+        && !string.IsNullOrWhiteSpace(_editingDefinition.Id)
+        && !_usageLoading
+        && (_usage?.TotalCount ?? 0) == 0;
+
+    private async Task DeleteDefinition()
+    {
+        if (!CanDeleteDefinition || _editingDefinition is null) return;
+        var res = await FormService.DeleteDefinitionAsync(_editingDefinition.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.StatusCode is >= 200 and < 300)
+        {
+            _editingDefinition = null;
+            await LoadAsync();
+        }
+    }
+
+    private string Summary(FormSubmissionModel sub) =>
+        string.Join(" · ", sub.Fields
+            .Where(field => !string.IsNullOrWhiteSpace(field.Value))
+            .Take(4)
+            .Select(field => $"{field.Label}: {field.Value}"));
+
+    private string StatusLabel(FormSubmissionStatusModel status) => status switch
+    {
+        FormSubmissionStatusModel.InProgress => "In Progress",
+        _ => status.ToString()
+    };
+
+    private string Text(Dictionary<string, string>? values, string fallback) =>
+        values?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : values?.GetValueOrDefault("en") is { Length: > 0 } english
+                ? english
+                : values?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+
+    private void SetText(Dictionary<string, string> values, object? value) =>
+        values[AdminLanguage] = value?.ToString() ?? string.Empty;
+
+    private static FormSubmissionModel Clone(FormSubmissionModel source) => new()
+    {
+        Id = source.Id,
+        FormId = source.FormId,
+        FormKey = source.FormKey,
+        FormName = source.FormName,
+        Language = source.Language,
+        SourcePage = source.SourcePage,
+        Status = source.Status,
+        Fields = source.Fields.Select(f => new FormSubmissionFieldModel
+        {
+            Key = f.Key,
+            Label = f.Label,
+            Type = f.Type,
+            Value = f.Value,
+            Order = f.Order
+        }).ToList(),
+        InternalNotes = source.InternalNotes,
+        SubmittedAt = source.SubmittedAt,
+        UpdatedAt = source.UpdatedAt
+    };
+
+    private static FormDefinitionModel Clone(FormDefinitionModel source) => new()
+    {
+        Id = source.Id,
+        Key = source.Key,
+        Name = new(source.Name),
+        Introduction = new(source.Introduction),
+        SubmitButtonLabel = new(source.SubmitButtonLabel),
+        DisplayMode = source.DisplayMode,
+        Layout = source.Layout,
+        Active = source.Active,
+        Fields = source.Fields.Select(f => new FormFieldDefinitionModel
+        {
+            Key = f.Key,
+            Type = f.Type,
+            Label = new(f.Label),
+            Placeholder = new(f.Placeholder),
+            Required = f.Required,
+            MinLength = f.MinLength,
+            MaxLength = f.MaxLength,
+            Options = f.Options.Select(o => new FormFieldOptionModel
+            {
+                Value = o.Value,
+                Label = new(o.Label),
+                Order = o.Order
+            }).ToList(),
+            Order = f.Order
+        }).ToList(),
+        CreatedAt = source.CreatedAt,
+        UpdatedAt = source.UpdatedAt
+    };
 }

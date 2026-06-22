@@ -5,7 +5,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace FullProject.Services
+namespace GlobalManager.Services.AssetService
 {
     public class R2StorageService
     {

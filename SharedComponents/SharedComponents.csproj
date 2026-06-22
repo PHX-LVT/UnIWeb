@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DevExpress.Win.Design" Version="25.2.3" />
     <PackageReference Include="Microsoft.AspNetCore.Components" Version="8.0.15" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.15" />
   </ItemGroup>

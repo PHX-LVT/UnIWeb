@@ -18,7 +18,7 @@
     }
 </nav>
 
-@if (Auth.CanManageSettings || Auth.CanViewLogs)
+@if (Auth.CanManageSettings)
 {
     <nav class="ez-nav-section">
         <button class="ez-nav-toggle @ToggleClass("global")" type="button" @onclick='() => ToggleGroup("global")'>
@@ -43,13 +43,16 @@
                     <span>@T("Social")</span>
                 </NavLink>
             }
-            @if (Auth.CanViewLogs)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/forms" @onclick='() => ExpandGroup("global")'>
-                    <span>@T("FormSubmissions")</span>
-                </NavLink>
-            }
         }
+    </nav>
+}
+
+@if (Auth.CanViewLogs)
+{
+    <nav class="ez-nav-section">
+        <NavLink class="ez-nav-link" href="/forms" @onclick="CollapseGroups">
+            <span>@T("FormSubmissions")</span>
+        </NavLink>
     </nav>
 }
 
@@ -63,21 +66,21 @@
 
         @if (_expandedGroup == "content")
         {
-            <NavLink class="ez-nav-link ez-nav-child" href="/content/all" @onclick='() => ExpandGroup("content")'>
-                <span>@T("AllContent")</span>
-            </NavLink>
             @if (Auth.CanManageContent)
             {
+                <NavLink class="ez-nav-link ez-nav-child" href="/content/all" @onclick='() => ExpandGroup("content")'>
+                    <span>@T("AllContent")</span>
+                </NavLink>
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/my" @onclick='() => ExpandGroup("content")'>
                     <span>@T("MyContent")</span>
                 </NavLink>
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/submitted" @onclick='() => ExpandGroup("content")'>
                     <span>@T("Submitted")</span>
                 </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/preview" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("ContentPreview")</span>
-                </NavLink>
             }
+            <NavLink class="ez-nav-link ez-nav-child" href="/content/preview" @onclick='() => ExpandGroup("content")'>
+                <span>@T("ContentPreview")</span>
+            </NavLink>
             @if (Auth.CanManageAllContent)
             {
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/published" @onclick='() => ExpandGroup("content")'>
@@ -184,7 +187,7 @@
     {
         if (!Auth.CanViewContent) return;
         _expandedGroup = "content";
-        Nav.NavigateTo("/content/all");
+        Nav.NavigateTo(Auth.CanManageContent ? "/content/all" : "/content/preview");
     }
 
     private void CollapseGroups()

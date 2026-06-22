@@ -1,5 +1,6 @@
 @inject AdminBlockService BlockService
 @inject IHttpService Http
+@inject AdminFormSubmissionService FormService
 @using Contracts.Admin
 @using Microsoft.AspNetCore.Components.Forms
 
@@ -107,10 +108,11 @@
         </div>
     }
     <div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:.75rem">
-        <div class="form-group">
-            <label class="form-label">Href</label>
-            <DxTextBox @bind-Text="_href" CssClass="w-100" NullText="/solutions" />
-        </div>
+        <ButtonActionFields @bind-Action="_action"
+                            @bind-Href="_href"
+                            @bind-FormDefinitionId="_formDefinitionId"
+                            FormDefinitions="_formDefinitions"
+                            AdminLanguage="AdminLanguage" />
         @if (Block.Type == "button")
         {
             <div class="form-group">
@@ -175,6 +177,8 @@
     private Dictionary<string, string> _description = new();
     private Dictionary<string, string> _buttonLabel = new();
     private string? _href;
+    private string _action = "linkToPage";
+    private string? _formDefinitionId;
     private string _style = "filled";
     private string? _value;
     private string? _prefix;
@@ -187,7 +191,14 @@
     private string _layoutMode = "stack";
     private int _columns = 2;
     private string _gap = "medium";
+    private List<FormDefinitionModel> _formDefinitions = new();
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var forms = await FormService.GetDefinitionsAsync();
+        _formDefinitions = forms.Data ?? new();
+    }
 
     protected override void OnParametersSet()
     {
@@ -199,6 +210,8 @@
         _description = new(Block.Description ?? new());
         _buttonLabel = new(Block.ButtonLabel ?? new());
         _href = Block.Href;
+        _action = NormalizeButtonAction(Block.Action);
+        _formDefinitionId = Block.FormDefinitionId;
         _style = NormalizeButtonStyle(Block.Style);
         _value = Block.Value;
         _prefix = Block.Prefix;
@@ -359,6 +372,13 @@
         W = Block.Layout.W,
         H = Block.Layout.H
     };
+
+    private static string NormalizeButtonAction(string? action) => IsOpenFormAction(action) ? "openForm" : "linkToPage";
+
+    private static bool IsOpenFormAction(string? action) =>
+        string.Equals(action, "openForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenModal", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeButtonStyle(string? style) => style switch
     {

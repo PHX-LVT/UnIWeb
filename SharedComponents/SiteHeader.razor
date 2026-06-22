@@ -45,13 +45,13 @@
                     @foreach (var btn in (GlobalButtons ?? Enumerable.Empty<PublicGlobalButton>()).Where(b =>
                         b.Position == GlobalButtonPosition.HeaderRight).OrderBy(b => b.Order))
                     {
-                        <a href="@GetButtonHref(btn)"
-                           class="sc-btn sc-btn--filled"
-                           target="@GetButtonTarget(btn)"
-                           rel="@GetButtonRel(btn)"
-                           @onclick="CloseMenu">
+                        <ActionButton Action="@btn.Action.ToString()" FormDefinitionId="@btn.FormDefinitionId" Href="@GetButtonHref(btn)"
+                                      CssClass="sc-btn sc-btn--filled"
+                                      Target="@GetButtonTarget(btn)"
+                                      Rel="@GetButtonRel(btn)"
+                                      OnClick="CloseMenu">
                             @GetButtonLabel(btn)
-                        </a>
+                        </ActionButton>
                     }
                 </div>
             }
@@ -76,13 +76,13 @@
                 @foreach (var btn in (GlobalButtons ?? Enumerable.Empty<PublicGlobalButton>()).Where(b =>
                     b.Position == GlobalButtonPosition.HeaderRight).OrderBy(b => b.Order))
                 {
-                    <a href="@GetButtonHref(btn)"
-                       class="sc-btn sc-btn--filled"
-                       target="@GetButtonTarget(btn)"
-                       rel="@GetButtonRel(btn)"
-                       @onclick="CloseMenu">
+                    <ActionButton Action="@btn.Action.ToString()" FormDefinitionId="@btn.FormDefinitionId" Href="@GetButtonHref(btn)"
+                                  CssClass="sc-btn sc-btn--filled"
+                                  Target="@GetButtonTarget(btn)"
+                                  Rel="@GetButtonRel(btn)"
+                                  OnClick="CloseMenu">
                         @GetButtonLabel(btn)
-                    </a>
+                    </ActionButton>
                 }
             </div>
         }

@@ -27,6 +27,9 @@ namespace AdminSite.Services
         public async Task<(bool Success, string? Error)> LoginAsync(
             string email, string password)
         {
+            CurrentUser = null;
+            await _storage.RemoveItemAsync("admin_session");
+
             var response = await _http.PostAsync<LoginResponse>(
                 "api/auth/login",
                 new LoginRequest { Email = email, Password = password });

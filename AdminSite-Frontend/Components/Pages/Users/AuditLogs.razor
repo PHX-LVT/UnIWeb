@@ -73,6 +73,18 @@
                 </tbody>
             </table>
         </div>
+        <div class="admin-pagination">
+            <span class="text-muted">@ShowingText</span>
+            <div class="admin-pagination__buttons">
+                <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="() => SetPage(_page - 1)" aria-label="Previous page">&lsaquo;</button>
+                @foreach (var page in VisiblePages)
+                {
+                    var pageNumber = page;
+                    <button class="btn-admin @(_page == pageNumber ? "btn-primary" : "btn-ghost")" @onclick="() => SetPage(pageNumber)">@pageNumber</button>
+                }
+                <button class="btn-admin btn-ghost" disabled="@(_page >= _totalPages)" @onclick="() => SetPage(_page + 1)" aria-label="Next page">&rsaquo;</button>
+            </div>
+        </div>
     }
 </div>
 
@@ -83,6 +95,10 @@
     private readonly HashSet<string> _selectedAuditIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _loading = true;
     private bool _deleting;
+    private const int PageSize = 20;
+    private int _page = 1;
+    private int _totalPages = 1;
+    private long _totalCount;
 
     private bool AllAuditLogsSelected =>
         _logs.Any() && _logs.All(item => _selectedAuditIds.Contains(item.Id));
@@ -102,17 +118,53 @@
 
     private async Task LoadAsync()
     {
-        var res = await Users.GetAuditLogsAsync();
+        _loading = true;
+        var res = await Users.GetAuditLogsAsync(_page, PageSize);
         if (res.Success && res.Data is not null)
         {
             _logs.Clear();
-            _logs.AddRange(res.Data);
+            _logs.AddRange(res.Data.Items);
+            _page = res.Data.Page;
+            _totalPages = res.Data.TotalPages;
+            _totalCount = res.Data.TotalCount;
             _selectedAuditIds.RemoveWhere(id => _logs.All(item => item.Id != id));
         }
         else
         {
             Http.Toast(res.Message, res.StatusCode);
         }
+        _loading = false;
+    }
+
+    private IEnumerable<int> VisiblePages
+    {
+        get
+        {
+            var start = Math.Max(1, _page - 2);
+            var end = Math.Min(_totalPages, start + 4);
+            start = Math.Max(1, end - 4);
+            return Enumerable.Range(start, end - start + 1);
+        }
+    }
+
+    private string ShowingText
+    {
+        get
+        {
+            if (_totalCount == 0) return string.Format(T("ShowingRange"), 0, 0, 0);
+            var start = ((_page - 1) * PageSize) + 1;
+            var end = Math.Min(start + _logs.Count - 1, _totalCount);
+            return string.Format(T("ShowingRange"), start, end, _totalCount);
+        }
+    }
+
+    private async Task SetPage(int page)
+    {
+        var next = Math.Clamp(page, 1, _totalPages);
+        if (next == _page) return;
+        _page = next;
+        _selectedAuditIds.Clear();
+        await LoadAsync();
     }
 
     private void ToggleAuditLog(string id, ChangeEventArgs e)

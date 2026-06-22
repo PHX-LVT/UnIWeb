@@ -4,6 +4,7 @@
 @inject IHttpService Http
 @inject NavigationManager Nav
 @inject AdminAuthService Auth
+@inject IJSRuntime JS
 
 <div class="page-header content-editor-header">
     <h1 class="page-title"><i class="fas fa-pen-nib"></i> @T(IsNew ? "NewContent" : "EditContent")</h1>
@@ -381,11 +382,12 @@ else
     private string CurrentLang => NormalizeLang(AdminLanguage);
     private ContentTypeModel? SelectedType => _types.FirstOrDefault(t => string.Equals(t.Key, _edit.ContentTypeKey, StringComparison.OrdinalIgnoreCase));
     private string ClickBehavior => SelectedType?.ClickBehavior?.ToLowerInvariant() ?? "detail";
-    private bool ShowsBody => SelectedType?.RequiresBody == true || ClickBehavior == "detail";
-    private bool ShowsHero => ClickBehavior == "detail" || SelectedType?.RequiresHeroImage == true;
-    private bool ShowsTemplate => ClickBehavior == "detail";
-    private bool ShowsFile => SelectedType?.RequiresFile == true || ClickBehavior == "download";
-    private bool ShowsVideo => SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video";
+    private bool IsDetailContent => SelectedType?.RequiresBody != false;
+    private bool ShowsBody => IsDetailContent;
+    private bool ShowsHero => IsDetailContent || SelectedType?.RequiresHeroImage == true;
+    private bool ShowsTemplate => IsDetailContent;
+    private bool ShowsFile => !IsDetailContent && (SelectedType?.RequiresFile == true || ClickBehavior == "download");
+    private bool ShowsVideo => !IsDetailContent && (SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video");
     private bool ShowsThumbnail => ShowsFile || ShowsVideo;
     private bool BodyLimitReached => _edit.BodyItems.Count >= 10;
     private string ReturnUrl => GetReturnUrl();
@@ -471,6 +473,7 @@ else
 
     private async Task<bool> SaveCurrentAsync()
     {
+        await FlushRichTextEditorsAsync();
         PrepareRequest();
         var res = IsNew
             ? await ContentService.CreateAsync(_edit)
@@ -488,6 +491,17 @@ else
             LoadItem(res.Data);
 
         return true;
+    }
+
+    private async Task FlushRichTextEditorsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("contentRichTextEditor.flushAll");
+        }
+        catch (JSException)
+        {
+        }
     }
 
     private async Task Submit() => await SetStatus("Submitted");

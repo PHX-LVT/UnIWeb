@@ -1,7 +1,10 @@
 using FullProject.DTOs;
 using FullProject.Models;
-using FullProject.SectionServices;
 using FullProject.Utils;
+using GlobalManager.Services.SectionServices;
+using FullProject.Security.Forms;
+using Contracts.Forms;
+using FullProject.Services.FormServices;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FullProject.Services.PublicService
@@ -16,17 +19,20 @@ namespace FullProject.Services.PublicService
         private readonly SectionService _sectionService;
         private readonly BlockService _blockService;
         private readonly FormSubmissionService _submissionService;
+        private readonly FormSubmissionSecurityService _formSecurity;
 
         public PublicFormSubmissionHandler(
             PageService pageService,
             SectionService sectionService,
             BlockService blockService,
-            FormSubmissionService submissionService)
+            FormSubmissionService submissionService,
+            FormSubmissionSecurityService formSecurity)
         {
             _pageService = pageService;
             _sectionService = sectionService;
             _blockService = blockService;
             _submissionService = submissionService;
+            _formSecurity = formSecurity;
         }
 
         public async Task<IActionResult> SubmitPageFormAsync(
@@ -57,26 +63,13 @@ namespace FullProject.Services.PublicService
             if (normalizedType is null)
                 return new NotFoundObjectResult(ApiResult.NotFound("Form not found."));
 
+            if (normalizedType != "sync")
+                return new NotFoundObjectResult(ApiResult.NotFound("Form not found."));
+
             var validation = ValidateModalSubmission(normalizedType, dto);
             if (validation is not null) return validation;
 
-            if (normalizedType == "sync")
-            {
-                return await SubmitSyncHubLoginAsync(dto);
-            }
-
-            var data = BuildModalSubmissionData(normalizedType, dto.Data);
-
-            await _submissionService.CreateAsync(new FormSubmission
-            {
-                PageId = $"modal:{normalizedType}",
-                SectionId = "hardcoded-modal",
-                BlockId = $"{normalizedType}-modal",
-                Data = data,
-                SubmittedAt = DateTime.UtcNow
-            });
-
-            return new OkObjectResult(ApiResult.Ok("Form submitted successfully."));
+            return await SubmitSyncHubLoginAsync(dto);
         }
 
         private async Task<IActionResult> SubmitForPageAsync(
@@ -95,13 +88,47 @@ namespace FullProject.Services.PublicService
             var validation = await ValidateFormSubmissionAsync(page, sectionId, form, dto);
             if (validation is not null) return validation;
 
+            var securityInput = new Dictionary<string, string>(dto.Data, StringComparer.OrdinalIgnoreCase)
+            {
+                ["__website"] = dto.Honeypot ?? string.Empty
+            };
+            var rules = form.Fields.Select(field => new FormFieldValidationRule(
+                field.Name,
+                field.Type,
+                field.Required,
+                FieldMaximumLength(field.Type),
+                field.Options?.Where(option => !string.IsNullOrWhiteSpace(option)).ToHashSet(StringComparer.OrdinalIgnoreCase)));
+            var security = await _formSecurity.ValidateAsync($"block:{blockId}", securityInput, rules);
+            if (!security.Accepted) return SecurityFailure(security);
+
+            var language = NormalizeLanguage(dto.Language);
+
             await _submissionService.CreateAsync(new FormSubmission
             {
                 PageId = page.Id,
                 SectionId = sectionId,
                 BlockId = blockId,
-                Data = dto.Data,
-                SubmittedAt = DateTime.UtcNow
+                FormKey = $"block:{blockId}",
+                FormName = "Page Form",
+                Language = language,
+                SourcePage = page.FullSlug ?? page.Slug,
+                Status = FormSubmissionStatus.New,
+                Fields = form.Fields
+                    .OrderBy(field => field.Order)
+                    .Where(field => security.Data.ContainsKey(field.Name))
+                    .Select(field => new FormSubmissionFieldSnapshot
+                    {
+                        Key = field.Name,
+                        Label = Localized(field.Label, language, field.Name),
+                        Type = field.Type,
+                        Value = security.Data[field.Name],
+                        Order = field.Order
+                    })
+                    .ToList(),
+                Security = ToSecurityModel(security),
+                Data = security.Data,
+                SubmittedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             });
 
             return new OkObjectResult(ApiResult.Ok("Form submitted successfully."));
@@ -161,35 +188,6 @@ namespace FullProject.Services.PublicService
             if (section is null || section.StableId != form.SectionStableId)
                 return new NotFoundObjectResult(ApiResult.NotFound("Form not found."));
 
-            if (dto.Data.Count > 50)
-                return new BadRequestObjectResult(ApiResult.BadRequest("Too many form fields."));
-
-            var validFields = form.Fields
-                .Where(f => !string.IsNullOrWhiteSpace(f.Name))
-                .ToDictionary(f => f.Name, f => f);
-
-            if (dto.Data.Keys.Any(k => string.IsNullOrWhiteSpace(k) ||
-                                       k.Length > 100 ||
-                                       !validFields.ContainsKey(k)))
-            {
-                return new BadRequestObjectResult(ApiResult.BadRequest("Invalid form field."));
-            }
-
-            if (dto.Data.Values.Any(v => v is not null && v.Length > 2000))
-                return new BadRequestObjectResult(ApiResult.BadRequest("Field value too long."));
-
-            var totalLength = dto.Data.Sum(kv => kv.Key.Length + (kv.Value?.Length ?? 0));
-            if (totalLength > 20_000)
-                return new BadRequestObjectResult(ApiResult.BadRequest("Form payload too large."));
-
-            var missingRequired = form.Fields.Any(f =>
-                f.Required &&
-                (!dto.Data.TryGetValue(f.Name, out var value) ||
-                 string.IsNullOrWhiteSpace(value)));
-
-            if (missingRequired)
-                return new BadRequestObjectResult(ApiResult.BadRequest("Required form field missing."));
-
             return null;
         }
 
@@ -198,11 +196,8 @@ namespace FullProject.Services.PublicService
             var type = modalType.Trim().ToLowerInvariant();
             return type switch
             {
-                "quote" => "quote",
-                "expert" => "expert",
                 "sync" => "sync",
                 "synchub" => "sync",
-                "contact" => "expert",
                 _ => null
             };
         }
@@ -214,12 +209,7 @@ namespace FullProject.Services.PublicService
             if (dto.Data.Count > 12)
                 return new BadRequestObjectResult(ApiResult.BadRequest("Too many form fields."));
 
-            var required = normalizedType switch
-            {
-                "quote" => new[] { "ServiceType", "Route", "Email", "Phone" },
-                "sync" => new[] { "Username", "Password" },
-                _ => new[] { "Name", "Email", "Phone", "Service" }
-            };
+            var required = new[] { "Username", "Password" };
 
             foreach (var field in required)
             {
@@ -255,31 +245,41 @@ namespace FullProject.Services.PublicService
             return null;
         }
 
-        private static Dictionary<string, string> BuildModalSubmissionData(
-            string normalizedType,
-            Dictionary<string, string> input)
+        private static FormSubmissionSecurity ToSecurityModel(FormSecurityResult result) => new()
         {
-            var data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            IpAddress = result.IpAddress,
+            UserAgent = result.UserAgent,
+            Fingerprint = result.Fingerprint
+        };
+
+        private static IActionResult SecurityFailure(FormSecurityResult result) =>
+            result.StatusCode switch
             {
-                ["FormType"] = normalizedType
+                StatusCodes.Status409Conflict => new ConflictObjectResult(ApiResult.BadRequest(result.Message)),
+                StatusCodes.Status429TooManyRequests => new ObjectResult(ApiResult.BadRequest(result.Message)) { StatusCode = StatusCodes.Status429TooManyRequests },
+                _ => new BadRequestObjectResult(ApiResult.BadRequest(result.Message))
             };
 
-            foreach (var field in input)
-            {
-                if (string.IsNullOrWhiteSpace(field.Key) || string.IsNullOrWhiteSpace(field.Value))
-                    continue;
+        private static int FieldMaximumLength(string? type) => type?.ToLowerInvariant() switch
+        {
+            "email" => 254,
+            "tel" or "phone" => 40,
+            "textarea" => 2000,
+            _ => 500
+        };
 
-                if (string.Equals(field.Key, "Password", StringComparison.OrdinalIgnoreCase))
-                {
-                    data["PasswordProvided"] = "true";
-                    continue;
-                }
-
-                data[field.Key] = field.Value.Trim();
-            }
-
-            return data;
+        private static string NormalizeLanguage(string? language)
+        {
+            var normalized = language?.Trim().ToLowerInvariant();
+            return string.IsNullOrWhiteSpace(normalized) || normalized.Length > 12 ? "en" : normalized;
         }
+
+        private static string Localized(IReadOnlyDictionary<string, string> values, string language, string fallback) =>
+            values.GetValueOrDefault(language) is { Length: > 0 } localized
+                ? localized
+                : values.GetValueOrDefault("en") is { Length: > 0 } english
+                    ? english
+                    : fallback;
 
         private static bool IsReasonableEmail(string email)
         {

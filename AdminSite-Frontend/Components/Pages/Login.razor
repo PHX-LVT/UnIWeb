@@ -75,13 +75,22 @@
         _error = null;
         _loading = true;
 
-        var (success, error) = await Auth.LoginAsync(_email, _password);
+        try
+        {
+            var (success, error) = await Auth.LoginAsync(_email, _password);
 
-        if (success)
-            Nav.NavigateTo("/");
-        else
-            _error = error ?? "Login failed.";
-
-        _loading = false;
+            if (success)
+                Nav.NavigateTo("/");
+            else
+                _error = error ?? "Login failed.";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to sign in: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 }

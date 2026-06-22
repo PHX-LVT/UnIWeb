@@ -46,9 +46,12 @@ else
         </div>
 
         <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem">
-            <input type="checkbox" @bind="_edit.RequiresBody" />
-            @T("RequiresBody")
+            <input type="checkbox" checked="@ResourceOnly" @onchange="OnResourceOnlyChanged" />
+            @T("ResourceOnlyContent")
         </label>
+        <p class="text-muted" style="font-size:.8rem;margin:.25rem 0 0">
+            @T("ResourceOnlyContentHint")
+        </p>
         <label style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
             <input type="checkbox" @bind="_edit.RequiresHeroImage" />
             @T("RequiresHeroImage")
@@ -66,7 +69,7 @@ else
             @T("AllowsAttachments")
         </label>
         <label style="margin-top:.75rem">@T("ClickBehavior")</label>
-        <select class="form-control" @bind="_edit.ClickBehavior">
+        <select class="form-control" @bind="_edit.ClickBehavior" @bind:after="NormalizeWorkflow">
             <option value="detail">@T("DetailPage")</option>
             <option value="download">@T("FileDownload")</option>
             <option value="video">@T("VideoModal")</option>
@@ -108,7 +111,7 @@ else
                         <tr>
                             <th>@T("Name")</th>
                             <th>@T("Key")</th>
-                            <th>@T("RequiresBody")</th>
+                            <th>@T("ContentWorkflow")</th>
                             <th>@T("ClickBehavior")</th>
                             <th>@T("Visible")</th>
                             <th></th>
@@ -120,7 +123,7 @@ else
                             <tr>
                                 <td>@GetLang(type.Name)</td>
                                 <td>@type.Key</td>
-                                <td>@(type.RequiresBody ? T("Yes") : T("No"))</td>
+                                <td>@(type.RequiresBody ? T("DetailPage") : T("ResourceOnlyContent"))</td>
                                 <td>@DisplayClickBehavior(type.ClickBehavior)</td>
                                 <td>@(type.Visible ? T("Yes") : T("No"))</td>
                                 <td style="text-align:right">
@@ -149,6 +152,7 @@ else
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
+    private bool ResourceOnly => !_edit.RequiresBody;
 
     protected override async Task OnInitializedAsync()
     {
@@ -195,6 +199,7 @@ else
 
     private async Task Save()
     {
+        NormalizeWorkflow();
         var res = _editingId is null
             ? await ContentService.CreateTypeAsync(_edit)
             : await ContentService.UpdateTypeAsync(_editingId, _edit);
@@ -230,6 +235,47 @@ else
         "external" => T("ExternalLink"),
         _ => T("DetailPage")
     };
+
+    private void OnResourceOnlyChanged(ChangeEventArgs e)
+    {
+        var resourceOnly = e.Value is bool value && value;
+        _edit.RequiresBody = !resourceOnly;
+
+        if (resourceOnly)
+        {
+            _edit.RequiresHeroImage = false;
+            _edit.AllowsAttachments = true;
+            if (string.Equals(_edit.ClickBehavior, "detail", StringComparison.OrdinalIgnoreCase))
+                _edit.ClickBehavior = "download";
+            if (string.Equals(_edit.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase))
+                _edit.RequiresFile = true;
+            if (string.Equals(_edit.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase))
+                _edit.RequiresVideoUrl = true;
+        }
+        else
+        {
+            _edit.RequiresFile = false;
+            _edit.RequiresVideoUrl = false;
+            _edit.ClickBehavior = "detail";
+        }
+    }
+
+    private void NormalizeWorkflow()
+    {
+        if (_edit.RequiresBody)
+        {
+            _edit.ClickBehavior = "detail";
+            _edit.RequiresFile = false;
+            _edit.RequiresVideoUrl = false;
+            return;
+        }
+
+        if (_edit.ClickBehavior is not ("download" or "video" or "external"))
+            _edit.ClickBehavior = "download";
+        _edit.RequiresFile = string.Equals(_edit.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase);
+        _edit.RequiresVideoUrl = string.Equals(_edit.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase);
+        _edit.AllowsAttachments = _edit.AllowsAttachments || _edit.RequiresFile;
+    }
 
     private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)
     {

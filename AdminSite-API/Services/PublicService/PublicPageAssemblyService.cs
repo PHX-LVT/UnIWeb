@@ -1,6 +1,7 @@
-﻿using Contracts.Public;
+using Contracts.Public;
 using FullProject.Models;
-using FullProject.SectionServices;
+using FullProject.Services.FormServices;
+using GlobalManager.Services.SectionServices;
 using System.Net;
 using System.Text.RegularExpressions;
 
@@ -12,17 +13,20 @@ namespace FullProject.Services.PublicService
         private readonly SectionService _sectionService;
         private readonly BlockService _blockService;
         private readonly ContentService _contentService;
+        private readonly FormDefinitionService _formDefinitionService;
 
         public PublicPageAssemblyService(
             PageService pageService,
             SectionService sectionService,
             BlockService blockService,
-            ContentService contentService)
+            ContentService contentService,
+            FormDefinitionService formDefinitionService)
         {
             _pageService = pageService;
             _sectionService = sectionService;
             _blockService = blockService;
             _contentService = contentService;
+            _formDefinitionService = formDefinitionService;
         }
 
         public async Task<object?> GetPageResponseAsync(string slug)
@@ -73,7 +77,7 @@ namespace FullProject.Services.PublicService
             var contentType = (await _contentService.GetTypesAsync())
                 .FirstOrDefault(t => string.Equals(t.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase));
 
-            return BuildContentDetailPage(item, contentType);
+            return await BuildContentDetailPageAsync(item, contentType);
         }
 
         private async Task<List<object>> BuildVisibleSectionDtosAsync(Page page)
@@ -385,7 +389,9 @@ namespace FullProject.Services.PublicService
             Summary = item.Summary,
             HeroImageUrl = item.HeroImageUrl,
             ThumbnailUrl = item.ThumbnailUrl,
-            VideoUrl = item.VideoUrl,
+            VideoUrl = !string.IsNullOrWhiteSpace(item.VideoUrl)
+                ? item.VideoUrl
+                : item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url,
             ExternalUrl = item.ExternalUrl,
             ClickBehavior = ResolveLibraryClickBehavior(item, type),
             Tags = item.Tags,
@@ -402,9 +408,10 @@ namespace FullProject.Services.PublicService
             PublishedAt = item.PublishedAt
         };
 
-        public PublicPageDto BuildContentDetailPage(ContentItem item, ContentType? type = null)
+        public async Task<PublicPageDto> BuildContentDetailPageAsync(ContentItem item, ContentType? type = null)
         {
             var typeRoute = ContentTypeRoute(item.ContentTypeKey);
+            var expertForm = await _formDefinitionService.GetActiveByKeyAsync("expert");
             var fullSlug = $"insights/{typeRoute}/{item.Slug}";
             return new PublicPageDto
             {
@@ -463,8 +470,9 @@ namespace FullProject.Services.PublicService
                                     ["vi"] = "Talk to Expert",
                                     ["cn"] = "Talk to Expert"
                                 },
-                                Action = "modal",
-                                Href = "#expert",
+                                Action = expertForm is null ? "linkToPage" : "openForm",
+                                Href = expertForm is null ? "/contact" : null,
+                                FormDefinitionId = expertForm?.Id,
                                 Style = "filled",
                                 Visible = true,
                                 Order = 0
@@ -693,7 +701,7 @@ namespace FullProject.Services.PublicService
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;
 
-            if (Regex.IsMatch(value, @"<\s*(p|h[1-6]|ul|ol|blockquote|div|figure|table|br)\b", RegexOptions.IgnoreCase))
+            if (ContainsHtmlMarkup(value))
                 return value;
 
             var paragraphs = Regex.Split(value.Trim(), @"(?:\r?\n){2,}")
@@ -703,6 +711,12 @@ namespace FullProject.Services.PublicService
 
             return string.Join(Environment.NewLine, paragraphs);
         }
+
+        private static bool ContainsHtmlMarkup(string value) =>
+            Regex.IsMatch(
+                value,
+                @"<\s*(p|h[1-6]|ul|ol|li|blockquote|div|figure|figcaption|table|thead|tbody|tr|td|th|br|span|strong|b|em|i|u|a)\b",
+                RegexOptions.IgnoreCase);
 
         private static string BuildContentDetailSidebarHtml(ContentItem item, string typeRoute, string lang)
         {
@@ -745,8 +759,8 @@ namespace FullProject.Services.PublicService
             {
                 var label = lang switch
                 {
-                    "vi" => "Quay láº¡i Insights",
-                    "cn" => "è¿”å›ž Insights",
+                    "vi" => "Quay lại Insights",
+                    "cn" => "返回 Insights",
                     _ => "Back to Insights"
                 };
 
@@ -861,6 +875,10 @@ namespace FullProject.Services.PublicService
         private static string ResolveLibraryClickBehavior(ContentItem item, ContentType? type = null)
         {
             var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
+            if (configured == "video" || IsVideoLibraryType(item.ContentTypeKey) || IsVideoLibraryType(type?.Key))
+                return "video";
+            if (type?.RequiresBody == true)
+                return "detail";
             if (type?.RequiresBody == false && configured is "download" or "video" or "external")
                 return configured;
             if (type?.RequiresBody == false)
@@ -872,8 +890,10 @@ namespace FullProject.Services.PublicService
                     return "external";
                 return "download";
             }
-            if (string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase))
-                return "video";
+            if (string.Equals(item.ContentTypeKey, "article", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.ContentTypeKey, "case-study", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.ContentTypeKey, "technology", StringComparison.OrdinalIgnoreCase))
+                return "detail";
             if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) ||
                 item.BodyItems.Any(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url)) ||
                 string.Equals(item.ContentTypeKey, "whitepaper", StringComparison.OrdinalIgnoreCase) ||
@@ -882,6 +902,14 @@ namespace FullProject.Services.PublicService
             if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
                 return "external";
             return "detail";
+        }
+
+        private static bool IsVideoLibraryType(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            var normalized = key.Trim().ToLowerInvariant();
+            return normalized.Contains("video", StringComparison.OrdinalIgnoreCase) ||
+                   normalized.Contains("webinar", StringComparison.OrdinalIgnoreCase);
         }
 
         private static ShowcaseItemOverride? FindShowcaseOverride(Page child, IReadOnlyDictionary<string, ShowcaseItemOverride> overrides)
@@ -921,6 +949,7 @@ namespace FullProject.Services.PublicService
             Label = b.Label,
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Style = b.Style,
             Visible = b.Visible,
             Order = b.Order
@@ -1013,13 +1042,17 @@ namespace FullProject.Services.PublicService
                     Description = card.Description,
                     ImageUrl = card.ImageUrl,
                     ButtonLabel = card.ButtonLabel,
-                    Href = card.Href
+                    Href = card.Href,
+                    Action = card.Action,
+                    FormDefinitionId = card.FormDefinitionId
                 },
                 ButtonBlock button => new PublicButtonBlockDto
                 {
                     Type = "button",
                     Label = button.Label,
                     Href = button.Href,
+                    Action = button.Action,
+                    FormDefinitionId = button.FormDefinitionId,
                     Style = button.Style
                 },
                 MetricBlock metric => new PublicMetricBlockDto
@@ -1086,7 +1119,9 @@ namespace FullProject.Services.PublicService
                 {
                     Id = b.Id,
                     Label = b.Label,
+                    Action = b.Action.ToString(),
                     Href = b.Href,
+                    FormDefinitionId = b.FormDefinitionId,
                     Visible = b.Visible,
                     Order = b.Order
                 })

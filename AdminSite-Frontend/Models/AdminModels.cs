@@ -57,6 +57,7 @@ namespace AdminSite.Models
         public Dictionary<string, string> LabelText { get; set; } = new();
         public string? Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Position { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -65,6 +66,7 @@ namespace AdminSite.Models
     {
         public Dictionary<string, string>? LabelText { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Action { get; set; }
         public string? Position { get; set; }
         // public string? Style { get; set; }
@@ -360,6 +362,7 @@ namespace AdminSite.Models
 
         public string? Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -450,6 +453,17 @@ namespace AdminSite.Models
     }
 
     // -- Blocks ------------------------------------------------
+    public class BlockButtonModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
+        public string? Action { get; set; }
+        public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
     public class BlockModel
     {
         public string Id { get; set; } = string.Empty;
@@ -462,6 +476,7 @@ namespace AdminSite.Models
         public string? BlockZone { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutModel? Layout { get; set; }
+        public List<BlockButtonModel> Buttons { get; set; } = new();
 
 
         // Text
@@ -476,6 +491,8 @@ namespace AdminSite.Models
         public string? Prefix { get; set; }
         public string? Suffix { get; set; }
         public string? Href { get; set; }
+        public string? Action { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }
@@ -620,14 +637,108 @@ namespace AdminSite.Models
     }
 
     // -- Form Submissions --------------------------------------
+    public enum FormLayoutModel
+    {
+        Stacked,
+        TwoColumns
+    }
+
+    public enum FormSubmissionStatusModel
+    {
+        New,
+        InProgress,
+        Resolved,
+        Spam,
+        Archived
+    }
+
+    public enum FormDisplayModeModel
+    {
+        Modal,
+        Embedded
+    }
+
+    public class FormDefinitionUsageItemModel
+    {
+        public string Area { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string Location { get; set; } = string.Empty;
+        public string PageName { get; set; } = string.Empty;
+        public string PageSlug { get; set; } = string.Empty;
+        public string SectionType { get; set; } = string.Empty;
+        public string SectionTitle { get; set; } = string.Empty;
+        public string ElementLabel { get; set; } = string.Empty;
+    }
+
+    public class FormDefinitionUsageModel
+    {
+        public string FormDefinitionId { get; set; } = string.Empty;
+        public int TotalCount { get; set; }
+        public List<FormDefinitionUsageItemModel> Items { get; set; } = new();
+    }
+    public class FormSubmissionFieldModel
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public string Value { get; set; } = string.Empty;
+        public int Order { get; set; }
+    }
+
     public class FormSubmissionModel
     {
         public string Id { get; set; } = string.Empty;
-        public string? PageId { get; set; }
-        public string? SectionId { get; set; }
-        public string? BlockId { get; set; }
-        public Dictionary<string, string> Data { get; set; } = new();
+        public string FormId { get; set; } = string.Empty;
+        public string FormKey { get; set; } = string.Empty;
+        public string FormName { get; set; } = string.Empty;
+        public string Language { get; set; } = "en";
+        public string SourcePage { get; set; } = string.Empty;
+        public FormSubmissionStatusModel Status { get; set; }
+        public List<FormSubmissionFieldModel> Fields { get; set; } = new();
+        public string? InternalNotes { get; set; }
         public DateTime SubmittedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class FormSubmissionUpdateRequest
+    {
+        public FormSubmissionStatusModel Status { get; set; }
+        public string? InternalNotes { get; set; }
+    }
+
+    public class FormFieldOptionModel
+    {
+        public string Value { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    public class FormFieldDefinitionModel
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Label { get; set; } = new();
+        public Dictionary<string, string> Placeholder { get; set; } = new();
+        public bool Required { get; set; }
+        public int MinLength { get; set; }
+        public int MaxLength { get; set; } = 500;
+        public List<FormFieldOptionModel> Options { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    public class FormDefinitionModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Introduction { get; set; } = new();
+        public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
+        public FormDisplayModeModel DisplayMode { get; set; }
+        public FormLayoutModel Layout { get; set; } = FormLayoutModel.Stacked;
+        public bool Active { get; set; }
+        public List<FormFieldDefinitionModel> Fields { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 
     // -- Content Management -----------------------------------

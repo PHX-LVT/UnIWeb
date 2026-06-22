@@ -1,0 +1,37 @@
+@if (OpensForm)
+{
+    <button type="button" class="@CssClass" title="@Title"
+            data-sc-public-modal-trigger
+            data-modal-form-id="@FormDefinitionId"
+            data-modal-href="@Href"
+            @onclick="OnClick">
+        @ChildContent
+    </button>
+}
+else
+{
+    <a href="@ResolvedHref" class="@CssClass" title="@Title"
+       target="@Target" rel="@Rel" @onclick="OnClick">
+        @ChildContent
+    </a>
+}
+
+@code {
+    [Parameter] public string? Action { get; set; }
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public string? FormDefinitionId { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Target { get; set; }
+    [Parameter] public string? Rel { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool OpensForm =>
+        !string.IsNullOrWhiteSpace(FormDefinitionId)
+        || string.Equals(Action, "openForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Action, "OpenForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Action, "OpenModal", StringComparison.OrdinalIgnoreCase);
+
+    private string ResolvedHref => string.IsNullOrWhiteSpace(Href) ? "#" : Href!;
+}

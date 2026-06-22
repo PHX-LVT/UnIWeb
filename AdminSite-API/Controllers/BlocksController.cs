@@ -1,11 +1,11 @@
 using FullProject.DTOs;
 using FullProject.Models;
-using FullProject.SectionServices;
 using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
+using GlobalManager.Services.SectionServices;
 
 namespace FullProject.Controllers
 {
@@ -168,6 +168,7 @@ namespace FullProject.Controllers
                     Label = btn.Label,
                     Action = btn.Action,
                     Href = btn.Href,
+                    FormDefinitionId = btn.FormDefinitionId,
                     Visible = btn.Visible,
                     Order = btn.Order
                 }).ToList(),
@@ -236,11 +237,15 @@ namespace FullProject.Controllers
                     dto.ImageUrl = card.ImageUrl;
                     dto.ButtonLabel = card.ButtonLabel;
                     dto.Href = card.Href;
+                    dto.Action = card.Action;
+                    dto.FormDefinitionId = card.FormDefinitionId;
                     break;
 
                 case ButtonBlock button:
                     dto.Label = button.Label;
                     dto.Href = button.Href;
+                    dto.Action = button.Action;
+                    dto.FormDefinitionId = button.FormDefinitionId;
                     dto.Style = button.Style;
                     break;
 

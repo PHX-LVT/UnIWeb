@@ -1,4 +1,4 @@
-﻿window.cmsWidgets = window.cmsWidgets || {};
+window.cmsWidgets = window.cmsWidgets || {};
 
 window.cmsWidgets.init = () => {
     initCounters();
@@ -45,14 +45,19 @@ function initCarousels() {
 }
 
 function initLibraryVideos() {
-    document.querySelectorAll("[data-sc-library-video]:not([data-bound])").forEach(trigger => {
-        trigger.dataset.bound = "true";
-        trigger.addEventListener("click", e => {
-            e.preventDefault();
-            const embedUrl = resolveVideoEmbedUrl(trigger.dataset.videoUrl || "");
-            if (!embedUrl) return;
-            openLibraryVideoModal(embedUrl, trigger.dataset.videoTitle || "Video");
-        });
+    if (window.__scLibraryVideosDelegated) return;
+    window.__scLibraryVideosDelegated = true;
+
+    document.addEventListener("click", e => {
+        const trigger = e.target.closest("[data-sc-library-video]");
+        if (!trigger) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const embedUrl = resolveVideoEmbedUrl(trigger.dataset.videoUrl || "");
+        if (!embedUrl) return;
+        openLibraryVideoModal(embedUrl, trigger.dataset.videoTitle || "Video");
     });
 }
 
@@ -76,13 +81,26 @@ function initNetworkMaps() {
 }
 
 function initPublicModals() {
-    document.querySelectorAll("a[href^='modal:'],a[href='#modal'],a[href='#quote']").forEach(link => {
-        if (link.dataset.modalBound === "true") return;
-        link.dataset.modalBound = "true";
-        link.addEventListener("click", e => {
-            e.preventDefault();
-            openPublicModal(resolveModalType(link));
-        });
+    if (window.__scPublicModalsDelegated) return;
+    window.__scPublicModalsDelegated = true;
+
+    document.addEventListener("click", async e => {
+        const trigger = e.target.closest("[data-sc-public-modal-trigger], a[href]");
+        if (!trigger) return;
+
+        const formId = trigger.dataset.modalFormId || "";
+        const modalHref = trigger.dataset.modalHref || trigger.getAttribute("href");
+        if (!formId && !isPublicModalHref(modalHref)) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (formId) {
+            await openPublicFormModalById(formId);
+            return;
+        }
+
+        openPublicModal(resolveModalType(modalHref, trigger.textContent));
     });
 }
 
@@ -106,6 +124,25 @@ function ensurePublicModal() {
         }
     });
     return modal;
+}
+
+async function openPublicFormModalById(formId) {
+    const modal = ensurePublicModal();
+    try {
+        modal.replaceChildren(buildPublicModalLoadingDialog());
+        document.body.classList.add("sc-modal-open");
+        modal.classList.add("open");
+
+        const response = await fetch(buildPublicApiUrl(`api/public/forms/by-id/${encodeURIComponent(formId)}`));
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.message || result?.Message || "Form not found");
+
+        const definition = result?.data || result?.Data;
+        if (!definition) throw new Error("Form not found");
+        modal.replaceChildren(buildPublicModalDialog(definition));
+    } catch (error) {
+        modal.replaceChildren(buildPublicModalErrorDialog(error?.message || publicUiText("SubmitError", getPublicUiLanguage())));
+    }
 }
 
 function openPublicModal(type) {
@@ -253,15 +290,23 @@ function buildMapPopup(pin) {
     return span;
 }
 
-function resolveModalType(link) {
-    const href = (link.getAttribute("href") || "").toLowerCase();
-    const label = (link.textContent || "").toLowerCase();
+function resolveModalType(rawHref, rawLabel) {
+    const href = (rawHref || "").toLowerCase();
+    const label = (rawLabel || "").toLowerCase();
 
     if (href.includes("sync") || label.includes("sync")) return "sync";
     if (href.includes("quote") || label.includes("quote")) return "quote";
     if (href.includes("expert") || href === "#modal" || label.includes("expert")) return "expert";
 
     return "expert";
+}
+
+function isPublicModalHref(rawHref) {
+    const href = (rawHref || "").trim().toLowerCase();
+    return href.startsWith("modal:")
+        || href === "#modal"
+        || href === "#quote"
+        || href === "#expert";
 }
 
 function getPublicModalConfig(type) {
@@ -308,10 +353,83 @@ function getPublicModalConfig(type) {
     return configs[type] || configs.expert;
 }
 
-function buildPublicModalDialog(type) {
-    const config = getPublicModalConfig(type);
+function getPublicModalConfigFromDefinition(definition) {
+    const lang = getPublicUiLanguage();
+    return {
+        type: definition.key || definition.Key,
+        title: localizeText(definition.name || definition.Name, definition.key || definition.Key || "Form"),
+        intro: localizeText(definition.introduction || definition.Introduction, ""),
+        submit: localizeText(definition.submitButtonLabel || definition.SubmitButtonLabel, publicUiText("Submit", lang)),
+        layout: normalizePublicFormLayout(definition.layout ?? definition.Layout),
+        fields: (definition.fields || definition.Fields || [])
+            .slice()
+            .sort((a, b) => (a.order ?? a.Order ?? 0) - (b.order ?? b.Order ?? 0))
+            .map(field => ({
+                name: field.key || field.Key,
+                label: localizeText(field.label || field.Label, field.key || field.Key || ""),
+                type: normalizePublicFieldType(field.type || field.Type),
+                required: !!(field.required ?? field.Required),
+                multiline: normalizePublicFieldType(field.type || field.Type) === "textarea",
+                options: field.options || field.Options || []
+            }))
+    };
+}
+
+function buildPublicModalLoadingDialog() {
     const dialog = document.createElement("div");
     dialog.className = "sc-public-modal__dialog";
+    const text = document.createElement("p");
+    text.className = "sc-public-modal__intro";
+    text.textContent = publicUiText("Submitting", getPublicUiLanguage());
+    dialog.appendChild(text);
+    return dialog;
+}
+
+function buildPublicModalErrorDialog(message) {
+    const dialog = document.createElement("div");
+    dialog.className = "sc-public-modal__dialog";
+    const header = document.createElement("div");
+    header.className = "sc-public-modal__header";
+    const title = document.createElement("h2");
+    title.textContent = publicUiText("SubmitError", getPublicUiLanguage());
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "sc-public-modal__close";
+    close.setAttribute("aria-label", "Close");
+    close.textContent = "x";
+    header.append(title, close);
+    const text = document.createElement("p");
+    text.className = "sc-public-modal__intro";
+    text.textContent = message;
+    dialog.append(header, text);
+    return dialog;
+}
+
+function normalizePublicFieldType(type) {
+    const value = (type || "text").toLowerCase();
+    return ["email", "tel", "url", "number", "date", "select", "textarea"].includes(value) ? value : "text";
+}
+
+function normalizePublicFormLayout(layout) {
+    if (layout === 1 || layout === "TwoColumns" || layout === "twoColumns" || layout === "two-columns") {
+        return "two-columns";
+    }
+
+    return "stacked";
+}
+function localizeText(value, fallback) {
+    if (!value) return fallback || "";
+    if (typeof value === "string") return value;
+    const lang = getPublicUiLanguage();
+    return value[lang] || value.en || Object.values(value).find(v => !!v) || fallback || "";
+}
+function buildPublicModalDialog(typeOrDefinition) {
+    const config = typeof typeOrDefinition === "string"
+        ? getPublicModalConfig(typeOrDefinition)
+        : getPublicModalConfigFromDefinition(typeOrDefinition);
+    const dialog = document.createElement("div");
+    const layout = normalizePublicFormLayout(config.layout);
+    dialog.className = `sc-public-modal__dialog sc-public-modal__dialog--${layout}`;
 
     const header = document.createElement("div");
     header.className = "sc-public-modal__header";
@@ -331,12 +449,21 @@ function buildPublicModalDialog(type) {
     text.textContent = config.intro;
 
     const form = document.createElement("form");
-    form.className = "sc-public-modal__form";
+    form.className = `sc-public-modal__form sc-public-modal__form--${layout}`;
     form.dataset.modalType = config.type;
     form.addEventListener("submit", async e => {
         e.preventDefault();
         await submitPublicModalForm(form, submit, status);
     });
+
+    const honeypot = document.createElement("input");
+    honeypot.type = "text";
+    honeypot.name = "__website";
+    honeypot.tabIndex = -1;
+    honeypot.autocomplete = "off";
+    honeypot.className = "sc-form-honeypot";
+    honeypot.setAttribute("aria-hidden", "true");
+    form.appendChild(honeypot);
 
     config.fields.forEach(field => form.appendChild(buildPublicModalField(field)));
 
@@ -366,6 +493,10 @@ function buildPublicModalDialog(type) {
 function buildPublicModalField(field) {
     const wrapper = document.createElement("label");
     wrapper.className = "sc-public-modal__field";
+    if (field.multiline) {
+        wrapper.classList.add("sc-public-modal__field--full");
+    }
+    const displayLabel = field.required ? `${field.label} *` : field.label;
 
     const input = field.type === "select"
         ? document.createElement("select")
@@ -379,15 +510,16 @@ function buildPublicModalField(field) {
     if (field.type === "select") {
         const placeholder = document.createElement("option");
         placeholder.value = "";
-        placeholder.textContent = field.label;
+        placeholder.textContent = displayLabel;
         placeholder.disabled = true;
         placeholder.selected = true;
         input.appendChild(placeholder);
 
-        (field.options || []).forEach(optionText => {
+        (field.options || []).forEach(optionItem => {
             const option = document.createElement("option");
-            option.value = optionText;
-            option.textContent = optionText;
+            const optionValue = typeof optionItem === "string" ? optionItem : optionItem.value;
+            option.value = optionValue || "";
+            option.textContent = typeof optionItem === "string" ? optionItem : localizeText(optionItem.label, optionValue || "");
             input.appendChild(option);
         });
     } else if (!field.multiline) {
@@ -395,7 +527,7 @@ function buildPublicModalField(field) {
     }
 
     if (field.type !== "select") {
-        input.placeholder = field.label;
+        input.placeholder = displayLabel;
     }
 
     if (field.autocomplete) {
@@ -413,9 +545,10 @@ function buildPublicModalField(field) {
 async function submitPublicModalForm(form, submit, status) {
     const type = form.dataset.modalType || "expert";
     const data = { PageUrl: window.location.href };
+    const honeypot = form.querySelector("[name='__website']")?.value || "";
 
     form.querySelectorAll("input, textarea, select").forEach(field => {
-        if (field.name) {
+        if (field.name && field.name !== "__website") {
             data[field.name] = field.value.trim();
         }
     });
@@ -436,10 +569,13 @@ async function submitPublicModalForm(form, submit, status) {
     submit.textContent = publicUiText("Submitting", getPublicUiLanguage());
 
     try {
-        const response = await fetch(buildPublicApiUrl(`api/public/forms/modal/${encodeURIComponent(type)}`), {
+        const endpoint = type === "sync"
+            ? `api/public/forms/modal/${encodeURIComponent(type)}`
+            : `api/public/forms/${encodeURIComponent(type)}/submit`;
+        const response = await fetch(buildPublicApiUrl(endpoint), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ data })
+            body: JSON.stringify({ data, language: getPublicUiLanguage(), sourcePage: window.location.href, honeypot })
         });
 
         const result = await response.json().catch(() => null);
@@ -472,6 +608,9 @@ async function submitPublicModalForm(form, submit, status) {
 
 function getPublicUiLanguage() {
     try {
+        const requested = new URLSearchParams(window.location.search).get("lang");
+        if (requested === "vi" || requested === "cn") return requested;
+
         const lang = window.localStorage.getItem("lang");
         return lang === "vi" || lang === "cn" ? lang : "en";
     } catch {
@@ -510,6 +649,7 @@ function publicUiText(key, lang) {
 
     return text[key]?.[lang] || text[key]?.en || key;
 }
+
 function buildPublicApiUrl(path) {
     const base = (window.cmsPublicApiBaseUrl || "").trim();
     if (!base) return `/${path}`;
@@ -524,4 +664,3 @@ function isSafeHref(href) {
         return false;
     }
 }
-

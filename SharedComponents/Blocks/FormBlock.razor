@@ -2,6 +2,12 @@
 @using SharedComponents.Helpers
 
 <div class="sc-block sc-block--form">
+    <input class="sc-form-honeypot"
+           type="text"
+           tabindex="-1"
+           autocomplete="off"
+           aria-hidden="true"
+           @bind="_honeypot" />
     @foreach (var field in Block.Fields?.OrderBy(f => f.Order) ?? Enumerable.Empty<PublicFormFieldDto>())
     {
         var key = FieldKey(field);
@@ -84,6 +90,7 @@
     private bool _submitted = false;
     private bool _error = false;
     private string? _errorMessage;
+    private string _honeypot = string.Empty;
 
     protected override void OnParametersSet()
     {
@@ -115,10 +122,15 @@
         }
 
         if (OnSubmit is null) return;
-        var success = await OnSubmit(_data);
+        var payload = new Dictionary<string, string>(_data, StringComparer.OrdinalIgnoreCase)
+        {
+            ["__website"] = _honeypot
+        };
+        var success = await OnSubmit(payload);
         if (success)
         {
             _submitted = true;
+            _honeypot = string.Empty;
             _data = (Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
                 .ToDictionary(FieldKey, _ => string.Empty);
         }

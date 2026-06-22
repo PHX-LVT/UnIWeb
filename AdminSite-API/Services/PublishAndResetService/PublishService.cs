@@ -3,7 +3,7 @@ using FullProject.Models;
 using FullProject.Utils;
 using MongoDB.Driver;
 
-namespace FullProject.Services
+namespace GlobalManager.Services.PublishAndResetService
 {
     public class PublishService
     {

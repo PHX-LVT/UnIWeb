@@ -1,4 +1,4 @@
-﻿using AdminSite.Models;
+using AdminSite.Models;
 using AdminSite.Services;
 using Contracts.Admin;
 using System.Xml.Linq;//using DevExpress.XtraPrinting.Native.Preview;
@@ -10,10 +10,12 @@ namespace AdminSite.Services
     {
         private readonly IHttpService _http;
         private readonly AdminSectionService _sectionService;
-        public AdminPageService(IHttpService http, AdminSectionService sectionService)
+        private readonly AdminFormSubmissionService _formService;
+        public AdminPageService(IHttpService http, AdminSectionService sectionService, AdminFormSubmissionService formService)
         {
             _http = http;
             _sectionService = sectionService;
+            _formService = formService;
         }
         public Task<ApiResponse<List<PageModel>>> GetAllAsync() =>
             _http.GetAsync<List<PageModel>>("api/admin/pages");
@@ -51,16 +53,26 @@ namespace AdminSite.Services
         }
         public async Task SeedTemplateAsync(string pageId, string template)
         {
-            foreach (var section in BuildTemplateSections(template))
+            var quoteFormId = await GetFormDefinitionIdAsync("quote");
+            foreach (var section in BuildTemplateSections(template, quoteFormId))
                 await _sectionService.CreateAsync(pageId, section);
         }
 
-        private static IEnumerable<SectionCreateDto> BuildTemplateSections(string template) => template switch
+
+        private async Task<string?> GetFormDefinitionIdAsync(string key)
+        {
+            var definitions = await _formService.GetDefinitionsAsync();
+            return definitions.Data?
+                .FirstOrDefault(definition => definition.Active &&
+                    string.Equals(definition.Key, key, StringComparison.OrdinalIgnoreCase))
+                ?.Id;
+        }
+        private static IEnumerable<SectionCreateDto> BuildTemplateSections(string template, string? quoteFormId) => template switch
         {
             "landing" => LandingTemplate(),
             "about" => AboutTemplate(),
             "contact" => ContactTemplate(),
-            "services" => ServicesTemplate(),
+            "services" => ServicesTemplate(quoteFormId),
             "portfolio" => PortfolioTemplate(),
             "faq" => FaqTemplate(),
             _ => Array.Empty<SectionCreateDto>()
@@ -200,7 +212,7 @@ namespace AdminSite.Services
             Cta("Need a custom form?", "This starter uses editable sections first. Add a Form Block later when the exact fields are decided.", "Open form settings", "#")
         };
 
-        private static IEnumerable<SectionCreateDto> ServicesTemplate() => new SectionCreateDto[]
+        private static IEnumerable<SectionCreateDto> ServicesTemplate(string? quoteFormId) => new SectionCreateDto[]
         {
             Hero(
                 "Services",
@@ -237,7 +249,7 @@ namespace AdminSite.Services
                     TestimonialItem("fas fa-check", "Publish", "Review preview and launch.", 3)
                 }
             },
-            Cta("Turn this into a real service page", "Replace each card with a real service, then link the CTA to Contact or Quote.", "Get a quote", "#quote")
+            Cta("Turn this into a real service page", "Replace each card with a real service, then link the CTA to Contact or Quote.", "Get a quote", "/contact", quoteFormId)
         };
 
         private static IEnumerable<SectionCreateDto> PortfolioTemplate() => new SectionCreateDto[]
@@ -344,12 +356,12 @@ namespace AdminSite.Services
             Style = WhiteSection("large")
         };
 
-        private static CtaSectionCreateDto Cta(string heading, string subtext, string buttonLabel, string href) => new()
+        private static CtaSectionCreateDto Cta(string heading, string subtext, string buttonLabel, string href, string? formDefinitionId = null) => new()
         {
             Layout = "center",
             Heading = L(heading),
             Subtext = L(subtext),
-            Buttons = new() { Button(buttonLabel, href) },
+            Buttons = new() { Button(buttonLabel, href, formDefinitionId: formDefinitionId) },
             Style = new SectionStyleDto
             {
                 BackgroundType = "color",
@@ -360,10 +372,12 @@ namespace AdminSite.Services
             }
         };
 
-        private static SectionButtonDto Button(string label, string href, string style = "filled", int order = 0) => new()
+        private static SectionButtonDto Button(string label, string href, string style = "filled", int order = 0, string? formDefinitionId = null) => new()
         {
             Label = L(label),
-            Href = href,
+            Action = string.IsNullOrWhiteSpace(formDefinitionId) ? "linkToPage" : "openForm",
+            Href = string.IsNullOrWhiteSpace(formDefinitionId) ? href : null,
+            FormDefinitionId = formDefinitionId,
             Style = style,
             Visible = true,
             Order = order

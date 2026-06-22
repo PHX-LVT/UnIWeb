@@ -2,6 +2,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Text.Json.Serialization;
+using Contracts.Forms;
 
 namespace FullProject.Models
 {
@@ -75,6 +76,7 @@ namespace FullProject.Models
         public Dictionary<string, string> LabelText { get; set; } = new();
         public GlobalButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition Position { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -196,6 +198,24 @@ namespace FullProject.Models
     }
 
     [BsonIgnoreExtraElements]
+    public class AdminLoginActivityRecord
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string? AdminId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string EventType { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
+        public string BrowserName { get; set; } = "Unknown";
+        public string OperatingSystem { get; set; } = "Unknown";
+        public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
     public class AdminAuditLog
     {
         [BsonId]
@@ -294,6 +314,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Label { get; set; } = new();
         public PageButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public PageButtonPosition Position { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -354,6 +375,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;          // linkToPage | openForm | externalUrl | download
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";               // filled | outline | ghost
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -727,6 +749,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Label { get; set; } = new();
         public  BlockButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
         public string? ColumnSlotId { get; set; }
@@ -894,6 +917,8 @@ namespace FullProject.Models
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     [BsonDiscriminator("button")]
@@ -901,6 +926,8 @@ namespace FullProject.Models
     {
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
     }
 
@@ -952,6 +979,49 @@ namespace FullProject.Models
     // FORM SUBMISSIONS
     // ═══════════════════════════════════════════════════════════
 
+    [BsonIgnoreExtraElements]
+    public class FormDefinition
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Introduction { get; set; } = new();
+        public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
+        public FormDisplayMode DisplayMode { get; set; } = FormDisplayMode.Embedded;
+        public FormLayout Layout { get; set; } = FormLayout.Stacked;
+        public bool Active { get; set; } = true;
+        public List<FormDefinitionField> Fields { get; set; } = new();
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormDefinitionField
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Label { get; set; } = new();
+        public Dictionary<string, string> Placeholder { get; set; } = new();
+        public bool Required { get; set; }
+        public int MinLength { get; set; }
+        public int MaxLength { get; set; } = 500;
+        public List<FormDefinitionFieldOption> Options { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormDefinitionFieldOption
+    {
+        public string Value { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
     public class FormSubmission
     {
         [BsonId]
@@ -961,7 +1031,37 @@ namespace FullProject.Models
         public string SectionId { get; set; } = string.Empty;
         public string BlockId { get; set; } = string.Empty;
         public Dictionary<string, string> Data { get; set; } = new();
+        public string FormId { get; set; } = string.Empty;
+        public string FormKey { get; set; } = string.Empty;
+        public string FormName { get; set; } = string.Empty;
+        public string Language { get; set; } = "en";
+        public string SourcePage { get; set; } = string.Empty;
+        public FormSubmissionStatus Status { get; set; } = FormSubmissionStatus.New;
+        public List<FormSubmissionFieldSnapshot> Fields { get; set; } = new();
+        public string? InternalNotes { get; set; }
+        public FormSubmissionSecurity Security { get; set; } = new();
         public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormSubmissionFieldSnapshot
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public string Value { get; set; } = string.Empty;
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormSubmissionSecurity
+    {
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
+        public string Fingerprint { get; set; } = string.Empty;
     }
 
     // ═══════════════════════════════════════════════════════════

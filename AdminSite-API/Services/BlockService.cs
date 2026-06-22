@@ -4,6 +4,7 @@ using FullProject.Models;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
+using GlobalManager.Services.AssetService;
 
 namespace FullProject.Services
 {
@@ -89,7 +90,7 @@ namespace FullProject.Services
             {
                 TextBlockCreateDto t => new TextBlock
                 {
-                    Title = t.Title,
+                    Title = SanitizeDictionary(t.Title),
                     Content = SanitizeDictionary(t.Content)
                 },
                 ImageBlockCreateDto img => new ImageBlock
@@ -143,12 +144,16 @@ namespace FullProject.Services
                     Description = SanitizeDictionary(card.Description),
                     ImageUrl = card.ImageUrl,
                     ButtonLabel = card.ButtonLabel,
-                    Href = CleanUrl(card.Href)
+                    Href = CleanUrl(card.Href),
+                    Action = card.Action,
+                    FormDefinitionId = card.FormDefinitionId
                 },
                 ButtonBlockCreateDto button => new ButtonBlock
                 {
                     Label = button.Label,
                     Href = CleanUrl(button.Href),
+                    Action = button.Action,
+                    FormDefinitionId = button.FormDefinitionId,
                     Style = NormalizeButtonStyle(button.Style)
                 },
                 MetricBlockCreateDto metric => new MetricBlock
@@ -238,7 +243,7 @@ namespace FullProject.Services
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
-                                .Set(b => ((TextBlock)b).Title, tDto.Title)
+                                .Set(b => ((TextBlock)b).Title, SanitizeDictionary(tDto.Title))
                                 .Set(b => ((TextBlock)b).Content, SanitizeDictionary(tDto.Content))));
                     break;
 
@@ -314,7 +319,9 @@ namespace FullProject.Services
                                 .Set(b => ((CardBlock)b).Description, SanitizeDictionary(cardDto.Description))
                                 .Set(b => ((CardBlock)b).ImageUrl, cardDto.ImageUrl)
                                 .Set(b => ((CardBlock)b).ButtonLabel, cardDto.ButtonLabel)
-                                .Set(b => ((CardBlock)b).Href, CleanUrl(cardDto.Href))));
+                                .Set(b => ((CardBlock)b).Href, CleanUrl(cardDto.Href))
+                                .Set(b => ((CardBlock)b).Action, cardDto.Action)
+                                .Set(b => ((CardBlock)b).FormDefinitionId, cardDto.FormDefinitionId)));
                     break;
 
                 case (ButtonBlock _, ButtonBlockUpdateDto buttonDto):
@@ -323,6 +330,8 @@ namespace FullProject.Services
                             Builders<Block>.Update
                                 .Set(b => ((ButtonBlock)b).Label, buttonDto.Label)
                                 .Set(b => ((ButtonBlock)b).Href, CleanUrl(buttonDto.Href))
+                                .Set(b => ((ButtonBlock)b).Action, buttonDto.Action)
+                                .Set(b => ((ButtonBlock)b).FormDefinitionId, buttonDto.FormDefinitionId)
                                 .Set(b => ((ButtonBlock)b).Style, NormalizeButtonStyle(buttonDto.Style))));
                     break;
 
@@ -616,6 +625,7 @@ namespace FullProject.Services
             Label = dto.Label,
             Action = dto.Action,
             Href = CleanUrl(dto.Href),
+            FormDefinitionId = dto.FormDefinitionId,
             Visible = dto.Visible,
             Order = dto.Order
         };
