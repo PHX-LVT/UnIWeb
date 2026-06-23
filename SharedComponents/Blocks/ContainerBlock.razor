@@ -13,6 +13,11 @@
                    Style="@NestedStyle"
                    SectionId="@SectionId"
                    ParentBlockId="@Block.Id"
+                   DataZoneId="@($"container-{Block.Id}")"
+                   ForceFreeform="@(NormalizeLayout(Block.LayoutMode) == "freeform")"
+                   PatternRadius="@PatternRadius"
+                   PatternStartAngle="@PatternStartAngle"
+                   PatternEndAngle="@PatternEndAngle"
                    Lang="@Lang"
                    ShowInvisible="@ShowInvisible"
                    OnSubmit="@OnSubmit" />
@@ -30,9 +35,7 @@
     private PublicSectionStyleDto NestedStyle => new()
     {
         BlockLayoutMode = NormalizeLayout(Block.LayoutMode),
-        BlockGridColumns = NormalizeLayout(Block.LayoutMode) == "grid"
-            ? Math.Clamp(Block.Columns ?? 2, 1, 6)
-            : 1,
+        BlockGridColumns = 1,
         BlockGap = NormalizeGap(Block.Gap)
     };
 
@@ -43,10 +46,25 @@
         return $"sc-block sc-design-block sc-container-block sc-container-block--{layout} sc-container-block--gap-{gap}";
     }
 
+    private int PatternRadius => NormalizeLayout(Block.LayoutMode) == "semicircle"
+        ? Math.Clamp(Block.SemicircleRadius, 80, 480)
+        : Math.Clamp(Block.OrbitRadius, 80, 480);
+
+    private int PatternStartAngle => NormalizeLayout(Block.LayoutMode) == "semicircle"
+        ? Math.Clamp(Block.SemicircleStartAngle, -360, 360)
+        : Math.Clamp(Block.OrbitStartAngle, -360, 360);
+
+    private int PatternEndAngle => NormalizeLayout(Block.LayoutMode) == "semicircle"
+        ? Math.Clamp(Block.SemicircleEndAngle, -360, 360)
+        : PatternStartAngle + 360;
+
     private static string NormalizeLayout(string? layout) => layout switch
     {
-        "grid" => "grid",
-        "split" => "split",
+        "row" => "row",
+        "orbit" => "orbit",
+        "semicircle" => "semicircle",
+        "freeform" => "freeform",
+        "grid" or "split" => "row",
         _ => "stack"
     };
 

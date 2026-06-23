@@ -40,20 +40,52 @@
 
 @if (Block.Type == "container")
 {
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
         <div class="form-group">
-            <label class="form-label">Layout</label>
-            <DxComboBox Data="_containerLayouts" @bind-Value="_layoutMode" CssClass="w-100" />
-        </div>
-        <div class="form-group">
-            <label class="form-label">Columns</label>
-            <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="6" CssClass="w-100" />
+            <label class="form-label">@T("ChildLayout")</label>
+            <select class="form-control" @bind="_layoutMode">
+                <option value="stack">@T("Stack")</option>
+                <option value="row">@T("Row")</option>
+                <option value="orbit">@T("Orbit")</option>
+                <option value="semicircle">@T("Semicircle")</option>
+                <option value="freeform">@T("Freeform")</option>
+            </select>
         </div>
         <div class="form-group">
             <label class="form-label">Gap</label>
             <DxComboBox Data="_gapOptions" @bind-Value="_gap" CssClass="w-100" />
         </div>
     </div>
+    @if (_layoutMode == "orbit")
+    {
+        <div class="container-pattern-settings">
+            <label class="form-group">
+                <span class="form-label">@T("Radius")</span>
+                <input class="form-control" type="number" min="80" max="480" step="8" @bind="_orbitRadius" />
+            </label>
+            <label class="form-group">
+                <span class="form-label">@T("StartAngle")</span>
+                <input class="form-control" type="number" min="-360" max="360" step="5" @bind="_orbitStartAngle" />
+            </label>
+        </div>
+    }
+    else if (_layoutMode == "semicircle")
+    {
+        <div class="container-pattern-settings container-pattern-settings--three">
+            <label class="form-group">
+                <span class="form-label">@T("Radius")</span>
+                <input class="form-control" type="number" min="80" max="480" step="8" @bind="_semicircleRadius" />
+            </label>
+            <label class="form-group">
+                <span class="form-label">@T("StartAngle")</span>
+                <input class="form-control" type="number" min="-360" max="360" step="5" @bind="_semicircleStartAngle" />
+            </label>
+            <label class="form-group">
+                <span class="form-label">@T("EndAngle")</span>
+                <input class="form-control" type="number" min="-360" max="360" step="5" @bind="_semicircleEndAngle" />
+            </label>
+        </div>
+    }
 }
 
 @if (Block.Type is "button" or "metric" or "icon")
@@ -152,6 +184,16 @@
 </div>
 
 <style>
+    .container-pattern-settings {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+    }
+
+    .container-pattern-settings--three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .design-list-item {
         display: grid;
         grid-template-columns: 150px minmax(0, 1fr) 42px;
@@ -186,11 +228,15 @@
     private List<BulletListItemModel> _items = new();
     private bool _saving;
     private List<string> _buttonStyles = new() { "filled", "outline", "ghost" };
-    private List<string> _containerLayouts = new() { "stack", "grid", "split" };
     private List<string> _gapOptions = new() { "none", "small", "medium", "large" };
     private string _layoutMode = "stack";
     private int _columns = 2;
     private string _gap = "medium";
+    private int _orbitRadius = 180;
+    private int _orbitStartAngle = -90;
+    private int _semicircleRadius = 180;
+    private int _semicircleStartAngle = 180;
+    private int _semicircleEndAngle = 360;
     private List<FormDefinitionModel> _formDefinitions = new();
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
@@ -219,6 +265,11 @@
         _layoutMode = NormalizeContainerLayout(Block.LayoutMode);
         _columns = Math.Clamp(Block.Columns ?? 2, 1, 6);
         _gap = NormalizeGap(Block.Gap);
+        _orbitRadius = Math.Clamp(Block.OrbitRadius ?? 180, 80, 480);
+        _orbitStartAngle = Math.Clamp(Block.OrbitStartAngle ?? -90, -360, 360);
+        _semicircleRadius = Math.Clamp(Block.SemicircleRadius ?? 180, 80, 480);
+        _semicircleStartAngle = Math.Clamp(Block.SemicircleStartAngle ?? 180, -360, 360);
+        _semicircleEndAngle = Math.Clamp(Block.SemicircleEndAngle ?? 360, -360, 360);
         _items = Block.BulletItems?.Select(i => new BulletListItemModel
         {
             Id = i.Id,
@@ -350,6 +401,11 @@
             LayoutMode = NormalizeContainerLayout(_layoutMode),
             Columns = Math.Clamp(_columns, 1, 6),
             Gap = NormalizeGap(_gap),
+            OrbitRadius = Math.Clamp(_orbitRadius, 80, 480),
+            OrbitStartAngle = Math.Clamp(_orbitStartAngle, -360, 360),
+            SemicircleRadius = Math.Clamp(_semicircleRadius, 80, 480),
+            SemicircleStartAngle = Math.Clamp(_semicircleStartAngle, -360, 360),
+            SemicircleEndAngle = Math.Clamp(_semicircleEndAngle, -360, 360),
             Visible = Block.Visible,
             Layout = ToLayoutDto()
         },
@@ -389,8 +445,11 @@
 
     private static string NormalizeContainerLayout(string? value) => value switch
     {
-        "grid" => "grid",
-        "split" => "split",
+        "row" => "row",
+        "orbit" => "orbit",
+        "semicircle" => "semicircle",
+        "freeform" => "freeform",
+        "grid" or "split" => "row",
         _ => "stack"
     };
 

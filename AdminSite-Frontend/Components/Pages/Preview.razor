@@ -4,6 +4,7 @@
 @inject AdminBlockService BlockService
 @inject AdminPageService PageService
 @inject AdminContentService ContentService
+@inject AdminFormSubmissionService FormService
 @inject ThemeService ThemeService
 @inject AdminAuthService Auth
 @inject AdminLanguageService AdminLanguageState
@@ -48,6 +49,8 @@ else
     private string? _loadedRequestKey;
     private string? _error;
     private string? _themeCss;
+    private IReadOnlyDictionary<string, FormDefinitionModel> _formDefinitions =
+        new Dictionary<string, FormDefinitionModel>();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -115,6 +118,10 @@ else
             var sectionsRes = await SectionService.GetAllAsync(PageId);
             var sections = sectionsRes.Data ?? new();
             var blocksBySection = await LoadBlocksAsync(sections);
+            var formsResponse = await FormService.GetDefinitionsAsync();
+            _formDefinitions = (formsResponse.Data ?? new())
+                .Where(definition => definition.Active)
+                .ToDictionary(definition => definition.Id, StringComparer.Ordinal);
             var childrenBySourceId = await LoadShowcaseChildrenAsync(sections);
             var contentTypes = await LoadContentTypesAsync(sections);
             var libraryItems = await LoadLibraryItemsAsync(sections, contentTypes);
@@ -214,7 +221,7 @@ else
 
     // -- Mapping: SectionModel ? typed PublicSectionDto ---------
 
-    private static PublicSectionDto ToPublicSectionDto(
+    private PublicSectionDto ToPublicSectionDto(
         SectionModel s,
         IReadOnlyDictionary<string, List<BlockModel>> blocksBySection,
         IReadOnlyDictionary<string, List<PublicChildCardDto>> childrenBySourceId,
@@ -437,7 +444,7 @@ else
         return dto;
     }
 
-    private static PublicColumnsSectionDto MapColumnsSection(
+    private PublicColumnsSectionDto MapColumnsSection(
         SectionModel s,
         IReadOnlyDictionary<string, List<BlockModel>> blocksBySection)
     {
@@ -466,7 +473,7 @@ else
         };
     }
 
-    private static List<PublicBlockDto> MapBlocks(IEnumerable<BlockModel> blocks, string? parentBlockId = null)
+    private List<PublicBlockDto> MapBlocks(IEnumerable<BlockModel> blocks, string? parentBlockId = null)
     {
         var blockList = blocks.ToList();
         var mapped = blockList
@@ -485,7 +492,7 @@ else
         return mapped;
     }
 
-    private static PublicBlockDto MapBlock(BlockModel b)
+    private PublicBlockDto MapBlock(BlockModel b)
     {
         PublicBlockDto dto = b.Type switch
         {
@@ -526,16 +533,12 @@ else
             },
             "form" => new PublicFormBlockDto
             {
-                SubmitButtonLabel = b.SubmitButtonLabel,
-                Fields = b.Fields?.Select(f => new PublicFormFieldDto
-                {
-                    Name = f.Name ?? f.Id,
-                    Type = f.FieldType ?? "text",
-                    Label = f.Label ?? new(),
-                    Required = f.Required,
-                    Options = f.Options,
-                    Order = f.Order
-                }).ToList()
+                FormDefinitionId = b.FormDefinitionId,
+                Name = ResolveFormDefinition(b)?.Name,
+                Introduction = ResolveFormDefinition(b)?.Introduction,
+                FormLayoutMode = ResolveFormDefinition(b)?.Layout == FormLayoutModel.TwoColumns ? "two-columns" : "stacked",
+                SubmitButtonLabel = ResolveFormDefinition(b)?.SubmitButtonLabel ?? b.SubmitButtonLabel,
+                Fields = MapPreviewFormFields(b)
             },
             "card" => new PublicCardBlockDto
             {
@@ -595,7 +598,12 @@ else
                 Title = b.Title,
                 LayoutMode = b.LayoutMode,
                 Columns = b.Columns,
-                Gap = b.Gap
+                Gap = b.Gap,
+                OrbitRadius = b.OrbitRadius ?? 180,
+                OrbitStartAngle = b.OrbitStartAngle ?? -90,
+                SemicircleRadius = b.SemicircleRadius ?? 180,
+                SemicircleStartAngle = b.SemicircleStartAngle ?? 180,
+                SemicircleEndAngle = b.SemicircleEndAngle ?? 360
             },
             _ => new PublicTextBlockDto
             {
@@ -609,6 +617,7 @@ else
         dto.Order = b.Order;
         dto.Visible = b.Visible;
         dto.BlockZone = b.BlockZone;
+        dto.PositionMode = ResolveBlockPositionMode(b);
         dto.ParentBlockId = b.ParentBlockId;
         dto.Layout = MapBlockLayout(b.Layout);
         dto.Buttons = b.Buttons
@@ -628,6 +637,50 @@ else
         return dto;
     }
 
+    private FormDefinitionModel? ResolveFormDefinition(BlockModel block) =>
+        !string.IsNullOrWhiteSpace(block.FormDefinitionId) &&
+        _formDefinitions.TryGetValue(block.FormDefinitionId, out var definition)
+            ? definition
+            : null;
+
+    private List<PublicFormFieldDto> MapPreviewFormFields(BlockModel block)
+    {
+        var definition = ResolveFormDefinition(block);
+        if (definition is not null)
+        {
+            return definition.Fields.OrderBy(field => field.Order).Select(field => new PublicFormFieldDto
+            {
+                Name = field.Key,
+                Type = field.Type,
+                Label = field.Label,
+                Placeholder = field.Placeholder,
+                Required = field.Required,
+                Options = field.Options.OrderBy(option => option.Order).Select(option => new PublicFormFieldOptionDto
+                {
+                    Value = option.Value,
+                    Label = option.Label,
+                    Order = option.Order
+                }).ToList(),
+                Order = field.Order
+            }).ToList();
+        }
+
+        return block.Fields?.Select(field => new PublicFormFieldDto
+        {
+            Name = field.Name ?? field.Id,
+            Type = field.FieldType ?? "text",
+            Label = field.Label ?? new(),
+            Required = field.Required,
+            Options = (field.Options ?? new()).Select((option, index) => new PublicFormFieldOptionDto
+            {
+                Value = option,
+                Label = new Dictionary<string, string> { ["en"] = option },
+                Order = index
+            }).ToList(),
+            Order = field.Order
+        }).ToList() ?? new();
+    }
+
     private static PublicBlockLayoutDto MapBlockLayout(BlockLayoutModel? layout) => new()
     {
         Width = layout?.Width ?? "auto",
@@ -644,6 +697,17 @@ else
         W = Math.Clamp(layout?.W ?? 4, 1, 12),
         H = Math.Clamp(layout?.H ?? 2, 1, 40)
     };
+
+    private static string ResolveBlockPositionMode(BlockModel block)
+    {
+        if (!string.IsNullOrWhiteSpace(block.PositionMode))
+            return string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase)
+                ? "freeform"
+                : "flow";
+
+        return !string.IsNullOrWhiteSpace(block.ColumnSlotId) ? "flow" :
+            string.Equals(block.BlockZone, "canvas", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
+    }
 
     private static List<PublicChildCardDto> ApplyShowcaseOverrides(
         IEnumerable<PublicChildCardDto> children,

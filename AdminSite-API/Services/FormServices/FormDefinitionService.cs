@@ -42,6 +42,21 @@ public sealed class FormDefinitionService
     public async Task<FormDefinition?> GetActiveByIdAsync(string id) =>
         await _definitions.Find(definition => definition.Id == id && definition.Active).FirstOrDefaultAsync();
 
+    public async Task<List<FormDefinition>> GetActiveByIdsAsync(IEnumerable<string> ids)
+    {
+        var normalizedIds = ids
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (normalizedIds.Count == 0)
+            return new List<FormDefinition>();
+
+        return await _definitions
+            .Find(definition => normalizedIds.Contains(definition.Id) && definition.Active)
+            .ToListAsync();
+    }
+
     public async Task<FormDefinition> UpsertAsync(FormDefinitionUpsertRequest request, string? id = null)
     {
         var key = NormalizeKey(request.Key) ?? throw new ArgumentException("Invalid form key.", nameof(request));
@@ -152,11 +167,17 @@ public sealed class FormDefinitionService
         await AddBlockUsageAsync("blocks_draft", "Draft", id, draftPages, draftSections, items);
         await AddBlockUsageAsync("blocks_published", "Published", id, publishedPages, publishedSections, items);
 
+        var ordered = items
+            .OrderBy(item => item.Area == "FormBlock" ? 0 : item.Area == "Block" ? 1 : item.Area == "Section" ? 2 : 3)
+            .ThenBy(item => item.Source)
+            .ThenBy(item => item.Location)
+            .ToList();
+
         return new FormDefinitionUsageResponse
         {
             FormDefinitionId = id,
-            TotalCount = items.Count,
-            Items = items
+            TotalCount = ordered.Count,
+            Items = ordered
         };
     }
 
@@ -230,7 +251,7 @@ public sealed class FormDefinitionService
             var blockLabel = ReadText(block, "Label", "ButtonLabel", "Title", "Filename") ?? $"{blockType} Block";
 
             if (FieldMatches(block, "FormDefinitionId", id))
-                AddUsage(items, "Block", source, page, section.Type, section.Title, blockLabel);
+                AddUsage(items, string.Equals(blockType, "Form", StringComparison.OrdinalIgnoreCase) ? "FormBlock" : "Block", source, page, section.Type, section.Title, blockLabel);
 
             foreach (var childButton in ReadDocumentArray(block, "Buttons").Where(buttonDoc => FieldMatches(buttonDoc, "FormDefinitionId", id)))
                 AddUsage(items, "Block", source, page, section.Type, section.Title, ReadText(childButton, "Label") ?? blockLabel);
@@ -510,13 +531,13 @@ public sealed class FormDefinitionService
         {
             Id = ObjectId.GenerateNewId().ToString(),
             Key = "quote",
-            Name = new() { ["en"] = "Get a Quote", ["vi"] = "Nhận báo giá" },
+            Name = new() { ["en"] = "Get a Quote", ["vi"] = "Nháº­n bÃ¡o giÃ¡" },
             Introduction = new()
             {
                 ["en"] = "Fill out the form below and our sales team will contact you shortly.",
-                ["vi"] = "Điền thông tin bên dưới và đội ngũ tư vấn sẽ liên hệ với bạn sớm."
+                ["vi"] = "Äiá»n thÃ´ng tin bÃªn dÆ°á»›i vÃ  Ä‘á»™i ngÅ© tÆ° váº¥n sáº½ liÃªn há»‡ vá»›i báº¡n sá»›m."
             },
-            SubmitButtonLabel = new() { ["en"] = "Submit Request", ["vi"] = "Gửi yêu cầu" },
+            SubmitButtonLabel = new() { ["en"] = "Submit Request", ["vi"] = "Gá»­i yÃªu cáº§u" },
             DisplayMode = FormDisplayMode.Modal,
             Active = true,
             CreatedAt = now,
@@ -540,13 +561,13 @@ public sealed class FormDefinitionService
         {
             Id = ObjectId.GenerateNewId().ToString(),
             Key = "expert",
-            Name = new() { ["en"] = "Talk to an Expert", ["vi"] = "Trao đổi với chuyên gia" },
+            Name = new() { ["en"] = "Talk to an Expert", ["vi"] = "Trao Ä‘á»•i vá»›i chuyÃªn gia" },
             Introduction = new()
             {
                 ["en"] = "Our specialists are here to answer your questions and help you find the best solution.",
-                ["vi"] = "Chuyên gia của chúng tôi sẽ hỗ trợ câu hỏi và đề xuất giải pháp phù hợp."
+                ["vi"] = "ChuyÃªn gia cá»§a chÃºng tÃ´i sáº½ há»— trá»£ cÃ¢u há»i vÃ  Ä‘á» xuáº¥t giáº£i phÃ¡p phÃ¹ há»£p."
             },
-            SubmitButtonLabel = new() { ["en"] = "Submit", ["vi"] = "Gửi" },
+            SubmitButtonLabel = new() { ["en"] = "Submit", ["vi"] = "Gá»­i" },
             DisplayMode = FormDisplayMode.Modal,
             Active = true,
             CreatedAt = now,

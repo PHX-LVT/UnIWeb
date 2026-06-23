@@ -43,6 +43,7 @@ namespace GlobalManager.Services.SectionServices
                 Name = NormalizeName(dto.Name),
                 Style = CloneStyle(canvas.Style),
                 Blocks = blocks.Select(block => CloneUtility.CloneBlock(block)).ToList(),
+                SchemaVersion = 2,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -94,6 +95,19 @@ namespace GlobalManager.Services.SectionServices
                     return clone;
                 })
                 .ToList();
+
+            var blockIdMap = preset.Blocks
+                .OrderBy(block => block.Order)
+                .Zip(blocks, (source, clone) => new { source.Id, CloneId = clone.Id })
+                .ToDictionary(item => item.Id, item => item.CloneId, StringComparer.Ordinal);
+
+            foreach (var block in blocks)
+            {
+                block.ParentBlockId = !string.IsNullOrWhiteSpace(block.ParentBlockId) &&
+                                      blockIdMap.TryGetValue(block.ParentBlockId, out var newParentId)
+                    ? newParentId
+                    : null;
+            }
 
             if (blocks.Count > 0)
                 await _context.BlocksDraft.InsertManyAsync(blocks);

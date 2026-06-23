@@ -474,6 +474,7 @@ namespace AdminSite.Models
         public int Order { get; set; }
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutModel? Layout { get; set; }
         public List<BlockButtonModel> Buttons { get; set; } = new();
@@ -497,6 +498,11 @@ namespace AdminSite.Models
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }
         public string? Gap { get; set; }
+        public int? OrbitRadius { get; set; }
+        public int? OrbitStartAngle { get; set; }
+        public int? SemicircleRadius { get; set; }
+        public int? SemicircleStartAngle { get; set; }
+        public int? SemicircleEndAngle { get; set; }
 
         // Image
         public string? ImageUrl { get; set; }
@@ -868,6 +874,7 @@ namespace AdminSite.Models
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public int BlockCount { get; set; }
+        public int SchemaVersion { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

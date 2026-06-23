@@ -5,6 +5,7 @@ using GlobalManager.Services.SectionServices;
 using FullProject.Security.Forms;
 using Contracts.Forms;
 using FullProject.Services.FormServices;
+using FullProject.Services.Metrics;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FullProject.Services.PublicService
@@ -20,19 +21,25 @@ namespace FullProject.Services.PublicService
         private readonly BlockService _blockService;
         private readonly FormSubmissionService _submissionService;
         private readonly FormSubmissionSecurityService _formSecurity;
+        private readonly FormDefinitionService _formDefinitionService;
+        private readonly VisitorMetricService _metrics;
 
         public PublicFormSubmissionHandler(
             PageService pageService,
             SectionService sectionService,
             BlockService blockService,
             FormSubmissionService submissionService,
-            FormSubmissionSecurityService formSecurity)
+            FormSubmissionSecurityService formSecurity,
+            FormDefinitionService formDefinitionService,
+            VisitorMetricService metrics)
         {
             _pageService = pageService;
             _sectionService = sectionService;
             _blockService = blockService;
             _submissionService = submissionService;
             _formSecurity = formSecurity;
+            _formDefinitionService = formDefinitionService;
+            _metrics = metrics;
         }
 
         public async Task<IActionResult> SubmitPageFormAsync(
@@ -88,16 +95,40 @@ namespace FullProject.Services.PublicService
             var validation = await ValidateFormSubmissionAsync(page, sectionId, form, dto);
             if (validation is not null) return validation;
 
+            var definition = string.IsNullOrWhiteSpace(form.FormDefinitionId)
+                ? null
+                : await _formDefinitionService.GetActiveByIdAsync(form.FormDefinitionId);
+            if (!string.IsNullOrWhiteSpace(form.FormDefinitionId) && definition is null)
+                return new NotFoundObjectResult(ApiResult.NotFound("Form definition is unavailable."));
+
+            var fields = definition is not null
+                ? definition.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
+                    field.Key,
+                    field.Type,
+                    field.Label,
+                    field.Required,
+                    field.MaxLength,
+                    field.Options.Select(option => option.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                    field.Order)).ToList()
+                : form.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
+                    field.Name,
+                    field.Type,
+                    field.Label,
+                    field.Required,
+                    FieldMaximumLength(field.Type),
+                    field.Options?.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                    field.Order)).ToList();
+
             var securityInput = new Dictionary<string, string>(dto.Data, StringComparer.OrdinalIgnoreCase)
             {
                 ["__website"] = dto.Honeypot ?? string.Empty
             };
-            var rules = form.Fields.Select(field => new FormFieldValidationRule(
-                field.Name,
+            var rules = fields.Select(field => new FormFieldValidationRule(
+                field.Key,
                 field.Type,
                 field.Required,
-                FieldMaximumLength(field.Type),
-                field.Options?.Where(option => !string.IsNullOrWhiteSpace(option)).ToHashSet(StringComparer.OrdinalIgnoreCase)));
+                field.MaximumLength,
+                field.AllowedValues));
             var security = await _formSecurity.ValidateAsync($"block:{blockId}", securityInput, rules);
             if (!security.Accepted) return SecurityFailure(security);
 
@@ -105,23 +136,25 @@ namespace FullProject.Services.PublicService
 
             await _submissionService.CreateAsync(new FormSubmission
             {
+                FormId = definition?.Id ?? string.Empty,
                 PageId = page.Id,
                 SectionId = sectionId,
                 BlockId = blockId,
-                FormKey = $"block:{blockId}",
-                FormName = "Page Form",
+                FormKey = definition?.Key ?? $"block:{blockId}",
+                FormName = definition is null
+                    ? "Page Form"
+                    : Localized(definition.Name, language, definition.Key),
                 Language = language,
                 SourcePage = page.FullSlug ?? page.Slug,
                 Status = FormSubmissionStatus.New,
-                Fields = form.Fields
-                    .OrderBy(field => field.Order)
-                    .Where(field => security.Data.ContainsKey(field.Name))
+                Fields = fields
+                    .Where(field => security.Data.ContainsKey(field.Key))
                     .Select(field => new FormSubmissionFieldSnapshot
                     {
-                        Key = field.Name,
-                        Label = Localized(field.Label, language, field.Name),
+                        Key = field.Key,
+                        Label = Localized(field.Label, language, field.Key),
                         Type = field.Type,
-                        Value = security.Data[field.Name],
+                        Value = security.Data[field.Key],
                         Order = field.Order
                     })
                     .ToList(),
@@ -130,6 +163,8 @@ namespace FullProject.Services.PublicService
                 SubmittedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             });
+
+            await _metrics.IncrementAsync(VisitorMetricService.FormSubmission, "form", definition?.Key ?? $"block:{blockId}", page.FullSlug ?? page.Slug);
 
             return new OkObjectResult(ApiResult.Ok("Form submitted successfully."));
         }
@@ -286,5 +321,14 @@ namespace FullProject.Services.PublicService
             var trimmed = email.Trim();
             return trimmed.Length <= 254 && trimmed.Contains('@') && trimmed.Contains('.');
         }
+
+        private sealed record SubmissionField(
+            string Key,
+            string Type,
+            Dictionary<string, string> Label,
+            bool Required,
+            int MaximumLength,
+            IReadOnlySet<string>? AllowedValues,
+            int Order);
     }
 }

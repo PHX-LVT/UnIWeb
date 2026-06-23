@@ -90,7 +90,7 @@
 
     <div class="ez-canvas__viewport">
 
-        <div class="ez-canvas__preview-shell"
+        <div class="ez-canvas__preview-shell @(ArrangeMode ? "ez-canvas__preview-shell--arrange" : "")"
              style="height: @(ScaledIframeHeight)px;">
             <div class="ez-canvas__preview-scale"
                  style="height: @(_iframeHeight)px;">
@@ -98,7 +98,7 @@
                 <iframe id="ez-preview-iframe"
                         @key="PreviewUrl"
                         src="@PreviewUrl"
-                        style="width: 100%; height: @(_iframeHeight)px; border: none; display: block;"
+                        style="width: 100%; height: @(_iframeHeight)px; border: none; display: block; pointer-events: @(ArrangeMode ? "none" : "auto");"
                         scrolling="no" />
 
                 @if (!Sections.Any())
@@ -118,12 +118,13 @@
                     </div>
                 }
 
-                @if (CanModify)
+                @if (CanModify || CanArrange)
                 {
                     <div @ref="_overlayRef"
+                         class="ez-canvas-arrange-overlay @(CanArrange ? "ez-canvas-arrange-overlay--active" : "")"
                          style="position: absolute; top: 0; left: 0;
                                 width: 100%; height: 100%;
-                                pointer-events: none; z-index: 10;">
+                                pointer-events: @(CanArrange ? "auto" : "none"); z-index: 10;">
 
                         @foreach (var pos in _sectionPositions)
                         {
@@ -139,58 +140,100 @@
                                         height: @(pos.Height)px;
                                         pointer-events: none;">
 
-                                <div class="ez-section-controls"
-                                     style="pointer-events: auto; position: relative; z-index: 2;"
-                                     @onclick:stopPropagation="true">
-                                    <button class="ez-section-btn ez-section-handle" title="Drag to reorder">
-                                        <i class="fas fa-grip-vertical"></i>
-                                    </button>
-                                    <span class="ez-section-label">@(section.Type)</span>
-                                    <button class="ez-section-btn" title="@T("Edit")"
-                                            @onclick="() => SelectSection(section)">
-                                        <i class="fas fa-pencil-alt"></i>
-                                    </button>
-                                    <button class="ez-section-btn" title="@(section.Visible ? T("Hide") : T("Show"))"
-                                            @onclick="() => ToggleVisibility(section)">
-                                        <i class="fas @(section.Visible ? "fa-eye" : "fa-eye-slash")"></i>
-                                    </button>
-                                    <button class="ez-section-btn ez-section-btn--danger" title="@T("Delete")"
-                                            @onclick="() => DeleteSection(section)">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
+                                @if (CanModify)
+                                {
+                                    <div class="ez-section-controls"
+                                         style="pointer-events: auto; position: relative; z-index: 2;"
+                                         @onclick:stopPropagation="true">
+                                        <button class="ez-section-btn ez-section-handle" title="Drag to reorder">
+                                            <i class="fas fa-grip-vertical"></i>
+                                        </button>
+                                        <span class="ez-section-label">@(section.Type)</span>
+                                        <button class="ez-section-btn" title="@T("Edit")"
+                                                @onclick="() => SelectSection(section)">
+                                            <i class="fas fa-pencil-alt"></i>
+                                        </button>
+                                        <button class="ez-section-btn" title="@(section.Visible ? T("Hide") : T("Show"))"
+                                                @onclick="() => ToggleVisibility(section)">
+                                            <i class="fas @(section.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                                        </button>
+                                        <button class="ez-section-btn ez-section-btn--danger" title="@T("Delete")"
+                                                @onclick="() => DeleteSection(section)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
 
-                                <div style="position: absolute; inset: 0;
-                                            pointer-events: auto; cursor: pointer; z-index: 1;"
-                                     @onclick="() => SelectSection(section)">
-                                </div>
+                                    <div style="position: absolute; inset: 0;
+                                                pointer-events: auto; cursor: pointer; z-index: 1;"
+                                         @onclick="() => SelectSection(section)">
+                                    </div>
+                                }
+                                else if (CanArrange && IsArrangeCompatible(section))
+                                {
+                                    <div class="ez-arrange-section"
+                                         style="position: absolute; inset: 6px; pointer-events: none;">
+                                        <span class="ez-arrange-section__label">@GetArrangeSectionLabel(section)</span>
+                                    </div>
+                                }
                             </div>
                         }
 
-                        @foreach (var block in _blockPositions)
+                        @if (CanArrange)
                         {
-                            <div class="ez-freeform-block-overlay"
-                                 data-section-id="@block.SectionId"
-                                 data-block-id="@block.Id"
-                                 data-section-left="@block.SectionLeft"
-                                 data-section-top="@block.SectionTop"
-                                 data-section-width="@block.SectionWidth"
-                                 data-section-height="@block.SectionHeight"
-                                 style="position: absolute;
-                                        top: @(block.Top)px;
-                                        left: @(block.Left)px;
-                                        width: @(block.Width)px;
-                                        height: @(block.Height)px;
-                                        pointer-events: auto;
-                                        z-index: 5;">
-                                <button type="button"
-                                        class="ez-freeform-block-handle"
-                                        title="Move block">
-                                    <i class="fas fa-arrows-alt"></i>
-                                </button>
-                                <span class="ez-freeform-block-label">block</span>
-                                <span class="ez-freeform-block-resize" title="Resize block"></span>
-                            </div>
+                            @foreach (var zone in _zonePositions)
+                            {
+                                var zoneSection = Sections.FirstOrDefault(s => s.Id == zone.SectionId);
+                                if (zoneSection is null || !IsArrangeCompatible(zoneSection)) continue;
+
+                                <div class="ez-arrange-zone-overlay"
+                                     data-section-id="@zone.SectionId"
+                                     data-zone-id="@zone.Id"
+                                     style="position: absolute;
+                                            top: @(zone.Top)px;
+                                            left: @(zone.Left)px;
+                                            width: @(zone.Width)px;
+                                            height: @(zone.Height)px;
+                                            pointer-events: none;
+                                            z-index: 4;">
+                                    <span class="ez-arrange-zone-overlay__label">
+                                        @(zone.Kind == "column" ? "Column zone" : "Canvas zone")
+                                    </span>
+                                </div>
+                            }
+
+                            @foreach (var block in _blockPositions)
+                            {
+                                var blockSection = Sections.FirstOrDefault(s => s.Id == block.SectionId);
+                                var canMoveBlock = blockSection is not null &&
+                                    IsArrangeCompatible(blockSection) &&
+                                    string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase);
+
+                                <div class="ez-freeform-block-overlay @(!canMoveBlock ? "ez-freeform-block-overlay--readonly" : "")"
+                                     data-section-id="@block.SectionId"
+                                     data-block-id="@block.Id"
+                                     data-section-left="@block.SectionLeft"
+                                     data-section-top="@block.SectionTop"
+                                     data-section-width="@block.SectionWidth"
+                                     data-section-height="@block.SectionHeight"
+                                     style="position: absolute;
+                                            top: @(block.Top)px;
+                                            left: @(block.Left)px;
+                                            width: @(block.Width)px;
+                                            height: @(block.Height)px;
+                                            pointer-events: @(canMoveBlock ? "auto" : "none");
+                                            z-index: 5;">
+                                    @if (canMoveBlock)
+                                    {
+                                        <button type="button"
+                                                class="ez-freeform-block-handle"
+                                                title="Move block">
+                                            <i class="fas fa-arrows-alt"></i>
+                                        </button>
+                                        <span class="ez-freeform-block-resize" title="Resize block"></span>
+                                    }
+                                    <span class="ez-freeform-block-label">block</span>
+                                </div>
+                            }
                         }
                     </div>
                 }
@@ -242,6 +285,7 @@
     [Parameter] public EventCallback<PageModel> OnDeletePage { get; set; }
     [Parameter] public EventCallback OnPageStatusChanged { get; set; }
     [Parameter] public bool EditMode { get; set; } = true;
+    [Parameter] public bool ArrangeMode { get; set; }
     [Parameter] public bool CanEdit { get; set; } = true;
 
     private SectionModel? _selectedSection;
@@ -251,18 +295,22 @@
     private double _iframeHeight = 2000;
     private List<SectionPosition> _sectionPositions = new();
     private List<BlockPosition> _blockPositions = new();
+    private List<ZonePosition> _zonePositions = new();
     private DotNetObjectReference<Canvas>? _dotNetRef;
     private ElementReference _overlayRef;
     private bool _overlayInitialized;
     private bool _sortableInitialized;
+    private bool _arrangeEditorInitialized;
     private string? _currentPageId;
     private string? _currentPreviewUrl;
     private string? _currentLang;
     private bool? _currentCanModify;
+    private bool? _currentCanArrange;
     private int _previewVersion;
     private bool IsChildPage => !string.IsNullOrWhiteSpace(Page.ParentPageId);
     private bool CanAddChildPage => !IsChildPage;
     private bool CanModify => CanEdit && EditMode;
+    private bool CanArrange => CanEdit && ArrangeMode;
     private string AddChildTitle => CanAddChildPage
         ? "Create a child page under this parent page."
         : "Child pages cannot have child pages. Select the parent page to add another child page.";
@@ -320,12 +368,24 @@
             try
             {
                 await JS.InvokeVoidAsync("initSortable", _overlayRef, _dotNetRef);
-                await JS.InvokeVoidAsync("initFreeformBlockEditor", _overlayRef, _dotNetRef, PreviewScale);
                 _sortableInitialized = true;
             }
             catch
             {
                 Http.Toast("Section drag sorting failed to initialize.", 500);
+            }
+        }
+
+        if (CanArrange && !_arrangeEditorInitialized && _blockPositions.Count > 0 && _dotNetRef is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initFreeformBlockEditor", _overlayRef, _dotNetRef, PreviewScale);
+                _arrangeEditorInitialized = true;
+            }
+            catch
+            {
+                Http.Toast("Block arranging failed to initialize.", 500);
             }
         }
     }
@@ -334,8 +394,10 @@
     {
         var langChanged = _currentLang != AdminLanguage;
         var modeChanged = _currentCanModify != CanModify;
+        var arrangeChanged = _currentCanArrange != CanArrange;
         var previewUrl = PreviewUrl;
-        if (_currentPageId == Page.Id && _currentPreviewUrl == previewUrl && !langChanged && !modeChanged) return;
+        if (_currentPageId == Page.Id && _currentPreviewUrl == previewUrl &&
+            !langChanged && !modeChanged && !arrangeChanged) return;
 
         if (langChanged)
         {
@@ -346,12 +408,15 @@
         _currentPageId = Page.Id;
         _currentPreviewUrl = PreviewUrl;
         _currentCanModify = CanModify;
+        _currentCanArrange = CanArrange;
         _sectionPositions = new();
         _blockPositions = new();
+        _zonePositions = new();
         _iframeHeight = 2000;
         _selectedSection = null;
         _overlayInitialized = false;
         _sortableInitialized = false;
+        _arrangeEditorInitialized = false;
     }
 
     public async ValueTask DisposeAsync()
@@ -370,19 +435,26 @@
     // -- Called from overlay.js via postMessage -------------------
 
     [JSInvokable]
-    public void UpdateSectionPositions(List<SectionPosition> positions, double documentHeight, List<BlockPosition>? blockPositions)
+    public void UpdateSectionPositions(
+        List<SectionPosition> positions,
+        double documentHeight,
+        List<BlockPosition>? blockPositions,
+        List<ZonePosition>? zonePositions)
     {
         var nextHeight = Math.Max(documentHeight, 400);
         blockPositions ??= new();
+        zonePositions ??= new();
         if (Math.Abs(_iframeHeight - nextHeight) < 1 &&
             PositionsEqual(_sectionPositions, positions) &&
-            BlockPositionsEqual(_blockPositions, blockPositions))
+            BlockPositionsEqual(_blockPositions, blockPositions) &&
+            ZonePositionsEqual(_zonePositions, zonePositions))
         {
             return;
         }
 
         _sectionPositions = positions;
         _blockPositions = blockPositions;
+        _zonePositions = zonePositions;
         _iframeHeight = nextHeight;
         StateHasChanged();
     }
@@ -410,6 +482,24 @@
         {
             if (current[i].Id != next[i].Id) return false;
             if (current[i].SectionId != next[i].SectionId) return false;
+            if (current[i].PositionMode != next[i].PositionMode) return false;
+            if (Math.Abs(current[i].Top - next[i].Top) >= 1) return false;
+            if (Math.Abs(current[i].Left - next[i].Left) >= 1) return false;
+            if (Math.Abs(current[i].Height - next[i].Height) >= 1) return false;
+            if (Math.Abs(current[i].Width - next[i].Width) >= 1) return false;
+        }
+
+        return true;
+    }
+
+    private static bool ZonePositionsEqual(List<ZonePosition> current, List<ZonePosition> next)
+    {
+        if (current.Count != next.Count) return false;
+
+        for (var i = 0; i < current.Count; i++)
+        {
+            if (current[i].Id != next[i].Id) return false;
+            if (current[i].SectionId != next[i].SectionId) return false;
             if (Math.Abs(current[i].Top - next[i].Top) >= 1) return false;
             if (Math.Abs(current[i].Left - next[i].Left) >= 1) return false;
             if (Math.Abs(current[i].Height - next[i].Height) >= 1) return false;
@@ -422,7 +512,14 @@
     [JSInvokable]
     public async Task SaveFreeformBlockLayout(string sectionId, string blockId, int x, int y, int w, int h)
     {
+        if (!CanArrange)
+            return;
+
         if (string.IsNullOrWhiteSpace(sectionId) || string.IsNullOrWhiteSpace(blockId))
+            return;
+
+        var section = Sections.FirstOrDefault(s => s.Id == sectionId);
+        if (section is null || !IsArrangeCompatible(section))
             return;
 
         var res = await BlockService.UpdateLayoutAsync(Page.Id, sectionId, blockId, new Contracts.Admin.BlockLayoutDto
@@ -444,8 +541,20 @@
 
     private void SelectSection(SectionModel section)
     {
+        if (!CanModify)
+            return;
+
         _selectedSection = section;
     }
+
+    private static bool IsArrangeCompatible(SectionModel section) =>
+        string.Equals(section.Type, "canvas", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(section.Type, "columns", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetArrangeSectionLabel(SectionModel section) =>
+        string.Equals(section.Type, "columns", StringComparison.OrdinalIgnoreCase)
+            ? "Columns block zones"
+            : "Canvas block zone";
 
     private void ClosePanel()
     {
@@ -568,9 +677,11 @@
         _previewVersion++;
         _sectionPositions = new();
         _blockPositions = new();
+        _zonePositions = new();
         _iframeHeight = 2000;
         _overlayInitialized = false;
         _sortableInitialized = false;
+        _arrangeEditorInitialized = false;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -589,6 +700,7 @@
     {
         public string Id { get; set; } = string.Empty;
         public string SectionId { get; set; } = string.Empty;
+        public string PositionMode { get; set; } = "flow";
         public double Top { get; set; }
         public double Left { get; set; }
         public double Width { get; set; }
@@ -597,6 +709,17 @@
         public double SectionLeft { get; set; }
         public double SectionWidth { get; set; }
         public double SectionHeight { get; set; }
+    }
+
+    public class ZonePosition
+    {
+        public string Id { get; set; } = string.Empty;
+        public string SectionId { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public double Top { get; set; }
+        public double Left { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
     }
 
     private sealed record PageChoice(string Id, string Label);

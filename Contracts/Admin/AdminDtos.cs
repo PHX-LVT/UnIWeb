@@ -72,6 +72,7 @@ namespace Contracts.Admin
         public string? BackgroundColor { get; set; }
         public string? BorderRadius { get; set; }
         public int? ZIndex { get; set; }
+        public int? ZOrder { get; set; }
         public int? X { get; set; }
         public int? Y { get; set; }
         public int? W { get; set; }
@@ -89,6 +90,7 @@ namespace Contracts.Admin
         public string? BackgroundColor { get; set; }
         public string BorderRadius { get; set; } = "none";
         public int ZIndex { get; set; } = 1;
+        public int ZOrder { get; set; } = 1;
         public int X { get; set; } = 0;
         public int Y { get; set; } = 0;
         public int W { get; set; } = 4;
@@ -804,6 +806,7 @@ public class ColumnSlotResponseDto
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public int BlockCount { get; set; }
+        public int SchemaVersion { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -867,6 +870,8 @@ public class ColumnSlotResponseDto
         public List<BlockButtonDto> Buttons { get; set; } = new();
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
+        public string? ZoneId { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutDto? Layout { get; set; }
 
@@ -907,6 +912,7 @@ public class ColumnSlotResponseDto
 
     public class FormBlockCreateDto : BlockCreateDto
     {
+        public string? FormDefinitionId { get; set; }
         public List<FormFieldDto> Fields { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
     }
@@ -978,6 +984,11 @@ public class ColumnSlotResponseDto
         public string LayoutMode { get; set; } = "stack";
         public int Columns { get; set; } = 2;
         public string Gap { get; set; } = "medium";
+        public int OrbitRadius { get; set; } = 180;
+        public int OrbitStartAngle { get; set; } = -90;
+        public int SemicircleRadius { get; set; } = 180;
+        public int SemicircleStartAngle { get; set; } = 180;
+        public int SemicircleEndAngle { get; set; } = 360;
     }
 
     // -- Block Update DTOs -------------------------------------
@@ -991,6 +1002,8 @@ public class ColumnSlotResponseDto
         public bool? Visible { get; set; }
         public List<BlockButtonDto>? Buttons { get; set; }
         public string? BlockZone { get; set; }
+        public string? ZoneId { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutDto? Layout { get; set; }
     }
@@ -1030,6 +1043,7 @@ public class ColumnSlotResponseDto
 
     public class FormBlockUpdateDto : BlockUpdateDto
     {
+        public string? FormDefinitionId { get; set; }
         public List<FormFieldDto> Fields { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
     }
@@ -1092,6 +1106,11 @@ public class ColumnSlotResponseDto
         public string LayoutMode { get; set; } = "stack";
         public int Columns { get; set; } = 2;
         public string Gap { get; set; } = "medium";
+        public int OrbitRadius { get; set; } = 180;
+        public int OrbitStartAngle { get; set; } = -90;
+        public int SemicircleRadius { get; set; } = 180;
+        public int SemicircleStartAngle { get; set; } = 180;
+        public int SemicircleEndAngle { get; set; } = 360;
     }
 
     public sealed class BlockCreateDtoJsonConverter : JsonConverter<BlockCreateDto>
@@ -1196,6 +1215,8 @@ public class ColumnSlotResponseDto
         public int Order { get; set; }
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
+        public string? ZoneId { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutResponseDto Layout { get; set; } = new();
         public List<BlockButtonResponseDto> Buttons { get; set; } = new();
@@ -1220,6 +1241,11 @@ public class ColumnSlotResponseDto
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }
         public string? Gap { get; set; }
+        public int? OrbitRadius { get; set; }
+        public int? OrbitStartAngle { get; set; }
+        public int? SemicircleRadius { get; set; }
+        public int? SemicircleStartAngle { get; set; }
+        public int? SemicircleEndAngle { get; set; }
 
         // Image
         public string? ImageUrl { get; set; }

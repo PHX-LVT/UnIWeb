@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace FullProject.Controllers
 {
     [ApiController]
+    [Route("api/admin/global/theme")]
+    [Authorize]
     public class ThemeController : ControllerBase
     {
         private readonly ThemeService _service;
@@ -17,8 +19,7 @@ namespace FullProject.Controllers
         }
 
         // GET api/admin/global/theme
-        [HttpGet("api/admin/global/theme")]
-        [Authorize]
+        [HttpGet]
         public async Task<IActionResult> GetAdmin()
         {
             var theme = await _service.GetAsync();
@@ -26,8 +27,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/global/theme
-        [HttpPut("api/admin/global/theme")]
-        [Authorize]
+        [HttpPut]
         public async Task<IActionResult> Update([FromBody] ThemeUpdateDto dto)
         {
             var updated = await _service.UpdateAsync(dto);

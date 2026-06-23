@@ -1,6 +1,7 @@
 using Contracts.Forms;
 using FullProject.Models;
 using FullProject.Security.Forms;
+using FullProject.Services.Metrics;
 using MongoDB.Bson;
 
 namespace FullProject.Services.FormServices;
@@ -12,19 +13,22 @@ public sealed class PublicFormSubmissionService
     private readonly FormSubmissionSecurityService _security;
     private readonly FormSubmissionService _submissions;
     private readonly ILogger<PublicFormSubmissionService> _logger;
+    private readonly VisitorMetricService _metrics;
 
     public PublicFormSubmissionService(
         FormDefinitionService definitions,
         FormValidationService validation,
         FormSubmissionSecurityService security,
         FormSubmissionService submissions,
-        ILogger<PublicFormSubmissionService> logger)
+        ILogger<PublicFormSubmissionService> logger,
+        VisitorMetricService metrics)
     {
         _definitions = definitions;
         _validation = validation;
         _security = security;
         _submissions = submissions;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public async Task<(int StatusCode, PublicFormSubmitResponse Response)> SubmitAsync(
@@ -115,6 +119,7 @@ public sealed class PublicFormSubmissionService
         };
 
         await _submissions.CreateAsync(submission);
+        await _metrics.IncrementAsync(VisitorMetricService.FormSubmission, "form", definition.Key, submission.SourcePage);
 
         return (StatusCodes.Status201Created, new PublicFormSubmitResponse
         {

@@ -24,6 +24,8 @@ namespace Contracts.Public
         public bool Visible { get; set; }
         public List<PublicBlockButtonDto>? Buttons { get; set; }
         public string? BlockZone { get; set; }
+        public string? ZoneId { get; set; }
+        public string PositionMode { get; set; } = "flow";
         public string? ParentBlockId { get; set; }
         public PublicBlockLayoutDto Layout { get; set; } = new();
     }
@@ -62,6 +64,10 @@ namespace Contracts.Public
 
     public class PublicFormBlockDto : PublicBlockDto
     {
+        public string? FormDefinitionId { get; set; }
+        public Dictionary<string, string>? Name { get; set; }
+        public Dictionary<string, string>? Introduction { get; set; }
+        public string FormLayoutMode { get; set; } = "stacked";
         public Dictionary<string, string>? SubmitButtonLabel { get; set; }
         public List<PublicFormFieldDto>? Fields { get; set; }
     }
@@ -124,6 +130,11 @@ namespace Contracts.Public
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }
         public string? Gap { get; set; }
+        public int OrbitRadius { get; set; } = 180;
+        public int OrbitStartAngle { get; set; } = -90;
+        public int SemicircleRadius { get; set; } = 180;
+        public int SemicircleStartAngle { get; set; } = 180;
+        public int SemicircleEndAngle { get; set; } = 360;
         public List<PublicBlockDto>? Children { get; set; }
     }
 

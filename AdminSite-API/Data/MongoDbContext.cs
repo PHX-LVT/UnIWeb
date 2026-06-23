@@ -18,6 +18,7 @@ namespace FullProject.Data
         // -------- STEP 35: COLLECTION SEGREGATION VIA STRATEGY --------
         public IMongoCollection<Page> PagesDraft => _database.GetCollection<Page>("pages_draft");
         public IMongoCollection<Page> PagesPublished => _database.GetCollection<Page>("pages_published");
+        public IMongoCollection<PageRevision> PageRevisions => _database.GetCollection<PageRevision>("page_revisions");
 
         public IMongoCollection<Section> SectionsDraft => _database.GetCollection<Section>("sections_draft");
         public IMongoCollection<Section> SectionsPublished => _database.GetCollection<Section>("sections_published");
@@ -35,6 +36,8 @@ namespace FullProject.Data
         public IMongoCollection<ContentItem> ContentPublished => _database.GetCollection<ContentItem>("content_published");
         public IMongoCollection<ContentType> ContentTypes => _database.GetCollection<ContentType>("content_types");
         public IMongoCollection<ContentAuditLog> ContentAuditLogs => _database.GetCollection<ContentAuditLog>("content_audit_logs");
+        public IMongoCollection<ContentRevision> ContentRevisions => _database.GetCollection<ContentRevision>("content_revisions");
+        public IMongoCollection<VisitorMetricCounter> VisitorMetrics => _database.GetCollection<VisitorMetricCounter>("visitor_metrics");
         public IMongoCollection<SiteSettings> Settings => _database.GetCollection<SiteSettings>("site_settings");
         public IMongoCollection<Branding> Branding => _database.GetCollection<Branding>("branding");
 

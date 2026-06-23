@@ -162,7 +162,7 @@ namespace FullProject.Services
                 PasswordHash = HashPassword(dto.Password),
                 Role = dto.Role,
                 Status = dto.Active ? AdminUserStatus.Active : AdminUserStatus.Disabled,
-                Permissions = NormalizePermissions(dto.Permissions),
+                Permissions = NormalizePermissions(dto.Role, dto.Permissions),
                 TokenVersion = 1,
                 DisabledAt = dto.Active ? null : DateTime.UtcNow,
                 DisabledById = dto.Active ? null : actor.Id,
@@ -203,7 +203,7 @@ namespace FullProject.Services
                 updates.Add(Builders<AdminUser>.Update.Set(u => u.Role, dto.Role.Value));
 
             if (dto.Permissions is not null)
-                updates.Add(Builders<AdminUser>.Update.Set(u => u.Permissions, NormalizePermissions(dto.Permissions)));
+                updates.Add(Builders<AdminUser>.Update.Set(u => u.Permissions, NormalizePermissions(dto.Role ?? user.Role, dto.Permissions)));
 
             var statusChanged = dto.Active is not null &&
                                 ((dto.Active.Value && user.Status != AdminUserStatus.Active) ||
@@ -513,8 +513,7 @@ namespace FullProject.Services
             };
 
             return defaults
-                .Concat(user.Permissions ?? [])
-                .Where(AdminPermissionKeys.All.Contains)
+                .Concat(NormalizePermissions(user.Role, user.Permissions))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
@@ -647,11 +646,27 @@ namespace FullProject.Services
             return errors;
         }
 
-        private static List<string> NormalizePermissions(IEnumerable<string>? permissions) =>
-            (permissions ?? [])
-            .Where(AdminPermissionKeys.All.Contains)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        private static List<string> NormalizePermissions(AdminRole role, IEnumerable<string>? permissions)
+        {
+            var allowed = AllowedPermissionsForRole(role);
+            return (permissions ?? [])
+                .Where(permission => allowed.Contains(permission, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static IReadOnlyCollection<string> AllowedPermissionsForRole(AdminRole role) => role switch
+        {
+            AdminRole.AdminAdmin => AdminPermissionKeys.All,
+            AdminRole.Manager => new[]
+            {
+                AdminPermissionKeys.ManageContent,
+                AdminPermissionKeys.PublishContent,
+                AdminPermissionKeys.DeleteContent
+            },
+            AdminRole.Writer => new[] { AdminPermissionKeys.ManageContent },
+            _ => Array.Empty<string>()
+        };
 
         private static List<string> NormalizeIds(IEnumerable<string>? ids) =>
             (ids ?? [])

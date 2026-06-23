@@ -1,8 +1,10 @@
-﻿using FullProject.Data; // Imported your new context namespace
+using FullProject.Data; // Imported your new context namespace
 using FullProject.DTOs;
 using FullProject.Models;
 using GlobalManager.Services.AssetService;
 using GlobalManager.Services.SectionServices;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using System.Globalization;
 using System.Text;
@@ -64,10 +66,12 @@ namespace FullProject.Services
             return page;
         }
 
-        public async Task<Page?> UpdateAsync(string pageId, PageUpdateDto dto)
+        public async Task<Page?> UpdateAsync(string pageId, PageUpdateDto dto, string actorId = "system")
         {
             var existing = await GetByIdAsync(pageId);
             if (existing is null) return null;
+
+            await SavePageRevisionAsync(existing, actorId, "updated");
 
             var updates = new List<UpdateDefinition<Page>>
             {
@@ -118,8 +122,12 @@ namespace FullProject.Services
             return true;
         }
 
-        public async Task<bool> SetVisibilityAsync(string pageId, bool visible)
+        public async Task<bool> SetVisibilityAsync(string pageId, bool visible, string actorId = "system")
         {
+            var existing = await GetByIdAsync(pageId);
+            if (existing is null) return false;
+            await SavePageRevisionAsync(existing, actorId, "visibility");
+
             var result = await _context.PagesDraft.UpdateOneAsync(
                 p => p.Id == pageId,
                 Builders<Page>.Update
@@ -129,8 +137,12 @@ namespace FullProject.Services
             return result.ModifiedCount > 0;
         }
 
-        public async Task<bool> SetAccessAsync(string pageId, bool access)
+        public async Task<bool> SetAccessAsync(string pageId, bool access, string actorId = "system")
         {
+            var existing = await GetByIdAsync(pageId);
+            if (existing is null) return false;
+            await SavePageRevisionAsync(existing, actorId, "access");
+
             var result = await _context.PagesDraft.UpdateOneAsync(
                 p => p.Id == pageId,
                 Builders<Page>.Update
@@ -158,10 +170,12 @@ namespace FullProject.Services
                                 .SortBy(p => p.Order)
                                 .ToListAsync();
 
-        public async Task<bool> UpdateCardAsync(string pageId, PageCardDto dto, bool isCustomized = true)
+        public async Task<bool> UpdateCardAsync(string pageId, PageCardDto dto, bool isCustomized = true, string actorId = "system")
         {
             var existing = await GetByIdAsync(pageId);
-            var oldCardImageUrl = existing?.Card?.CardImageUrl;
+            if (existing is null) return false;
+            await SavePageRevisionAsync(existing, actorId, "card-updated");
+            var oldCardImageUrl = existing.Card?.CardImageUrl;
             var updates = new List<UpdateDefinition<Page>>();
             if (dto.CardTitle != null) updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardTitle, dto.CardTitle));
             if (dto.CardContent != null) updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardContent, dto.CardContent));
@@ -182,8 +196,12 @@ namespace FullProject.Services
             return result.ModifiedCount > 0;
         }
 
-        public async Task<bool> ResetCardAsync(string pageId)
+        public async Task<bool> ResetCardAsync(string pageId, string actorId = "system")
         {
+            var existing = await GetByIdAsync(pageId);
+            if (existing is null) return false;
+            await SavePageRevisionAsync(existing, actorId, "card-reset");
+
             var result = await _context.PagesDraft.UpdateOneAsync(p => p.Id == pageId,
                 Builders<Page>.Update.Set(p => p.Card!.IsCustomized, false).Inc(p => p.Version, 1));
             return result.ModifiedCount > 0;
@@ -223,6 +241,84 @@ namespace FullProject.Services
             await _context.PagesDraft.UpdateOneAsync(p => p.Id == pageId, Builders<Page>.Update.Combine(updates));
         }
 
+
+        public async Task<List<RevisionResponseDto>> GetRevisionsAsync(string pageId)
+        {
+            var page = await GetByIdAsync(pageId);
+            if (page is null) return new();
+
+            var revisions = await _context.PageRevisions
+                .Find(r => r.PageStableId == page.StableId)
+                .SortByDescending(r => r.CreatedAt)
+                .Limit(10)
+                .ToListAsync();
+
+            return revisions.Select(MapRevision).ToList();
+        }
+
+        public async Task<Page?> RestoreRevisionAsync(string pageId, string revisionId, string actorId)
+        {
+            var current = await GetByIdAsync(pageId);
+            if (current is null) return null;
+
+            var revision = await _context.PageRevisions
+                .Find(r => r.Id == revisionId && r.PageStableId == current.StableId)
+                .FirstOrDefaultAsync();
+            if (revision is null) return null;
+
+            await SavePageRevisionAsync(current, actorId, "before-restore");
+
+            var restored = BsonSerializer.Deserialize<Page>(revision.Snapshot);
+            restored.Id = current.Id;
+            restored.StableId = current.StableId;
+            restored.CreatedAt = current.CreatedAt;
+            restored.UpdatedAt = DateTime.UtcNow;
+            restored.Version = current.Version + 1;
+
+            await _context.PagesDraft.ReplaceOneAsync(p => p.Id == pageId, restored);
+            await TrimPageRevisionsAsync(current.StableId);
+            return await GetByIdAsync(pageId);
+        }
+
+        private async Task SavePageRevisionAsync(Page page, string actorId, string reason)
+        {
+            await _context.PageRevisions.InsertOneAsync(new PageRevision
+            {
+                PageId = page.Id,
+                PageStableId = page.StableId,
+                SourceVersion = page.Version,
+                ActorId = actorId,
+                Reason = reason,
+                CreatedAt = DateTime.UtcNow,
+                Snapshot = page.ToBsonDocument()
+            });
+
+            await TrimPageRevisionsAsync(page.StableId);
+        }
+
+        private async Task TrimPageRevisionsAsync(string pageStableId)
+        {
+            var staleIds = await _context.PageRevisions
+                .Find(r => r.PageStableId == pageStableId)
+                .SortByDescending(r => r.CreatedAt)
+                .Skip(2)
+                .Project(r => r.Id)
+                .ToListAsync();
+
+            if (staleIds.Count > 0)
+                await _context.PageRevisions.DeleteManyAsync(r => staleIds.Contains(r.Id));
+        }
+
+        private static RevisionResponseDto MapRevision(PageRevision revision) => new()
+        {
+            Id = revision.Id,
+            TargetId = revision.PageId,
+            StableId = revision.PageStableId,
+            SourceVersion = revision.SourceVersion,
+            ActorId = revision.ActorId,
+            Reason = revision.Reason,
+            CreatedAt = revision.CreatedAt
+        };
         // -----------------------------------------------------------
         // PUBLIC USER SITE RENDER METHODS (PUBLISHED EXCLUSIVE)
         // -----------------------------------------------------------
@@ -302,6 +398,3 @@ namespace FullProject.Services
         }
     }
 }
-
-
-

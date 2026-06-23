@@ -56,6 +56,15 @@
     </nav>
 }
 
+@if (Auth.CanViewLogs)
+{
+    <nav class="ez-nav-section">
+        <NavLink class="ez-nav-link" href="/website-activity" @onclick="CollapseGroups">
+            <span>@T("WebsiteActivity")</span>
+        </NavLink>
+    </nav>
+}
+
 @if (Auth.CanViewContent)
 {
     <nav class="ez-nav-section">
@@ -186,6 +195,13 @@
     private void OpenContentManagement()
     {
         if (!Auth.CanViewContent) return;
+
+        if (_expandedGroup == "content")
+        {
+            _expandedGroup = null;
+            return;
+        }
+
         _expandedGroup = "content";
         Nav.NavigateTo(Auth.CanManageContent ? "/content/all" : "/content/preview");
     }

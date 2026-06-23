@@ -58,6 +58,7 @@ public static class BlockUpdateDtoMapper
             },
             "form" => new FormBlockUpdateDto
             {
+                FormDefinitionId = block.FormDefinitionId,
                 SubmitButtonLabel = block.SubmitButtonLabel ?? new(),
                 Fields = block.Fields?.Select(f => new FormFieldDto
                 {
@@ -138,6 +139,11 @@ public static class BlockUpdateDtoMapper
                 LayoutMode = block.LayoutMode ?? "stack",
                 Columns = Math.Clamp(block.Columns ?? 2, 1, 6),
                 Gap = block.Gap ?? "medium",
+                OrbitRadius = Math.Clamp(block.OrbitRadius ?? 180, 80, 480),
+                OrbitStartAngle = Math.Clamp(block.OrbitStartAngle ?? -90, -360, 360),
+                SemicircleRadius = Math.Clamp(block.SemicircleRadius ?? 180, 80, 480),
+                SemicircleStartAngle = Math.Clamp(block.SemicircleStartAngle ?? 180, -360, 360),
+                SemicircleEndAngle = Math.Clamp(block.SemicircleEndAngle ?? 360, -360, 360),
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -153,12 +159,16 @@ public static class BlockUpdateDtoMapper
         dto.Visible = block.Visible;
         dto.Layout = layout;
         dto.BlockZone = NormalizeBlockZone(block.BlockZone);
+        dto.PositionMode = NormalizePositionMode(block.PositionMode);
         dto.ParentBlockId = block.ParentBlockId;
         return dto;
     }
 
     private static string NormalizeBlockZone(string? zone) =>
         string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();
+
+    private static string NormalizePositionMode(string? mode) =>
+        string.Equals(mode, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
 
     private static BlockLayoutDto ToLayoutDto(BlockLayoutModel? layout) => new()
     {

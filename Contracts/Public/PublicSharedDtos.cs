@@ -33,6 +33,7 @@ namespace Contracts.Public
         public string? BackgroundColor { get; set; }
         public string BorderRadius { get; set; } = "none";
         public int ZIndex { get; set; } = 1;
+        public int ZOrder { get; set; } = 1;
         public int X { get; set; } = 0;
         public int Y { get; set; } = 0;
         public int W { get; set; } = 4;
@@ -193,8 +194,16 @@ namespace Contracts.Public
         public string Name { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
+        public Dictionary<string, string> Placeholder { get; set; } = new();
         public bool Required { get; set; }
-        public List<string>? Options { get; set; }
+        public List<PublicFormFieldOptionDto> Options { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    public class PublicFormFieldOptionDto
+    {
+        public string Value { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
         public int Order { get; set; }
     }
 

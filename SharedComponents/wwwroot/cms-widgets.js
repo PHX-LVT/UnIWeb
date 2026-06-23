@@ -4,6 +4,7 @@ window.cmsWidgets.init = () => {
     initCounters();
     initCarousels();
     initLibraryVideos();
+    initDownloadMetrics();
     initNetworkMaps();
     initPublicModals();
 };
@@ -61,6 +62,41 @@ function initLibraryVideos() {
     });
 }
 
+
+function initDownloadMetrics() {
+    if (window.__scDownloadMetricsDelegated) return;
+    window.__scDownloadMetricsDelegated = true;
+
+    document.addEventListener("click", e => {
+        const link = e.target.closest("a.sc-insight-download[href], a[download][href]");
+        if (!link) return;
+
+        const href = link.getAttribute("href") || "";
+        if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+        trackDownloadMetric(href);
+    }, true);
+}
+
+function trackDownloadMetric(href) {
+    try {
+        const url = new URL(href, window.location.href);
+        if (!["http:", "https:"].includes(url.protocol)) return;
+
+        const payload = JSON.stringify({
+            url: url.href,
+            sourcePage: window.location.pathname
+        });
+
+        fetch(buildPublicApiUrl("api/public/metrics/download"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: payload,
+            keepalive: true
+        }).catch(() => { });
+    } catch {
+        // Ignore metric failures; downloads must never be blocked by tracking.
+    }
+}
 function initNetworkMaps() {
     document.querySelectorAll("[data-sc-network-map]:not([data-bound])").forEach(root => {
         root.dataset.bound = "true";
@@ -620,31 +656,31 @@ function getPublicUiLanguage() {
 
 function publicUiText(key, lang) {
     const text = {
-        QuoteTitle: { en: "Get a Quote", vi: "Nhận báo giá" },
-        QuoteIntro: { en: "Fill out the form below and our sales team will contact you shortly.", vi: "Điền thông tin bên dưới và đội ngũ tư vấn sẽ liên hệ với bạn sớm." },
-        ExpertTitle: { en: "Talk to an Expert", vi: "Trao đổi với chuyên gia" },
-        ExpertIntro: { en: "Our specialists are here to answer your questions and help you find the best solution.", vi: "Chuyên gia của chúng tôi sẽ hỗ trợ câu hỏi và đề xuất giải pháp phù hợp." },
-        SyncTitle: { en: "Login to SyncHub", vi: "Đăng nhập SyncHub" },
-        SyncIntro: { en: "Access your dashboard and start managing shipments seamlessly.", vi: "Truy cập bảng điều khiển để quản lý lô hàng liền mạch." },
-        Submit: { en: "Submit", vi: "Gửi" },
-        SubmitRequest: { en: "Submit Request", vi: "Gửi yêu cầu" },
-        Login: { en: "Login", vi: "Đăng nhập" },
-        SelectService: { en: "Select Service", vi: "Chọn dịch vụ" },
-        Route: { en: "Route / Volume / Duration", vi: "Tuyến / Khối lượng / Thời gian" },
+        QuoteTitle: { en: "Get a Quote", vi: "NhÃ¡ÂºÂ­n bÃƒÂ¡o giÃƒÂ¡" },
+        QuoteIntro: { en: "Fill out the form below and our sales team will contact you shortly.", vi: "Ã„ÂiÃ¡Â»Ân thÃƒÂ´ng tin bÃƒÂªn dÃ†Â°Ã¡Â»â€ºi vÃƒÂ  Ã„â€˜Ã¡Â»â„¢i ngÃ…Â© tÃ†Â° vÃ¡ÂºÂ¥n sÃ¡ÂºÂ½ liÃƒÂªn hÃ¡Â»â€¡ vÃ¡Â»â€ºi bÃ¡ÂºÂ¡n sÃ¡Â»â€ºm." },
+        ExpertTitle: { en: "Talk to an Expert", vi: "Trao Ã„â€˜Ã¡Â»â€¢i vÃ¡Â»â€ºi chuyÃƒÂªn gia" },
+        ExpertIntro: { en: "Our specialists are here to answer your questions and help you find the best solution.", vi: "ChuyÃƒÂªn gia cÃ¡Â»Â§a chÃƒÂºng tÃƒÂ´i sÃ¡ÂºÂ½ hÃ¡Â»â€” trÃ¡Â»Â£ cÃƒÂ¢u hÃ¡Â»Âi vÃƒÂ  Ã„â€˜Ã¡Â»Â xuÃ¡ÂºÂ¥t giÃ¡ÂºÂ£i phÃƒÂ¡p phÃƒÂ¹ hÃ¡Â»Â£p." },
+        SyncTitle: { en: "Login to SyncHub", vi: "Ã„ÂÃ„Æ’ng nhÃ¡ÂºÂ­p SyncHub" },
+        SyncIntro: { en: "Access your dashboard and start managing shipments seamlessly.", vi: "Truy cÃ¡ÂºÂ­p bÃ¡ÂºÂ£ng Ã„â€˜iÃ¡Â»Âu khiÃ¡Â»Æ’n Ã„â€˜Ã¡Â»Æ’ quÃ¡ÂºÂ£n lÃƒÂ½ lÃƒÂ´ hÃƒÂ ng liÃ¡Â»Ân mÃ¡ÂºÂ¡ch." },
+        Submit: { en: "Submit", vi: "GÃ¡Â»Â­i" },
+        SubmitRequest: { en: "Submit Request", vi: "GÃ¡Â»Â­i yÃƒÂªu cÃ¡ÂºÂ§u" },
+        Login: { en: "Login", vi: "Ã„ÂÃ„Æ’ng nhÃ¡ÂºÂ­p" },
+        SelectService: { en: "Select Service", vi: "ChÃ¡Â»Ân dÃ¡Â»â€¹ch vÃ¡Â»Â¥" },
+        Route: { en: "Route / Volume / Duration", vi: "TuyÃ¡ÂºÂ¿n / KhÃ¡Â»â€˜i lÃ†Â°Ã¡Â»Â£ng / ThÃ¡Â»Âi gian" },
         Email: { en: "Email", vi: "Email" },
-        EmailAddress: { en: "Email Address", vi: "Địa chỉ email" },
-        Phone: { en: "Phone Number", vi: "Số điện thoại" },
-        FullName: { en: "Full Name", vi: "Họ và tên" },
-        CompanyName: { en: "Company Name", vi: "Tên công ty" },
-        YourMessage: { en: "Your Message", vi: "Nội dung" },
-        Username: { en: "Email / Username", vi: "Email / Tên đăng nhập" },
-        Password: { en: "Password", vi: "Mật khẩu" },
-        ForgotPassword: { en: "Forgot password?", vi: "Quên mật khẩu?" },
-        RequiredFields: { en: "Please complete all required fields.", vi: "Vui lòng điền đầy đủ các trường bắt buộc." },
-        Submitting: { en: "Submitting...", vi: "Đang gửi..." },
-        SubmitSuccess: { en: "Thank you, your message has been sent.", vi: "Cảm ơn bạn, thông tin đã được gửi." },
-        SubmitError: { en: "Something went wrong. Please try again.", vi: "Đã xảy ra lỗi. Vui lòng thử lại." },
-        LoginRedirecting: { en: "Login successful. Redirecting...", vi: "Đăng nhập thành công. Đang chuyển hướng..." }
+        EmailAddress: { en: "Email Address", vi: "Ã„ÂÃ¡Â»â€¹a chÃ¡Â»â€° email" },
+        Phone: { en: "Phone Number", vi: "SÃ¡Â»â€˜ Ã„â€˜iÃ¡Â»â€¡n thoÃ¡ÂºÂ¡i" },
+        FullName: { en: "Full Name", vi: "HÃ¡Â»Â vÃƒÂ  tÃƒÂªn" },
+        CompanyName: { en: "Company Name", vi: "TÃƒÂªn cÃƒÂ´ng ty" },
+        YourMessage: { en: "Your Message", vi: "NÃ¡Â»â„¢i dung" },
+        Username: { en: "Email / Username", vi: "Email / TÃƒÂªn Ã„â€˜Ã„Æ’ng nhÃ¡ÂºÂ­p" },
+        Password: { en: "Password", vi: "MÃ¡ÂºÂ­t khÃ¡ÂºÂ©u" },
+        ForgotPassword: { en: "Forgot password?", vi: "QuÃƒÂªn mÃ¡ÂºÂ­t khÃ¡ÂºÂ©u?" },
+        RequiredFields: { en: "Please complete all required fields.", vi: "Vui lÃƒÂ²ng Ã„â€˜iÃ¡Â»Ân Ã„â€˜Ã¡ÂºÂ§y Ã„â€˜Ã¡Â»Â§ cÃƒÂ¡c trÃ†Â°Ã¡Â»Âng bÃ¡ÂºÂ¯t buÃ¡Â»â„¢c." },
+        Submitting: { en: "Submitting...", vi: "Ã„Âang gÃ¡Â»Â­i..." },
+        SubmitSuccess: { en: "Thank you, your message has been sent.", vi: "CÃ¡ÂºÂ£m Ã†Â¡n bÃ¡ÂºÂ¡n, thÃƒÂ´ng tin Ã„â€˜ÃƒÂ£ Ã„â€˜Ã†Â°Ã¡Â»Â£c gÃ¡Â»Â­i." },
+        SubmitError: { en: "Something went wrong. Please try again.", vi: "Ã„ÂÃƒÂ£ xÃ¡ÂºÂ£y ra lÃ¡Â»â€”i. Vui lÃƒÂ²ng thÃ¡Â»Â­ lÃ¡ÂºÂ¡i." },
+        LoginRedirecting: { en: "Login successful. Redirecting...", vi: "Ã„ÂÃ„Æ’ng nhÃ¡ÂºÂ­p thÃƒÂ nh cÃƒÂ´ng. Ã„Âang chuyÃ¡Â»Æ’n hÃ†Â°Ã¡Â»â€ºng..." }
     };
 
     return text[key]?.[lang] || text[key]?.en || key;
