@@ -13,7 +13,7 @@
         <div class="block-delete-dialog">
             <div class="block-delete-dialog__header">@ConfirmTitle</div>
             <div class="block-delete-dialog__body">
-                <p>Delete this <strong>@Block?.Type</strong> block?</p>
+                <p>@((MarkupString)string.Format(T("DeleteBlockPrompt"), $"<strong>{Block?.Type}</strong>"))</p>
             </div>
             <div class="block-delete-dialog__footer">
                 <button class="btn-admin btn-ghost"
@@ -32,6 +32,9 @@
     [Parameter] public string DeleteText { get; set; } = "Delete";
     [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public EventCallback OnConfirm { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     private async Task OnVisibleChanged(bool visible)
     {

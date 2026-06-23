@@ -329,7 +329,11 @@ namespace FullProject.Controllers
                 X = layout.X,
                 Y = layout.Y,
                 W = layout.W,
-                H = layout.H
+                H = layout.H,
+                LeftPercent = layout.LeftPercent,
+                TopPx = layout.TopPx,
+                WidthPercent = layout.WidthPercent,
+                HeightPx = layout.HeightPx
             };
         }
 

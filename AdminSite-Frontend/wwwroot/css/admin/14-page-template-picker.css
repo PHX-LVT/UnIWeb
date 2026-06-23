@@ -30,13 +30,21 @@
     color: var(--primary-light);
 }
 
-.ez-picker-card span {
+.ez-picker-card__text {
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+}
+
+.ez-picker-card__text span {
     font-size: .85rem;
     font-weight: 600;
     color: var(--text);
 }
 
-.ez-picker-card small {
+.ez-picker-card__text small {
+    max-width: 18ch;
     font-size: .75rem;
+    line-height: 1.25;
     color: var(--text-muted);
 }

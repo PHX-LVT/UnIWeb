@@ -6,7 +6,7 @@
 @implements IAsyncDisposable
 
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-cog"></i> Settings</h1>
+    <h1 class="page-title"><i class="fas fa-cog"></i> @T("Settings")</h1>
 </div>
 
 <DxTabs>
@@ -185,13 +185,13 @@
         </div>
     </DxTabPage>
 
-    <DxTabPage Text="Glossary" CssClass="fas fa-book">
+    <DxTabPage Text='@T("Glossary")' CssClass="fas fa-book">
         <div class="admin-card" style="margin-top:1rem">
             <div class="admin-card-title" style="display:flex;align-items:center">
-                <span style="flex:1">Glossary Terms</span>
+                <span style="flex:1">@T("GlossaryTerms")</span>
                 <button class="btn-admin btn-primary"
                         @onclick="() => OpenTermModal(null)">
-                    <i class="fas fa-plus"></i> Add Term
+                    <i class="fas fa-plus"></i> @T("AddTerm")
                 </button>
             </div>
 
@@ -201,7 +201,7 @@
             }
             else if (!_glossary.Any())
             {
-                <p class="text-muted" style="margin-top:.75rem">No terms yet.</p>
+                <p class="text-muted" style="margin-top:.75rem">@T("NoTermsYet")</p>
             }
             else
             {
@@ -328,14 +328,14 @@
     <div class="modal-backdrop" @onclick="CloseTermModal">
         <div class="modal-box" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <span>@(_editingTerm is null ? "Add Term" : "Edit Term")</span>
+                <span>@(_editingTerm is null ? T("AddTerm") : T("EditTerm"))</span>
                 <button class="btn-admin btn-ghost" @onclick="CloseTermModal">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label required">Term (key)</label>
+                    <label class="form-label required">@T("TermKey")</label>
                     <DxTextBox @bind-Text="_termForm.Term" CssClass="w-100"
                                NullText="e.g. hero_title" />
                 </div>
@@ -350,10 +350,10 @@
                 }
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost" @onclick="CloseTermModal">Cancel</button>
+                <button class="btn-admin btn-ghost" @onclick="CloseTermModal">@T("Cancel")</button>
                 <button class="btn-admin btn-primary"
                         @onclick="SaveTerm" disabled="@_termSaving">
-                    @(_termSaving ? "Saving..." : "Save")
+                    @(_termSaving ? T("Saving") : T("Save"))
                 </button>
             </div>
         </div>

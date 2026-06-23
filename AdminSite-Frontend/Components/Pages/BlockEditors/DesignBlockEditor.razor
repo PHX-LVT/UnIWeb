@@ -52,7 +52,7 @@
             </select>
         </div>
         <div class="form-group">
-            <label class="form-label">Gap</label>
+            <label class="form-label">@T("Gap")</label>
             <DxComboBox Data="_gapOptions" @bind-Value="_gap" CssClass="w-100" />
         </div>
     </div>
@@ -426,7 +426,11 @@
         X = Block.Layout.X,
         Y = Block.Layout.Y,
         W = Block.Layout.W,
-        H = Block.Layout.H
+        H = Block.Layout.H,
+        LeftPercent = Block.Layout.LeftPercent,
+        TopPx = Block.Layout.TopPx,
+        WidthPercent = Block.Layout.WidthPercent,
+        HeightPx = Block.Layout.HeightPx
     };
 
     private static string NormalizeButtonAction(string? action) => IsOpenFormAction(action) ? "openForm" : "linkToPage";

@@ -129,21 +129,17 @@
     private string GetBlockStyle(PublicBlockDto block, int index, int count)
     {
         var layout = block.Layout ?? new PublicBlockLayoutDto();
-        var x = Math.Clamp(layout.X, 0, 11);
-        var w = Math.Clamp(layout.W, 1, 12);
-        var y = Math.Clamp(layout.Y, 0, 60);
-        var h = Math.Clamp(layout.H, 1, 40);
-        var left = (x / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
-        var width = (w / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        var left = FormatNumber(FreeformLeftPercent(layout));
+        var width = FormatNumber(FreeformWidthPercent(layout));
         var parts = new List<string>
         {
             $"--sc-block-column-span: {Math.Clamp(layout.ColumnSpan, 1, 12)}",
             $"--sc-block-left: {left}%",
             $"--sc-block-width: {width}%",
-            $"--sc-block-top: {y * 48}px",
-            $"--sc-block-min-height: {h * 48}px",
+            $"--sc-block-top: {FormatNumber(FreeformTopPx(layout))}px",
+            $"--sc-block-min-height: {FormatNumber(FreeformHeightPx(layout))}px",
             $"--sc-pattern-angle: {PatternAngle(index, count).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}deg",
-            $"z-index: {Math.Clamp(layout.ZIndex, 0, 20)}"
+            $"z-index: {Math.Clamp(layout.ZIndex, 0, 1000)}"
         };
 
         if (!string.IsNullOrWhiteSpace(layout.BackgroundColor))
@@ -160,6 +156,21 @@
 
     private string EffectivePositionMode(PublicBlockDto block) =>
         ForceFreeform ? "freeform" : NormalizePositionMode(block.PositionMode);
+
+    private static double FreeformLeftPercent(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.LeftPercent ?? (Math.Clamp(layout.X, 0, 11) / 12d * 100), 0, 100);
+
+    private static double FreeformWidthPercent(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.WidthPercent ?? (Math.Clamp(layout.W, 1, 12) / 12d * 100), 1, 100);
+
+    private static double FreeformTopPx(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.TopPx ?? (Math.Clamp(layout.Y, 0, 60) * 48d), 0, 10000);
+
+    private static double FreeformHeightPx(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.HeightPx ?? (Math.Clamp(layout.H, 1, 40) * 48d), 24, 10000);
+
+    private static string FormatNumber(double value) =>
+        value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 
     private double PatternAngle(int index, int count)
     {

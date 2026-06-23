@@ -227,10 +227,26 @@ else
                                                 }
                                             </select>
                                         </label>
-                                        <label>
-                                            <span>@T("LayerOrder")</span>
-                                            <input type="number" min="0" max="20" @bind="_layoutZIndex" />
-                                        </label>
+                                        <div class="block-layout-panel__layer">
+                                            <label>
+                                                <span>@T("LayerOrder")</span>
+                                                <input type="number" min="0" max="1000" @bind="_layoutZIndex" />
+                                            </label>
+                                            <div class="block-layout-panel__layer-actions" aria-label="@T("LayerControls")">
+                                                <button type="button" title="@T("SendBackward")" @onclick="SendLayerBackward">
+                                                    <i class="fas fa-arrow-down"></i>
+                                                </button>
+                                                <button type="button" title="@T("BringForward")" @onclick="BringLayerForward">
+                                                    <i class="fas fa-arrow-up"></i>
+                                                </button>
+                                                <button type="button" title="@T("SendToBack")" @onclick="SendLayerToBack">
+                                                    <i class="fas fa-angle-double-down"></i>
+                                                </button>
+                                                <button type="button" title="@T("BringToFront")" @onclick="BringLayerToFront">
+                                                    <i class="fas fa-angle-double-up"></i>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </details>
                                 <div class="block-layout-panel__actions">
@@ -374,6 +390,28 @@ else
         padding: .25rem .45rem;
         color: var(--text);
         background: #fff;
+    }
+    .block-layout-panel__layer {
+        display: flex;
+        flex-direction: column;
+        gap: .4rem;
+    }
+    .block-layout-panel__layer-actions {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: .3rem;
+    }
+    .block-layout-panel__layer-actions button {
+        min-height: 30px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--primary);
+        cursor: pointer;
+    }
+    .block-layout-panel__layer-actions button:hover {
+        border-color: var(--primary-light);
+        background: #f0f4ff;
     }
     .block-layout-panel__hint {
         margin: .65rem 0 0;
@@ -659,8 +697,8 @@ else
     }
     private int _layoutZIndex
     {
-        get => Math.Clamp(EnsureLayout().ZIndex ?? 1, 0, 20);
-        set => EnsureLayout().ZIndex = Math.Clamp(value, 0, 20);
+        get => Math.Clamp(EnsureLayout().ZIndex ?? 1, 0, 1000);
+        set => EnsureLayout().ZIndex = Math.Clamp(value, 0, 1000);
     }
     private List<BlockTypeGroup> _blockGroups = new()
     {
@@ -908,6 +946,29 @@ public void Dispose()
         _fullBlock ??= new BlockModel();
         _fullBlock.Layout ??= new BlockLayoutModel();
         return _fullBlock.Layout;
+    }
+
+    private void BringLayerForward() => _layoutZIndex = Math.Min(1000, _layoutZIndex + 1);
+
+    private void SendLayerBackward() => _layoutZIndex = Math.Max(0, _layoutZIndex - 1);
+
+    private void BringLayerToFront() => _layoutZIndex = Math.Min(1000, HighestPeerLayer() + 1);
+
+    private void SendLayerToBack() => _layoutZIndex = 0;
+
+    private int HighestPeerLayer()
+    {
+        if (_fullBlock is null)
+            return _layoutZIndex;
+
+        var parent = NormalizeParent(_fullBlock.ParentBlockId);
+        var zone = NormalizeBlockZone(_fullBlock.BlockZone);
+        return _blocks
+            .Where(b => NormalizeParent(b.ParentBlockId) == parent)
+            .Where(b => NormalizeBlockZone(b.BlockZone) == zone)
+            .Select(b => Math.Clamp(b.Layout?.ZIndex ?? 1, 0, 1000))
+            .DefaultIfEmpty(_layoutZIndex)
+            .Max();
     }
 
     private async Task SaveBlockLayout()

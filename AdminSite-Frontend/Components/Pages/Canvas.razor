@@ -196,7 +196,7 @@
                                             pointer-events: none;
                                             z-index: 4;">
                                     <span class="ez-arrange-zone-overlay__label">
-                                        @(zone.Kind == "column" ? "Column zone" : "Canvas zone")
+                                        @(zone.Kind == "column" ? T("ColumnZone") : T("CanvasZone"))
                                     </span>
                                 </div>
                             }
@@ -221,7 +221,7 @@
                                             width: @(block.Width)px;
                                             height: @(block.Height)px;
                                             pointer-events: @(canMoveBlock ? "auto" : "none");
-                                            z-index: 5;">
+                                            z-index: @(5 + Math.Clamp(block.ZIndex, 0, 1000));">
                                     @if (canMoveBlock)
                                     {
                                         <button type="button"
@@ -483,6 +483,7 @@
             if (current[i].Id != next[i].Id) return false;
             if (current[i].SectionId != next[i].SectionId) return false;
             if (current[i].PositionMode != next[i].PositionMode) return false;
+            if (current[i].ZIndex != next[i].ZIndex) return false;
             if (Math.Abs(current[i].Top - next[i].Top) >= 1) return false;
             if (Math.Abs(current[i].Left - next[i].Left) >= 1) return false;
             if (Math.Abs(current[i].Height - next[i].Height) >= 1) return false;
@@ -510,31 +511,76 @@
     }
 
     [JSInvokable]
-    public async Task SaveFreeformBlockLayout(string sectionId, string blockId, int x, int y, int w, int h)
+    public async Task<bool> SaveFreeformBlockLayout(
+        string sectionId,
+        string blockId,
+        int x,
+        int y,
+        int w,
+        int h,
+        double leftPercent,
+        double topPx,
+        double widthPercent,
+        double heightPx)
     {
         if (!CanArrange)
-            return;
+            return false;
 
         if (string.IsNullOrWhiteSpace(sectionId) || string.IsNullOrWhiteSpace(blockId))
-            return;
+            return false;
 
         var section = Sections.FirstOrDefault(s => s.Id == sectionId);
         if (section is null || !IsArrangeCompatible(section))
-            return;
+            return false;
 
         var res = await BlockService.UpdateLayoutAsync(Page.Id, sectionId, blockId, new Contracts.Admin.BlockLayoutDto
         {
             X = x,
             Y = y,
             W = w,
-            H = h
+            H = h,
+            LeftPercent = leftPercent,
+            TopPx = topPx,
+            WidthPercent = widthPercent,
+            HeightPx = heightPx
         });
 
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success)
         {
-            await ReloadPreviewSafelyAsync();
+            ApplyFreeformBlockLayoutLocally(sectionId, blockId, leftPercent, topPx, widthPercent, heightPx);
+            try
+            {
+                await JS.InvokeVoidAsync("patchPreviewBlockLayout", blockId, x, y, w, h, leftPercent, topPx, widthPercent, heightPx);
+            }
+            catch
+            {
+            }
+
+            await InvokeAsync(StateHasChanged);
         }
+
+        return res.Success;
+    }
+
+    private void ApplyFreeformBlockLayoutLocally(
+        string sectionId,
+        string blockId,
+        double leftPercent,
+        double topPx,
+        double widthPercent,
+        double heightPx)
+    {
+        var block = _blockPositions.FirstOrDefault(item =>
+            item.Id == blockId &&
+            item.SectionId == sectionId);
+        if (block is null)
+            return;
+
+        block.Left = block.SectionLeft + block.SectionWidth * Math.Clamp(leftPercent, 0, 100) / 100d;
+        block.Top = block.SectionTop + Math.Clamp(topPx, 0, 10000);
+        block.Width = block.SectionWidth * Math.Clamp(widthPercent, 1, 100) / 100d;
+        block.Height = Math.Clamp(heightPx, 24, 10000);
     }
 
     // -- Section actions ------------------------------------------
@@ -551,10 +597,10 @@
         string.Equals(section.Type, "canvas", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(section.Type, "columns", StringComparison.OrdinalIgnoreCase);
 
-    private static string GetArrangeSectionLabel(SectionModel section) =>
+    private string GetArrangeSectionLabel(SectionModel section) =>
         string.Equals(section.Type, "columns", StringComparison.OrdinalIgnoreCase)
-            ? "Columns block zones"
-            : "Canvas block zone";
+            ? T("ColumnsBlockZones")
+            : T("CanvasBlockZone");
 
     private void ClosePanel()
     {
@@ -709,6 +755,7 @@
         public double SectionLeft { get; set; }
         public double SectionWidth { get; set; }
         public double SectionHeight { get; set; }
+        public int ZIndex { get; set; } = 1;
     }
 
     public class ZonePosition

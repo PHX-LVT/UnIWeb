@@ -5,7 +5,7 @@
 <div class="form-group">
     <label class="form-label">@T("ContentType")</label>
     <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:.5rem">
-        Library sections pull published content from selected Content Types.
+        @T("LibraryContentTypeHint")
     </div>
     @if (_contentTypes.Count == 0)
     {
@@ -19,7 +19,7 @@
                     TextFieldName="Label"
                     ValueFieldName="Key"
                     CssClass="w-100"
-                    NullText="Select content type..." />
+                    NullText="@T("SelectContentType")" />
     }
     else
     {
@@ -34,14 +34,14 @@
                                 TextFieldName="Label"
                                 ValueFieldName="Key"
                                 CssClass="w-100"
-                                NullText="Select content type..." />
+                                NullText="@T("SelectContentType")" />
                     <button type="button" class="btn-admin btn-secondary" @onclick="() => RemoveSource(index)" disabled="@(_sourceTypes.Count <= 1)">
-                        Remove
+                        @T("Remove")
                     </button>
                 </div>
             }
             <div>
-                <button type="button" class="btn-admin btn-secondary" @onclick="AddSource">Add More</button>
+                <button type="button" class="btn-admin btn-secondary" @onclick="AddSource">@T("AddMore")</button>
             </div>
         </div>
     }
@@ -49,10 +49,10 @@
 
 <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-bottom:1rem">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_enableTabs" /> Enable Tabs
+        <DxCheckBox @bind-Checked="_enableTabs" /> @T("EnableTabs")
     </label>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_enablePagination" /> Enable Pagination
+        <DxCheckBox @bind-Checked="_enablePagination" /> @T("EnablePagination")
     </label>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
         <DxCheckBox @bind-Checked="_showTime" /> @T("ShowTimes")
@@ -74,14 +74,14 @@
         @if (!UsesGridColumns)
         {
             <div style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem">
-                Columns apply to Card, Grid, and Rows layouts.
+                @T("ColumnsApplyToLayouts")
             </div>
         }
     </div>
     @if (_enablePagination)
     {
         <div class="form-group">
-            <label class="form-label">Rows</label>
+            <label class="form-label">@T("Rows")</label>
             <DxSpinEdit @bind-Value="_rows" MinValue="1" MaxValue="12" CssClass="w-100" />
         </div>
     }
@@ -112,7 +112,7 @@
 <div style="display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:1rem">
     <div class="form-group">
         <label class="form-label">@T("ButtonLabel")</label>
-        <LangField @bind-Value="_buttonLabel" Languages="Languages" NullText="Read More" />
+        <LangField @bind-Value="_buttonLabel" Languages="Languages" NullText="@T("ReadMore")" />
     </div>
     <div class="form-group">
         <label class="form-label">@T("Style")</label>
@@ -127,7 +127,7 @@
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
     <div class="form-group">
         <label class="form-label">@T("SearchPlaceholder")</label>
-        <LangField @bind-Value="_searchPlaceholder" Languages="Languages" NullText="Search insights..." />
+        <LangField @bind-Value="_searchPlaceholder" Languages="Languages" NullText="@T("SearchContents")" />
     </div>
     <div class="form-group">
         <label class="form-label">@T("SortBy")</label>
@@ -206,7 +206,9 @@
     private bool UsesGridColumns => _layout is "card" or "grid" or "rows";
     private int MaxColumns => _layout == "rows" ? 2 : 6;
 
-    private string T(string key) => AdminUiLocalizer.T(key, "en");
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override async Task OnInitializedAsync()
     {

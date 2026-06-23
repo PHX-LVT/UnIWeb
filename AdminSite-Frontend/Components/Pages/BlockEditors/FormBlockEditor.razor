@@ -4,15 +4,15 @@
 @using Contracts.Admin
 
 <div class="form-group">
-    <label class="form-label">Form Definition</label>
+    <label class="form-label">@T("FormDefinition")</label>
     <select class="form-select" @bind="_formDefinitionId">
-        <option value="">Select a form</option>
+        <option value="">@T("SelectForm")</option>
         @foreach (var optionDefinition in _definitions.Where(item => item.Active))
         {
             <option value="@optionDefinition.Id">@DefinitionName(optionDefinition)</option>
         }
     </select>
-    <p class="form-hint">The selected definition supplies the title, fields, validation, layout, and submit label.</p>
+    <p class="form-hint">@T("FormDefinitionPreviewHint")</p>
 </div>
 
 @if (SelectedDefinition is { } definition)
@@ -20,7 +20,7 @@
     <div class="form-block-preview">
         <div class="form-block-preview__header">
             <strong>@DefinitionName(definition)</strong>
-            <span>@(definition.Layout == FormLayoutModel.TwoColumns ? "Two columns" : "Stacked")</span>
+            <span>@(definition.Layout == FormLayoutModel.TwoColumns ? T("TwoColumns") : T("Stacked"))</span>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(Localized(definition.Introduction)))
@@ -46,7 +46,7 @@
 else
 {
     <div class="form-block-preview form-block-preview--empty">
-        Select an active Form Definition to render this block.
+        @T("SelectActiveFormDefinition")
     </div>
 }
 
@@ -54,7 +54,7 @@ else
     <button class="btn-admin btn-primary"
             @onclick="Save"
             disabled="@(_saving || SelectedDefinition is null)">
-        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
 </div>
 
@@ -156,7 +156,7 @@ else
     {
         if (SelectedDefinition is null)
         {
-            Http.Toast("Select an active Form Definition.", 400);
+            Http.Toast(T("SelectActiveFormDefinition"), 400);
             return;
         }
 
@@ -182,6 +182,8 @@ else
 
     private string DefinitionName(FormDefinitionModel definition) =>
         Localized(definition.Name) is { Length: > 0 } name ? name : definition.Key;
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     private string Localized(Dictionary<string, string>? values)
     {

@@ -1,7 +1,7 @@
 ﻿<div class="ez-modal-overlay" @onclick="OnCancel">
     <div class="ez-modal" @onclick:stopPropagation="true">
         <div class="ez-modal__header">
-            <h2>New Page</h2>
+            <h2>@T("NewPage")</h2>
             <button class="ez-icon-btn" @onclick="OnCancel">
                 <i class="fas fa-times"></i>
             </button>
@@ -16,8 +16,8 @@
                         <div class="ez-picker-card__icon">
                             <i class="fas @template.Icon"></i>
                         </div>
-                        <span>@template.Name</span>
-                        <small>@template.Description</small>
+                        <span>@T(template.NameKey)</span>
+                        <small>@T(template.DescriptionKey)</small>
                     </button>
                 }
             </div>
@@ -28,17 +28,20 @@
 @code {
     [Parameter] public EventCallback<string> OnPicked { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private List<PageTemplate> _templates = new()
     {
-        new("blank",     "Blank",     "fa-file",          "Start from scratch"),
-        new("landing",   "Landing",   "fa-rocket",        "Hero, stats, cards, carousel, CTA"),
-        new("about",     "About Us",  "fa-users",         "Hero, story, values, metrics, CTA"),
-        new("contact",   "Contact",   "fa-envelope",      "Hero, contact details, network map, CTA"),
-        new("services",  "Services",  "fa-concierge-bell","Hero, service cards, process, CTA"),
-        new("portfolio", "Portfolio", "fa-briefcase",     "Hero, gallery, proof points, CTA"),
-        new("faq",       "FAQ",       "fa-question-circle","Hero, FAQ cards, support CTA")
+        new("blank",     "PageTemplateBlankName",     "fa-file",           "PageTemplateBlankDesc"),
+        new("landing",   "PageTemplateLandingName",   "fa-rocket",         "PageTemplateLandingDesc"),
+        new("about",     "PageTemplateAboutName",     "fa-users",          "PageTemplateAboutDesc"),
+        new("contact",   "PageTemplateContactName",   "fa-envelope",       "PageTemplateContactDesc"),
+        new("services",  "PageTemplateServicesName",  "fa-concierge-bell", "PageTemplateServicesDesc"),
+        new("portfolio", "PageTemplatePortfolioName", "fa-briefcase",      "PageTemplatePortfolioDesc"),
+        new("faq",       "PageTemplateFaqName",       "fa-question-circle", "PageTemplateFaqDesc")
     };
 
-    private record PageTemplate(string Type, string Name, string Icon, string Description);
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private record PageTemplate(string Type, string NameKey, string Icon, string DescriptionKey);
 }

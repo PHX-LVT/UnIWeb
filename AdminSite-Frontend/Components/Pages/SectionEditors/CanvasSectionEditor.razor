@@ -3,30 +3,30 @@
 
 <div class="form-section">
     <p class="form-hint">
-        Canvas sections are composition sections. Use Style for the section frame and Blocks for movable content.
+        @T("CanvasSectionHint")
     </p>
 
     <div class="form-group">
-        <label class="form-label">Preset name</label>
+        <label class="form-label">@T("PresetName")</label>
         <input class="form-control" value="@_presetName" @oninput="e => _presetName = e.Value?.ToString() ?? string.Empty" />
     </div>
 
     <div class="ez-editor-actions">
         <button type="button" class="btn-admin btn-primary" @onclick="SavePreset">
             <i class="fas fa-save"></i>
-            Save Current as Preset
+            @T("SaveCurrentAsPreset")
         </button>
     </div>
 </div>
 
 <div class="form-section">
     <div class="form-group">
-        <label class="form-label">Insert saved preset</label>
+        <label class="form-label">@T("InsertSavedPreset")</label>
         <select class="form-select" @bind="_selectedPresetId">
-            <option value="">Select a preset</option>
+            <option value="">@T("SelectPreset")</option>
             @foreach (var preset in _presets)
             {
-                <option value="@preset.Id">@GetPresetName(preset) (@preset.BlockCount blocks)</option>
+                <option value="@preset.Id">@GetPresetName(preset) (@string.Format(T("BlocksCount"), preset.BlockCount))</option>
             }
         </select>
     </div>
@@ -37,14 +37,14 @@
                 disabled="@string.IsNullOrWhiteSpace(_selectedPresetId)"
                 @onclick="ApplyPreset">
             <i class="fas fa-plus"></i>
-            Insert Preset Section
+            @T("InsertPresetSection")
         </button>
         <button type="button"
                 class="btn-admin btn-ghost"
                 disabled="@string.IsNullOrWhiteSpace(_selectedPresetId)"
                 @onclick="DeletePreset">
             <i class="fas fa-trash"></i>
-            Delete Preset
+            @T("DeletePreset")
         </button>
     </div>
 </div>
@@ -64,7 +64,7 @@
     {
         _presetName = GetText(Section.AdminLabel) is { Length: > 0 } label
             ? label
-            : "Canvas Preset";
+            : T("CanvasPreset");
         await LoadPresets();
     }
 
@@ -76,7 +76,7 @@
 
     private async Task SavePreset()
     {
-        var name = new Dictionary<string, string> { [AdminLanguage] = string.IsNullOrWhiteSpace(_presetName) ? "Canvas Preset" : _presetName.Trim() };
+        var name = new Dictionary<string, string> { [AdminLanguage] = string.IsNullOrWhiteSpace(_presetName) ? T("CanvasPreset") : _presetName.Trim() };
         var res = await SectionService.SaveCanvasPresetAsync(PageId, Section.Id, name);
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success)
@@ -113,7 +113,9 @@
     }
 
     private string GetPresetName(CanvasSectionPresetModel preset) =>
-        GetText(preset.Name) is { Length: > 0 } value ? value : "Canvas Preset";
+        GetText(preset.Name) is { Length: > 0 } value ? value : T("CanvasPreset");
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     private string GetText(Dictionary<string, string>? value)
     {

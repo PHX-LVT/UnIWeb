@@ -209,6 +209,8 @@ namespace FullProject.Services
             block.Visible = dto.Visible;
             block.Order = (int)count;
             block.Layout = MapLayout(dto.Layout);
+            if (dto.Layout?.ZIndex is null && dto.Layout?.ZOrder is null)
+                block.Layout.ZIndex = Math.Clamp((int)count + 1, 1, 1000);
             block.Version = 1;
             block.CreatedAt = DateTime.UtcNow;
             block.UpdatedAt = DateTime.UtcNow;
@@ -502,11 +504,15 @@ namespace FullProject.Services
                 Margin = NormalizeChoice(dto.Margin, new[] { "none", "small", "medium", "large" }, "none"),
                 BackgroundColor = string.IsNullOrWhiteSpace(dto.BackgroundColor) ? null : dto.BackgroundColor,
                 BorderRadius = NormalizeChoice(dto.BorderRadius, new[] { "none", "small", "medium", "large" }, "none"),
-                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? 1, 0, 20),
+                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? 1, 0, 1000),
                 X = Math.Clamp(dto.X ?? 0, 0, 11),
                 Y = Math.Clamp(dto.Y ?? 0, 0, 60),
                 W = Math.Clamp(dto.W ?? 4, 1, 12),
-                H = Math.Clamp(dto.H ?? 2, 1, 40)
+                H = Math.Clamp(dto.H ?? 2, 1, 40),
+                LeftPercent = ClampDouble(dto.LeftPercent, 0, 100),
+                TopPx = ClampDouble(dto.TopPx, 0, 10000),
+                WidthPercent = ClampDouble(dto.WidthPercent, 1, 100),
+                HeightPx = ClampDouble(dto.HeightPx, 24, 10000)
             };
         }
 
@@ -536,12 +542,24 @@ namespace FullProject.Services
                 BorderRadius = dto.BorderRadius is null
                     ? current.BorderRadius
                     : NormalizeChoice(dto.BorderRadius, new[] { "none", "small", "medium", "large" }, "none"),
-                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? current.ZIndex, 0, 20),
+                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? current.ZIndex, 0, 1000),
                 X = Math.Clamp(dto.X ?? current.X, 0, 11),
                 Y = Math.Clamp(dto.Y ?? current.Y, 0, 60),
                 W = Math.Clamp(dto.W ?? current.W, 1, 12),
-                H = Math.Clamp(dto.H ?? current.H, 1, 40)
+                H = Math.Clamp(dto.H ?? current.H, 1, 40),
+                LeftPercent = dto.LeftPercent.HasValue ? ClampDouble(dto.LeftPercent, 0, 100) : current.LeftPercent,
+                TopPx = dto.TopPx.HasValue ? ClampDouble(dto.TopPx, 0, 10000) : current.TopPx,
+                WidthPercent = dto.WidthPercent.HasValue ? ClampDouble(dto.WidthPercent, 1, 100) : current.WidthPercent,
+                HeightPx = dto.HeightPx.HasValue ? ClampDouble(dto.HeightPx, 24, 10000) : current.HeightPx
             };
+        }
+
+        private static double? ClampDouble(double? value, double min, double max)
+        {
+            if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+                return null;
+
+            return Math.Clamp(value.Value, min, max);
         }
 
         private static string NormalizeChoice(string? value, IReadOnlyCollection<string> allowed, string fallback)

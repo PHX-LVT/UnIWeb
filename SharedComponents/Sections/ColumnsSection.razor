@@ -67,11 +67,11 @@
         var parts = new List<string>
         {
             $"--sc-block-column-span: {Math.Clamp(layout.ColumnSpan, 1, 12)}",
-            $"--sc-block-left: {(Math.Clamp(layout.X, 0, 11) / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}%",
-            $"--sc-block-width: {(Math.Clamp(layout.W, 1, 12) / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}%",
-            $"--sc-block-top: {Math.Clamp(layout.Y, 0, 60) * 48}px",
-            $"--sc-block-min-height: {Math.Clamp(layout.H, 1, 40) * 48}px",
-            $"z-index: {Math.Clamp(layout.ZIndex, 0, 20)}"
+            $"--sc-block-left: {FormatNumber(FreeformLeftPercent(layout))}%",
+            $"--sc-block-width: {FormatNumber(FreeformWidthPercent(layout))}%",
+            $"--sc-block-top: {FormatNumber(FreeformTopPx(layout))}px",
+            $"--sc-block-min-height: {FormatNumber(FreeformHeightPx(layout))}px",
+            $"z-index: {Math.Clamp(layout.ZIndex, 0, 1000)}"
         };
 
         if (!string.IsNullOrWhiteSpace(layout.BackgroundColor))
@@ -95,9 +95,27 @@
         if (freeform.Count == 0) return string.Empty;
 
         var height = Math.Max(320, freeform.Max(block =>
-            (Math.Clamp(block.Layout?.Y ?? 0, 0, 60) + Math.Clamp(block.Layout?.H ?? 2, 1, 40)) * 48));
+        {
+            var layout = block.Layout ?? new PublicBlockLayoutDto();
+            return FreeformTopPx(layout) + FreeformHeightPx(layout);
+        }));
         return $"--sc-column-freeform-height: {height}px";
     }
+
+    private static double FreeformLeftPercent(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.LeftPercent ?? (Math.Clamp(layout.X, 0, 11) / 12d * 100), 0, 100);
+
+    private static double FreeformWidthPercent(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.WidthPercent ?? (Math.Clamp(layout.W, 1, 12) / 12d * 100), 1, 100);
+
+    private static double FreeformTopPx(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.TopPx ?? (Math.Clamp(layout.Y, 0, 60) * 48d), 0, 10000);
+
+    private static double FreeformHeightPx(PublicBlockLayoutDto layout) =>
+        Math.Clamp(layout.HeightPx ?? (Math.Clamp(layout.H, 1, 40) * 48d), 24, 10000);
+
+    private static string FormatNumber(double value) =>
+        value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 
     // 2. Updated to use C# Class Type Matching instead of string matching
     private RenderFragment RenderBlock(PublicBlockDto block)

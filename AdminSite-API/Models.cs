@@ -364,6 +364,10 @@ namespace FullProject.Models
         public int Y { get; set; } = 0;                              // freeform row start
         public int W { get; set; } = 4;                              // freeform width in 12-column units
         public int H { get; set; } = 2;                              // freeform height in row units
+        public double? LeftPercent { get; set; }                     // precise freeform left, 0-100
+        public double? TopPx { get; set; }                           // precise freeform top in px
+        public double? WidthPercent { get; set; }                    // precise freeform width, 0-100
+        public double? HeightPx { get; set; }                        // precise freeform height in px
     }
 
     [BsonIgnoreExtraElements]
@@ -860,7 +864,7 @@ namespace FullProject.Models
         public int ZOrder
         {
             get => Layout.ZIndex;
-            set => Layout.ZIndex = Math.Clamp(value, 0, 20);
+            set => Layout.ZIndex = Math.Clamp(value, 0, 1000);
         }
 
     }

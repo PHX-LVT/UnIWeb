@@ -77,6 +77,10 @@ namespace Contracts.Admin
         public int? Y { get; set; }
         public int? W { get; set; }
         public int? H { get; set; }
+        public double? LeftPercent { get; set; }
+        public double? TopPx { get; set; }
+        public double? WidthPercent { get; set; }
+        public double? HeightPx { get; set; }
     }
 
     public class BlockLayoutResponseDto
@@ -95,6 +99,10 @@ namespace Contracts.Admin
         public int Y { get; set; } = 0;
         public int W { get; set; } = 4;
         public int H { get; set; } = 2;
+        public double? LeftPercent { get; set; }
+        public double? TopPx { get; set; }
+        public double? WidthPercent { get; set; }
+        public double? HeightPx { get; set; }
     }
 
     public class SectionButtonDto

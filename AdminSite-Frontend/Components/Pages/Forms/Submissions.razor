@@ -8,21 +8,21 @@
 
 <div class="admin-card" style="margin-bottom:1rem">
     <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem">
-        <div class="form-stat"><strong>@_submissions.Count</strong><span>Total</span></div>
-        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.New)</strong><span>New</span></div>
-        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.InProgress)</strong><span>In Progress</span></div>
-        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.Resolved)</strong><span>Resolved</span></div>
+        <div class="form-stat"><strong>@_submissions.Count</strong><span>@T("Total")</span></div>
+        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.New)</strong><span>@T("New")</span></div>
+        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.InProgress)</strong><span>@T("InProgress")</span></div>
+        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.Resolved)</strong><span>@T("Resolved")</span></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 180px 180px auto;gap:.75rem;align-items:end">
         <label class="form-filter">
-            <span>Search</span>
-            <input class="form-control" @bind="_search" @bind:event="oninput" placeholder="Name, email, source..." />
+            <span>@T("Search")</span>
+            <input class="form-control" @bind="_search" @bind:event="oninput" placeholder="@T("SearchFormSubmissionsPlaceholder")" />
         </label>
         <label class="form-filter">
-            <span>Form</span>
+            <span>@T("Form")</span>
             <select class="form-control" @bind="_formKey">
-                <option value="">All forms</option>
+                <option value="">@T("AllForms")</option>
                 @foreach (var definition in _definitions)
                 {
                     <option value="@definition.Key">@Text(definition.Name, definition.Key)</option>
@@ -30,37 +30,37 @@
             </select>
         </label>
         <label class="form-filter">
-            <span>Status</span>
+            <span>@T("Status")</span>
             <select class="form-control" @bind="_statusFilter">
-                <option value="">All statuses</option>
+                <option value="">@T("AllStatuses")</option>
                 @foreach (var status in Enum.GetValues<FormSubmissionStatusModel>())
                 {
                     <option value="@status">@StatusLabel(status)</option>
                 }
             </select>
         </label>
-        <button class="btn-admin btn-primary" @onclick="LoadAsync">Apply</button>
+        <button class="btn-admin btn-primary" @onclick="LoadAsync">@T("Apply")</button>
     </div>
 </div>
 
 @if (_selectedIds.Count > 0)
 {
     <div class="admin-card" style="margin-bottom:1rem;display:flex;gap:.5rem;align-items:center">
-        <strong>@_selectedIds.Count selected</strong>
-        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Archived)">Archive</button>
-        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Spam)">Mark spam</button>
-        <button class="btn-admin btn-danger" @onclick="BulkDelete">Delete permanently</button>
+        <strong>@string.Format(T("SelectedCount"), _selectedIds.Count)</strong>
+        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Archived)">@T("Archive")</button>
+        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Spam)">@T("MarkSpam")</button>
+        <button class="btn-admin btn-danger" @onclick="BulkDelete">@T("DeletePermanently")</button>
     </div>
 }
 
 <div class="admin-card">
     @if (_loading)
     {
-        <div style="padding:2rem;text-align:center">Loading...</div>
+        <div style="padding:2rem;text-align:center">@T("Loading")</div>
     }
     else if (!_filteredSubmissions.Any())
     {
-        <p class="text-muted">No submissions found.</p>
+        <p class="text-muted">@T("NoSubmissionsFound")</p>
     }
     else
     {
@@ -79,10 +79,10 @@
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
                 <DxGridDataColumn FieldName="@nameof(FormSubmissionModel.SubmittedAt)"
-                                  Caption="Submitted Time"
+                                  Caption="@T("SubmittedTime")"
                                   DisplayFormat="{0:dd MMM yyyy HH:mm}"
                                   Width="170px" />
-                <DxGridDataColumn Caption="Form" Width="170px">
+                <DxGridDataColumn Caption="@T("Form")" Width="170px">
                     <CellDisplayTemplate>
                         @{
                             var sub = (FormSubmissionModel)context.DataItem;
@@ -90,7 +90,7 @@
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn Caption="Status" Width="140px">
+                <DxGridDataColumn Caption="@T("Status")" Width="140px">
                     <CellDisplayTemplate>
                         @{
                             var sub = (FormSubmissionModel)context.DataItem;
@@ -98,7 +98,7 @@
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn Caption="Source" Width="220px">
+                <DxGridDataColumn Caption="@T("Source")" Width="220px">
                     <CellDisplayTemplate>
                         @{
                             var sub = (FormSubmissionModel)context.DataItem;
@@ -106,7 +106,7 @@
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn Caption="Data">
+                <DxGridDataColumn Caption="@T("Data")">
                     <CellDisplayTemplate>
                         @{
                             var sub = (FormSubmissionModel)context.DataItem;
@@ -118,7 +118,7 @@
                     <CellDisplayTemplate>
                         @{
                             var sub = (FormSubmissionModel)context.DataItem;
-                            <button class="btn-admin btn-secondary" @onclick="() => OpenDetail(sub)">View</button>
+                            <button class="btn-admin btn-secondary" @onclick="() => OpenDetail(sub)">@T("View")</button>
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
@@ -129,7 +129,7 @@
 
 <div class="admin-card" style="margin-top:1rem">
     <div class="definition-toolbar">
-        <h2 style="font-size:1.05rem;margin:0">Form Definitions</h2>
+        <h2 style="font-size:1.05rem;margin:0">@T("FormDefinitions")</h2>
         <div class="definition-editor-toolbar">
             <div class="definition-usage">
                 <button type="button" class="definition-usage__button" disabled="@(!CanShowUsage)" @onclick="ToggleUsage">
@@ -140,11 +140,11 @@
                     <div class="definition-usage__menu">
                         @if (_usage.TotalCount == 0)
                         {
-                            <div class="definition-usage__empty">Not used anywhere. Safe to delete.</div>
+                            <div class="definition-usage__empty">@T("NotUsedAnywhereSafeToDelete")</div>
                         }
                         else
                         {
-                            <strong>Used in @_usage.TotalCount place@(_usage.TotalCount == 1 ? string.Empty : "s")</strong>
+                            <strong>@string.Format(T("UsedInPlaces"), _usage.TotalCount, _usage.TotalCount == 1 ? string.Empty : "s")</strong>
                             @foreach (var item in _usage.Items.Take(8))
                             {
                                 <div class="definition-usage__item">
@@ -154,15 +154,15 @@
                             }
                             @if (_usage.TotalCount > 8)
                             {
-                                <div class="definition-usage__empty">+@(_usage.TotalCount - 8) more</div>
+                                <div class="definition-usage__empty">@string.Format(T("MoreCount"), _usage.TotalCount - 8)</div>
                             }
                         }
                     </div>
                 }
             </div>
             <div class="definition-toolbar__actions">
-                <button class="btn-admin btn-primary" @onclick="NewDefinition">New form</button>
-                <button class="btn-admin btn-danger" disabled="@(!CanDeleteDefinition)" @onclick="DeleteDefinition">Permanent delete</button>
+                <button class="btn-admin btn-primary" @onclick="NewDefinition">@T("NewForm")</button>
+                <button class="btn-admin btn-danger" disabled="@(!CanDeleteDefinition)" @onclick="DeleteDefinition">@T("PermanentDelete")</button>
             </div>
         </div>
     </div>
@@ -174,7 +174,7 @@
                 <button class="definition-row @(_editingDefinition?.Id == definition.Id ? "active" : null)"
                         @onclick="() => EditDefinition(definition)">
                     <strong>@Text(definition.Name, definition.Key)</strong>
-                    <span>@definition.Key · @(definition.Active ? "Active" : "Disabled")</span>
+                    <span>@definition.Key · @(definition.Active ? T("Active") : T("Disabled"))</span>
                 </button>
             }
         </div>
@@ -185,7 +185,7 @@
                 @if (_definitionValidationErrors.Count > 0)
                 {
                     <div class="alert alert-danger" role="alert">
-                        <strong>Please complete the required fields:</strong>
+                        <strong>@T("PleaseCompleteRequiredFields")</strong>
                         <ul style="margin:.35rem 0 0;padding-left:1.25rem">
                             @foreach (var error in _definitionValidationErrors)
                             {
@@ -196,11 +196,11 @@
                 }
                 <div style="display:grid;grid-template-columns:160px 1fr;gap:.75rem">
                     <label class="form-filter">
-                        <span>Key <strong class="required-mark">*</strong></span>
+                        <span>@T("Key") <strong class="required-mark">*</strong></span>
                         <input class="form-control" required @bind="_editingDefinition.Key" />
                     </label>
                     <div class="form-filter">
-                        <span>Name <strong class="required-mark">*</strong></span>
+                        <span>@T("Name") <strong class="required-mark">*</strong></span>
                         <div class="definition-name-control">
                             <input class="form-control" required value="@Text(_editingDefinition.Name, string.Empty)" @onchange="e => SetText(_editingDefinition.Name, e.Value)" />
                             <button type="button"
@@ -208,34 +208,34 @@
                                     aria-pressed="@_editingDefinition.Active"
                                     @onclick="ToggleDefinitionActive">
                                 <span class="definition-active-toggle__dot"></span>
-                                @(_editingDefinition.Active ? "Active" : "Disabled")
+                                @(_editingDefinition.Active ? T("Active") : T("Disabled"))
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <label class="form-filter" style="margin-top:.75rem">
-                    <span>Introduction</span>
+                    <span>@T("Introduction")</span>
                     <textarea class="form-control" rows="2" @onchange="e => SetText(_editingDefinition.Introduction, e.Value)">@Text(_editingDefinition.Introduction, string.Empty)</textarea>
                 </label>
 
                 <div class="definition-settings-row">
                     <label class="form-filter">
-                        <span>Submit Button Label <strong class="required-mark">*</strong></span>
+                        <span>@T("SubmitButtonLabel") <strong class="required-mark">*</strong></span>
                         <input class="form-control" required value="@Text(_editingDefinition.SubmitButtonLabel, string.Empty)" @onchange="e => SetText(_editingDefinition.SubmitButtonLabel, e.Value)" />
                     </label>
                     <label class="form-filter">
-                        <span>Modal Layout</span>
+                        <span>@T("ModalLayout")</span>
                         <select class="form-control" @bind="_editingDefinition.Layout">
-                            <option value="@FormLayoutModel.Stacked">Stacked</option>
-                            <option value="@FormLayoutModel.TwoColumns">Two-Columns</option>
+                            <option value="@FormLayoutModel.Stacked">@T("Stacked")</option>
+                            <option value="@FormLayoutModel.TwoColumns">@T("TwoColumns")</option>
                         </select>
                     </label>
                 </div>
 
                 <div style="display:flex;justify-content:space-between;align-items:center;margin:1rem 0 .5rem">
-                    <h3 style="font-size:1rem;margin:0">Fields</h3>
-                    <button class="btn-admin btn-secondary" @onclick="AddField">Add field</button>
+                    <h3 style="font-size:1rem;margin:0">@T("Fields")</h3>
+                    <button class="btn-admin btn-secondary" @onclick="AddField">@T("AddField")</button>
                 </div>
 
                 <div class="@DefinitionFieldGridClass">
@@ -244,7 +244,7 @@
                         <div class="@FieldCardClass(field)">
                             <div class="field-card__controls">
                                 <label class="form-filter">
-                                    <span>Type</span>
+                                    <span>@T("Type")</span>
                                     <select class="form-control" @bind="field.Type">
                                         @foreach (var type in FieldTypes)
                                         {
@@ -253,29 +253,29 @@
                                     </select>
                                 </label>
                                 <label class="form-filter">
-                                    <span>Key <strong class="required-mark">*</strong></span>
+                                    <span>@T("Key") <strong class="required-mark">*</strong></span>
                                     <input class="form-control" required placeholder="name" @bind="field.Key" />
                                 </label>
                                 <label class="form-filter field-card__label-input">
-                                    <span>Label <strong class="required-mark">*</strong></span>
-                                    <input class="form-control" required placeholder="Field label" value="@Text(field.Label, string.Empty)" @onchange="e => SetText(field.Label, e.Value)" />
+                                    <span>@T("Label") <strong class="required-mark">*</strong></span>
+                                    <input class="form-control" required placeholder="@T("Label")" value="@Text(field.Label, string.Empty)" @onchange="e => SetText(field.Label, e.Value)" />
                                 </label>
                                 <label class="form-filter">
-                                    <span>Max</span>
+                                    <span>@T("Max")</span>
                                     <input class="form-control" type="number" min="1" max="2000" @bind="field.MaxLength" />
                                 </label>
                                 <label class="field-card__required">
                                     <input type="checkbox" @bind="field.Required" />
-                                    Required
+                                    @T("Required")
                                 </label>
-                                <button class="btn-admin btn-danger" @onclick="() => RemoveField(field)">Delete</button>
+                                <button class="btn-admin btn-danger" @onclick="() => RemoveField(field)">@T("Delete")</button>
                             </div>
                         </div>
                     }
                 </div>
 
                 <div style="display:flex;gap:.5rem;margin-top:1rem">
-                    <button class="btn-admin btn-primary" @onclick="SaveDefinition">Save definition</button>
+                    <button class="btn-admin btn-primary" @onclick="SaveDefinition">@T("SaveDefinition")</button>
                 </div>
             </div>
         }
@@ -286,7 +286,7 @@
 {
     <div class="modal-backdrop" @onclick="CloseDetail">
         <div class="modal-box" style="max-width:680px" @onclick:stopPropagation="true">
-            <div class="modal-header">Submission Detail</div>
+            <div class="modal-header">@T("SubmissionDetail")</div>
             <div class="modal-body">
                 <div style="display:grid;grid-template-columns:1fr 180px;gap:.75rem;margin-bottom:1rem">
                     <div>
@@ -312,13 +312,13 @@
                 </div>
 
                 <label class="form-filter">
-                    <span>Internal notes</span>
+                    <span>@T("InternalNotes")</span>
                     <textarea class="form-control" rows="4" @bind="_detail.InternalNotes"></textarea>
                 </label>
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost" @onclick="CloseDetail">Close</button>
-                <button class="btn-admin btn-primary" @onclick="SaveDetail">Save</button>
+                <button class="btn-admin btn-ghost" @onclick="CloseDetail">@T("Close")</button>
+                <button class="btn-admin btn-primary" @onclick="SaveDetail">@T("Save")</button>
             </div>
         </div>
     </div>
@@ -391,14 +391,14 @@
     private bool CanShowUsage => _editingDefinition is not null && !string.IsNullOrWhiteSpace(_editingDefinition.Id);
 
     private string UsageSummary => !CanShowUsage
-        ? "Usage: Not saved yet"
+        ? T("UsageNotSaved")
         : _usageLoading
-            ? "Usage: Loading..."
+            ? T("UsageLoading")
             : _usage is null
-                ? "Usage: Not loaded"
+                ? T("UsageNotLoaded")
                 : _usage.TotalCount == 0
-                    ? "Usage: Not used"
-                    : $"Usage: Used in {_usage.TotalCount} place{(_usage.TotalCount == 1 ? string.Empty : "s")}";
+                    ? T("UsageNotUsed")
+                    : string.Format(T("UsageUsedInPlaces"), _usage.TotalCount, _usage.TotalCount == 1 ? string.Empty : "s");
 
     private string DefinitionFieldGridClass => _editingDefinition?.Layout == FormLayoutModel.TwoColumns
         ? "definition-field-grid definition-field-grid--two-columns"
@@ -561,7 +561,7 @@
         _definitionValidationErrors = ValidateDefinition(_editingDefinition);
         if (_definitionValidationErrors.Count > 0)
         {
-            Http.Toast("Please fill in the required form fields.", 400);
+            Http.Toast(T("PleaseCompleteRequiredFields"), 400);
             return;
         }
 
@@ -626,7 +626,11 @@
 
     private string StatusLabel(FormSubmissionStatusModel status) => status switch
     {
-        FormSubmissionStatusModel.InProgress => "In Progress",
+        FormSubmissionStatusModel.InProgress => T("InProgress"),
+        FormSubmissionStatusModel.New => T("New"),
+        FormSubmissionStatusModel.Resolved => T("Resolved"),
+        FormSubmissionStatusModel.Archived => T("Archived"),
+        FormSubmissionStatusModel.Spam => T("Spam"),
         _ => status.ToString()
     };
 

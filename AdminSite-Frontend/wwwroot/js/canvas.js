@@ -470,6 +470,31 @@ window.applyPreviewThemeCss = function (css) {
     window.__ezCanvasRequestPositions?.();
 };
 
+window.patchPreviewBlockLayout = function (blockId, x, y, w, h, leftPercent, topPx, widthPercent, heightPx, zIndex) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (!iframe || !iframe.contentDocument || !blockId) return;
+
+    const block = [...iframe.contentDocument.querySelectorAll("[data-block-id]")]
+        .find(item => item.getAttribute("data-block-id") === blockId);
+    if (!block) return;
+
+    const safeX = Math.min(Math.max(Number.parseInt(x, 10) || 0, 0), 11);
+    const safeY = Math.min(Math.max(Number.parseInt(y, 10) || 0, 0), 60);
+    const safeW = Math.min(Math.max(Number.parseInt(w, 10) || 1, 1), 12);
+    const safeH = Math.min(Math.max(Number.parseInt(h, 10) || 1, 1), 40);
+    const exactLeft = Number.isFinite(Number(leftPercent)) ? Math.min(Math.max(Number(leftPercent), 0), 100) : safeX / 12 * 100;
+    const exactTop = Number.isFinite(Number(topPx)) ? Math.min(Math.max(Number(topPx), 0), 10000) : safeY * 48;
+    const exactWidth = Number.isFinite(Number(widthPercent)) ? Math.min(Math.max(Number(widthPercent), 1), 100) : safeW / 12 * 100;
+    const exactHeight = Number.isFinite(Number(heightPx)) ? Math.min(Math.max(Number(heightPx), 24), 10000) : safeH * 48;
+
+    block.style.setProperty("--sc-block-left", `${exactLeft}%`);
+    block.style.setProperty("--sc-block-width", `${exactWidth}%`);
+    block.style.setProperty("--sc-block-top", `${exactTop}px`);
+    block.style.setProperty("--sc-block-min-height", `${exactHeight}px`);
+    if (Number.isFinite(Number(zIndex))) block.style.zIndex = `${Math.min(Math.max(Number.parseInt(zIndex, 10), 0), 1000)}`;
+    window.__ezCanvasRequestPositions?.();
+};
+
 window.initFreeformBlockEditor = function (container, dotnet, scale) {
     if (!container || !dotnet) return;
 
@@ -699,13 +724,15 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             const y = clamp(Math.round((top - start.sectionTop) / 48), 0, 60);
             const w = clamp(Math.round(width / start.sectionWidth * 12), 1, 12);
             const h = clamp(Math.round(height / 48), 1, 40);
+            const leftPercent = clamp((left - start.sectionLeft) / start.sectionWidth * 100, 0, 100);
+            const topPx = clamp(top - start.sectionTop, 0, start.sectionHeight - height);
+            const widthPercent = clamp(width / start.sectionWidth * 100, 1, 100);
+            const heightPx = clamp(height, 24, start.sectionHeight);
 
-            const startX = clamp(Math.round((start.left - start.sectionLeft) / start.sectionWidth * 12), 0, 11);
-            const startY = clamp(Math.round((start.top - start.sectionTop) / 48), 0, 60);
-            const startW = clamp(Math.round(start.width / start.sectionWidth * 12), 1, 12);
-            const startH = clamp(Math.round(start.height / 48), 1, 40);
-
-            if (x === startX && y === startY && w === startW && h === startH) {
+            if (Math.abs(left - start.left) < 0.5 &&
+                Math.abs(top - start.top) < 0.5 &&
+                Math.abs(width - start.width) < 0.5 &&
+                Math.abs(height - start.height) < 0.5) {
                 block.style.left = `${start.left}px`;
                 block.style.top = `${start.top}px`;
                 block.style.width = `${start.width}px`;
@@ -720,7 +747,25 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
                 x,
                 y,
                 w,
-                h).catch(() => {});
+                h,
+                leftPercent,
+                topPx,
+                widthPercent,
+                heightPx)
+                .then(saved => {
+                    if (saved !== false) return;
+
+                    block.style.left = `${start.left}px`;
+                    block.style.top = `${start.top}px`;
+                    block.style.width = `${start.width}px`;
+                    block.style.height = `${start.height}px`;
+                })
+                .catch(() => {
+                    block.style.left = `${start.left}px`;
+                    block.style.top = `${start.top}px`;
+                    block.style.width = `${start.width}px`;
+                    block.style.height = `${start.height}px`;
+                });
         }
 
         window.addEventListener("pointermove", move);

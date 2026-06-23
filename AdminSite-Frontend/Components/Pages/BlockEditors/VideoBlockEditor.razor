@@ -4,12 +4,11 @@
 @using SharedComponents.Helpers
 
 <div class="form-group">
-    <label class="form-label">Embed URL</label>
+    <label class="form-label">@T("EmbedUrl")</label>
     <DxTextBox @bind-Text="_embedUrl" CssClass="w-100"
                NullText="https://www.youtube.com/embed/..." />
     <div class="form-hint">
-        Use the embed URL — YouTube: youtube.com/embed/ID,
-        Vimeo: player.vimeo.com/video/ID
+        @T("EmbedUrlHint")
     </div>
 </div>
 
@@ -25,7 +24,7 @@
 
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
 </div>
 
@@ -35,9 +34,13 @@
     [Parameter] public string SectionId { get; set; } = string.Empty;
     [Parameter] public EventCallback OnSaved { get; set; }
 
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
     private string? _embedUrl;
     private bool _saving;
     private string? PreviewUrl => VideoUrlHelper.ToEmbedUrl(_embedUrl);
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override void OnParametersSet()
     {

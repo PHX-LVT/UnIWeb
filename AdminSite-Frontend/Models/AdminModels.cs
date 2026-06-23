@@ -336,6 +336,10 @@ namespace AdminSite.Models
         public int? Y { get; set; }
         public int? W { get; set; }
         public int? H { get; set; }
+        public double? LeftPercent { get; set; }
+        public double? TopPx { get; set; }
+        public double? WidthPercent { get; set; }
+        public double? HeightPx { get; set; }
     }
 
     public class ShowcaseItemOverrideModel

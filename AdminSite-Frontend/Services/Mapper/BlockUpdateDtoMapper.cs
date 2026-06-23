@@ -180,10 +180,22 @@ public static class BlockUpdateDtoMapper
         Margin = layout?.Margin ?? "none",
         BackgroundColor = layout?.BackgroundColor,
         BorderRadius = layout?.BorderRadius ?? "none",
-        ZIndex = Math.Clamp(layout?.ZIndex ?? 1, 0, 20),
+        ZIndex = Math.Clamp(layout?.ZIndex ?? 1, 0, 1000),
         X = Math.Clamp(layout?.X ?? 0, 0, 11),
         Y = Math.Clamp(layout?.Y ?? 0, 0, 60),
         W = Math.Clamp(layout?.W ?? 4, 1, 12),
-        H = Math.Clamp(layout?.H ?? 2, 1, 40)
+        H = Math.Clamp(layout?.H ?? 2, 1, 40),
+        LeftPercent = ClampDouble(layout?.LeftPercent, 0, 100),
+        TopPx = ClampDouble(layout?.TopPx, 0, 10000),
+        WidthPercent = ClampDouble(layout?.WidthPercent, 1, 100),
+        HeightPx = ClampDouble(layout?.HeightPx, 24, 10000)
     };
+
+    private static double? ClampDouble(double? value, double min, double max)
+    {
+        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+            return null;
+
+        return Math.Clamp(value.Value, min, max);
+    }
 }

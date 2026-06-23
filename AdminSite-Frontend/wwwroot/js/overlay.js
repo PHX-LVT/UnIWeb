@@ -55,6 +55,7 @@
                     measuredBlockIds.add(blockId);
 
                     const blockRect = block.getBoundingClientRect();
+                    const zIndex = Number.parseInt(window.getComputedStyle(block).zIndex, 10);
                     blockPositions.push({
                         id: blockId,
                         sectionId: block.getAttribute('data-block-section-id') || sectionId,
@@ -66,7 +67,8 @@
                         sectionTop: containerRect.top + window.scrollY,
                         sectionLeft: containerRect.left + window.scrollX,
                         sectionWidth: containerRect.width,
-                        sectionHeight: containerRect.height
+                        sectionHeight: containerRect.height,
+                        zIndex: Number.isFinite(zIndex) ? zIndex : 1
                     });
                 });
             });

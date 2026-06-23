@@ -495,7 +495,7 @@
 
     private int ColumnMax => _layout == "link-bar" ? 10 : 4;
 
-    private string ColumnLabel => _layout == "link-bar" ? "Linkbar Columns" : "Card Grid Columns";
+    private string ColumnLabel => _layout == "link-bar" ? T("LinkbarColumns") : T("CardGridColumns");
 
     private int NormalizedColumns => _layout == "link-bar"
         ? Math.Clamp(_columns, 1, 10)
