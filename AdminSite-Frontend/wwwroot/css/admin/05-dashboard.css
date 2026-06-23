@@ -77,10 +77,65 @@
     background: var(--bg);
 }
 
-.ez-dashboard__mode-toggle {
-    min-width: 118px;
+.btn-admin.ez-dashboard__mode-toggle {
+    box-sizing: border-box;
+    flex: 0 0 140px;
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    padding: 0 12px;
+    align-self: center;
     justify-content: center;
+    overflow: hidden;
     white-space: nowrap;
+    line-height: 1;
+    color: #fff;
+}
+
+.ez-dashboard__mode-toggle span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.ez-dashboard__mode-toggle i {
+    flex: 0 0 14px;
+    width: 14px;
+    line-height: 1;
+}
+
+.ez-dashboard__mode-toggle--preview {
+    background: #1261a0;
+    border-color: #1261a0;
+}
+
+.ez-dashboard__mode-toggle--preview:hover {
+    background: #0d4f84;
+    border-color: #0d4f84;
+}
+
+.ez-dashboard__mode-toggle--edit {
+    background: #16755a;
+    border-color: #16755a;
+}
+
+.ez-dashboard__mode-toggle--edit:hover {
+    background: #105f49;
+    border-color: #105f49;
+}
+
+.ez-dashboard__mode-toggle--arrange {
+    background: #9a6e14;
+    border-color: #9a6e14;
+}
+
+.ez-dashboard__mode-toggle--arrange:hover {
+    background: #7d590f;
+    border-color: #7d590f;
 }
 
 .ez-dashboard__canvas {
