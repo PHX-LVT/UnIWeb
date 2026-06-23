@@ -1,14 +1,20 @@
 @using Contracts.Public
 
-@if (ZoneBlocks.Any())
+@if (ShouldRenderContainer)
 {
-    <div class="@GetContainerClass()" style="@GetContainerStyle()">
-        @foreach (var block in ZoneBlocks.OrderBy(b => b.Order))
+    <div class="@GetContainerClass()"
+         data-block-zone="@NormalizeZone(DataZoneId ?? BlockZone)"
+         style="@GetContainerStyle()">
+        @{ var renderedBlocks = ZoneBlocks.OrderBy(block => block.Order).ToList(); }
+        @for (var index = 0; index < renderedBlocks.Count; index++)
         {
+            var block = renderedBlocks[index];
             <div class="@GetBlockClass(block)"
                  data-block-id="@block.Id"
                  data-block-section-id="@GetSectionId()"
-                 style="@GetBlockStyle(block)">
+                 data-block-zone="@NormalizeZone(block.ZoneId ?? block.BlockZone)"
+                 data-block-position-mode="@EffectivePositionMode(block)"
+                 style="@GetBlockStyle(block, index, renderedBlocks.Count)">
                 @RenderBlock(block)
             </div>
         }
@@ -20,6 +26,12 @@
     [Parameter] public PublicSectionStyleDto? Style { get; set; }
     [Parameter] public string? SectionId { get; set; }
     [Parameter] public string BlockZone { get; set; } = "default";
+    [Parameter] public string? DataZoneId { get; set; }
+    [Parameter] public bool IncludeDefaultZone { get; set; }
+    [Parameter] public bool ForceFreeform { get; set; }
+    [Parameter] public int PatternRadius { get; set; } = 180;
+    [Parameter] public int PatternStartAngle { get; set; } = -90;
+    [Parameter] public int PatternEndAngle { get; set; } = 270;
     [Parameter] public string? ParentBlockId { get; set; }
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
@@ -31,12 +43,25 @@
             .Where(b => string.IsNullOrWhiteSpace(ParentBlockId)
                 ? string.IsNullOrWhiteSpace(b.ParentBlockId)
                 : string.Equals(b.ParentBlockId, ParentBlockId, StringComparison.Ordinal))
-            .Where(b => NormalizeZone(b.BlockZone) == NormalizeZone(BlockZone));
+            .Where(b => ZoneMatches(b));
+
+    private bool ShouldRenderContainer => ZoneBlocks.Any() || LayoutMode == "freeform";
+
+    private bool ZoneMatches(PublicBlockDto block)
+    {
+        var requested = NormalizeZone(BlockZone);
+        var actual = NormalizeZone(block.ZoneId ?? block.BlockZone);
+
+        return actual == requested || (IncludeDefaultZone && actual == "default");
+    }
 
     private string LayoutMode => Style?.BlockLayoutMode switch
     {
         "grid" => "grid",
         "split" => "split",
+        "row" => "row",
+        "orbit" => "orbit",
+        "semicircle" => "semicircle",
         "freeform" => "freeform",
         _ => "stack"
     };
@@ -51,7 +76,8 @@
             _ => "medium"
         };
 
-        return $"sc-section-blocks sc-section-blocks--{LayoutMode} sc-section-blocks--gap-{gap}";
+        var forced = ForceFreeform ? " sc-section-blocks--force-freeform" : string.Empty;
+        return $"sc-section-blocks sc-block-zone sc-section-blocks--{LayoutMode} sc-section-blocks--gap-{gap}{forced}";
     }
 
     private string GetContainerStyle()
@@ -70,10 +96,18 @@
             styles.Add($"--sc-freeform-min-height: {height}px");
         }
 
+        else if (LayoutMode is "orbit" or "semicircle")
+        {
+            var radius = Math.Clamp(PatternRadius, 80, 480);
+            var height = LayoutMode == "orbit" ? radius * 2 + 180 : radius + 200;
+            styles.Add($"--sc-pattern-radius: {radius}px");
+            styles.Add($"--sc-pattern-min-height: {height}px");
+        }
+
         return string.Join("; ", styles);
     }
 
-    private static string GetBlockClass(PublicBlockDto block)
+    private string GetBlockClass(PublicBlockDto block)
     {
         var layout = block.Layout ?? new PublicBlockLayoutDto();
         var span = Math.Clamp(layout.ColumnSpan, 1, 12);
@@ -81,6 +115,7 @@
         return string.Join(" ", new[]
         {
             "sc-block-frame",
+            $"sc-block-frame--position-{EffectivePositionMode(block)}",
             $"sc-block-frame--span-{span}",
             $"sc-block-frame--width-{Normalize(layout.Width, "auto")}",
             $"sc-block-frame--align-{Normalize(layout.Align, "stretch")}",
@@ -91,7 +126,7 @@
         });
     }
 
-    private static string GetBlockStyle(PublicBlockDto block)
+    private string GetBlockStyle(PublicBlockDto block, int index, int count)
     {
         var layout = block.Layout ?? new PublicBlockLayoutDto();
         var x = Math.Clamp(layout.X, 0, 11);
@@ -107,6 +142,7 @@
             $"--sc-block-width: {width}%",
             $"--sc-block-top: {y * 48}px",
             $"--sc-block-min-height: {h * 48}px",
+            $"--sc-pattern-angle: {PatternAngle(index, count).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}deg",
             $"z-index: {Math.Clamp(layout.ZIndex, 0, 20)}"
         };
 
@@ -118,6 +154,25 @@
 
     private static string Normalize(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    private static string NormalizePositionMode(string? value) =>
+        string.Equals(value, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
+
+    private string EffectivePositionMode(PublicBlockDto block) =>
+        ForceFreeform ? "freeform" : NormalizePositionMode(block.PositionMode);
+
+    private double PatternAngle(int index, int count)
+    {
+        if (LayoutMode == "orbit")
+            return PatternStartAngle + (count <= 1 ? 0 : index * (360d / count));
+
+        if (LayoutMode == "semicircle")
+            return count <= 1
+                ? (PatternStartAngle + PatternEndAngle) / 2d
+                : PatternStartAngle + index * ((PatternEndAngle - PatternStartAngle) / (double)(count - 1));
+
+        return 0;
+    }
 
     private string GetSectionId() => SectionId ?? string.Empty;
 

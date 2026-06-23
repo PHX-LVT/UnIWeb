@@ -1,5 +1,6 @@
 using FullProject.Models;
 using FullProject.Services;
+using FullProject.Security;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +48,7 @@ namespace FullProject.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(string pageId, [FromBody] SectionCreateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var page = await _pageService.GetByIdAsync(pageId);
             if (page is null) return NotFound(ApiResult.NotFound("Page not found."));
 
@@ -61,6 +63,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Update(string pageId, string sectionId,
             [FromBody] SectionUpdateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateAsync(pageId, sectionId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
 
@@ -72,6 +75,7 @@ namespace FullProject.Controllers
         [HttpDelete("{sectionId}")]
         public async Task<IActionResult> Delete(string pageId, string sectionId)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.DeleteAsync(pageId, sectionId);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
             return Ok(ApiResult.Ok("Section deleted."));
@@ -82,6 +86,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> SetVisibility(string pageId, string sectionId,
             [FromBody] VisibilityDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
             return Ok(ApiResult.Ok($"Section {(dto.Visible ? "shown" : "hidden")}."));
@@ -92,6 +97,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> UpdateStyle(string pageId, string sectionId,
         [FromBody] SectionStyleDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateStyleAsync(pageId, sectionId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
             return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Style updated."));
@@ -101,12 +107,15 @@ namespace FullProject.Controllers
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder(string pageId, [FromBody] ReorderDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.ReorderAsync(pageId, dto.OrderedIds);
             if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
             return Ok(ApiResult.Ok("Sections reordered."));
         }
 
         // -- Mapping -------------------------------------------
+
+        private bool CanUsePageBuilder => AdminAuthorization.CanUsePageBuilder(User);
 
         private static SectionResponseDto MapToDto(string pageId, Section s)
         {
@@ -387,8 +396,3 @@ namespace FullProject.Controllers
         };
     }
 }
-
-
-
-
-

@@ -1,4 +1,4 @@
-using FullProject.Models;
+﻿using FullProject.Models;
 using System.Text.Json.Serialization;
 
 namespace FullProject.DTOs
@@ -293,7 +293,22 @@ namespace FullProject.DTOs
         public string? FullSlug { get; set; }
         public PageCardResponseDto? Card { get; set; }
     }
-
+    public class PublicDownloadMetricDto
+    {
+        public string? Url { get; set; }
+        public string? SourcePage { get; set; }
+    }
+    public class RevisionResponseDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string TargetId { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
+        public int? SourceVersion { get; set; }
+        public DateTime? SourceUpdatedAt { get; set; }
+        public string ActorId { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+    }
     // ---------------------------------------------------------------------------------------------------------------------
     // PAGE-LEVEL BUTTONS
     // ---------------------------------------------------------------------------------------------------------------------
@@ -572,5 +587,4 @@ namespace FullProject.DTOs
         public string? Description { get; set; }
     }
 }
-
 

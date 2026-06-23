@@ -1,0 +1,119 @@
+.website-activity__header {
+    align-items: end;
+}
+
+.website-activity__filters {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.website-activity__filters label {
+    display: grid;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: .78rem;
+    font-weight: 600;
+}
+
+.website-activity__filters input {
+    height: 36px;
+    min-width: 150px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.website-activity__stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.website-activity__stat {
+    display: grid;
+    gap: 10px;
+    min-height: 112px;
+    border-top: 4px solid var(--primary);
+}
+
+.website-activity__stat span {
+    color: var(--text-muted);
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+.website-activity__stat strong {
+    color: var(--text);
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.website-activity__stat--content {
+    border-top-color: #16755a;
+}
+
+.website-activity__stat--downloads {
+    border-top-color: #9a6e14;
+}
+
+.website-activity__stat--forms {
+    border-top-color: #a23952;
+}
+
+.website-activity__tables {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
+    gap: 16px;
+}
+
+.website-activity__tables h2 {
+    margin: 0 0 14px;
+    font-size: 1rem;
+}
+
+.website-activity__table-scroll {
+    overflow-x: auto;
+}
+
+.website-activity__table-scroll .table {
+    width: 100%;
+}
+
+.website-activity__table-scroll td[title] {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+    .website-activity__stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .website-activity__tables {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .website-activity__stats {
+        grid-template-columns: 1fr;
+    }
+
+    .website-activity__filters {
+        width: 100%;
+    }
+
+    .website-activity__filters label,
+    .website-activity__filters input,
+    .website-activity__filters button {
+        width: 100%;
+    }
+}

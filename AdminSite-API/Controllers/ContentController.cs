@@ -183,6 +183,36 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(new { Count = count }, $"{count} content item(s) permanently deleted."));
         }
 
+
+        [HttpGet("{id}/revisions")]
+        public async Task<IActionResult> GetRevisions(string id)
+        {
+            var existing = await _service.GetByIdAsync(id);
+            if (existing is null) return NotFound(ApiResult.NotFound("Content item not found."));
+            if (!CanReadItem(existing)) return Forbid();
+
+            var revisions = await _service.GetRevisionsAsync(id);
+            return Ok(ApiResult.Ok(revisions));
+        }
+
+        [HttpPost("{id}/revisions/{revisionId}/restore")]
+        public async Task<IActionResult> RestoreRevision(string id, string revisionId)
+        {
+            var existing = await _service.GetByIdAsync(id);
+            if (existing is null) return NotFound(ApiResult.NotFound("Content item not found."));
+            if (!CanEditItem(existing)) return Forbid();
+
+            var (item, errors) = await _service.RestoreRevisionAsync(id, revisionId, ActorId);
+            if (errors.Count > 0)
+            {
+                if (errors.Contains("Content item not found.") || errors.Contains("Content revision not found."))
+                    return NotFound(ApiResult.NotFound(errors[0]));
+
+                return UnprocessableEntity(ApiResult.Unprocessable<ContentResponseDto>(errors));
+            }
+
+            return Ok(ApiResult.Ok(MapItem(item!), "Content revision restored."));
+        }
         [HttpGet("{stableId}/logs")]
         public async Task<IActionResult> GetLogs(string stableId)
         {

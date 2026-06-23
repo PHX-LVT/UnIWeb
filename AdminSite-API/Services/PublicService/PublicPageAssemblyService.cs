@@ -94,6 +94,12 @@ namespace FullProject.Services.PublicService
         public async Task<List<object>> BuildSectionDtosAsync(Page page, List<Section> visibleSections)
         {
             var allBlocks = await _blockService.GetPublicByPageAsync(page.StableId);
+            var formDefinitions = (await _formDefinitionService.GetActiveByIdsAsync(
+                    allBlocks.OfType<FormBlock>()
+                        .Select(block => block.FormDefinitionId)
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Select(id => id!)))
+                .ToDictionary(definition => definition.Id, StringComparer.Ordinal);
 
             // We filter for visible blocks here to keep the logic clean inside the loops
             var blocksBySection = allBlocks
@@ -225,7 +231,7 @@ namespace FullProject.Services.PublicService
                                 slot.Id,
                                 slot.Order,
                                 Blocks = blocksBySlot.TryGetValue(slot.Id, out var slotBlocks)
-                                    ? MapPublicBlocks(slotBlocks)
+                                    ? MapPublicBlocks(slotBlocks, formDefinitions)
                                     : new List<PublicBlockDto>()
                             }).ToList()
                     });
@@ -351,14 +357,17 @@ namespace FullProject.Services.PublicService
                     DefaultZoom = (section as NetworkMapSection)?.DefaultZoom,
                     AdminLabel = (section as CanvasSection)?.AdminLabel,
                     Blocks = MapPublicBlocks(visibleBlocks
-                        .Where(b => string.IsNullOrWhiteSpace(b.ColumnSlotId)))
+                        .Where(b => string.IsNullOrWhiteSpace(b.ColumnSlotId)), formDefinitions)
                 });
             }
 
             return sectionDtos;
         }
 
-        private static List<PublicBlockDto> MapPublicBlocks(IEnumerable<Block> blocks, string? parentBlockId = null)
+        private static List<PublicBlockDto> MapPublicBlocks(
+            IEnumerable<Block> blocks,
+            IReadOnlyDictionary<string, FormDefinition> formDefinitions,
+            string? parentBlockId = null)
         {
             var blockList = blocks.ToList();
             var mapped = blockList
@@ -366,14 +375,14 @@ namespace FullProject.Services.PublicService
                     ? string.IsNullOrWhiteSpace(b.ParentBlockId)
                     : string.Equals(b.ParentBlockId, parentBlockId, StringComparison.Ordinal))
                 .OrderBy(b => b.Order)
-                .Select(MapPublicBlock)
+                .Select(block => MapPublicBlock(block, formDefinitions))
                 .Where(b => b is not null)
                 .Select(b => b!)
                 .ToList();
 
             foreach (var container in mapped.OfType<PublicContainerBlockDto>())
             {
-                container.Children = MapPublicBlocks(blockList, container.Id);
+                container.Children = MapPublicBlocks(blockList, formDefinitions, container.Id);
             }
 
             return mapped;
@@ -977,7 +986,9 @@ namespace FullProject.Services.PublicService
             BlockGap = style.BlockGap
         };
 
-        private static PublicBlockDto? MapPublicBlock(Block block)
+        private static PublicBlockDto? MapPublicBlock(
+            Block block,
+            IReadOnlyDictionary<string, FormDefinition> formDefinitions)
         {
             PublicBlockDto? mapped = block switch
             {
@@ -1020,20 +1031,7 @@ namespace FullProject.Services.PublicService
                         Href = p.Href
                     }).ToList()
                 },
-                FormBlock form => new PublicFormBlockDto
-                {
-                    Type = "form",
-                    Fields = form.Fields.Select(f => new PublicFormFieldDto
-                    {
-                        Name = f.Name,
-                        Type = f.Type,
-                        Label = f.Label,
-                        Required = f.Required,
-                        Options = f.Options,
-                        Order = f.Order
-                    }).ToList(),
-                    SubmitButtonLabel = form.SubmitButtonLabel
-                },
+                FormBlock form => MapFormBlock(form, formDefinitions),
                 CardBlock card => new PublicCardBlockDto
                 {
                     Type = "card",
@@ -1099,7 +1097,12 @@ namespace FullProject.Services.PublicService
                     Title = container.Title,
                     LayoutMode = container.LayoutMode,
                     Columns = container.Columns,
-                    Gap = container.Gap
+                    Gap = container.Gap,
+                    OrbitRadius = container.OrbitRadius,
+                    OrbitStartAngle = container.OrbitStartAngle,
+                    SemicircleRadius = container.SemicircleRadius,
+                    SemicircleStartAngle = container.SemicircleStartAngle,
+                    SemicircleEndAngle = container.SemicircleEndAngle
                 },
                 _ => null
             };
@@ -1110,6 +1113,8 @@ namespace FullProject.Services.PublicService
             mapped.Visible = block.Visible;
             mapped.Order = block.Order;
             mapped.BlockZone = block.BlockZone;
+            mapped.ZoneId = block.BlockZone;
+            mapped.PositionMode = ResolveBlockPositionMode(block);
             mapped.ParentBlockId = block.ParentBlockId;
             mapped.Layout = MapBlockLayout(block.Layout);
             mapped.Buttons = block.Buttons
@@ -1130,6 +1135,66 @@ namespace FullProject.Services.PublicService
             return mapped;
         }
 
+        private static PublicFormBlockDto MapFormBlock(
+            FormBlock block,
+            IReadOnlyDictionary<string, FormDefinition> definitions)
+        {
+            if (!string.IsNullOrWhiteSpace(block.FormDefinitionId) &&
+                definitions.TryGetValue(block.FormDefinitionId, out var definition))
+            {
+                return new PublicFormBlockDto
+                {
+                    Type = "form",
+                    FormDefinitionId = definition.Id,
+                    Name = definition.Name,
+                    Introduction = definition.Introduction,
+                    FormLayoutMode = definition.Layout == Contracts.Forms.FormLayout.TwoColumns ? "two-columns" : "stacked",
+                    SubmitButtonLabel = definition.SubmitButtonLabel,
+                    Fields = definition.Fields
+                        .OrderBy(field => field.Order)
+                        .Select(field => new PublicFormFieldDto
+                        {
+                            Name = field.Key,
+                            Type = field.Type,
+                            Label = field.Label,
+                            Placeholder = field.Placeholder,
+                            Required = field.Required,
+                            Options = field.Options
+                                .OrderBy(option => option.Order)
+                                .Select(option => new PublicFormFieldOptionDto
+                                {
+                                    Value = option.Value,
+                                    Label = option.Label,
+                                    Order = option.Order
+                                }).ToList(),
+                            Order = field.Order
+                        }).ToList()
+                };
+            }
+
+            return new PublicFormBlockDto
+            {
+                Type = "form",
+                FormDefinitionId = block.FormDefinitionId,
+                SubmitButtonLabel = block.SubmitButtonLabel,
+                Fields = block.Fields.Select(field => new PublicFormFieldDto
+                {
+                    Name = field.Name,
+                    Type = field.Type,
+                    Label = field.Label,
+                    Required = field.Required,
+                    Options = (field.Options ?? new List<string>())
+                        .Select((option, index) => new PublicFormFieldOptionDto
+                        {
+                            Value = option,
+                            Label = new Dictionary<string, string> { ["en"] = option },
+                            Order = index
+                        }).ToList(),
+                    Order = field.Order
+                }).ToList()
+            };
+        }
+
         private static PublicBlockLayoutDto MapBlockLayout(BlockLayout? layout)
         {
             layout ??= new BlockLayout();
@@ -1145,11 +1210,23 @@ namespace FullProject.Services.PublicService
                 BackgroundColor = layout.BackgroundColor,
                 BorderRadius = layout.BorderRadius,
                 ZIndex = layout.ZIndex,
+                ZOrder = layout.ZIndex,
                 X = layout.X,
                 Y = layout.Y,
                 W = layout.W,
                 H = layout.H
             };
+        }
+
+        private static string ResolveBlockPositionMode(Block block)
+        {
+            if (!string.IsNullOrWhiteSpace(block.PositionMode))
+                return string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase)
+                    ? "freeform"
+                    : "flow";
+
+            return !string.IsNullOrWhiteSpace(block.ColumnSlotId) ? "flow" :
+                string.Equals(block.BlockZone, "canvas", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
         }
 
     }

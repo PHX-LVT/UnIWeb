@@ -25,6 +25,8 @@ namespace FullProject.Services
             await EnsureContentIndexesAsync();
             await EnsureUserIndexesAsync();
             await EnsureSystemIndexesAsync();
+            await EnsureRevisionIndexesAsync();
+            await EnsureVisitorMetricIndexesAsync();
 
             _logger.LogInformation("MongoDB indexes verified.");
         }
@@ -153,6 +155,38 @@ namespace FullProject.Services
                     .Descending(l => l.CreatedAt)));
         }
 
+
+
+        private async Task EnsureVisitorMetricIndexesAsync()
+        {
+            var visitorMetrics = _database.GetCollection<VisitorMetricCounter>("visitor_metrics");
+            await visitorMetrics.Indexes.CreateOneAsync(new CreateIndexModel<VisitorMetricCounter>(
+                Builders<VisitorMetricCounter>.IndexKeys
+                    .Ascending(m => m.MetricType)
+                    .Ascending(m => m.TargetType)
+                    .Ascending(m => m.TargetKey)
+                    .Ascending(m => m.Day),
+                new CreateIndexOptions { Unique = true }));
+            await visitorMetrics.Indexes.CreateOneAsync(new CreateIndexModel<VisitorMetricCounter>(
+                Builders<VisitorMetricCounter>.IndexKeys
+                    .Descending(m => m.Day)
+                    .Ascending(m => m.MetricType)
+                    .Descending(m => m.Count)));
+        }
+        private async Task EnsureRevisionIndexesAsync()
+        {
+            var pageRevisions = _database.GetCollection<PageRevision>("page_revisions");
+            await pageRevisions.Indexes.CreateOneAsync(new CreateIndexModel<PageRevision>(
+                Builders<PageRevision>.IndexKeys
+                    .Ascending(r => r.PageStableId)
+                    .Descending(r => r.CreatedAt)));
+
+            var contentRevisions = _database.GetCollection<ContentRevision>("content_revisions");
+            await contentRevisions.Indexes.CreateOneAsync(new CreateIndexModel<ContentRevision>(
+                Builders<ContentRevision>.IndexKeys
+                    .Ascending(r => r.ContentStableId)
+                    .Descending(r => r.CreatedAt)));
+        }
         private async Task EnsureSystemIndexesAsync()
         {
             var logs = _database.GetCollection<ContentAuditLog>("content_audit_logs");

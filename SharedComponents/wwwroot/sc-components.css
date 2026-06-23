@@ -88,6 +88,20 @@
     color: inherit;
 }
 
+.sc-block-zone {
+    position: relative;
+    min-width: 0;
+}
+
+.sc-canvas {
+    overflow: hidden;
+}
+
+.sc-canvas .sc-section-blocks {
+    max-width: none;
+    padding: 0;
+}
+
 .sc-section-blocks--gap-none { gap: 0; }
 .sc-section-blocks--gap-small { gap: 12px; }
 .sc-section-blocks--gap-medium { gap: 20px; }
@@ -110,6 +124,44 @@
     min-height: var(--sc-freeform-min-height, 640px);
 }
 
+.sc-section-blocks--row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+}
+
+.sc-section-blocks--row > .sc-block-frame {
+    flex: 1 1 180px;
+    width: auto;
+}
+
+.sc-section-blocks--orbit,
+.sc-section-blocks--semicircle {
+    position: relative;
+    display: block;
+    min-height: var(--sc-pattern-min-height, 560px);
+}
+
+.sc-section-blocks--orbit > .sc-block-frame,
+.sc-section-blocks--semicircle > .sc-block-frame {
+    position: absolute;
+    left: 50%;
+    width: min(180px, 28%);
+    min-height: 80px;
+    transform-origin: center;
+}
+
+.sc-section-blocks--orbit > .sc-block-frame {
+    top: 50%;
+    transform: translate(-50%, -50%) rotate(var(--sc-pattern-angle)) translateX(var(--sc-pattern-radius)) rotate(calc(-1 * var(--sc-pattern-angle)));
+}
+
+.sc-section-blocks--semicircle > .sc-block-frame {
+    top: calc(100% - 70px);
+    transform: translate(-50%, -50%) rotate(var(--sc-pattern-angle)) translateX(var(--sc-pattern-radius)) rotate(calc(-1 * var(--sc-pattern-angle)));
+}
+
 .sc-block-frame {
     position: relative;
     min-width: 0;
@@ -125,12 +177,26 @@
     grid-column: span var(--sc-block-column-span, 12);
 }
 
-.sc-section-blocks--freeform .sc-block-frame {
+.sc-section-blocks--freeform .sc-block-frame--position-freeform {
     position: absolute;
     left: var(--sc-block-left, 0%);
     top: var(--sc-block-top, 0);
     width: var(--sc-block-width, 33.3333%);
     min-height: var(--sc-block-min-height, 96px);
+}
+
+.sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame {
+    position: absolute;
+    left: var(--sc-block-left, 0%);
+    top: var(--sc-block-top, 0);
+    width: var(--sc-block-width, 33.3333%);
+    min-height: var(--sc-block-min-height, 96px);
+}
+
+.sc-section-blocks--freeform .sc-block-frame--position-flow {
+    position: relative;
+    width: 100%;
+    margin-bottom: 20px;
 }
 
 .sc-section-blocks--stack .sc-block-frame--width-full,
@@ -150,6 +216,19 @@
 .sc-block-frame--align-center { align-self: center; }
 .sc-block-frame--align-end { align-self: flex-end; }
 .sc-block-frame--align-stretch { align-self: stretch; }
+
+.sc-column--has-freeform {
+    position: relative;
+    min-height: var(--sc-column-freeform-height, 320px);
+}
+
+.sc-column--has-freeform .sc-block-frame--position-freeform {
+    position: absolute;
+    left: var(--sc-block-left, 0%);
+    top: var(--sc-block-top, 0);
+    width: var(--sc-block-width, 33.3333%);
+    min-height: var(--sc-block-min-height, 96px);
+}
 
 .sc-block-frame--justify-start { justify-self: start; }
 .sc-block-frame--justify-center { justify-self: center; }
@@ -323,10 +402,24 @@
 .sc-container-block--gap-medium > .sc-section-blocks { gap: 20px; }
 .sc-container-block--gap-large > .sc-section-blocks { gap: 32px; }
 
+.sc-container-block--row > .sc-section-blocks {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+}
+
+.sc-container-block--row > .sc-section-blocks > .sc-block-frame--position-flow {
+    flex: 1 1 180px;
+    width: auto;
+}
+
 @media (max-width: 768px) {
     .sc-section-blocks--grid,
     .sc-section-blocks--split,
-    .sc-section-blocks--freeform {
+    .sc-section-blocks--freeform,
+    .sc-section-blocks--row,
+    .sc-section-blocks--orbit,
+    .sc-section-blocks--semicircle {
         display: flex;
         flex-direction: column;
         min-height: 0;
@@ -335,13 +428,37 @@
     .sc-section-blocks--stack .sc-block-frame,
     .sc-section-blocks--grid .sc-block-frame,
     .sc-section-blocks--split .sc-block-frame,
-    .sc-section-blocks--freeform .sc-block-frame {
+    .sc-section-blocks--freeform .sc-block-frame,
+    .sc-section-blocks--row > .sc-block-frame,
+    .sc-section-blocks--orbit > .sc-block-frame,
+    .sc-section-blocks--semicircle > .sc-block-frame {
         position: relative;
         left: auto;
         top: auto;
         width: 100%;
         min-height: 0;
         justify-self: stretch;
+        transform: none;
+    }
+
+    .sc-column--has-freeform {
+        min-height: 0;
+    }
+
+    .sc-column--has-freeform .sc-block-frame--position-freeform {
+        position: relative;
+        left: auto;
+        top: auto;
+        width: 100%;
+        min-height: 0;
+    }
+
+    .sc-container-block--row > .sc-section-blocks {
+        flex-direction: column;
+    }
+
+    .sc-container-block--row > .sc-section-blocks > .sc-block-frame--position-flow {
+        width: 100%;
     }
 }
 
@@ -2995,6 +3112,56 @@ button.sc-library__media--video {
     gap: 16px;
 }
 
+.sc-form-block {
+    padding: clamp(20px, 3vw, 36px);
+    color: var(--navy);
+    background: #fff;
+    border: 1px solid rgba(0, 26, 51, .12);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.sc-form-block__header {
+    display: grid;
+    gap: 8px;
+}
+
+.sc-form-block__header h3 {
+    margin: 0;
+    font-size: var(--theme-text-item-title, 20px);
+}
+
+.sc-form-block__header p {
+    margin: 0;
+    color: inherit;
+    opacity: .76;
+}
+
+.sc-form-block__fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+}
+
+.sc-form-block--two-columns .sc-form-block__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sc-form-field--wide {
+    grid-column: 1 / -1;
+}
+
+.sc-form-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+}
+
+.sc-form-block__submit {
+    align-self: flex-start;
+}
+
 .sc-form-field {
     display: flex;
     flex-direction: column;
@@ -3036,6 +3203,12 @@ button.sc-library__media--video {
 textarea.sc-form-input {
     min-height: 120px;
     resize: vertical;
+}
+
+@media (max-width: 680px) {
+    .sc-form-block--two-columns .sc-form-block__fields {
+        grid-template-columns: 1fr;
+    }
 }
 
 .sc-required {

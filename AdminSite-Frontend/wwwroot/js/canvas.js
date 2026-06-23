@@ -395,7 +395,8 @@ window.initCanvasOverlay = function (dotNetRef) {
                 "UpdateSectionPositions",
                 e.data.positions,
                 e.data.documentHeight ?? 2000,
-                e.data.blockPositions || []).catch(() => {});
+                e.data.blockPositions || [],
+                e.data.zonePositions || []).catch(() => {});
         }
     };
 
@@ -478,6 +479,51 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
     if (container.__ezFreeformInitialized) return;
     container.__ezFreeformInitialized = true;
 
+    const snapThreshold = 8;
+
+    function ensureGuide(axis) {
+        const key = axis === "x" ? "__ezVerticalGuide" : "__ezHorizontalGuide";
+        if (container[key]) return container[key];
+
+        const guide = document.createElement("div");
+        guide.className = axis === "x"
+            ? "ez-arrange-guide ez-arrange-guide--vertical"
+            : "ez-arrange-guide ez-arrange-guide--horizontal";
+        container.appendChild(guide);
+        container[key] = guide;
+        return guide;
+    }
+
+    function showGuide(axis, position, bounds) {
+        const guide = ensureGuide(axis);
+        guide.style.display = "block";
+        if (axis === "x") {
+            guide.style.left = `${position}px`;
+            guide.style.top = `${bounds.top}px`;
+            guide.style.height = `${bounds.height}px`;
+            return;
+        }
+
+        guide.style.top = `${position}px`;
+        guide.style.left = `${bounds.left}px`;
+        guide.style.width = `${bounds.width}px`;
+    }
+
+    function hideGuide(axis) {
+        const guide = axis === "x" ? container.__ezVerticalGuide : container.__ezHorizontalGuide;
+        if (guide) guide.style.display = "none";
+    }
+
+    function nearestSnap(value, candidates) {
+        let best = null;
+        candidates.forEach(candidate => {
+            const distance = Math.abs(value - candidate.value);
+            if (distance > snapThreshold || (best && distance >= best.distance)) return;
+            best = { ...candidate, distance };
+        });
+        return best;
+    }
+
     container.addEventListener("pointerdown", function (event) {
         const handle = event.target.closest(".ez-freeform-block-handle, .ez-freeform-block-resize");
         if (!handle) return;
@@ -490,7 +536,11 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
         block.setPointerCapture?.(event.pointerId);
 
         const mode = handle.classList.contains("ez-freeform-block-resize") ? "resize" : "drag";
-        const scale = container.__ezFreeformScale || 1;
+        const containerRect = container.getBoundingClientRect();
+        const renderedScale = container.offsetWidth > 0
+            ? containerRect.width / container.offsetWidth
+            : 0;
+        const scale = renderedScale > 0 ? renderedScale : (container.__ezFreeformScale || 1);
         const start = {
             x: event.clientX,
             y: event.clientY,
@@ -504,7 +554,45 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             sectionHeight: Math.max(parseFloat(block.dataset.sectionHeight || "1"), 1)
         };
 
+        if (start.width <= 0 || start.height <= 0 || start.sectionWidth <= 1 || start.sectionHeight <= 1) return;
+
         block.classList.add("ez-freeform-block-overlay--editing");
+        document.body.classList.add("ez-arranging-block");
+
+        const bounds = {
+            left: start.sectionLeft,
+            top: start.sectionTop,
+            width: start.sectionWidth,
+            height: start.sectionHeight,
+            right: start.sectionLeft + start.sectionWidth,
+            bottom: start.sectionTop + start.sectionHeight,
+            centerX: start.sectionLeft + start.sectionWidth / 2,
+            centerY: start.sectionTop + start.sectionHeight / 2
+        };
+
+        const siblings = [...container.querySelectorAll(".ez-freeform-block-overlay")]
+            .filter(item => item !== block &&
+                item.dataset.sectionId === block.dataset.sectionId &&
+                item.dataset.sectionLeft === block.dataset.sectionLeft &&
+                item.dataset.sectionTop === block.dataset.sectionTop &&
+                item.dataset.sectionWidth === block.dataset.sectionWidth &&
+                item.dataset.sectionHeight === block.dataset.sectionHeight)
+            .map(item => {
+                const left = parseFloat(item.style.left || "0");
+                const top = parseFloat(item.style.top || "0");
+                const width = parseFloat(item.style.width || "0");
+                const height = parseFloat(item.style.height || "0");
+                return {
+                    left,
+                    top,
+                    width,
+                    height,
+                    right: left + width,
+                    bottom: top + height,
+                    centerX: left + width / 2,
+                    centerY: top + height / 2
+                };
+            });
 
         function clamp(value, min, max) {
             return Math.min(Math.max(value, min), max);
@@ -515,8 +603,37 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             const dy = (e.clientY - start.y) / scale;
 
             if (mode === "resize") {
-                const width = clamp(start.width + dx, start.sectionWidth / 12, start.sectionWidth);
-                const height = clamp(start.height + dy, 48, Math.max(48, start.sectionHeight - (start.top - start.sectionTop)));
+                const availableWidth = Math.max(start.sectionWidth / 12, start.sectionWidth - (start.left - start.sectionLeft));
+                const availableHeight = Math.max(48, start.sectionHeight - (start.top - start.sectionTop));
+                let width = clamp(start.width + dx, start.sectionWidth / 12, availableWidth);
+                let height = clamp(start.height + dy, 48, availableHeight);
+
+                const rightCandidates = [
+                    { value: bounds.right, guide: bounds.right },
+                    { value: bounds.centerX, guide: bounds.centerX },
+                    ...siblings.flatMap(item => [
+                        { value: item.left, guide: item.left },
+                        { value: item.right, guide: item.right },
+                        { value: item.centerX, guide: item.centerX }
+                    ])
+                ];
+                const bottomCandidates = [
+                    { value: bounds.bottom, guide: bounds.bottom },
+                    { value: bounds.centerY, guide: bounds.centerY },
+                    ...siblings.flatMap(item => [
+                        { value: item.top, guide: item.top },
+                        { value: item.bottom, guide: item.bottom },
+                        { value: item.centerY, guide: item.centerY }
+                    ])
+                ];
+                const snapX = nearestSnap(start.left + width, rightCandidates);
+                const snapY = nearestSnap(start.top + height, bottomCandidates);
+
+                if (snapX) width = clamp(snapX.value - start.left, start.sectionWidth / 12, availableWidth);
+                if (snapY) height = clamp(snapY.value - start.top, 48, availableHeight);
+                snapX ? showGuide("x", snapX.guide, bounds) : hideGuide("x");
+                snapY ? showGuide("y", snapY.guide, bounds) : hideGuide("y");
+
                 block.style.width = `${width}px`;
                 block.style.height = `${height}px`;
                 return;
@@ -524,16 +641,54 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
 
             const width = parseFloat(block.style.width || `${start.width}`);
             const height = parseFloat(block.style.height || `${start.height}`);
-            const left = clamp(start.left + dx, start.sectionLeft, start.sectionLeft + start.sectionWidth - width);
-            const top = clamp(start.top + dy, start.sectionTop, start.sectionTop + start.sectionHeight - height);
+            const maxLeft = Math.max(start.sectionLeft, start.sectionLeft + start.sectionWidth - width);
+            const maxTop = Math.max(start.sectionTop, start.sectionTop + start.sectionHeight - height);
+            let left = clamp(start.left + dx, start.sectionLeft, maxLeft);
+            let top = clamp(start.top + dy, start.sectionTop, maxTop);
+            const xCandidates = [
+                { value: bounds.left, guide: bounds.left },
+                { value: bounds.right - width, guide: bounds.right },
+                { value: bounds.centerX - width / 2, guide: bounds.centerX },
+                ...siblings.flatMap(item => [
+                    { value: item.left, guide: item.left },
+                    { value: item.right, guide: item.right },
+                    { value: item.left - width, guide: item.left },
+                    { value: item.right - width, guide: item.right },
+                    { value: item.centerX - width / 2, guide: item.centerX }
+                ])
+            ];
+            const yCandidates = [
+                { value: bounds.top, guide: bounds.top },
+                { value: bounds.bottom - height, guide: bounds.bottom },
+                { value: bounds.centerY - height / 2, guide: bounds.centerY },
+                ...siblings.flatMap(item => [
+                    { value: item.top, guide: item.top },
+                    { value: item.bottom, guide: item.bottom },
+                    { value: item.top - height, guide: item.top },
+                    { value: item.bottom - height, guide: item.bottom },
+                    { value: item.centerY - height / 2, guide: item.centerY }
+                ])
+            ];
+            const snapX = nearestSnap(left, xCandidates);
+            const snapY = nearestSnap(top, yCandidates);
+
+            if (snapX) left = clamp(snapX.value, start.sectionLeft, maxLeft);
+            if (snapY) top = clamp(snapY.value, start.sectionTop, maxTop);
+            snapX ? showGuide("x", snapX.guide, bounds) : hideGuide("x");
+            snapY ? showGuide("y", snapY.guide, bounds) : hideGuide("y");
+
             block.style.left = `${left}px`;
             block.style.top = `${top}px`;
         }
 
-        function up(e) {
+        function finish() {
             window.removeEventListener("pointermove", move);
-            window.removeEventListener("pointerup", up);
+            window.removeEventListener("pointerup", finish);
+            window.removeEventListener("pointercancel", finish);
             block.classList.remove("ez-freeform-block-overlay--editing");
+            document.body.classList.remove("ez-arranging-block");
+            hideGuide("x");
+            hideGuide("y");
 
             const left = parseFloat(block.style.left || `${start.left}`);
             const top = parseFloat(block.style.top || `${start.top}`);
@@ -544,6 +699,19 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             const y = clamp(Math.round((top - start.sectionTop) / 48), 0, 60);
             const w = clamp(Math.round(width / start.sectionWidth * 12), 1, 12);
             const h = clamp(Math.round(height / 48), 1, 40);
+
+            const startX = clamp(Math.round((start.left - start.sectionLeft) / start.sectionWidth * 12), 0, 11);
+            const startY = clamp(Math.round((start.top - start.sectionTop) / 48), 0, 60);
+            const startW = clamp(Math.round(start.width / start.sectionWidth * 12), 1, 12);
+            const startH = clamp(Math.round(start.height / 48), 1, 40);
+
+            if (x === startX && y === startY && w === startW && h === startH) {
+                block.style.left = `${start.left}px`;
+                block.style.top = `${start.top}px`;
+                block.style.width = `${start.width}px`;
+                block.style.height = `${start.height}px`;
+                return;
+            }
 
             container.__ezFreeformDotNet.invokeMethodAsync(
                 "SaveFreeformBlockLayout",
@@ -556,7 +724,8 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
         }
 
         window.addEventListener("pointermove", move);
-        window.addEventListener("pointerup", up);
+        window.addEventListener("pointerup", finish);
+        window.addEventListener("pointercancel", finish);
     });
 };
 

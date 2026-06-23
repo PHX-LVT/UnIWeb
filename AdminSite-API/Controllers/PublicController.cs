@@ -1,5 +1,6 @@
-﻿using FullProject.DTOs;
+using FullProject.DTOs;
 using FullProject.Services.PublicService;
+using FullProject.Services.Metrics;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,15 +16,18 @@ namespace FullProject.Controllers
         private readonly PublicMetadataService _metadata;
         private readonly PublicPageAssemblyService _pages;
         private readonly PublicFormSubmissionHandler _forms;
+        private readonly VisitorMetricService _metrics;
 
         public PublicController(
             PublicMetadataService metadata,
             PublicPageAssemblyService pages,
-            PublicFormSubmissionHandler forms)
+            PublicFormSubmissionHandler forms,
+            VisitorMetricService metrics)
         {
             _metadata = metadata;
             _pages = pages;
             _forms = forms;
+            _metrics = metrics;
         }
 
         [HttpGet("navigation")]
@@ -58,29 +62,52 @@ namespace FullProject.Controllers
         public async Task<IActionResult> GetPage(string slug)
         {
             var page = await _pages.GetPageResponseAsync(slug);
-            return page is null
-                ? NotFound(ApiResult.NotFound("Page not found."))
-                : Ok(ApiResult.Ok(page));
+            if (page is null)
+                return NotFound(ApiResult.NotFound("Page not found."));
+
+            await _metrics.IncrementAsync(VisitorMetricService.PageView, "page", slug, slug);
+            return Ok(ApiResult.Ok(page));
         }
 
         [HttpGet("pages/{parentSlug}/{childSlug}")]
         public async Task<IActionResult> GetChildPage(string parentSlug, string childSlug)
         {
+            var fullSlug = $"{parentSlug}/{childSlug}";
             var page = await _pages.GetChildPageResponseAsync(parentSlug, childSlug);
-            return page is null
-                ? NotFound(ApiResult.NotFound("Page not found."))
-                : Ok(ApiResult.Ok(page));
+            if (page is null)
+                return NotFound(ApiResult.NotFound("Page not found."));
+
+            await _metrics.IncrementAsync(VisitorMetricService.PageView, "page", fullSlug, fullSlug);
+            return Ok(ApiResult.Ok(page));
         }
 
         [HttpGet("content/{typeKey}/{slug}")]
         public async Task<IActionResult> GetContentPage(string typeKey, string slug)
         {
             var page = await _pages.GetContentPageAsync(typeKey, slug);
-            return page is null
-                ? NotFound(ApiResult.NotFound("Content not found."))
-                : Ok(ApiResult.Ok(page));
+            if (page is null)
+                return NotFound(ApiResult.NotFound("Content not found."));
+
+            var target = $"{typeKey}/{slug}";
+            await _metrics.IncrementAsync(VisitorMetricService.ContentPageView, "content", target, target);
+            return Ok(ApiResult.Ok(page));
         }
 
+
+        [HttpPost("metrics/download")]
+        [RequestSizeLimit(2_048)]
+        public async Task<IActionResult> TrackDownload([FromBody] PublicDownloadMetricDto dto)
+        {
+            var url = dto.Url?.Trim();
+            if (string.IsNullOrWhiteSpace(url) || url.Length > 1_000)
+                return BadRequest(ApiResult.BadRequest("Invalid download target."));
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+                return BadRequest(ApiResult.BadRequest("Invalid download target."));
+
+            await _metrics.IncrementAsync(VisitorMetricService.Download, "url", url, dto.SourcePage);
+            return Ok(ApiResult.Ok("Download counted."));
+        }
         [HttpPost("pages/{slug}/sections/{sectionId}/blocks/{blockId}/form/submit")]
         [EnableRateLimiting("public-form")]
         [RequestSizeLimit(32_768)]

@@ -3,6 +3,7 @@ using FullProject.DTOs;
 using FullProject.Models;
 using FullProject.Security;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using System.Net;
 using System.Text.RegularExpressions;
@@ -234,6 +235,8 @@ namespace FullProject.Services
             var validation = await ValidateContentUpdateAsync(existing, dto, typeKey);
             if (validation.Count > 0) return (null, validation);
 
+            await SaveContentRevisionAsync(existing, actorId, "updated");
+
             if (dto.Title is not null)
             {
                 var normalizedTitle = NormalizeLang(dto.Title);
@@ -380,6 +383,85 @@ namespace FullProject.Services
             return items.Count;
         }
 
+
+        public async Task<List<RevisionResponseDto>> GetRevisionsAsync(string id)
+        {
+            var item = await GetByIdAsync(id);
+            if (item is null) return new();
+
+            var revisions = await _context.ContentRevisions
+                .Find(r => r.ContentStableId == item.StableId)
+                .SortByDescending(r => r.CreatedAt)
+                .Limit(10)
+                .ToListAsync();
+
+            return revisions.Select(MapRevision).ToList();
+        }
+
+        public async Task<(ContentItem? Item, List<string> Errors)> RestoreRevisionAsync(string id, string revisionId, string actorId)
+        {
+            var current = await GetByIdAsync(id);
+            if (current is null) return (null, ["Content item not found."]);
+
+            var revision = await _context.ContentRevisions
+                .Find(r => r.Id == revisionId && r.ContentStableId == current.StableId)
+                .FirstOrDefaultAsync();
+            if (revision is null) return (null, ["Content revision not found."]);
+
+            await SaveContentRevisionAsync(current, actorId, "before-restore");
+
+            var restored = BsonSerializer.Deserialize<ContentItem>(revision.Snapshot);
+            restored.Id = current.Id;
+            restored.StableId = current.StableId;
+            restored.CreatedAt = current.CreatedAt;
+            restored.UpdatedAt = DateTime.UtcNow;
+            restored.UpdatedById = actorId;
+
+            await _context.ContentDraft.ReplaceOneAsync(c => c.Id == id, restored);
+            await TrimContentRevisionsAsync(current.StableId);
+            await LogAsync(current.StableId, "revision-restored", actorId);
+            return (await GetByIdAsync(id), []);
+        }
+
+        private async Task SaveContentRevisionAsync(ContentItem item, string actorId, string reason)
+        {
+            await _context.ContentRevisions.InsertOneAsync(new ContentRevision
+            {
+                ContentId = item.Id,
+                ContentStableId = item.StableId,
+                SourceUpdatedAt = item.UpdatedAt,
+                ActorId = actorId,
+                Reason = reason,
+                CreatedAt = DateTime.UtcNow,
+                Snapshot = item.ToBsonDocument()
+            });
+
+            await TrimContentRevisionsAsync(item.StableId);
+        }
+
+        private async Task TrimContentRevisionsAsync(string contentStableId)
+        {
+            var staleIds = await _context.ContentRevisions
+                .Find(r => r.ContentStableId == contentStableId)
+                .SortByDescending(r => r.CreatedAt)
+                .Skip(2)
+                .Project(r => r.Id)
+                .ToListAsync();
+
+            if (staleIds.Count > 0)
+                await _context.ContentRevisions.DeleteManyAsync(r => staleIds.Contains(r.Id));
+        }
+
+        private static RevisionResponseDto MapRevision(ContentRevision revision) => new()
+        {
+            Id = revision.Id,
+            TargetId = revision.ContentId,
+            StableId = revision.ContentStableId,
+            SourceUpdatedAt = revision.SourceUpdatedAt,
+            ActorId = revision.ActorId,
+            Reason = revision.Reason,
+            CreatedAt = revision.CreatedAt
+        };
         public async Task<List<ContentAuditLog>> GetLogsAsync(string stableId) =>
             await _context.ContentAuditLogs.Find(l => l.ContentStableId == stableId)
                 .SortByDescending(l => l.CreatedAt)

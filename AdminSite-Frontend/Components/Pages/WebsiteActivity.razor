@@ -1,0 +1,228 @@
+@page "/website-activity"
+@using Contracts.Admin
+@inject IHttpService Http
+@inject AdminAuthService Auth
+
+<div class="page-header website-activity__header">
+    <h1 class="page-title">@T("WebsiteActivity")</h1>
+
+    @if (Auth.CanViewLogs)
+    {
+        <div class="website-activity__filters">
+            <label>
+                <span>@T("DateFrom")</span>
+                <input type="date" @bind="_from" />
+            </label>
+            <label>
+                <span>@T("DateTo")</span>
+                <input type="date" @bind="_to" />
+            </label>
+            <button type="button" class="btn-admin btn-primary" disabled="@_loading" @onclick="ApplyRange">
+                @T("Apply")
+            </button>
+        </div>
+    }
+</div>
+
+@if (!Auth.CanViewLogs)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoPermission")</p>
+    </div>
+}
+else if (_loading)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("Loading")</p>
+    </div>
+}
+else
+{
+    <div class="website-activity__stats">
+        <article class="admin-card website-activity__stat website-activity__stat--pages">
+            <span>@T("PageViews")</span>
+            <strong>@MetricTotal(PageView)</strong>
+        </article>
+        <article class="admin-card website-activity__stat website-activity__stat--content">
+            <span>@T("ContentPageViews")</span>
+            <strong>@MetricTotal(ContentPageView)</strong>
+        </article>
+        <article class="admin-card website-activity__stat website-activity__stat--downloads">
+            <span>@T("Downloads")</span>
+            <strong>@MetricTotal(Download)</strong>
+        </article>
+        <article class="admin-card website-activity__stat website-activity__stat--forms">
+            <span>@T("FormSubmissions")</span>
+            <strong>@MetricTotal(FormSubmission)</strong>
+        </article>
+    </div>
+
+    @if (_items.Count == 0)
+    {
+        <div class="admin-card">
+            <p class="text-muted">@T("NoWebsiteActivity")</p>
+        </div>
+    }
+    else
+    {
+        <div class="website-activity__tables">
+            <section class="admin-card">
+                <h2>@T("DailyActivity")</h2>
+                <div class="website-activity__table-scroll">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>@T("Date")</th>
+                                <th>@T("PageViews")</th>
+                                <th>@T("ContentPageViews")</th>
+                                <th>@T("Downloads")</th>
+                                <th>@T("FormSubmissions")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in DailyRows)
+                            {
+                                <tr>
+                                    <td>@row.Day.ToString("dd MMM yyyy")</td>
+                                    <td>@row.PageViews</td>
+                                    <td>@row.ContentViews</td>
+                                    <td>@row.Downloads</td>
+                                    <td>@row.FormSubmissions</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="admin-card">
+                <h2>@T("TopActivityTargets")</h2>
+                <div class="website-activity__table-scroll">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>@T("ActivityType")</th>
+                                <th>@T("Target")</th>
+                                <th>@T("Count")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in TopTargets)
+                            {
+                                <tr>
+                                    <td>@MetricLabel(row.MetricType)</td>
+                                    <td title="@row.TargetKey">@row.Label</td>
+                                    <td>@row.Count</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    }
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private const string PageView = "page-view";
+    private const string ContentPageView = "content-page-view";
+    private const string Download = "download";
+    private const string FormSubmission = "form-submission";
+
+    private readonly List<VisitorMetricResponseDto> _items = new();
+    private DateTime _from = DateTime.Today.AddDays(-29);
+    private DateTime _to = DateTime.Today;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+
+        if (Auth.CanViewLogs)
+            await LoadAsync();
+
+        _loading = false;
+    }
+
+    private async Task ApplyRange()
+    {
+        if (_from > _to)
+            (_from, _to) = (_to, _from);
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var from = Uri.EscapeDataString(_from.ToString("yyyy-MM-dd"));
+        var to = Uri.EscapeDataString(_to.ToString("yyyy-MM-dd"));
+        var response = await Http.GetAsync<List<VisitorMetricResponseDto>>(
+            $"api/admin/visitor-metrics?from={from}&to={to}");
+
+        if (response.Success && response.Data is not null)
+        {
+            _items.Clear();
+            _items.AddRange(response.Data);
+        }
+        else
+        {
+            Http.Toast(response.Message, response.StatusCode);
+        }
+
+        _loading = false;
+    }
+
+    private long MetricTotal(string metricType) =>
+        _items.Where(item => item.MetricType == metricType).Sum(item => item.Count);
+
+    private IEnumerable<DailyActivityRow> DailyRows =>
+        _items
+            .GroupBy(item => item.Day.Date)
+            .OrderByDescending(group => group.Key)
+            .Select(group => new DailyActivityRow(
+                group.Key,
+                group.Where(item => item.MetricType == PageView).Sum(item => item.Count),
+                group.Where(item => item.MetricType == ContentPageView).Sum(item => item.Count),
+                group.Where(item => item.MetricType == Download).Sum(item => item.Count),
+                group.Where(item => item.MetricType == FormSubmission).Sum(item => item.Count)));
+
+    private IEnumerable<TargetActivityRow> TopTargets =>
+        _items
+            .GroupBy(item => new { item.MetricType, item.TargetKey, item.Label })
+            .Select(group => new TargetActivityRow(
+                group.Key.MetricType,
+                group.Key.TargetKey,
+                string.IsNullOrWhiteSpace(group.Key.Label) ? group.Key.TargetKey : group.Key.Label,
+                group.Sum(item => item.Count)))
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Label)
+            .Take(12);
+
+    private string MetricLabel(string metricType) => metricType switch
+    {
+        PageView => T("PageViews"),
+        ContentPageView => T("ContentPageViews"),
+        Download => T("Downloads"),
+        FormSubmission => T("FormSubmissions"),
+        _ => metricType
+    };
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private sealed record DailyActivityRow(
+        DateTime Day,
+        long PageViews,
+        long ContentViews,
+        long Downloads,
+        long FormSubmissions);
+
+    private sealed record TargetActivityRow(
+        string MetricType,
+        string TargetKey,
+        string Label,
+        long Count);
+}

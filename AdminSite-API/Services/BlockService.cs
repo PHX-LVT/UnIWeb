@@ -126,6 +126,7 @@ namespace FullProject.Services
                 },
                 FormBlockCreateDto form => new FormBlock
                 {
+                    FormDefinitionId = string.IsNullOrWhiteSpace(form.FormDefinitionId) ? null : form.FormDefinitionId,
                     Fields = form.Fields.Select(f => new FormField
                     {
                         Name = f.Name,
@@ -188,15 +189,21 @@ namespace FullProject.Services
                     Title = SanitizeDictionary(container.Title),
                     LayoutMode = NormalizeContainerLayout(container.LayoutMode),
                     Columns = Math.Clamp(container.Columns, 1, 6),
-                    Gap = NormalizeBlockGap(container.Gap)
+                    Gap = NormalizeBlockGap(container.Gap),
+                    OrbitRadius = Math.Clamp(container.OrbitRadius, 80, 480),
+                    OrbitStartAngle = Math.Clamp(container.OrbitStartAngle, -360, 360),
+                    SemicircleRadius = Math.Clamp(container.SemicircleRadius, 80, 480),
+                    SemicircleStartAngle = Math.Clamp(container.SemicircleStartAngle, -360, 360),
+                    SemicircleEndAngle = Math.Clamp(container.SemicircleEndAngle, -360, 360)
                 },
                 _ => throw new ArgumentException("Unknown block type")
             };
 
             block.StableId = Guid.NewGuid().ToString();
             block.ColumnSlotId = dto.ColumnSlotId;
-            block.BlockZone = NormalizeBlockZone(dto.BlockZone);
-            block.ParentBlockId = dto.ParentBlockId;
+            block.BlockZone = ResolveBlockZone(section, dto.BlockZone, dto.ZoneId);
+            block.PositionMode = ResolvePositionMode(section, dto.PositionMode);
+            block.ParentBlockId = string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId;
             block.PageStableId = page.StableId;       // â† GUID
             block.SectionStableId = section.StableId; // â† GUID
             block.Visible = dto.Visible;
@@ -228,8 +235,11 @@ namespace FullProject.Services
             if (dto.Buttons is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Buttons,
                     dto.Buttons.Select(MapButton).ToList()));
-            if (dto.BlockZone is not null)
-                baseUpdates.Add(Builders<Block>.Update.Set(b => b.BlockZone, NormalizeBlockZone(dto.BlockZone)));
+            var requestedZone = dto.ZoneId ?? dto.BlockZone;
+            if (requestedZone is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.BlockZone, ResolveBlockZone(existing, requestedZone)));
+            if (dto.PositionMode is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.PositionMode, NormalizePositionMode(dto.PositionMode)));
             if (dto.ParentBlockId is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.ParentBlockId, string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId));
             if (dto.Layout is not null)
@@ -296,6 +306,8 @@ namespace FullProject.Services
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
+                                .Set(b => ((FormBlock)b).FormDefinitionId,
+                                    string.IsNullOrWhiteSpace(formDto.FormDefinitionId) ? null : formDto.FormDefinitionId)
                                 .Set(b => ((FormBlock)b).Fields,
                                     formDto.Fields.Select(f => new FormField
                                     {
@@ -381,7 +393,12 @@ namespace FullProject.Services
                                 .Set(b => ((ContainerBlock)b).Title, SanitizeDictionary(containerDto.Title))
                                 .Set(b => ((ContainerBlock)b).LayoutMode, NormalizeContainerLayout(containerDto.LayoutMode))
                                 .Set(b => ((ContainerBlock)b).Columns, Math.Clamp(containerDto.Columns, 1, 6))
-                                .Set(b => ((ContainerBlock)b).Gap, NormalizeBlockGap(containerDto.Gap))));
+                                .Set(b => ((ContainerBlock)b).Gap, NormalizeBlockGap(containerDto.Gap))
+                                .Set(b => ((ContainerBlock)b).OrbitRadius, Math.Clamp(containerDto.OrbitRadius, 80, 480))
+                                .Set(b => ((ContainerBlock)b).OrbitStartAngle, Math.Clamp(containerDto.OrbitStartAngle, -360, 360))
+                                .Set(b => ((ContainerBlock)b).SemicircleRadius, Math.Clamp(containerDto.SemicircleRadius, 80, 480))
+                                .Set(b => ((ContainerBlock)b).SemicircleStartAngle, Math.Clamp(containerDto.SemicircleStartAngle, -360, 360))
+                                .Set(b => ((ContainerBlock)b).SemicircleEndAngle, Math.Clamp(containerDto.SemicircleEndAngle, -360, 360))));
                     break;
 
                 default:
@@ -485,7 +502,7 @@ namespace FullProject.Services
                 Margin = NormalizeChoice(dto.Margin, new[] { "none", "small", "medium", "large" }, "none"),
                 BackgroundColor = string.IsNullOrWhiteSpace(dto.BackgroundColor) ? null : dto.BackgroundColor,
                 BorderRadius = NormalizeChoice(dto.BorderRadius, new[] { "none", "small", "medium", "large" }, "none"),
-                ZIndex = Math.Clamp(dto.ZIndex ?? 1, 0, 20),
+                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? 1, 0, 20),
                 X = Math.Clamp(dto.X ?? 0, 0, 11),
                 Y = Math.Clamp(dto.Y ?? 0, 0, 60),
                 W = Math.Clamp(dto.W ?? 4, 1, 12),
@@ -519,7 +536,7 @@ namespace FullProject.Services
                 BorderRadius = dto.BorderRadius is null
                     ? current.BorderRadius
                     : NormalizeChoice(dto.BorderRadius, new[] { "none", "small", "medium", "large" }, "none"),
-                ZIndex = Math.Clamp(dto.ZIndex ?? current.ZIndex, 0, 20),
+                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? current.ZIndex, 0, 20),
                 X = Math.Clamp(dto.X ?? current.X, 0, 11),
                 Y = Math.Clamp(dto.Y ?? current.Y, 0, 60),
                 W = Math.Clamp(dto.W ?? current.W, 1, 12),
@@ -536,10 +553,43 @@ namespace FullProject.Services
         private static string NormalizeBlockZone(string? value) =>
             string.IsNullOrWhiteSpace(value) ? "default" : value.Trim().ToLowerInvariant();
 
+        private static string NormalizePositionMode(string? value) =>
+            string.Equals(value, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
+
+        private static string ResolvePositionMode(Section section, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return NormalizePositionMode(value);
+
+            return section is CanvasSection ? "freeform" : "flow";
+        }
+
+        private static string ResolveBlockZone(Section section, string? blockZone, string? zoneId) =>
+            ResolveBlockZone(section, zoneId ?? blockZone);
+
+        private static string ResolveBlockZone(Section section, string? zone)
+        {
+            if (string.IsNullOrWhiteSpace(zone) && section is CanvasSection)
+                return "canvas";
+
+            return NormalizeBlockZone(zone);
+        }
+
+        private static string ResolveBlockZone(Block block, string? zone)
+        {
+            if (string.IsNullOrWhiteSpace(zone) && block.BlockZone == "canvas")
+                return "canvas";
+
+            return NormalizeBlockZone(zone);
+        }
+
         private static string NormalizeContainerLayout(string? value) => value switch
         {
-            "grid" => "grid",
-            "split" => "split",
+            "row" => "row",
+            "orbit" => "orbit",
+            "semicircle" => "semicircle",
+            "freeform" => "freeform",
+            "grid" or "split" => "row",
             _ => "stack"
         };
 

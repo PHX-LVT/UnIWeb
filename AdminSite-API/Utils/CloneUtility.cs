@@ -86,6 +86,15 @@ namespace FullProject.Utils
                     ShowIcon = l.ShowIcon,
                     Items = l.Items.Select(CloneListItem).ToList()
                 },
+                DynamicSection dynamicSection => new DynamicSection
+                {
+                    ScopeSectionIds = dynamicSection.ScopeSectionIds.ToList(),
+                    SearchBy = dynamicSection.SearchBy,
+                    Display = dynamicSection.Display,
+                    Placeholder = new Dictionary<string, string>(dynamicSection.Placeholder),
+                    DefaultSort = dynamicSection.DefaultSort,
+                    ShowSearchBar = dynamicSection.ShowSearchBar
+                },
                 HtmlSection html => new HtmlSection
                 {
                     Content = html.Content.ToDictionary(kv => kv.Key, kv => kv.Value)
@@ -247,6 +256,7 @@ namespace FullProject.Utils
                 },
                 FormBlock form => new FormBlock
                 {
+                    FormDefinitionId = form.FormDefinitionId,
                     SubmitButtonLabel = new Dictionary<string, string>(form.SubmitButtonLabel),
                     Fields = form.Fields.Select(f => new FormField
                     {
@@ -309,7 +319,12 @@ namespace FullProject.Utils
                     Title = new Dictionary<string, string>(container.Title),
                     LayoutMode = container.LayoutMode,
                     Columns = container.Columns,
-                    Gap = container.Gap
+                    Gap = container.Gap,
+                    OrbitRadius = container.OrbitRadius,
+                    OrbitStartAngle = container.OrbitStartAngle,
+                    SemicircleRadius = container.SemicircleRadius,
+                    SemicircleStartAngle = container.SemicircleStartAngle,
+                    SemicircleEndAngle = container.SemicircleEndAngle
                 },
                 _ => throw new ArgumentException($"Unknown block type: {source.GetType().Name}")
             };
@@ -325,6 +340,7 @@ namespace FullProject.Utils
             clone.Order = source.Order;
             clone.ColumnSlotId = source.ColumnSlotId;
             clone.BlockZone = source.BlockZone;
+            clone.PositionMode = source.PositionMode;
             clone.ParentBlockId = source.ParentBlockId;
             clone.Layout = CloneBlockLayout(source.Layout);
             clone.Buttons = source.Buttons.Select(b => new BlockButton

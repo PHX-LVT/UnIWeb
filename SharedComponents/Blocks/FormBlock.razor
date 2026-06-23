@@ -1,85 +1,110 @@
 @using Contracts.Public
 @using SharedComponents.Helpers
 
-<div class="sc-block sc-block--form">
+<div class="@FormClass">
+    @if (!string.IsNullOrWhiteSpace(NameText) || !string.IsNullOrWhiteSpace(IntroductionText))
+    {
+        <div class="sc-form-block__header">
+            @if (!string.IsNullOrWhiteSpace(NameText))
+            {
+                <h3>@NameText</h3>
+            }
+            @if (!string.IsNullOrWhiteSpace(IntroductionText))
+            {
+                <p>@IntroductionText</p>
+            }
+        </div>
+    }
+
     <input class="sc-form-honeypot"
            type="text"
            tabindex="-1"
            autocomplete="off"
            aria-hidden="true"
            @bind="_honeypot" />
-    @foreach (var field in Block.Fields?.OrderBy(f => f.Order) ?? Enumerable.Empty<PublicFormFieldDto>())
-    {
-        var key = FieldKey(field);
-        var label = StyleHelper.Lang(field.Label, Lang);
 
-        <div class="sc-form-field">
-            <label class="sc-form-label">
-                @label
-                @if (field.Required == true)
+    <div class="sc-form-block__fields">
+        @foreach (var field in Block.Fields?.OrderBy(item => item.Order) ?? Enumerable.Empty<PublicFormFieldDto>())
+        {
+            var key = FieldKey(field);
+            var label = StyleHelper.Lang(field.Label, Lang);
+            var placeholder = StyleHelper.Lang(field.Placeholder, Lang);
+
+            <div class="@FieldClass(field)">
+                <label class="sc-form-label" for="@InputId(key)">
+                    @label
+                    @if (field.Required)
+                    {
+                        <span class="sc-required">*</span>
+                    }
+                </label>
+
+                @switch (field.Type)
                 {
-                    <span class="sc-required">*</span>
-                }
-            </label>
-
-            @switch (field.Type)
-            {
-                case "textarea":
-                    <textarea class="sc-form-input"
-                              name="@field.Name"
-                              placeholder="@label"
-                              required="@(field.Required == true)"
-                              value="@_data.GetValueOrDefault(key)"
-                              @onchange="e => SetField(key, e.Value)">
-                    </textarea>
+                    case "textarea":
+                        <textarea id="@InputId(key)"
+                                  class="sc-form-input"
+                                  name="@key"
+                                  placeholder="@placeholder"
+                                  required="@field.Required"
+                                  value="@_data.GetValueOrDefault(key)"
+                                  @onchange="eventArgs => SetField(key, eventArgs.Value)"></textarea>
                         break;
 
-                case "select":
-                            <select class="sc-form-input"
-                                    name="@field.Name"
-                                    value="@_data.GetValueOrDefault(key)"
-                                    @onchange="e => SetField(key, e.Value)">
-                                <option value="">— select —</option>
-                                @foreach (var opt in field.Options ?? new())
-                                {
-                                    <option value="@opt">@opt</option>
-                                }
-                            </select>
-                            break;
+                    case "select":
+                        <select id="@InputId(key)"
+                                class="sc-form-input"
+                                name="@key"
+                                value="@_data.GetValueOrDefault(key)"
+                                required="@field.Required"
+                                @onchange="eventArgs => SetField(key, eventArgs.Value)">
+                            <option value="">@placeholder</option>
+                            @foreach (var option in field.Options.OrderBy(item => item.Order))
+                            {
+                                <option value="@option.Value">@StyleHelper.Lang(option.Label, Lang)</option>
+                            }
+                        </select>
+                        break;
 
-                        case "checkbox":
-                            <input type="checkbox"
-                                   name="@field.Name"
+                    case "checkbox":
+                        <label class="sc-form-checkbox" for="@InputId(key)">
+                            <input id="@InputId(key)"
+                                   type="checkbox"
+                                   name="@key"
                                    checked="@IsChecked(key)"
-                                   @onchange="e => SetField(key, e.Value)" />
-                            break;
+                                   @onchange="eventArgs => SetField(key, eventArgs.Value)" />
+                            <span>@placeholder</span>
+                        </label>
+                        break;
 
-                        default:
-                            <input type="@field.Type"
-                                   class="sc-form-input"
-                                   name="@field.Name"
-                                   placeholder="@label"
-                                   required="@(field.Required == true)"
-                                   value="@_data.GetValueOrDefault(key)"
-                                   @onchange="e => SetField(key, e.Value)" />
-                            break;
-                        }
-                    </div>
-            }
+                    default:
+                        <input id="@InputId(key)"
+                               type="@InputType(field.Type)"
+                               class="sc-form-input"
+                               name="@key"
+                               placeholder="@placeholder"
+                               required="@field.Required"
+                               value="@_data.GetValueOrDefault(key)"
+                               @onchange="eventArgs => SetField(key, eventArgs.Value)" />
+                        break;
+                }
+            </div>
+        }
+    </div>
 
-            <button class="sc-btn sc-btn--filled" @onclick="Submit">
-                @StyleHelper.Lang(Block.SubmitButtonLabel, Lang)
-            </button>
+    <button type="button" class="sc-btn sc-btn--filled sc-form-block__submit" @onclick="Submit">
+        @SubmitLabelText
+    </button>
 
-            @if (_submitted)
-            {
-                <p class="sc-form-success">Thank you, your message has been sent.</p>
-            }
-            @if (_error)
-            {
-                <p class="sc-form-error">@(_errorMessage ?? "Something went wrong. Please try again.")</p>
-            }
-        </div>
+    @if (_submitted)
+    {
+        <p class="sc-form-success">Thank you, your message has been sent.</p>
+    }
+    @if (_error)
+    {
+        <p class="sc-form-error">@(_errorMessage ?? "Something went wrong. Please try again.")</p>
+    }
+</div>
 
 @code {
     [Parameter, EditorRequired] public PublicFormBlockDto Block { get; set; } = default!;
@@ -87,10 +112,19 @@
     [Parameter] public Func<Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
 
     private Dictionary<string, string> _data = new();
-    private bool _submitted = false;
-    private bool _error = false;
+    private bool _submitted;
+    private bool _error;
     private string? _errorMessage;
     private string _honeypot = string.Empty;
+
+    private string NameText => StyleHelper.Lang(Block.Name, Lang);
+    private string IntroductionText => StyleHelper.Lang(Block.Introduction, Lang);
+    private string SubmitLabelText => StyleHelper.Lang(Block.SubmitButtonLabel, Lang) is { Length: > 0 } value
+        ? value
+        : "Submit";
+    private string FormClass => Block.FormLayoutMode == "two-columns"
+        ? "sc-block sc-block--form sc-form-block sc-form-block--two-columns"
+        : "sc-block sc-block--form sc-form-block sc-form-block--stacked";
 
     protected override void OnParametersSet()
     {
@@ -111,8 +145,7 @@
         _errorMessage = null;
 
         var missingRequired = (Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
-            .Any(f => f.Required == true &&
-                      string.IsNullOrWhiteSpace(_data.GetValueOrDefault(FieldKey(f))));
+            .Any(field => field.Required && string.IsNullOrWhiteSpace(_data.GetValueOrDefault(FieldKey(field))));
 
         if (missingRequired)
         {
@@ -144,14 +177,26 @@
     {
         _data[key] = value switch
         {
-            bool b => b ? "true" : "false",
+            bool booleanValue => booleanValue ? "true" : "false",
             null => string.Empty,
             _ => value.ToString() ?? string.Empty
         };
     }
 
     private bool IsChecked(string key) => _data.GetValueOrDefault(key) == "true";
-
+    private string InputId(string key) => $"form-{Block.Id}-{key}";
     private static string FieldKey(PublicFormFieldDto field) =>
         !string.IsNullOrWhiteSpace(field.Name) ? field.Name : $"field_{field.Order}";
+    private static string FieldClass(PublicFormFieldDto field) => field.Type is "textarea" or "checkbox"
+        ? "sc-form-field sc-form-field--wide"
+        : "sc-form-field";
+    private static string InputType(string? type) => type?.ToLowerInvariant() switch
+    {
+        "phone" => "tel",
+        "number" => "number",
+        "date" => "date",
+        "url" => "url",
+        "email" => "email",
+        _ => "text"
+    };
 }

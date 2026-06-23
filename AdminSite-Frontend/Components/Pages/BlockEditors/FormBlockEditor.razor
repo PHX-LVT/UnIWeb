@@ -1,130 +1,195 @@
-﻿@inject AdminBlockService BlockService
+@inject AdminBlockService BlockService
+@inject AdminFormSubmissionService FormService
 @inject IHttpService Http
 @using Contracts.Admin
 
 <div class="form-group">
-    <label class="form-label">Form Title</label>
-    <LangField @bind-Value="_formTitle" Languages="Languages" />
+    <label class="form-label">Form Definition</label>
+    <select class="form-select" @bind="_formDefinitionId">
+        <option value="">Select a form</option>
+        @foreach (var optionDefinition in _definitions.Where(item => item.Active))
+        {
+            <option value="@optionDefinition.Id">@DefinitionName(optionDefinition)</option>
+        }
+    </select>
+    <p class="form-hint">The selected definition supplies the title, fields, validation, layout, and submit label.</p>
 </div>
 
-<div class="form-group">
-    <label class="form-label">Fields (@_fields.Count)</label>
-
-    @foreach (var (field, i) in _fields.Select((f, i) => (f, i)))
-    {
-        <div style="border:1px solid var(--border);border-radius:8px;
-            padding:.75rem;margin-bottom:.5rem;background:var(--bg)">
-            <div style="display:flex;align-items:center;justify-content:space-between;
-                margin-bottom:.5rem">
-                <span style="font-weight:500;font-size:.85rem">Field @(i + 1)</span>
-                <button class="btn-admin btn-danger"
-                        style="padding:3px 8px"
-                        @onclick="() => _fields.RemoveAt(i)">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;
-                margin-bottom:.5rem">
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">Field Type</label>
-                    <DxComboBox Data="_fieldTypes"
-                                Value="@field.FieldType"
-                                ValueChanged="@((string v) => field.FieldType = v)"
-                                CssClass="w-100" />
-                </div>
-                <div class="form-group" style="margin:0;
-                    display:flex;align-items:flex-end">
-                    <label style="display:flex;align-items:center;
-                        gap:8px;cursor:pointer">
-                        <DxCheckBox Checked="@field.Required"
-                                    CheckedChanged="@((bool v) => field.Required = v)" />
-                        Required
-                    </label>
-                </div>
-            </div>
-            <div class="form-group" style="margin:0">
-                <label class="form-label">Label</label>
-                <LangField Value="@(field.Label ?? new())"
-                           ValueChanged="@(v => field.Label = v)"
-                           Languages="Languages" />
-            </div>
+@if (SelectedDefinition is { } definition)
+{
+    <div class="form-block-preview">
+        <div class="form-block-preview__header">
+            <strong>@DefinitionName(definition)</strong>
+            <span>@(definition.Layout == FormLayoutModel.TwoColumns ? "Two columns" : "Stacked")</span>
         </div>
-    }
 
-    <button class="btn-admin btn-outline" @onclick="AddField">
-        <i class="fas fa-plus"></i> Add Field
-    </button>
-</div>
+        @if (!string.IsNullOrWhiteSpace(Localized(definition.Introduction)))
+        {
+            <p>@Localized(definition.Introduction)</p>
+        }
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
+        <div class="@(definition.Layout == FormLayoutModel.TwoColumns ? "form-block-preview__fields form-block-preview__fields--two" : "form-block-preview__fields")">
+            @foreach (var field in definition.Fields.OrderBy(item => item.Order))
+            {
+                <div class="form-block-preview__field">
+                    <span>@Localized(field.Label)@if (field.Required){<b>*</b>}</span>
+                    <div>@(string.IsNullOrWhiteSpace(Localized(field.Placeholder)) ? Localized(field.Label) : Localized(field.Placeholder))</div>
+                </div>
+            }
+        </div>
+
+        <button type="button" class="btn-admin btn-primary" disabled>
+            @Localized(definition.SubmitButtonLabel)
+        </button>
+    </div>
+}
+else
+{
+    <div class="form-block-preview form-block-preview--empty">
+        Select an active Form Definition to render this block.
+    </div>
+}
+
+<div class="ez-editor-actions">
+    <button class="btn-admin btn-primary"
+            @onclick="Save"
+            disabled="@(_saving || SelectedDefinition is null)">
         <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
     </button>
 </div>
 
+<style>
+    .form-block-preview {
+        margin-top: .75rem;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        color: #111827;
+    }
+
+    .form-block-preview--empty {
+        color: #64748b;
+        background: #f8fafc;
+    }
+
+    .form-block-preview__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-bottom: .5rem;
+    }
+
+    .form-block-preview__header span {
+        color: #64748b;
+        font-size: .75rem;
+    }
+
+    .form-block-preview__fields {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: .65rem;
+        margin: 1rem 0;
+    }
+
+    .form-block-preview__fields--two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .form-block-preview__field span {
+        display: block;
+        margin-bottom: .25rem;
+        font-size: .78rem;
+        font-weight: 600;
+    }
+
+    .form-block-preview__field b {
+        color: #dc2626;
+        margin-left: 2px;
+    }
+
+    .form-block-preview__field div {
+        min-height: 38px;
+        padding: .55rem .7rem;
+        color: #94a3b8;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+    }
+
+    @@media (max-width: 720px) {
+        .form-block-preview__fields--two {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
 @code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
     [Parameter] public BlockModel Block { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public string SectionId { get; set; } = string.Empty;
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
 
-    private Dictionary<string, string> _formTitle = new();
-    private List<FormFieldModel> _fields = new();
+    private List<FormDefinitionModel> _definitions = new();
+    private string _formDefinitionId = string.Empty;
     private bool _saving;
+    private string? _loadedBlockId;
 
-    private List<string> _fieldTypes = new()
-    {
-        "text", "email", "phone", "textarea",
-        "select", "checkbox", "date"
-    };
+    private FormDefinitionModel? SelectedDefinition =>
+        _definitions.FirstOrDefault(item => item.Id == _formDefinitionId && item.Active);
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
-        _formTitle = new(Block.FormTitle ?? new());
-        _fields = Block.Fields?.Select(f => new FormFieldModel
-        {
-            Id = f.Id,
-            FieldType = f.FieldType,
-            Required = f.Required,
-            Order = f.Order,
-            Label = new(f.Label ?? new())
-        }).ToList() ?? new();
+        if (_loadedBlockId == Block.Id)
+            return;
+
+        _loadedBlockId = Block.Id;
+        _formDefinitionId = Block.FormDefinitionId ?? string.Empty;
+        var response = await FormService.GetDefinitionsAsync();
+        _definitions = response.Data ?? new();
     }
-
-    private void AddField() => _fields.Add(new FormFieldModel
-    {
-        Id = Guid.NewGuid().ToString(),
-        FieldType = "text",
-        Order = _fields.Count,
-        Label = new()
-    });
 
     private async Task Save()
     {
+        if (SelectedDefinition is null)
+        {
+            Http.Toast("Select an active Form Definition.", 400);
+            return;
+        }
+
         _saving = true;
         try
         {
-            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new FormBlockUpdateDto
+            var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new FormBlockUpdateDto
             {
-                SubmitButtonLabel = _formTitle,
-                Fields = _fields.Select((f, i) => new FormFieldDto
-                {
-                    Name = string.IsNullOrWhiteSpace(f.Name) ? $"field_{i + 1}" : f.Name,
-                    Type = f.FieldType ?? "text",
-                    Label = f.Label ?? new(),
-                    Required = f.Required,
-                    Options = f.Options,
-                    Order = i
-                }).ToList(),
+                FormDefinitionId = _formDefinitionId,
+                Fields = new(),
+                SubmitButtonLabel = new(),
                 Visible = Block.Visible
             });
-            Http.Toast(res.Message, res.StatusCode);
-            if (res.Success) await OnSaved.InvokeAsync();
+            Http.Toast(response.Message, response.StatusCode);
+            if (response.Success)
+                await OnSaved.InvokeAsync();
         }
         finally
         {
             _saving = false;
         }
+    }
+
+    private string DefinitionName(FormDefinitionModel definition) =>
+        Localized(definition.Name) is { Length: > 0 } name ? name : definition.Key;
+
+    private string Localized(Dictionary<string, string>? values)
+    {
+        if (values is null) return string.Empty;
+        if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english))
+            return english;
+        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 }

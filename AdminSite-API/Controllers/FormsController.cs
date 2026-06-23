@@ -133,6 +133,9 @@ namespace FullProject.Controllers
             if (normalizedRequestKey is null || !string.Equals(normalizedRequestKey, existing.Key, StringComparison.OrdinalIgnoreCase))
                 return BadRequest(ApiResult.BadRequest("Form key cannot be changed after creation."));
 
+            if (existing.Active && !request.Active && await _definitions.IsReferencedAsync(id))
+                return BadRequest(ApiResult.BadRequest("This form is used by one or more FormBlocks or buttons. Remove those usages before disabling it."));
+
             var errors = _validation.ValidateDefinition(request);
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
@@ -145,7 +148,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> DeleteDefinition(string id)
         {
             if (await _definitions.IsReferencedAsync(id))
-                return BadRequest(ApiResult.BadRequest("This form is still used by one or more buttons. Disable it or remove those references before deleting it."));
+                return BadRequest(ApiResult.BadRequest("This form is still used by one or more FormBlocks or buttons. Remove those usages before deleting it."));
 
             if (await _definitions.HasSubmissionsAsync(id))
                 return BadRequest(ApiResult.BadRequest("This form already has submissions. Disable it instead, or permanently delete its submissions first."));

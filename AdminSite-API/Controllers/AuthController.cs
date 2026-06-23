@@ -3,6 +3,7 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.IdentityModel.Tokens.Jwt;
 
 namespace FullProject.Controllers
@@ -19,6 +20,7 @@ namespace FullProject.Controllers
         }
 
         [AllowAnonymous]
+        [EnableRateLimiting("admin-login")]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {

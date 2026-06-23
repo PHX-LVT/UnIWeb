@@ -16,12 +16,17 @@
         @* Fixed: Swapped collection type to PublicColumnSlotDto *@
         @foreach (var slot in Section.ColumnSlots?.OrderBy(s => s.Order) ?? Enumerable.Empty<PublicColumnSlotDto>())
         {
-            <div class="sc-column">
+            <div class="sc-column sc-block-zone sc-block-zone--column @(slot.Blocks.Any(IsFreeform) ? "sc-column--has-freeform" : "")"
+                 data-block-zone="@slot.Id"
+                 data-block-zone-kind="column"
+                 style="@GetColumnStyle(slot.Blocks)">
                 @foreach (var block in slot.Blocks.OrderBy(b => b.Order))
                 {
                     <div class="@GetBlockClass(block)"
                          data-block-id="@block.Id"
                          data-block-section-id="@Section.Id"
+                         data-block-zone="@slot.Id"
+                         data-block-position-mode="@NormalizePositionMode(block.PositionMode)"
                          style="@GetBlockStyle(block)">
                         @RenderBlock(block)
                     </div>
@@ -45,6 +50,7 @@
         return string.Join(" ", new[]
         {
             "sc-block-frame",
+            $"sc-block-frame--position-{NormalizePositionMode(block.PositionMode)}",
             $"sc-block-frame--span-{span}",
             $"sc-block-frame--width-{Normalize(layout.Width, "auto")}",
             $"sc-block-frame--align-{Normalize(layout.Align, "stretch")}",
@@ -61,6 +67,10 @@
         var parts = new List<string>
         {
             $"--sc-block-column-span: {Math.Clamp(layout.ColumnSpan, 1, 12)}",
+            $"--sc-block-left: {(Math.Clamp(layout.X, 0, 11) / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}%",
+            $"--sc-block-width: {(Math.Clamp(layout.W, 1, 12) / 12d * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}%",
+            $"--sc-block-top: {Math.Clamp(layout.Y, 0, 60) * 48}px",
+            $"--sc-block-min-height: {Math.Clamp(layout.H, 1, 40) * 48}px",
             $"z-index: {Math.Clamp(layout.ZIndex, 0, 20)}"
         };
 
@@ -72,6 +82,22 @@
 
     private static string Normalize(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    private static string NormalizePositionMode(string? value) =>
+        string.Equals(value, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
+
+    private static bool IsFreeform(PublicBlockDto block) =>
+        NormalizePositionMode(block.PositionMode) == "freeform";
+
+    private static string GetColumnStyle(IEnumerable<PublicBlockDto> blocks)
+    {
+        var freeform = blocks.Where(IsFreeform).ToList();
+        if (freeform.Count == 0) return string.Empty;
+
+        var height = Math.Max(320, freeform.Max(block =>
+            (Math.Clamp(block.Layout?.Y ?? 0, 0, 60) + Math.Clamp(block.Layout?.H ?? 2, 1, 40)) * 48));
+        return $"--sc-column-freeform-height: {height}px";
+    }
 
     // 2. Updated to use C# Class Type Matching instead of string matching
     private RenderFragment RenderBlock(PublicBlockDto block)
@@ -114,6 +140,12 @@
 
             PublicIconBlockDto iconBlock =>
                 @<IconBlock Block="iconBlock" Lang="@Lang" />,
+
+            PublicContainerBlockDto containerBlock =>
+                @<ContainerBlock Block="containerBlock"
+                                 SectionId="@Section.Id"
+                                 Lang="@Lang"
+                                 OnSubmit="@OnSubmit" />,
                             
                     _ =>
                         @<text></text>

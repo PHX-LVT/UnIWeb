@@ -61,6 +61,7 @@ namespace FullProject.Controllers
             Id = preset.Id,
             Name = preset.Name,
             BlockCount = preset.Blocks.Count,
+            SchemaVersion = preset.SchemaVersion,
             CreatedAt = preset.CreatedAt,
             UpdatedAt = preset.UpdatedAt
         };
