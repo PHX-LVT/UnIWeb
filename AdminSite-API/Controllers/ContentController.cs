@@ -296,6 +296,7 @@ namespace FullProject.Controllers
             Key = type.Key,
             Name = type.Name,
             Description = type.Description,
+            Behavior = type.Behavior,
             RequiresBody = type.RequiresBody,
             RequiresHeroImage = type.RequiresHeroImage,
             RequiresFile = type.RequiresFile,

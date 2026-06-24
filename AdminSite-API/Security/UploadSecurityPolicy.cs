@@ -28,6 +28,7 @@ namespace FullProject.Security
             "content-thumbnails",
             "content-body",
             "content-files",
+            "managed-resources",
             "footer"
         };
 

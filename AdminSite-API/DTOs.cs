@@ -1,4 +1,4 @@
-﻿using FullProject.Models;
+using FullProject.Models;
 using System.Text.Json.Serialization;
 
 namespace FullProject.DTOs
@@ -350,6 +350,7 @@ namespace FullProject.DTOs
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; } = true;
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -363,6 +364,7 @@ namespace FullProject.DTOs
     {
         public Dictionary<string, string>? Name { get; set; }
         public Dictionary<string, string>? Description { get; set; }
+        public string? Behavior { get; set; }
         public bool? RequiresBody { get; set; }
         public bool? RequiresHeroImage { get; set; }
         public bool? RequiresFile { get; set; }
@@ -379,6 +381,7 @@ namespace FullProject.DTOs
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; }
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -504,6 +507,55 @@ namespace FullProject.DTOs
     }
 
 
+    public class ManagedResourceCreateDto
+    {
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? SizeBytes { get; set; }
+        public string? Source { get; set; }
+        public List<string> Tags { get; set; } = new();
+        public bool Active { get; set; } = true;
+    }
+
+    public class ManagedResourceUpdateDto
+    {
+        public string? Kind { get; set; }
+        public Dictionary<string, string>? Name { get; set; }
+        public Dictionary<string, string>? Description { get; set; }
+        public string? Url { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? SizeBytes { get; set; }
+        public string? Source { get; set; }
+        public List<string>? Tags { get; set; }
+        public bool? Active { get; set; }
+    }
+
+    public class ManagedResourceResponseDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string Source { get; set; } = "managed-upload";
+        public List<string> Tags { get; set; } = new();
+        public bool Active { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
     // ---------------------------------------------------------------------------------------------------------------------
     // FORM SUBMISSIONS
     // ---------------------------------------------------------------------------------------------------------------------

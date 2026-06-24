@@ -65,6 +65,27 @@ namespace AdminSite.Services
         public Task<ApiResponse<object>> PermanentDeleteAsync(IEnumerable<string> ids) =>
             _http.PostAsync<object>("api/admin/content/permanent-delete", new { Ids = ids.ToList() });
 
+
+        public Task<ApiResponse<List<ManagedResourceModel>>> GetResourcesAsync(string? kind = null, string? search = null, bool includeInactive = true)
+        {
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(kind))
+                query.Add($"kind={Uri.EscapeDataString(kind)}");
+            if (!string.IsNullOrWhiteSpace(search))
+                query.Add($"search={Uri.EscapeDataString(search)}");
+            query.Add($"includeInactive={includeInactive.ToString().ToLowerInvariant()}");
+            var suffix = query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
+            return _http.GetAsync<List<ManagedResourceModel>>($"api/admin/resources{suffix}");
+        }
+
+        public Task<ApiResponse<ManagedResourceModel>> CreateResourceAsync(ManagedResourceRequest req) =>
+            _http.PostAsync<ManagedResourceModel>("api/admin/resources", req);
+
+        public Task<ApiResponse<ManagedResourceModel>> UpdateResourceAsync(string id, ManagedResourceRequest req) =>
+            _http.PutAsync<ManagedResourceModel>($"api/admin/resources/{id}", req);
+
+        public Task<ApiResponse<ManagedResourceModel>> UploadResourceAsync(Microsoft.AspNetCore.Components.Forms.IBrowserFile file) =>
+            _http.PostFileAsync<ManagedResourceModel>("api/admin/resources/upload", file, maxBytes: 20 * 1024 * 1024);
         public Task<ApiResponse<List<ContentAuditLogModel>>> GetLogsAsync(string stableId) =>
             _http.GetAsync<List<ContentAuditLogModel>>($"api/admin/content/{stableId}/logs");
     }

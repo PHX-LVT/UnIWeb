@@ -38,6 +38,7 @@ else
                     <option value="@type.Key">@GetLang(type.Name)</option>
                 }
             </select>
+            <div class="form-hint">@SelectedBehaviorHint</div>
 
             <label style="margin-top:.75rem">@T("Slug")</label>
             <input class="form-control" value="@_edit.Slug" @oninput="e => _edit.Slug = e.Value?.ToString()" />
@@ -49,7 +50,7 @@ else
                 {
                     <span class="content-tag-pill">
                         @tag
-                        <button type="button" @onclick="() => RemoveTag(tag)">×</button>
+                        <button type="button" @onclick="() => RemoveTag(tag)">Ã—</button>
                     </span>
                 }
                 <input value="@_tagDraft"
@@ -114,7 +115,10 @@ else
             <div class="admin-card content-editor-card" style="margin-bottom:1rem">
                 <div class="content-editor-card-header">
                     <h2 style="font-size:1rem;margin:0">@T("Content")</h2>
-                    <span>@T("EditingLanguage"): @CurrentLang.ToUpperInvariant()</span>
+                    <div class="content-editor-card-meta">
+                        <span class="content-behavior-pill">@SelectedBehaviorLabel</span>
+                        <span>@T("EditingLanguage"): @CurrentLang.ToUpperInvariant()</span>
+                    </div>
                 </div>
 
                 <label>@T("Title")</label>
@@ -122,7 +126,7 @@ else
                        value="@GetValue(_edit.Title, CurrentLang)"
                        @oninput="e => SetValue(_edit.Title, CurrentLang, e.Value?.ToString())" />
 
-                <label style="margin-top:.75rem">@T("Summary")</label>
+                <label style="margin-top:.75rem">@SummaryLabel</label>
                 <textarea class="form-control content-editor-input"
                           rows="4"
                           value="@GetValue(_edit.Summary, CurrentLang)"
@@ -142,8 +146,11 @@ else
                                        OnChange="UploadHero"
                                        accept="image/*" />
                             <label class="btn-admin btn-ghost" for="content-hero-upload">
-                                <i class="fas fa-image"></i> @T("UploadImage")
+                                <i class="fas fa-image"></i> @T("UploadNew")
                             </label>
+                            <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("image", "hero")'>
+                                <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                            </button>
                             @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
                             {
                                 <button class="btn-admin btn-danger" @onclick="RemoveHero">@T("RemoveImage")</button>
@@ -210,8 +217,11 @@ else
                                                            OnChange="e => UploadBodyImage(item, e)"
                                                            accept="image/*" />
                                                 <label class="btn-admin btn-ghost" for="@($"content-body-image-{item.Id}")">
-                                                    <i class="fas fa-image"></i> @T("UploadImage")
+                                                    <i class="fas fa-image"></i> @T("UploadNew")
                                                 </label>
+                                                <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("image", "body-image", item)'>
+                                                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                                                </button>
                                                 <input class="form-control content-editor-input"
                                                        placeholder="@T("ImageUrl")"
                                                        value="@item.Url"
@@ -224,10 +234,15 @@ else
                                                    @oninput="e => SetValue(item.Caption, CurrentLang, e.Value?.ToString())" />
                                             break;
                                         case "video":
-                                            <input class="form-control content-editor-input"
-                                                   placeholder="@T("VideoUrl")"
-                                                   value="@item.Url"
-                                                   @oninput="e => item.Url = e.Value?.ToString()" />
+                                            <div class="content-body-upload-row">
+                                                <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("video", "body-video", item)'>
+                                                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                                                </button>
+                                                <input class="form-control content-editor-input"
+                                                       placeholder="@T("VideoUrl")"
+                                                       value="@item.Url"
+                                                       @oninput="e => item.Url = e.Value?.ToString()" />
+                                            </div>
                                             <input class="form-control content-editor-input"
                                                    style="margin-top:.75rem"
                                                    placeholder="@T("Caption")"
@@ -241,8 +256,11 @@ else
                                                            OnChange="e => UploadBodyFile(item, e)"
                                                            accept="application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" />
                                                 <label class="btn-admin btn-ghost" for="@($"content-body-file-{item.Id}")">
-                                                    <i class="fas fa-file"></i> @T("UploadFile")
+                                                    <i class="fas fa-file"></i> @T("UploadNew")
                                                 </label>
+                                                <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("file", "body-file", item)'>
+                                                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                                                </button>
                                                 <input class="form-control content-editor-input"
                                                        placeholder="@T("FileUrl")"
                                                        value="@item.Url"
@@ -294,7 +312,8 @@ else
             @if (ShowsFile)
             {
                 <div class="admin-card content-editor-card" style="margin-bottom:1rem">
-                    <h2 style="font-size:1rem;margin:0 0 1rem">@T("PrimaryFile")</h2>
+                    <h2 style="font-size:1rem;margin:0 0 .35rem">@T("PrimaryFile")</h2>
+                    <div class="form-hint" style="margin-bottom:.85rem">@T("PrimaryFileHint")</div>
                     @if (!string.IsNullOrWhiteSpace(_fileUrl))
                     {
                         <div class="content-attachment-row">
@@ -319,10 +338,13 @@ else
                         <InputFile class="content-editor-file-input"
                                    id="content-file-upload"
                                    OnChange="UploadFile"
-                                   accept="application/pdf" />
+                                   accept="application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" />
                         <label class="btn-admin btn-ghost" for="content-file-upload">
-                            <i class="fas fa-file-pdf"></i> @T("UploadFile")
+                            <i class="fas fa-file-pdf"></i> @T("UploadNew")
                         </label>
+                        <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("file", "primary-file")'>
+                            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                        </button>
                     </div>
                 </div>
             }
@@ -330,16 +352,23 @@ else
             @if (ShowsVideo)
             {
                 <div class="admin-card content-editor-card" style="margin-bottom:1rem">
-                    <h2 style="font-size:1rem;margin:0 0 1rem">@T("Video")</h2>
+                    <h2 style="font-size:1rem;margin:0 0 .35rem">@T("Video")</h2>
+                    <div class="form-hint" style="margin-bottom:.85rem">@T("VideoUrlHint")</div>
                     <label>@T("VideoUrl")</label>
-                    <input class="form-control content-editor-input" value="@_edit.VideoUrl" @oninput="e => _edit.VideoUrl = e.Value?.ToString()" />
+                    <div class="content-body-upload-row">
+                        <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("video", "video")'>
+                            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                        </button>
+                        <input class="form-control content-editor-input" value="@_edit.VideoUrl" @oninput="e => _edit.VideoUrl = e.Value?.ToString()" />
+                    </div>
                 </div>
             }
 
             @if (ShowsThumbnail)
             {
                 <div class="admin-card content-editor-card">
-                    <h2 style="font-size:1rem;margin:0 0 1rem">@T("Thumbnail")</h2>
+                    <h2 style="font-size:1rem;margin:0 0 .35rem">@T("PreviewImage")</h2>
+                    <div class="form-hint" style="margin-bottom:.85rem">@T("PreviewImageHint")</div>
                     @if (!string.IsNullOrWhiteSpace(_edit.ThumbnailUrl))
                     {
                         <img class="content-editor-preview" src="@_edit.ThumbnailUrl" alt="" />
@@ -352,8 +381,11 @@ else
                                    OnChange="UploadThumbnail"
                                    accept="image/*" />
                         <label class="btn-admin btn-ghost" for="content-thumbnail-upload">
-                            <i class="fas fa-image"></i> @T("UploadImage")
+                            <i class="fas fa-image"></i> @T("UploadNew")
                         </label>
+                        <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("image", "thumbnail")'>
+                            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                        </button>
                     </div>
                 </div>
             }
@@ -361,6 +393,68 @@ else
     </div>
 }
 
+@if (_resourcePickerOpen)
+{
+    <div class="modal-backdrop" @onclick="CloseResourcePicker">
+        <div class="modal-box content-resource-picker" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@ResourcePickerTitle</span>
+                <button type="button" class="btn-admin btn-ghost content-icon-btn" @onclick="CloseResourcePicker" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="content-resource-picker__toolbar">
+                    <input class="form-control" placeholder="@T("SearchResources")" value="@_resourcePickerSearch" @oninput="OnResourcePickerSearchChanged" />
+                    <a class="btn-admin btn-ghost" href="/content/resources" target="_blank" rel="noopener">
+                        <i class="fas fa-up-right-from-square"></i> @T("ResourceLibrary")
+                    </a>
+                </div>
+                <div class="form-hint">@T("ResourcePickerHint")</div>
+
+                @if (_resourcePickerLoading)
+                {
+                    <p class="text-muted">@T("Loading")</p>
+                }
+                else if (!_resourcePickerItems.Any())
+                {
+                    <p class="text-muted">@T("NoMatchingResources")</p>
+                }
+                else
+                {
+                    <div class="content-resource-picker__grid">
+                        @foreach (var resource in _resourcePickerItems)
+                        {
+                            <button type="button" class="content-resource-picker__item" @key="resource.Id" @onclick="() => SelectResource(resource)">
+                                <span class="content-resource-picker__thumb">
+                                    @if (ResourceThumbnailUrl(resource) is { Length: > 0 } thumbnail)
+                                    {
+                                        <img src="@thumbnail" alt="" />
+                                    }
+                                    else
+                                    {
+                                        <i class="fas @ResourceIcon(resource)"></i>
+                                    }
+                                </span>
+                                <span class="content-resource-picker__meta">
+                                    <strong>@ResourceName(resource)</strong>
+                                    <small>@DisplayResourceKind(resource.Kind)</small>
+                                    @if (!string.IsNullOrWhiteSpace(ResourceDescription(resource)))
+                                    {
+                                        <em>@ResourceDescription(resource)</em>
+                                    }
+                                </span>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-admin btn-ghost" @onclick="CloseResourcePicker">@T("Cancel")</button>
+            </div>
+        </div>
+    </div>
+}
 @code {
     [Parameter] public string? Id { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
@@ -377,18 +471,47 @@ else
     private long _fileSize;
     private bool _loading = true;
     private HashSet<string> _expandedBodyItemIds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _resourcePickerOpen;
+    private bool _resourcePickerLoading;
+    private string _resourcePickerKind = "file";
+    private string _resourcePickerTarget = string.Empty;
+    private string _resourcePickerSearch = string.Empty;
+    private List<ManagedResourceModel> _resourcePickerItems = new();
+    private ContentBodyItemModel? _resourcePickerBodyItem;
 
     private bool IsNew => string.IsNullOrWhiteSpace(Id);
     private string CurrentLang => NormalizeLang(AdminLanguage);
     private ContentTypeModel? SelectedType => _types.FirstOrDefault(t => string.Equals(t.Key, _edit.ContentTypeKey, StringComparison.OrdinalIgnoreCase));
-    private string ClickBehavior => SelectedType?.ClickBehavior?.ToLowerInvariant() ?? "detail";
-    private bool IsDetailContent => SelectedType?.RequiresBody != false;
-    private bool ShowsBody => IsDetailContent;
-    private bool ShowsHero => IsDetailContent || SelectedType?.RequiresHeroImage == true;
-    private bool ShowsTemplate => IsDetailContent;
-    private bool ShowsFile => !IsDetailContent && (SelectedType?.RequiresFile == true || ClickBehavior == "download");
-    private bool ShowsVideo => !IsDetailContent && (SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video");
+    private string SelectedBehavior => ResolveBehavior(SelectedType);
+    private bool IsPageContent => string.Equals(SelectedBehavior, "page", StringComparison.OrdinalIgnoreCase);
+    private bool IsFileResource => string.Equals(SelectedBehavior, "file-resource", StringComparison.OrdinalIgnoreCase);
+    private bool IsVideoResource => string.Equals(SelectedBehavior, "video-resource", StringComparison.OrdinalIgnoreCase);
+    private string ClickBehavior => SelectedType?.ClickBehavior?.ToLowerInvariant() ?? (IsVideoResource ? "video" : IsFileResource ? "download" : "detail");
+    private bool ShowsBody => IsPageContent;
+    private bool ShowsHero => IsPageContent || SelectedType?.RequiresHeroImage == true;
+    private bool ShowsTemplate => IsPageContent;
+    private bool ShowsFile => IsFileResource || (!IsPageContent && (SelectedType?.RequiresFile == true || ClickBehavior == "download"));
+    private bool ShowsVideo => IsVideoResource || (!IsPageContent && (SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video"));
     private bool ShowsThumbnail => ShowsFile || ShowsVideo;
+    private string SelectedBehaviorLabel => SelectedBehavior switch
+    {
+        "file-resource" => T("FileResource"),
+        "video-resource" => T("VideoResource"),
+        _ => T("PageContent")
+    };
+    private string SelectedBehaviorHint => SelectedBehavior switch
+    {
+        "file-resource" => T("FileResourceEditorHint"),
+        "video-resource" => T("VideoResourceEditorHint"),
+        _ => T("PageContentEditorHint")
+    };
+    private string SummaryLabel => IsPageContent ? T("Summary") : T("ResourceDescription");
+    private string ResourcePickerTitle => _resourcePickerKind switch
+    {
+        "image" => T("ChooseImageResource"),
+        "video" => T("ChooseVideoResource"),
+        _ => T("ChooseFileResource")
+    };
     private bool BodyLimitReached => _edit.BodyItems.Count >= 10;
     private string ReturnUrl => GetReturnUrl();
     private bool IsDraft => string.Equals(_status, "Draft", StringComparison.OrdinalIgnoreCase);
@@ -413,6 +536,26 @@ else
     };
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private static string ResolveBehavior(ContentTypeModel? type)
+    {
+        if (type is null) return "page";
+
+        var behavior = NormalizeContentBehavior(type.Behavior);
+        if (!string.IsNullOrWhiteSpace(type.Behavior))
+            return behavior;
+
+        var clickBehavior = type.ClickBehavior?.Trim().ToLowerInvariant();
+        if (type.RequiresVideoUrl || clickBehavior == "video") return "video-resource";
+        if (type.RequiresFile || clickBehavior == "download" || !type.RequiresBody) return "file-resource";
+        return "page";
+    }
+
+    private static string NormalizeContentBehavior(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "file" or "file-resource" or "download" or "resource" => "file-resource",
+        "video" or "video-resource" or "webinar" => "video-resource",
+        _ => "page"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -550,34 +693,185 @@ else
         if (res.Success && res.Data is not null) LoadItem(res.Data);
     }
 
+
+    private async Task OpenResourcePicker(string kind, string target, ContentBodyItemModel? bodyItem = null)
+    {
+        _resourcePickerKind = NormalizeResourceKind(kind);
+        _resourcePickerTarget = target;
+        _resourcePickerBodyItem = bodyItem;
+        _resourcePickerSearch = string.Empty;
+        _resourcePickerOpen = true;
+        await LoadResourcePicker();
+    }
+
+    private async Task LoadResourcePicker()
+    {
+        _resourcePickerLoading = true;
+        var res = await ContentService.GetResourcesAsync(_resourcePickerKind, _resourcePickerSearch, includeInactive: false);
+        if (res.Success)
+            _resourcePickerItems = (res.Data ?? new()).Where(r => r.Active).ToList();
+        else
+        {
+            _resourcePickerItems = new();
+            Http.Toast(res.Message, res.StatusCode);
+        }
+        _resourcePickerLoading = false;
+    }
+
+    private async Task OnResourcePickerSearchChanged(ChangeEventArgs e)
+    {
+        _resourcePickerSearch = e.Value?.ToString() ?? string.Empty;
+        await LoadResourcePicker();
+    }
+
+    private void SelectResource(ManagedResourceModel resource)
+    {
+        switch (_resourcePickerTarget)
+        {
+            case "hero":
+                _edit.HeroImageUrl = resource.Url;
+                if (string.IsNullOrWhiteSpace(_edit.HeroImageAlt))
+                    _edit.HeroImageAlt = ResourceName(resource);
+                break;
+            case "thumbnail":
+                _edit.ThumbnailUrl = ResourceThumbnailUrl(resource);
+                break;
+            case "primary-file":
+                SetPrimaryFileFromResource(resource);
+                break;
+            case "video":
+                _edit.VideoUrl = resource.Url;
+                if (string.IsNullOrWhiteSpace(_edit.ThumbnailUrl) && !string.IsNullOrWhiteSpace(resource.ThumbnailUrl))
+                    _edit.ThumbnailUrl = resource.ThumbnailUrl;
+                break;
+            case "body-image" when _resourcePickerBodyItem is not null:
+                _resourcePickerBodyItem.Url = resource.Url;
+                if (string.IsNullOrWhiteSpace(GetValue(_resourcePickerBodyItem.Caption, CurrentLang)))
+                    SetValue(_resourcePickerBodyItem.Caption, CurrentLang, ResourceDescription(resource));
+                break;
+            case "body-file" when _resourcePickerBodyItem is not null:
+                _resourcePickerBodyItem.Url = resource.Url;
+                _resourcePickerBodyItem.FileName = ResourceFileName(resource);
+                _resourcePickerBodyItem.ContentType = resource.ContentType;
+                _resourcePickerBodyItem.SizeBytes = resource.SizeBytes;
+                break;
+            case "body-video" when _resourcePickerBodyItem is not null:
+                _resourcePickerBodyItem.Url = resource.Url;
+                break;
+        }
+
+        CloseResourcePicker();
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+        _resourcePickerLoading = false;
+        _resourcePickerTarget = string.Empty;
+        _resourcePickerBodyItem = null;
+    }
+
+    private void SetPrimaryFileFromResource(ManagedResourceModel resource)
+    {
+        _fileUrl = resource.Url;
+        _fileName = ResourceFileName(resource);
+        _fileContentType = string.IsNullOrWhiteSpace(resource.ContentType) ? "application/octet-stream" : resource.ContentType;
+        _fileSize = resource.SizeBytes;
+    }
+
+    private string ResourceName(ManagedResourceModel resource)
+    {
+        var name = GetValue(resource.Name, CurrentLang, fallback: true);
+        if (!string.IsNullOrWhiteSpace(name)) return name;
+        if (!string.IsNullOrWhiteSpace(resource.FileName)) return resource.FileName;
+        return resource.Url.Split('/').LastOrDefault() ?? T("Resource");
+    }
+
+    private string ResourceDescription(ManagedResourceModel resource) =>
+        GetValue(resource.Description, CurrentLang, fallback: true);
+
+    private string ResourceFileName(ManagedResourceModel resource) =>
+        string.IsNullOrWhiteSpace(resource.FileName) ? ResourceName(resource) : resource.FileName;
+
+    private static string ResourceThumbnailUrl(ManagedResourceModel resource) =>
+        !string.IsNullOrWhiteSpace(resource.ThumbnailUrl) ? resource.ThumbnailUrl! : resource.Kind == "image" ? resource.Url : string.Empty;
+
+    private static string ResourceIcon(ManagedResourceModel resource) => NormalizeResourceKind(resource.Kind) switch
+    {
+        "image" => "fa-image",
+        "video" => "fa-play",
+        _ => "fa-file"
+    };
+
+    private string DisplayResourceKind(string kind) => NormalizeResourceKind(kind) switch
+    {
+        "image" => T("ImageResource"),
+        "video" => T("VideoResource"),
+        _ => T("FileResource")
+    };
+
+    private static string NormalizeResourceKind(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "image" or "gallery" => "image",
+        "video" or "webinar" => "video",
+        _ => "file"
+    };
     private void PrepareRequest()
     {
         EnsureEnglishFallback(_edit.Title);
         EnsureEnglishFallback(_edit.Summary);
-        EnsureEnglishFallback(_edit.BodyHtml);
-        EnsureBodyItems();
-        foreach (var item in _edit.BodyItems)
+
+        if (IsPageContent)
         {
-            EnsureEnglishFallback(item.Content);
-            EnsureEnglishFallback(item.Caption);
+            EnsureEnglishFallback(_edit.BodyHtml);
+            EnsureBodyItems();
+            foreach (var item in _edit.BodyItems)
+            {
+                EnsureEnglishFallback(item.Content);
+                EnsureEnglishFallback(item.Caption);
+            }
+            _edit.VideoUrl = null;
+            _edit.ThumbnailUrl = null;
+            _edit.Attachments = new();
         }
+        else
+        {
+            _edit.BodyHtml = EnsureLangs(null);
+            _edit.BodyItems = new();
+            _edit.TemplateKey = null;
+            _edit.HeroImageUrl = null;
+            _edit.HeroImageAlt = null;
+        }
+
         AddPendingTag();
         _edit.Tags = _tags.ToList();
         _tagsText = string.Join(", ", _tags);
-        _edit.Attachments = string.IsNullOrWhiteSpace(_fileUrl)
-            ? new()
-            : new()
-            {
-                new ContentAttachmentModel
-                {
-                    FileName = string.IsNullOrWhiteSpace(_fileName) ? "download.pdf" : _fileName,
-                    Url = _fileUrl,
-                    ContentType = string.IsNullOrWhiteSpace(_fileContentType) ? "application/pdf" : _fileContentType,
-                    SizeBytes = _fileSize
-                }
-            };
-    }
 
+        if (IsFileResource)
+        {
+            _edit.VideoUrl = null;
+            _edit.Attachments = string.IsNullOrWhiteSpace(_fileUrl)
+                ? new()
+                : new()
+                {
+                    new ContentAttachmentModel
+                    {
+                        FileName = string.IsNullOrWhiteSpace(_fileName) ? "download.pdf" : _fileName,
+                        Url = _fileUrl,
+                        ContentType = string.IsNullOrWhiteSpace(_fileContentType) ? "application/pdf" : _fileContentType,
+                        SizeBytes = _fileSize
+                    }
+                };
+        }
+        else if (IsVideoResource)
+        {
+            _edit.Attachments = new();
+        }
+        else
+        {
+            _edit.Attachments = new();
+        }
+    }
     private void OnTypeChanged(ChangeEventArgs e)
     {
         _edit.ContentTypeKey = e.Value?.ToString() ?? _edit.ContentTypeKey;

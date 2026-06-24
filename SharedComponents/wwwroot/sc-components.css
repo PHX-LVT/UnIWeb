@@ -1418,6 +1418,29 @@ button.sc-list__card-link[data-sc-public-modal-trigger] {
 .sc-library__grid--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .sc-library__grid--6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 
+.sc-library__gallery {
+    display: flex;
+    grid-template-columns: none;
+    gap: 24px;
+    overflow-x: auto;
+    padding: 4px 2px 16px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+}
+
+.sc-library__gallery .sc-library__item {
+    flex: 0 0 min(360px, 82vw);
+    scroll-snap-align: start;
+}
+
+.sc-library__gallery .sc-library__media {
+    aspect-ratio: 4 / 3;
+}
+
+.sc-library__gallery .sc-library__body {
+    min-height: 180px;
+}
+
 .sc-library--featured-grid .sc-library__item:first-child {
     grid-column: span 2;
     min-height: 100%;

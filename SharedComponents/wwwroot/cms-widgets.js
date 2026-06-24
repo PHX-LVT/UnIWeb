@@ -50,15 +50,26 @@ function initLibraryVideos() {
     window.__scLibraryVideosDelegated = true;
 
     document.addEventListener("click", e => {
-        const trigger = e.target.closest("[data-sc-library-video]");
-        if (!trigger) return;
+        const videoTrigger = e.target.closest("[data-sc-library-video]");
+        if (videoTrigger) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const embedUrl = resolveVideoEmbedUrl(videoTrigger.dataset.videoUrl || "");
+            if (!embedUrl) return;
+            openLibraryVideoModal(embedUrl, videoTrigger.dataset.videoTitle || "Video");
+            return;
+        }
+
+        const imageTrigger = e.target.closest("[data-sc-library-image]");
+        if (!imageTrigger) return;
 
         e.preventDefault();
         e.stopPropagation();
 
-        const embedUrl = resolveVideoEmbedUrl(trigger.dataset.videoUrl || "");
-        if (!embedUrl) return;
-        openLibraryVideoModal(embedUrl, trigger.dataset.videoTitle || "Video");
+        const imageUrl = imageTrigger.dataset.imageUrl || "";
+        if (!imageUrl) return;
+        openLibraryImageModal(imageUrl, imageTrigger.dataset.imageTitle || "Image");
     });
 }
 
@@ -68,7 +79,7 @@ function initDownloadMetrics() {
     window.__scDownloadMetricsDelegated = true;
 
     document.addEventListener("click", e => {
-        const link = e.target.closest("a.sc-insight-download[href], a[download][href]");
+        const link = e.target.closest("a.sc-insight-download[href], a[download][href], a[data-sc-download][href]");
         if (!link) return;
 
         const href = link.getAttribute("href") || "";
@@ -266,6 +277,76 @@ function closeLibraryVideoModal(modal) {
     document.body.classList.remove("sc-modal-open");
 }
 
+
+function openLibraryImageModal(imageUrl, titleText) {
+    const modal = ensureLibraryImageModal();
+    const title = modal.querySelector(".sc-image-modal__title");
+    const frame = modal.querySelector(".sc-image-modal__frame");
+
+    if (title) title.textContent = titleText;
+    if (frame) {
+        frame.replaceChildren();
+        const image = document.createElement("img");
+        image.src = imageUrl;
+        image.alt = titleText || "Image";
+        frame.appendChild(image);
+    }
+
+    document.body.classList.add("sc-modal-open");
+    modal.classList.add("open");
+}
+
+function ensureLibraryImageModal() {
+    let modal = document.querySelector(".sc-image-modal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.className = "sc-image-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+
+    const dialog = document.createElement("div");
+    dialog.className = "sc-image-modal__dialog";
+
+    const header = document.createElement("div");
+    header.className = "sc-image-modal__header";
+
+    const title = document.createElement("h2");
+    title.className = "sc-image-modal__title";
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "sc-image-modal__close";
+    close.setAttribute("aria-label", "Close image");
+    close.textContent = "x";
+
+    const frame = document.createElement("div");
+    frame.className = "sc-image-modal__frame";
+
+    header.append(title, close);
+    dialog.append(header, frame);
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    modal.addEventListener("click", e => {
+        if (e.target === modal || e.target.closest(".sc-image-modal__close")) {
+            closeLibraryImageModal(modal);
+        }
+    });
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape" && modal.classList.contains("open")) {
+            closeLibraryImageModal(modal);
+        }
+    });
+
+    return modal;
+}
+
+function closeLibraryImageModal(modal) {
+    modal.classList.remove("open");
+    modal.querySelector(".sc-image-modal__frame")?.replaceChildren();
+    document.body.classList.remove("sc-modal-open");
+}
 function resolveVideoEmbedUrl(rawUrl) {
     try {
         const url = new URL(rawUrl, window.location.origin);

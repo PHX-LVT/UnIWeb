@@ -1,4 +1,4 @@
-﻿using FullProject.Filters;
+using FullProject.Filters;
 using FullProject.Models;
 using FullProject.Services;
 using FullProject.Settings;
@@ -79,6 +79,7 @@ builder.Services.AddScoped<FormValidationService>();
 builder.Services.AddScoped<PublicFormSubmissionService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ContentService>();
+builder.Services.AddScoped<ManagedResourceService>();
 builder.Services.AddScoped<VisitorMetricService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicPageAssemblyService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicMetadataService>();

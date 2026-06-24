@@ -758,6 +758,7 @@ namespace AdminSite.Models
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; } = true;
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -775,6 +776,7 @@ namespace AdminSite.Models
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; } = true;
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -873,6 +875,40 @@ namespace AdminSite.Models
         public DateTime CreatedAt { get; set; }
     }
 
+    public class ManagedResourceModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string Source { get; set; } = "managed-upload";
+        public List<string> Tags { get; set; } = new();
+        public bool Active { get; set; } = true;
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ManagedResourceRequest
+    {
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? SizeBytes { get; set; }
+        public string? Source { get; set; } = "external-url";
+        public List<string> Tags { get; set; } = new();
+        public bool Active { get; set; } = true;
+    }
     public class CanvasSectionPresetModel
     {
         public string Id { get; set; } = string.Empty;

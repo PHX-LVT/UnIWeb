@@ -26,6 +26,7 @@ namespace FullProject.Services
         public async Task<List<ContentType>> GetTypesAsync()
         {
             await EnsureDefaultTypesAsync();
+            await EnsureContentTypeBehaviorsAsync();
             return await _context.ContentTypes.Find(_ => true)
                 .SortBy(t => t.Order)
                 .ThenBy(t => t.Key)
@@ -45,18 +46,14 @@ namespace FullProject.Services
             if (exists) return (null, ["Content type key already exists."]);
 
             var order = (int)await _context.ContentTypes.CountDocumentsAsync(_ => true);
-            var workflow = NormalizeContentTypeWorkflow(
-                dto.RequiresBody,
-                dto.RequiresHeroImage,
-                dto.RequiresFile,
-                dto.RequiresVideoUrl,
-                dto.AllowsAttachments,
-                dto.ClickBehavior);
+            var behavior = ResolveContentBehavior(dto.Behavior, key, dto.RequiresBody, dto.RequiresFile, dto.RequiresVideoUrl, dto.ClickBehavior);
+            var workflow = NormalizeContentTypeWorkflow(behavior, dto.RequiresHeroImage);
             var type = new ContentType
             {
                 Key = key,
                 Name = NormalizeLang(dto.Name),
                 Description = NormalizeLang(dto.Description, false),
+                Behavior = behavior,
                 RequiresBody = workflow.RequiresBody,
                 RequiresHeroImage = workflow.RequiresHeroImage,
                 RequiresFile = workflow.RequiresFile,
@@ -85,13 +82,15 @@ namespace FullProject.Services
 
             if (dto.Name is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.Name, NormalizeLang(dto.Name)));
             if (dto.Description is not null) updates.Add(Builders<ContentType>.Update.Set(t => t.Description, NormalizeLang(dto.Description, false)));
-            var workflow = NormalizeContentTypeWorkflow(
+            var behavior = ResolveContentBehavior(
+                dto.Behavior ?? type.Behavior,
+                type.Key,
                 dto.RequiresBody ?? type.RequiresBody,
-                dto.RequiresHeroImage ?? type.RequiresHeroImage,
                 dto.RequiresFile ?? type.RequiresFile,
                 dto.RequiresVideoUrl ?? type.RequiresVideoUrl,
-                dto.AllowsAttachments ?? type.AllowsAttachments,
                 dto.ClickBehavior ?? type.ClickBehavior);
+            var workflow = NormalizeContentTypeWorkflow(behavior, dto.RequiresHeroImage ?? type.RequiresHeroImage);
+            updates.Add(Builders<ContentType>.Update.Set(t => t.Behavior, behavior));
             updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresBody, workflow.RequiresBody));
             updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresHeroImage, workflow.RequiresHeroImage));
             updates.Add(Builders<ContentType>.Update.Set(t => t.RequiresFile, workflow.RequiresFile));
@@ -565,6 +564,7 @@ namespace FullProject.Services
         private async Task<bool> TypeExistsAsync(string typeKey)
         {
             await EnsureDefaultTypesAsync();
+            await EnsureContentTypeBehaviorsAsync();
             return await _context.ContentTypes.Find(t => t.Key == NormalizeKey(typeKey)).AnyAsync();
         }
 
@@ -599,6 +599,35 @@ namespace FullProject.Services
                 _ => query.SortByDescending(c => c.PublishedAt).ThenByDescending(c => c.UpdatedAt)
             };
 
+        private async Task EnsureContentTypeBehaviorsAsync()
+        {
+            var types = await _context.ContentTypes.Find(_ => true).ToListAsync();
+            foreach (var type in types)
+            {
+                var behavior = ResolveContentBehavior(type.Behavior, type.Key, type.RequiresBody, type.RequiresFile, type.RequiresVideoUrl, type.ClickBehavior);
+                var workflow = NormalizeContentTypeWorkflow(behavior, type.RequiresHeroImage);
+
+                if (string.Equals(type.Behavior, behavior, StringComparison.OrdinalIgnoreCase) &&
+                    type.RequiresBody == workflow.RequiresBody &&
+                    type.RequiresHeroImage == workflow.RequiresHeroImage &&
+                    type.RequiresFile == workflow.RequiresFile &&
+                    type.RequiresVideoUrl == workflow.RequiresVideoUrl &&
+                    type.AllowsAttachments == workflow.AllowsAttachments &&
+                    string.Equals(type.ClickBehavior, workflow.ClickBehavior, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                await _context.ContentTypes.UpdateOneAsync(t => t.Id == type.Id,
+                    Builders<ContentType>.Update
+                        .Set(t => t.Behavior, behavior)
+                        .Set(t => t.RequiresBody, workflow.RequiresBody)
+                        .Set(t => t.RequiresHeroImage, workflow.RequiresHeroImage)
+                        .Set(t => t.RequiresFile, workflow.RequiresFile)
+                        .Set(t => t.RequiresVideoUrl, workflow.RequiresVideoUrl)
+                        .Set(t => t.AllowsAttachments, workflow.AllowsAttachments)
+                        .Set(t => t.ClickBehavior, workflow.ClickBehavior)
+                        .Set(t => t.UpdatedAt, DateTime.UtcNow));
+            }
+        }
         private async Task EnsureDefaultTypesAsync()
         {
             if (await _context.ContentTypes.Find(_ => true).AnyAsync())
@@ -606,11 +635,11 @@ namespace FullProject.Services
 
             var defaults = new[]
             {
-                new ContentType { Key = "article", Name = Lang("Article"), Description = Lang("Editorial content and market intelligence."), Order = 0, RequiresBody = true, ClickBehavior = "detail" },
-                new ContentType { Key = "case-study", Name = Lang("Case Study"), Description = Lang("Outcome-driven customer or operational stories."), Order = 1, RequiresBody = true, ClickBehavior = "detail" },
-                new ContentType { Key = "whitepaper", Name = Lang("Whitepaper / Report"), Description = Lang("Downloadable PDF files and reports."), Order = 2, RequiresBody = false, RequiresFile = true, AllowsAttachments = true, ClickBehavior = "download" },
-                new ContentType { Key = "video", Name = Lang("Video / Webinar"), Description = Lang("Video and webinar links."), Order = 3, RequiresBody = false, RequiresVideoUrl = true, AllowsAttachments = false, ClickBehavior = "video" },
-                new ContentType { Key = "tool", Name = Lang("Tool"), Description = Lang("Templates, calculators, and downloadable tools."), Order = 4, RequiresBody = false, AllowsAttachments = true, ClickBehavior = "download" }
+                new ContentType { Key = "article", Name = Lang("Article"), Description = Lang("Editorial content and market intelligence."), Order = 0, Behavior = "page", RequiresBody = true, ClickBehavior = "detail" },
+                new ContentType { Key = "case-study", Name = Lang("Case Study"), Description = Lang("Outcome-driven customer or operational stories."), Order = 1, Behavior = "page", RequiresBody = true, ClickBehavior = "detail" },
+                new ContentType { Key = "whitepaper", Name = Lang("Whitepaper / Report"), Description = Lang("Downloadable PDF files and reports."), Order = 2, Behavior = "file-resource", RequiresBody = false, RequiresFile = true, AllowsAttachments = true, ClickBehavior = "download" },
+                new ContentType { Key = "video", Name = Lang("Video / Webinar"), Description = Lang("Video and webinar links."), Order = 3, Behavior = "video-resource", RequiresBody = false, RequiresVideoUrl = true, AllowsAttachments = false, ClickBehavior = "video" },
+                new ContentType { Key = "tool", Name = Lang("Tool"), Description = Lang("Templates, calculators, and downloadable tools."), Order = 4, Behavior = "file-resource", RequiresBody = false, RequiresFile = true, AllowsAttachments = true, ClickBehavior = "download" }
             };
 
             await _context.ContentTypes.InsertManyAsync(defaults);
@@ -967,41 +996,80 @@ namespace FullProject.Services
         private static string NormalizeClickBehavior(string? value)
         {
             var normalized = (value ?? "detail").Trim().ToLowerInvariant();
-            return normalized is "detail" or "download" or "video" or "external" ? normalized : "detail";
+            return normalized is "detail" or "download" or "video" or "external" or "image" ? normalized : "detail";
         }
 
-        private static ContentTypeWorkflow NormalizeContentTypeWorkflow(
+        private static string ResolveContentBehavior(
+            string? behavior,
+            string? key,
             bool requiresBody,
-            bool requiresHeroImage,
             bool requiresFile,
             bool requiresVideoUrl,
-            bool allowsAttachments,
             string? clickBehavior)
         {
-            var behavior = NormalizeClickBehavior(clickBehavior);
-            if (requiresBody)
+            var normalizedKey = NormalizeKey(key ?? string.Empty);
+            if (normalizedKey is "article" or "articles" or "case-study" or "case-studies")
+                return "page";
+            if (normalizedKey.Contains("video", StringComparison.OrdinalIgnoreCase) || normalizedKey.Contains("webinar", StringComparison.OrdinalIgnoreCase))
+                return "video-resource";
+            if (normalizedKey.Contains("whitepaper", StringComparison.OrdinalIgnoreCase) ||
+                normalizedKey.Contains("report", StringComparison.OrdinalIgnoreCase) ||
+                normalizedKey.Contains("tool", StringComparison.OrdinalIgnoreCase) ||
+                normalizedKey.Contains("template", StringComparison.OrdinalIgnoreCase) ||
+                normalizedKey.Contains("disclosure", StringComparison.OrdinalIgnoreCase) ||
+                normalizedKey.Contains("charter", StringComparison.OrdinalIgnoreCase) ||
+                normalizedKey.Contains("regulation", StringComparison.OrdinalIgnoreCase))
+                return "file-resource";
+
+            var normalizedBehavior = NormalizeContentTypeBehavior(behavior);
+            if (!string.IsNullOrWhiteSpace(normalizedBehavior))
+                return normalizedBehavior;
+
+            var click = NormalizeClickBehavior(clickBehavior);
+            if (requiresVideoUrl || click == "video") return "video-resource";
+            if (requiresFile || click == "download") return "file-resource";
+            return requiresBody ? "page" : "file-resource";
+        }
+
+        private static string NormalizeContentTypeBehavior(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+            return normalized switch
             {
-                return new ContentTypeWorkflow(
+                "page" or "detail" or "article" => "page",
+                "file" or "file-resource" or "download" or "resource" => "file-resource",
+                "video" or "video-resource" or "webinar" => "video-resource",
+                _ => string.Empty
+            };
+        }
+
+        private static ContentTypeWorkflow NormalizeContentTypeWorkflow(string behavior, bool requiresHeroImage)
+        {
+            return NormalizeContentTypeBehavior(behavior) switch
+            {
+                "video-resource" => new ContentTypeWorkflow(
+                    RequiresBody: false,
+                    RequiresHeroImage: false,
+                    RequiresFile: false,
+                    RequiresVideoUrl: true,
+                    AllowsAttachments: false,
+                    ClickBehavior: "video"),
+                "file-resource" => new ContentTypeWorkflow(
+                    RequiresBody: false,
+                    RequiresHeroImage: false,
+                    RequiresFile: true,
+                    RequiresVideoUrl: false,
+                    AllowsAttachments: true,
+                    ClickBehavior: "download"),
+                _ => new ContentTypeWorkflow(
                     RequiresBody: true,
                     RequiresHeroImage: requiresHeroImage,
                     RequiresFile: false,
                     RequiresVideoUrl: false,
-                    AllowsAttachments: allowsAttachments,
-                    ClickBehavior: "detail");
-            }
-
-            if (behavior == "detail")
-                behavior = "download";
-
-            return new ContentTypeWorkflow(
-                RequiresBody: false,
-                RequiresHeroImage: false,
-                RequiresFile: behavior == "download",
-                RequiresVideoUrl: behavior == "video",
-                AllowsAttachments: allowsAttachments || behavior == "download",
-                ClickBehavior: behavior);
+                    AllowsAttachments: true,
+                    ClickBehavior: "detail")
+            };
         }
-
         private sealed record ContentTypeWorkflow(
             bool RequiresBody,
             bool RequiresHeroImage,

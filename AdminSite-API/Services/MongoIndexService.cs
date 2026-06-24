@@ -23,6 +23,7 @@ namespace FullProject.Services
             await EnsureBlockIndexesAsync("blocks_draft");
             await EnsureBlockIndexesAsync("blocks_published");
             await EnsureContentIndexesAsync();
+            await EnsureManagedResourceIndexesAsync();
             await EnsureUserIndexesAsync();
             await EnsureSystemIndexesAsync();
             await EnsureRevisionIndexesAsync();
@@ -110,6 +111,21 @@ namespace FullProject.Services
                 new CreateIndexOptions { Unique = true }));
         }
 
+        private async Task EnsureManagedResourceIndexesAsync()
+        {
+            var resources = _database.GetCollection<ManagedResource>("managed_resources");
+            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
+                Builders<ManagedResource>.IndexKeys
+                    .Ascending(r => r.Kind)
+                    .Ascending(r => r.Active)
+                    .Descending(r => r.UpdatedAt)));
+            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
+                Builders<ManagedResource>.IndexKeys
+                    .Ascending(r => r.CreatedById)
+                    .Descending(r => r.CreatedAt)));
+            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
+                Builders<ManagedResource>.IndexKeys.Ascending(r => r.Url)));
+        }
         private async Task EnsureUserIndexesAsync()
         {
             var adminUsers = _database.GetCollection<AdminUser>("admin_users");

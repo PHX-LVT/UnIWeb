@@ -393,6 +393,7 @@ namespace FullProject.Services.PublicService
             Id = item.Id,
             StableId = item.StableId,
             ContentTypeKey = item.ContentTypeKey,
+            ContentBehavior = ResolveLibraryContentBehavior(type),
             Slug = item.Slug,
             Title = item.Title,
             Summary = item.Summary,
@@ -884,13 +885,17 @@ namespace FullProject.Services.PublicService
         private static string ResolveLibraryClickBehavior(ContentItem item, ContentType? type = null)
         {
             var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
-            if (configured == "video" || IsVideoLibraryType(item.ContentTypeKey) || IsVideoLibraryType(type?.Key))
+            var behavior = ResolveLibraryContentBehavior(type);
+
+            if (configured == "video" || behavior == "video-resource" || IsVideoLibraryType(item.ContentTypeKey) || IsVideoLibraryType(type?.Key))
                 return "video";
-            if (type?.RequiresBody == true)
+            if (configured == "image" || behavior is "image-resource" or "gallery" || IsImageLibraryType(item.ContentTypeKey) || IsImageLibraryType(type?.Key))
+                return "image";
+            if (type?.RequiresBody == true || behavior == "page")
                 return "detail";
-            if (type?.RequiresBody == false && configured is "download" or "video" or "external")
+            if (configured is "download" or "external")
                 return configured;
-            if (type?.RequiresBody == false)
+            if (behavior == "file-resource" || type?.RequiresBody == false)
             {
                 if (!string.IsNullOrWhiteSpace(item.VideoUrl) ||
                     item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))
@@ -913,12 +918,33 @@ namespace FullProject.Services.PublicService
             return "detail";
         }
 
+        private static string ResolveLibraryContentBehavior(ContentType? type)
+        {
+            var behavior = (type?.Behavior ?? string.Empty).Trim().ToLowerInvariant();
+            if (behavior is "page" or "file-resource" or "video-resource" or "image-resource" or "gallery")
+                return behavior;
+            if (type?.RequiresVideoUrl == true || string.Equals(type?.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase))
+                return "video-resource";
+            if (type?.RequiresFile == true || string.Equals(type?.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase))
+                return "file-resource";
+            return type?.RequiresBody == false ? "file-resource" : "page";
+        }
+
         private static bool IsVideoLibraryType(string? key)
         {
             if (string.IsNullOrWhiteSpace(key)) return false;
             var normalized = key.Trim().ToLowerInvariant();
             return normalized.Contains("video", StringComparison.OrdinalIgnoreCase) ||
                    normalized.Contains("webinar", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsImageLibraryType(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            var normalized = key.Trim().ToLowerInvariant();
+            return normalized.Contains("image", StringComparison.OrdinalIgnoreCase) ||
+                   normalized.Contains("gallery", StringComparison.OrdinalIgnoreCase) ||
+                   normalized.Contains("photo", StringComparison.OrdinalIgnoreCase);
         }
 
         private static ShowcaseItemOverride? FindShowcaseOverride(Page child, IReadOnlyDictionary<string, ShowcaseItemOverride> overrides)

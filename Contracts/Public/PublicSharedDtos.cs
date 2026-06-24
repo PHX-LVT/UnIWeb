@@ -168,6 +168,7 @@ namespace Contracts.Public
         public string Id { get; set; } = string.Empty;
         public string StableId { get; set; } = string.Empty;
         public string ContentTypeKey { get; set; } = string.Empty;
+        public string ContentBehavior { get; set; } = "page";
         public string Slug { get; set; } = string.Empty;
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();

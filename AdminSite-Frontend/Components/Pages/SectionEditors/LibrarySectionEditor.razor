@@ -170,7 +170,8 @@
         new("card", "Card"),
         new("grid", "Grid"),
         new("rows", "Rows"),
-        new("lists", "Lists")
+        new("lists", "Lists"),
+        new("gallery", "Gallery")
     };
     private readonly List<string> _sortModes = new() { "newest", "oldest", "title" };
     private readonly List<ButtonStyleOption> _buttonStyles = new()
@@ -203,7 +204,7 @@
     private string _sortMode = "newest";
     private bool _saving;
     private string? _loadedSectionId;
-    private bool UsesGridColumns => _layout is "card" or "grid" or "rows";
+    private bool UsesGridColumns => _layout is "card" or "grid" or "rows" or "gallery";
     private int MaxColumns => _layout == "rows" ? 2 : 6;
 
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
@@ -388,6 +389,7 @@
         "grid" or "resource-grid" => "grid",
         "rows" => "rows",
         "lists" or "compact-list" or "resource-list" => "lists",
+        "gallery" or "media-gallery" => "gallery",
         _ => "card"
     };
 
