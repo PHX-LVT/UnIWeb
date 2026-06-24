@@ -526,7 +526,7 @@
     margin: 0 auto;
     padding: 20px 30px;
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 24px;
 }
@@ -6327,4 +6327,40 @@ textarea.sc-form-input {
 .sc-list__card-title,
 .sc-block__title {
     font-size: var(--theme-text-item-title, 20px);
+}
+/* Single rendered header actions: desktop inline, mobile inside opened menu. */
+@media (max-width: 1100px) {
+    .sc-header__mobile-actions {
+        display: none !important;
+    }
+
+    .sc-header__nav .sc-header__actions {
+        display: none;
+    }
+
+    .sc-header__nav--open .sc-header__actions {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        width: 100%;
+        margin-left: 0;
+        padding-top: 22px;
+    }
+
+    .sc-header__nav--open .sc-header__actions .sc-lang-select {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        height: 44px;
+    }
+
+    .sc-header__nav--open .sc-header__actions .sc-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 16px;
+    }
 }

@@ -40,32 +40,44 @@
 
 .ez-sidebar-language {
     display: grid;
-    gap: 6px;
-    padding: 0.75rem 1rem;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    align-items: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 0.65rem 0.75rem;
     border-bottom: 1px solid rgba(255,255,255,0.12);
     flex-shrink: 0;
 }
 
 .ez-sidebar-language label {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
     color: rgba(255,255,255,0.72);
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
+    line-height: 1.2;
+    text-overflow: ellipsis;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .ez-sidebar-language select {
     width: 100%;
-    min-height: 34px;
+    min-width: 0;
+    height: 34px;
     border-radius: 6px;
     border: 1px solid rgba(255,255,255,0.32);
-    background: var(--surface);
+    background: #fff;
     color: var(--primary);
-    padding: 0 10px;
+    padding: 0 8px;
     font: inherit;
+    font-size: 0.82rem;
+    line-height: 1.1;
 }
 
 .ez-sidebar-language option {
-    background: var(--surface);
+    background: #fff;
     color: var(--primary);
 }
 
