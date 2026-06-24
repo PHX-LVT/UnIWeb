@@ -261,19 +261,18 @@ namespace AdminSite.Services
                 "centered",
                 "#061b3a",
                 TextLight(),
-                Button("Explore examples", "#gallery")),
-            new GallerySectionCreateDto
+                Button("Explore examples", "#work")),
+            new ListSectionCreateDto
             {
-                Layout = "grid",
+                Layout = "cards",
                 Columns = 3,
-                Gap = "medium",
-                ShowCaptions = true,
+                SectionTitle = L("Portfolio examples"),
                 Style = WhiteSection("large"),
-                Images = new()
+                Items = new()
                 {
-                    new() { Caption = L("Project image placeholder: add a real image URL in the editor."), Order = 0 },
-                    new() { Caption = L("Use captions to explain the result, not just the image."), Order = 1 },
-                    new() { Caption = L("Gallery sections are best for visual proof and comparison."), Order = 2 }
+                    new() { Title = L("Project image placeholder"), Description = L("Add a real image URL in the editor."), Order = 0 },
+                    new() { Title = L("Result caption"), Description = L("Use card text to explain the result, not just the image."), Order = 1 },
+                    new() { Title = L("Visual proof"), Description = L("Use Library sections with Gallery layout for managed media galleries."), Order = 2 }
                 }
             },
             new StatsSectionCreateDto

@@ -238,7 +238,7 @@ namespace FullProject.Services.PublicService
                     continue;
                 }
 
-                // 3. Catch-all for standard sections (Hero, CTA, Gallery, etc.)
+                // 3. Catch-all for standard sections (Hero, CTA, etc.)
                 var visibleBlocks = blocksBySection.TryGetValue(section.StableId, out var sBlocks)
                     ? sBlocks : new List<Block>();
 
@@ -250,7 +250,6 @@ namespace FullProject.Services.PublicService
                     {
                         HeroSection => "hero",
                         CtaSection => "cta",
-                        GallerySection => "gallery",
                         ListSection => "list",
                         DynamicSection => "dynamic",
                         HtmlSection => "html",
@@ -270,7 +269,6 @@ namespace FullProject.Services.PublicService
                     Subtext = (section as CtaSection)?.Subtext,
                     Layout = (section as HeroSection)?.Layout
                                 ?? (section as CtaSection)?.Layout
-                                ?? (section as GallerySection)?.Layout
                                 ?? (section as ListSection)?.Layout
                                 ?? (section as CarouselSection)?.Layout
                                 ?? (section as TestimonialSection)?.Layout,
@@ -283,7 +281,6 @@ namespace FullProject.Services.PublicService
                     },
                     Button = (section as CtaSection)?.Button,
                     ImageUrl = (section as HeroSection)?.ImageUrl,
-                    Images = (section as GallerySection)?.Images?.Where(i => i.Visible).OrderBy(i => i.Order).ToList(),
                     Items = section switch
                     {
                         ListSection list => list.Items
@@ -405,18 +402,72 @@ namespace FullProject.Services.PublicService
             ExternalUrl = item.ExternalUrl,
             ClickBehavior = ResolveLibraryClickBehavior(item, type),
             Tags = item.Tags,
-            Attachments = item.Attachments.Select(a => new PublicLibraryAttachmentDto
-            {
-                Id = a.Id,
-                FileName = a.FileName,
-                Url = a.Url,
-                ContentType = a.ContentType,
-                SizeBytes = a.SizeBytes
-            }).ToList(),
+            Attachments = MapLibraryAttachments(item),
+            GalleryItems = MapLibraryGalleryItems(item),
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt,
             PublishedAt = item.PublishedAt
         };
+
+        private static List<PublicLibraryAttachmentDto> MapLibraryAttachments(ContentItem item)
+        {
+            var attachments = item.Attachments
+                .Where(a => !string.IsNullOrWhiteSpace(a.Url))
+                .Select(a => new PublicLibraryAttachmentDto
+                {
+                    Id = a.Id,
+                    FileName = a.FileName,
+                    Url = a.Url,
+                    ContentType = a.ContentType,
+                    SizeBytes = a.SizeBytes
+                })
+                .ToList();
+
+            var existingUrls = attachments
+                .Select(a => a.Url)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var bodyFiles = item.BodyItems
+                .Where(i => i.Visible
+                    && string.Equals(i.Type, "file", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(i.Url)
+                    && existingUrls.Add(i.Url!))
+                .Select(i => new PublicLibraryAttachmentDto
+                {
+                    Id = i.Id,
+                    FileName = !string.IsNullOrWhiteSpace(i.FileName) ? i.FileName! : FileNameFromUrl(i.Url),
+                    Url = i.Url!,
+                    ContentType = i.ContentType ?? string.Empty,
+                    SizeBytes = i.SizeBytes
+                });
+
+            attachments.AddRange(bodyFiles);
+            return attachments;
+        }
+
+        private static List<PublicLibraryGalleryItemDto> MapLibraryGalleryItems(ContentItem item) =>
+            item.GalleryItems
+                .Where(i => i.Visible && !string.IsNullOrWhiteSpace(i.Url))
+                .OrderBy(i => i.Order)
+                .Select(i => new PublicLibraryGalleryItemDto
+                {
+                    Id = i.Id,
+                    Kind = NormalizeGalleryItemKind(i.Kind),
+                    Url = i.Url!,
+                    ThumbnailUrl = i.ThumbnailUrl,
+                    Caption = i.Caption,
+                    Order = i.Order
+                })
+                .ToList();
+
+        private static string NormalizeGalleryItemKind(string? kind) =>
+            string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase) ? "video" : "image";
+
+        private static string FileNameFromUrl(string? url)
+        {
+            var fileName = System.IO.Path.GetFileName(url);
+            return string.IsNullOrWhiteSpace(fileName) ? "File" : fileName;
+        }
 
         public async Task<PublicPageDto> BuildContentDetailPageAsync(ContentItem item, ContentType? type = null)
         {
@@ -604,12 +655,13 @@ namespace FullProject.Services.PublicService
             var buttonLabel = behavior switch
             {
                 "video" => "Watch Video",
+                "image" => "View Image",
                 "external" => "Open Link",
                 _ => "Open File"
             };
 
             var action = string.IsNullOrWhiteSpace(href)
-                ? "<p class=\"sc-insight-resource-note\">No file, video, or external URL is attached yet.</p>"
+                ? "<p class=\"sc-insight-resource-note\">No file, video, image, or external URL is attached yet.</p>"
                 : $"<a class=\"sc-insight-download\" href=\"{H(href)}\" target=\"_blank\" rel=\"noopener\"><span><strong>{title}</strong>{ResourceMeta(item, behavior)}</span><b>{H(buttonLabel)}</b></a>";
 
             return $"""
@@ -627,6 +679,7 @@ namespace FullProject.Services.PublicService
                 "video" => item.VideoUrl
                     ?? item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url
                     ?? string.Empty,
+                "image" => !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? item.ThumbnailUrl! : item.HeroImageUrl ?? string.Empty,
                 "external" => item.ExternalUrl ?? string.Empty,
                 _ => item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url))?.Url
                     ?? item.BodyItems.FirstOrDefault(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url))?.Url
@@ -637,6 +690,8 @@ namespace FullProject.Services.PublicService
         {
             if (behavior == "video")
                 return "<small>Video / Webinar</small>";
+            if (behavior == "image")
+                return "<small>Image resource</small>";
             if (behavior == "external")
                 return "<small>External resource</small>";
 
@@ -920,14 +975,29 @@ namespace FullProject.Services.PublicService
 
         private static string ResolveLibraryContentBehavior(ContentType? type)
         {
-            var behavior = (type?.Behavior ?? string.Empty).Trim().ToLowerInvariant();
-            if (behavior is "page" or "file-resource" or "video-resource" or "image-resource" or "gallery")
+            var behavior = NormalizeLibraryContentBehavior(type?.Behavior);
+            if (!string.IsNullOrWhiteSpace(behavior))
                 return behavior;
+            if (string.Equals(type?.ClickBehavior, "image", StringComparison.OrdinalIgnoreCase))
+                return "image-resource";
             if (type?.RequiresVideoUrl == true || string.Equals(type?.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase))
                 return "video-resource";
             if (type?.RequiresFile == true || string.Equals(type?.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase))
                 return "file-resource";
             return type?.RequiresBody == false ? "file-resource" : "page";
+        }
+
+        private static string NormalizeLibraryContentBehavior(string? value)
+        {
+            return (value ?? string.Empty).Trim().ToLowerInvariant() switch
+            {
+                "page" or "detail" or "article" => "page",
+                "file" or "file-resource" or "download" or "resource" => "file-resource",
+                "video" or "video-resource" or "webinar" => "video-resource",
+                "image" or "image-resource" or "photo" or "picture" => "image-resource",
+                "gallery" or "image-gallery" or "photo-gallery" or "media-gallery" => "gallery",
+                _ => string.Empty
+            };
         }
 
         private static bool IsVideoLibraryType(string? key)

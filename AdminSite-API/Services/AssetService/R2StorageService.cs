@@ -22,6 +22,12 @@ namespace GlobalManager.Services.AssetService
 
         public async Task<string> UploadAsync(Stream stream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
         {
+            var result = await UploadWithMetadataAsync(stream, fileName, contentType, folder, cancellationToken);
+            return result.Url;
+        }
+
+        public async Task<R2UploadResult> UploadWithMetadataAsync(Stream stream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
+        {
             if (!_settings.IsConfigured)
                 throw new InvalidOperationException("R2 storage is not configured. Set R2Storage in appsettings.json.");
 
@@ -63,7 +69,11 @@ namespace GlobalManager.Services.AssetService
                 throw new InvalidOperationException($"R2 upload failed ({(int)response.StatusCode}): {body}");
             }
 
-            return $"{_settings.PublicBaseUrl.TrimEnd('/')}/{key}";
+            return new R2UploadResult
+            {
+                Url = $"{_settings.PublicBaseUrl.TrimEnd('/')}/{key}",
+                StorageKey = key
+            };
         }
 
 
@@ -135,5 +145,11 @@ namespace GlobalManager.Services.AssetService
 
         private static string ToHex(byte[] bytes) =>
             Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    public sealed class R2UploadResult
+    {
+        public string Url { get; set; } = string.Empty;
+        public string StorageKey { get; set; } = string.Empty;
     }
 }

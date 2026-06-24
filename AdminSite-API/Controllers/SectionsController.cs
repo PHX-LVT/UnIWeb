@@ -127,7 +127,6 @@ namespace FullProject.Controllers
                 {
                     HeroSection => "hero",
                     CtaSection => "cta",
-                    GallerySection => "gallery",
                     ListSection => "list",
                     DynamicSection => "dynamic",
                     HtmlSection => "html",
@@ -187,21 +186,6 @@ namespace FullProject.Controllers
                     dto.Subtext = c.Subtext;
                     dto.Button = c.Button != null ? MapButtonToDto(c.Button) : null;
                     dto.Buttons = c.Buttons.Select(MapButtonToDto).ToList();
-                    break;
-
-                case GallerySection g:
-                    dto.Layout = g.Layout;
-                    dto.Columns = g.Columns;
-                    dto.Gap = g.Gap;
-                    dto.ShowCaptions = g.ShowCaptions;
-                    dto.Images = g.Images.Select(i => new GalleryImageResponseDto
-                    {
-                        Id = i.Id,
-                        ImageUrl = i.ImageUrl,
-                        Caption = i.Caption,
-                        Visible = i.Visible,
-                        Order = i.Order
-                    }).ToList();
                     break;
 
                 case ListSection l:

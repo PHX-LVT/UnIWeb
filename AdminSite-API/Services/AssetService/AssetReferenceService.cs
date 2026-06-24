@@ -38,7 +38,6 @@ namespace GlobalManager.Services.AssetService
             var filter = Builders<Section>.Filter.Or(
                 Builders<Section>.Filter.Eq("Style.BackgroundImageUrl", url),
                 Builders<Section>.Filter.Eq("ImageUrl", url),
-                Builders<Section>.Filter.Eq("Images.ImageUrl", url),
                 Builders<Section>.Filter.Eq("Items.ImageUrl", url),
                 Builders<Section>.Filter.Eq("ItemOverrides.CardImageUrl", url));
 

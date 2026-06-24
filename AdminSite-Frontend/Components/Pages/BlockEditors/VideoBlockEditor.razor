@@ -5,12 +5,22 @@
 
 <div class="form-group">
     <label class="form-label">@T("EmbedUrl")</label>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem">
+        <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
+            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+        </button>
+    </div>
     <DxTextBox @bind-Text="_embedUrl" CssClass="w-100"
                NullText="https://www.youtube.com/embed/..." />
     <div class="form-hint">
         @T("EmbedUrlHint")
     </div>
 </div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="video"
+                     ResourceSelected="SelectResourceVideo"
+                     Closed="CloseResourcePicker" />
 
 @if (!string.IsNullOrEmpty(PreviewUrl))
 {
@@ -38,6 +48,7 @@
 
     private string? _embedUrl;
     private bool _saving;
+    private bool _resourcePickerOpen;
     private string? PreviewUrl => VideoUrlHelper.ToEmbedUrl(_embedUrl);
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
@@ -45,6 +56,21 @@
     protected override void OnParametersSet()
     {
         _embedUrl = Block.EmbedUrl;
+    }
+
+    private void OpenResourcePicker()
+    {
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+    }
+
+    private void SelectResourceVideo(ManagedResourceModel resource)
+    {
+        _embedUrl = resource.Url;
     }
 
     private async Task Save()

@@ -16,9 +16,25 @@
             </button>
         </div>
     }
-    <InputFile OnChange="OnFileSelected" accept="image/*" />
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <InputFile id="image-block-upload"
+                   OnChange="OnFileSelected"
+                   accept="image/*"
+                   style="display:none" />
+        <label class="btn-admin btn-ghost" for="image-block-upload">
+            <i class="fas fa-image"></i> @T("UploadNew")
+        </label>
+        <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
+            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+        </button>
+    </div>
     <div class="form-hint">@T("UploadImageHint")</div>
 </div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectResourceImage"
+                     Closed="CloseResourcePicker" />
 
 <div class="form-group">
     <label class="form-label">@T("AltText")</label>
@@ -44,6 +60,7 @@
     private string? _imageUrl;
     private Dictionary<string, string> _altText = new();
     private bool _saving;
+    private bool _resourcePickerOpen;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override void OnParametersSet()
@@ -67,6 +84,23 @@
         {
             Http.Toast(res.Message ?? "Image upload failed.", res.StatusCode);
         }
+    }
+
+    private void OpenResourcePicker()
+    {
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+    }
+
+    private void SelectResourceImage(ManagedResourceModel resource)
+    {
+        _imageUrl = resource.Url;
+        if (_altText.Count == 0 || !_altText.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            _altText = new(resource.Name);
     }
 
     private async Task Save()

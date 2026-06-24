@@ -28,6 +28,7 @@
 
     @foreach (var (item, i) in _items.Select((x, i) => (x, i)))
     {
+        var uploadId = $"list-item-image-upload-{i}";
         <div style="border:1px solid var(--border);border-radius:8px;
             padding:.75rem;margin-bottom:.5rem;background:var(--bg)">
             <div style="display:flex;align-items:center;justify-content:space-between;
@@ -71,7 +72,18 @@
                         </button>
                     </div>
                 }
-                <InputFile OnChange="@(e => OnItemImageSelected(e, item))" accept="image/*" />
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                    <InputFile id="@uploadId"
+                               OnChange="@(e => OnItemImageSelected(e, item))"
+                               accept="image/*"
+                               style="display:none" />
+                    <label class="btn-admin btn-ghost" for="@uploadId">
+                        <i class="fas fa-image"></i> @T("UploadNew")
+                    </label>
+                    <button type="button" class="btn-admin btn-ghost" @onclick="() => OpenResourcePicker(item)">
+                        <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                    </button>
+                </div>
             </div>
         </div>
     }
@@ -80,6 +92,11 @@
         <i class="fas fa-plus"></i> @T("AddItem")
     </button>
 </div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectResourceImage"
+                     Closed="CloseResourcePicker" />
 
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
@@ -102,6 +119,8 @@
     private List<ListItemModel> _items = new();
     private bool _saving;
     private string? _loadedSectionId;
+    private bool _resourcePickerOpen;
+    private ListItemModel? _resourcePickerItem;
 
     private List<string> _layouts = new() { "cards", "rows", "numbered" };
 
@@ -157,6 +176,24 @@
     private static void ClearItemImage(ListItemModel item)
     {
         item.ImageUrl = string.Empty;
+    }
+
+    private void OpenResourcePicker(ListItemModel item)
+    {
+        _resourcePickerItem = item;
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+        _resourcePickerItem = null;
+    }
+
+    private void SelectResourceImage(ManagedResourceModel resource)
+    {
+        if (_resourcePickerItem is not null)
+            _resourcePickerItem.ImageUrl = resource.Url;
     }
 
     private async Task Save()

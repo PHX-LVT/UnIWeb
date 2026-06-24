@@ -188,6 +188,11 @@
                                        class="btn-admin btn-secondary btn-sm showcase-child-card__upload">
                                     <i class="fas fa-image"></i> @(IsUploading(card) ? T("Uploading") : T("UploadImage"))
                                 </label>
+                                <button type="button"
+                                        class="btn-admin btn-secondary btn-sm"
+                                        @onclick="() => OpenResourcePicker(card)">
+                                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                                </button>
                                 @if (!string.IsNullOrWhiteSpace(card.CardImageUrl))
                                 {
                                     <button type="button"
@@ -210,6 +215,11 @@
         <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
 </div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectResourceImage"
+                     Closed="CloseResourcePicker" />
 
 <style>
     .showcase-action-editor {
@@ -289,6 +299,8 @@
     private string? _loadedSectionId;
     private string? _loadedChildrenSourceId;
     private string? _uploadingCardId;
+    private bool _resourcePickerOpen;
+    private ShowcaseChildCardModel? _resourcePickerCard;
 
     private List<string> _layouts = new() { "media-rows", "link-bar", "card-grid" };
     private List<string> _backgroundTypes = new() { "color", "image" };
@@ -480,6 +492,25 @@
     {
         card.CardImageUrl = string.Empty;
         card.UploadVersion++;
+    }
+
+    private void OpenResourcePicker(ShowcaseChildCardModel card)
+    {
+        _resourcePickerCard = card;
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+        _resourcePickerCard = null;
+    }
+
+    private void SelectResourceImage(ManagedResourceModel resource)
+    {
+        if (_resourcePickerCard is null) return;
+        _resourcePickerCard.CardImageUrl = resource.Url;
+        _resourcePickerCard.CardBackgroundType = "image";
     }
 
     private static string PageTitle(PageModel page) =>

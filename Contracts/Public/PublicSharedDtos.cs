@@ -68,14 +68,6 @@ namespace Contracts.Public
         public int Order { get; set; }
     }
 
-    public class PublicGalleryImageDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string> Caption { get; set; } = new();
-        public int Order { get; set; }
-    }
-
     public class PublicListItemDto
     {
         public string Id { get; set; } = string.Empty;
@@ -163,6 +155,16 @@ namespace Contracts.Public
         public long SizeBytes { get; set; }
     }
 
+    public class PublicLibraryGalleryItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "image";
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public int Order { get; set; }
+    }
+
     public class PublicLibraryItemDto
     {
         public string Id { get; set; } = string.Empty;
@@ -179,6 +181,7 @@ namespace Contracts.Public
         public string ClickBehavior { get; set; } = "detail";
         public List<string> Tags { get; set; } = new();
         public List<PublicLibraryAttachmentDto> Attachments { get; set; } = new();
+        public List<PublicLibraryGalleryItemDto> GalleryItems { get; set; } = new();
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public DateTime? PublishedAt { get; set; }

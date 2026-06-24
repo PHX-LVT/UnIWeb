@@ -14,17 +14,19 @@ namespace FullProject.Controllers
     public class ContentController : ControllerBase
     {
         private readonly ContentService _service;
+        private readonly ContentMappingService _mapping;
 
-        public ContentController(ContentService service)
+        public ContentController(ContentService service, ContentMappingService mapping)
         {
             _service = service;
+            _mapping = mapping;
         }
 
         [HttpGet("types")]
         public async Task<IActionResult> GetTypes()
         {
             var types = await _service.GetTypesAsync();
-            return Ok(ApiResult.Ok(types.Select(MapType).ToList()));
+            return Ok(ApiResult.Ok(types.Select(_mapping.MapType).ToList()));
         }
 
         [HttpPost("types")]
@@ -35,7 +37,7 @@ namespace FullProject.Controllers
             var (type, errors) = await _service.CreateTypeAsync(dto);
             if (errors.Count > 0) return UnprocessableEntity(ApiResult.Unprocessable<ContentTypeResponseDto>(errors));
 
-            return Ok(ApiResult.Created(MapType(type!), "Content type created."));
+            return Ok(ApiResult.Created(_mapping.MapType(type!), "Content type created."));
         }
 
         [HttpPut("types/{id}")]
@@ -46,7 +48,7 @@ namespace FullProject.Controllers
             var type = await _service.UpdateTypeAsync(id, dto);
             if (type is null) return NotFound(ApiResult.NotFound("Content type not found."));
 
-            return Ok(ApiResult.Ok(MapType(type), "Content type updated."));
+            return Ok(ApiResult.Ok(_mapping.MapType(type), "Content type updated."));
         }
 
         [HttpDelete("types/{id}")]
@@ -65,7 +67,7 @@ namespace FullProject.Controllers
         {
             var items = await _service.GetAllAsync(typeKey, status);
             items = ApplyContentVisibility(items, scope).ToList();
-            return Ok(ApiResult.Ok(items.Select(MapItem).ToList()));
+            return Ok(ApiResult.Ok(items.Select(_mapping.MapItem).ToList()));
         }
 
         [HttpGet("{id}")]
@@ -75,7 +77,7 @@ namespace FullProject.Controllers
             if (item is null) return NotFound(ApiResult.NotFound("Content item not found."));
             if (!CanReadItem(item)) return Forbid();
 
-            return Ok(ApiResult.Ok(MapItem(item)));
+            return Ok(ApiResult.Ok(_mapping.MapItem(item)));
         }
 
         [HttpPost]
@@ -87,7 +89,7 @@ namespace FullProject.Controllers
             var (item, errors) = await _service.CreateAsync(dto, ActorId);
             if (errors.Count > 0) return UnprocessableEntity(ApiResult.Unprocessable<ContentResponseDto>(errors));
 
-            return Ok(ApiResult.Created(MapItem(item!), "Content item created."));
+            return Ok(ApiResult.Created(_mapping.MapItem(item!), "Content item created."));
         }
 
         [HttpPut("{id}")]
@@ -107,7 +109,7 @@ namespace FullProject.Controllers
                 return UnprocessableEntity(ApiResult.Unprocessable<ContentResponseDto>(errors));
             }
 
-            return Ok(ApiResult.Ok(MapItem(item!), "Content item updated."));
+            return Ok(ApiResult.Ok(_mapping.MapItem(item!), "Content item updated."));
         }
 
         [HttpPut("{id}/status")]
@@ -126,7 +128,7 @@ namespace FullProject.Controllers
                 return UnprocessableEntity(ApiResult.Unprocessable<ContentResponseDto>(errors));
             }
 
-            return Ok(ApiResult.Ok(MapItem(item!), "Content status updated."));
+            return Ok(ApiResult.Ok(_mapping.MapItem(item!), "Content status updated."));
         }
 
         [HttpPost("{id}/publish")]
@@ -143,7 +145,7 @@ namespace FullProject.Controllers
                 return UnprocessableEntity(ApiResult.Unprocessable<ContentResponseDto>(errors));
             }
 
-            return Ok(ApiResult.Ok(MapItem(item!), "Content published."));
+            return Ok(ApiResult.Ok(_mapping.MapItem(item!), "Content published."));
         }
 
         [HttpDelete("{id}")]
@@ -171,7 +173,7 @@ namespace FullProject.Controllers
                 return UnprocessableEntity(ApiResult.Unprocessable<ContentResponseDto>(errors));
             }
 
-            return Ok(ApiResult.Ok(MapItem(item!), "Content item restored."));
+            return Ok(ApiResult.Ok(_mapping.MapItem(item!), "Content item restored."));
         }
 
         [HttpPost("permanent-delete")]
@@ -211,7 +213,7 @@ namespace FullProject.Controllers
                 return UnprocessableEntity(ApiResult.Unprocessable<ContentResponseDto>(errors));
             }
 
-            return Ok(ApiResult.Ok(MapItem(item!), "Content revision restored."));
+            return Ok(ApiResult.Ok(_mapping.MapItem(item!), "Content revision restored."));
         }
         [HttpGet("{stableId}/logs")]
         public async Task<IActionResult> GetLogs(string stableId)
@@ -224,7 +226,7 @@ namespace FullProject.Controllers
                 if (item is null || !IsOwner(item)) return Forbid();
             }
 
-            return Ok(ApiResult.Ok(logs.Select(MapLog).ToList()));
+            return Ok(ApiResult.Ok(logs.Select(_mapping.MapLog).ToList()));
         }
 
         private string ActorId =>
@@ -290,86 +292,5 @@ namespace FullProject.Controllers
             (!string.IsNullOrWhiteSpace(ActorEmail) &&
              string.Equals(item.AuthorId, ActorEmail, StringComparison.OrdinalIgnoreCase));
 
-        private static ContentTypeResponseDto MapType(ContentType type) => new()
-        {
-            Id = type.Id,
-            Key = type.Key,
-            Name = type.Name,
-            Description = type.Description,
-            Behavior = type.Behavior,
-            RequiresBody = type.RequiresBody,
-            RequiresHeroImage = type.RequiresHeroImage,
-            RequiresFile = type.RequiresFile,
-            RequiresVideoUrl = type.RequiresVideoUrl,
-            AllowsAttachments = type.AllowsAttachments,
-            ClickBehavior = type.ClickBehavior,
-            Visible = type.Visible,
-            Order = type.Order,
-            CreatedAt = type.CreatedAt,
-            UpdatedAt = type.UpdatedAt
-        };
-
-        private static ContentResponseDto MapItem(ContentItem item) => new()
-        {
-            Id = item.Id,
-            StableId = item.StableId,
-            ContentTypeKey = item.ContentTypeKey,
-            Slug = item.Slug,
-            Title = item.Title,
-            Summary = item.Summary,
-            BodyHtml = item.BodyHtml,
-            BodyItems = item.BodyItems.Select(MapBodyItem).ToList(),
-            HeroImageUrl = item.HeroImageUrl,
-            HeroImageAlt = item.HeroImageAlt,
-            ThumbnailUrl = item.ThumbnailUrl,
-            VideoUrl = item.VideoUrl,
-            ExternalUrl = item.ExternalUrl,
-            TemplateKey = item.TemplateKey,
-            Tags = item.Tags,
-            Attachments = item.Attachments.Select(MapAttachment).ToList(),
-            Status = item.Status,
-            Visible = item.Visible,
-            AuthorId = item.AuthorId,
-            UpdatedById = item.UpdatedById,
-            PublishedById = item.PublishedById,
-            CreatedAt = item.CreatedAt,
-            UpdatedAt = item.UpdatedAt,
-            SubmittedAt = item.SubmittedAt,
-            PublishedAt = item.PublishedAt
-        };
-
-        private static ContentAttachmentDto MapAttachment(ContentAttachment attachment) => new()
-        {
-            Id = attachment.Id,
-            FileName = attachment.FileName,
-            Url = attachment.Url,
-            ContentType = attachment.ContentType,
-            SizeBytes = attachment.SizeBytes
-        };
-
-        private static ContentBodyItemDto MapBodyItem(ContentBodyItem item) => new()
-        {
-            Id = item.Id,
-            Type = item.Type,
-            Content = item.Content,
-            Caption = item.Caption,
-            Url = item.Url,
-            FileName = item.FileName,
-            ContentType = item.ContentType,
-            SizeBytes = item.SizeBytes,
-            Style = item.Style,
-            Visible = item.Visible,
-            Order = item.Order
-        };
-
-        private static ContentAuditLogResponseDto MapLog(ContentAuditLog log) => new()
-        {
-            Id = log.Id,
-            ContentStableId = log.ContentStableId,
-            Action = log.Action,
-            ActorId = log.ActorId,
-            Message = log.Message,
-            CreatedAt = log.CreatedAt
-        };
     }
 }

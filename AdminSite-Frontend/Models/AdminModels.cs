@@ -222,11 +222,8 @@ namespace AdminSite.Models
         public Dictionary<string, string>? Subtext { get; set; }
         public SectionButtonModel? Button { get; set; }
 
-        // Gallery
         public int? Columns { get; set; }
         public string? Gap { get; set; }
-        public bool? ShowCaptions { get; set; }
-        public List<GalleryImageModel>? Images { get; set; }
 
         // Shared section heading fields
         public Dictionary<string, string>? Eyebrow { get; set; }
@@ -368,23 +365,6 @@ namespace AdminSite.Models
         public string? Href { get; set; }
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
-        public bool Visible { get; set; }
-        public int Order { get; set; }
-    }
-
-    public class GalleryImageModel
-    {
-        public string Id { get; set; } = string.Empty;
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string>? Caption { get; set; }
-
-        [JsonIgnore]
-        public string CaptionText
-        {
-            get => Caption is not null && Caption.TryGetValue("en", out var value) ? value : string.Empty;
-            set => Caption = new Dictionary<string, string> { ["en"] = value };
-        }
-
         public bool Visible { get; set; }
         public int Order { get; set; }
     }
@@ -792,6 +772,9 @@ namespace AdminSite.Models
         public string Id { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
     }
@@ -803,10 +786,27 @@ namespace AdminSite.Models
         public Dictionary<string, string> Content { get; set; } = new();
         public Dictionary<string, string> Caption { get; set; } = new();
         public string? Url { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
         public string? FileName { get; set; }
         public string? ContentType { get; set; }
         public long SizeBytes { get; set; }
         public string? Style { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
+    public class ContentGalleryItemModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "image";
+        public string? Url { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
+        public Dictionary<string, string> Caption { get; set; } = new();
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
     }
@@ -821,10 +821,20 @@ namespace AdminSite.Models
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
         public List<ContentBodyItemModel> BodyItems { get; set; } = new();
+        public List<ContentGalleryItemModel> GalleryItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string HeroImageResourceSource { get; set; } = "DirectUpload";
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string ThumbnailResourceSource { get; set; } = "DirectUpload";
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string VideoResourceSource { get; set; } = "DirectUpload";
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string> Tags { get; set; } = new();
@@ -848,10 +858,20 @@ namespace AdminSite.Models
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
         public List<ContentBodyItemModel> BodyItems { get; set; } = new();
+        public List<ContentGalleryItemModel> GalleryItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string HeroImageResourceSource { get; set; } = "DirectUpload";
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string ThumbnailResourceSource { get; set; } = "DirectUpload";
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string VideoResourceSource { get; set; } = "DirectUpload";
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string> Tags { get; set; } = new();
@@ -882,6 +902,7 @@ namespace AdminSite.Models
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string FileName { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
@@ -889,10 +910,32 @@ namespace AdminSite.Models
         public string Source { get; set; } = "managed-upload";
         public List<string> Tags { get; set; } = new();
         public bool Active { get; set; } = true;
+        public int UsageCount { get; set; }
+        public bool IsInUse { get; set; }
         public string CreatedById { get; set; } = string.Empty;
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ManagedResourceUsageModel
+    {
+        public string ResourceId { get; set; } = string.Empty;
+        public int UsageCount { get; set; }
+        public List<ManagedResourceUsageReferenceModel> References { get; set; } = new();
+    }
+
+    public class ManagedResourceUsageReferenceModel
+    {
+        public string ResourceId { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string ItemId { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Field { get; set; } = string.Empty;
+        public string Detail { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? UpdatedAt { get; set; }
     }
 
     public class ManagedResourceRequest
@@ -901,6 +944,7 @@ namespace AdminSite.Models
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string? FileName { get; set; }
         public string? ContentType { get; set; }
@@ -939,6 +983,7 @@ namespace AdminSite.Models
     public class AssetUploadModel
     {
         public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public long Size { get; set; }

@@ -122,6 +122,7 @@ else
                                 <th>@T("Preview")</th>
                                 <th>@T("Name")</th>
                                 <th>@T("Type")</th>
+                                <th>@T("Usage")</th>
                                 <th>@T("Updated")</th>
                                 <th>@T("Active")</th>
                                 <th></th>
@@ -137,15 +138,24 @@ else
                                         <div class="text-muted" style="font-size:.8rem;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@resource.Url</div>
                                     </td>
                                     <td>@DisplayKind(resource.Kind)</td>
+                                    <td>
+                                        <span style="@UsageStyle(resource)">@UsageText(resource)</span>
+                                    </td>
                                     <td>@resource.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
                                     <td>@(resource.Active ? T("Active") : T("Disabled"))</td>
-                                    <td style="width:110px">
+                                    <td style="width:150px">
                                         <div style="display:flex;gap:.35rem;justify-content:flex-end">
                                             <a class="btn-admin btn-ghost content-icon-btn" href="@resource.Url" target="_blank" rel="noopener" title="@T("View")">
                                                 <i class="fas fa-eye"></i>
                                             </a>
                                             <button class="btn-admin btn-ghost content-icon-btn" @onclick="() => EditResource(resource)" title="@T("Edit")">
                                                 <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn-admin btn-danger content-icon-btn"
+                                                    disabled="@resource.IsInUse"
+                                                    @onclick="() => AskDeleteResource(resource)"
+                                                    title="@DeleteTitle(resource)">
+                                                <i class="fas fa-trash"></i>
                                             </button>
                                         </div>
                                     </td>
@@ -155,6 +165,54 @@ else
                     </table>
                 </div>
             }
+        </div>
+    </div>
+}
+
+@if (_deleteResource is not null)
+{
+    <div class="modal-backdrop" @onclick="CancelDeleteResource">
+        <div class="modal-card" style="max-width:560px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("DeleteResource")</div>
+            <div style="padding:1rem">
+                <p style="margin-top:0">
+                    @string.Format(T("DeleteResourcePrompt"), GetValue(_deleteResource.Name, CurrentLang, fallback: true))
+                </p>
+                @if (_deleteLoading)
+                {
+                    <p class="text-muted">@T("UsageLoading")</p>
+                }
+                else if ((_deleteUsage?.UsageCount ?? 0) > 0)
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("UsageUsedInPlaces"), _deleteUsage!.UsageCount, _deleteUsage.UsageCount == 1 ? string.Empty : "s")
+                    </div>
+                    <ul style="margin:.5rem 0 0;padding-left:1.2rem">
+                        @foreach (var reference in _deleteUsage!.References.Take(6))
+                        {
+                            <li>@UsageReferenceText(reference)</li>
+                        }
+                    </ul>
+                    @if (_deleteUsage.References.Count > 6)
+                    {
+                        <div class="text-muted" style="font-size:.85rem;margin-top:.5rem">
+                            @string.Format(T("MoreCount"), _deleteUsage.References.Count - 6)
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="text-muted">@T("NotUsedAnywhereSafeToDelete")</p>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CancelDeleteResource">@T("Cancel")</button>
+                <button class="btn-admin btn-danger"
+                        disabled="@(_deleteLoading || (_deleteUsage?.UsageCount ?? 0) > 0)"
+                        @onclick="ConfirmDeleteResource">
+                    @T("Delete")
+                </button>
+            </div>
         </div>
     </div>
 }
@@ -170,6 +228,9 @@ else
     private string _kindFilter = string.Empty;
     private string _tagsText = string.Empty;
     private bool _loading = true;
+    private ManagedResourceModel? _deleteResource;
+    private ManagedResourceUsageModel? _deleteUsage;
+    private bool _deleteLoading;
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
@@ -214,6 +275,7 @@ else
             Name = EnsureLangs(resource.Name),
             Description = EnsureLangs(resource.Description),
             Url = resource.Url,
+            StorageKey = resource.StorageKey,
             ThumbnailUrl = resource.ThumbnailUrl,
             FileName = resource.FileName,
             ContentType = resource.ContentType,
@@ -249,6 +311,56 @@ else
             await LoadResources();
             EditResource(res.Data);
         }
+    }
+
+    private async Task AskDeleteResource(ManagedResourceModel resource)
+    {
+        if (resource.IsInUse)
+        {
+            Http.Toast(string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s"), 422);
+            return;
+        }
+
+        _deleteResource = resource;
+        _deleteUsage = null;
+        _deleteLoading = true;
+
+        var usage = await ContentService.GetResourceUsageAsync(resource.Id);
+        if (usage.Success)
+            _deleteUsage = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
+        else
+            Http.Toast(usage.Message, usage.StatusCode);
+
+        _deleteLoading = false;
+    }
+
+    private void CancelDeleteResource()
+    {
+        _deleteResource = null;
+        _deleteUsage = null;
+        _deleteLoading = false;
+    }
+
+    private async Task ConfirmDeleteResource()
+    {
+        if (_deleteResource is null) return;
+
+        var res = await ContentService.DeleteResourceAsync(_deleteResource.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            if (string.Equals(_editingId, _deleteResource.Id, StringComparison.OrdinalIgnoreCase))
+                NewResource();
+
+            CancelDeleteResource();
+            await LoadResources();
+            return;
+        }
+
+        var usage = await ContentService.GetResourceUsageAsync(_deleteResource.Id);
+        if (usage.Success)
+            _deleteUsage = usage.Data;
+        await LoadResources();
     }
 
     private void PrepareRequest()
@@ -289,6 +401,26 @@ else
         "video" => T("VideoResource"),
         _ => T("FileResource")
     };
+
+    private string UsageText(ManagedResourceModel resource) =>
+        resource.UsageCount <= 0
+            ? T("UsageNotUsed")
+            : string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s");
+
+    private static string UsageStyle(ManagedResourceModel resource) =>
+        resource.UsageCount <= 0
+            ? "display:inline-flex;padding:.2rem .45rem;border-radius:999px;background:#ecfdf5;color:#166534;font-size:.8rem"
+            : "display:inline-flex;padding:.2rem .45rem;border-radius:999px;background:#fff7ed;color:#9a3412;font-size:.8rem";
+
+    private string DeleteTitle(ManagedResourceModel resource) =>
+        resource.IsInUse ? T("DeleteResourceInUseBlocked") : T("Delete");
+
+    private static string UsageReferenceText(ManagedResourceUsageReferenceModel reference)
+    {
+        var title = string.IsNullOrWhiteSpace(reference.Title) ? reference.ItemId : reference.Title;
+        var detail = string.IsNullOrWhiteSpace(reference.Detail) ? string.Empty : $" - {reference.Detail}";
+        return $"{reference.Source}: {title} / {reference.Field}{detail}";
+    }
 
     private string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)
     {

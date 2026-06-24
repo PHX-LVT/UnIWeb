@@ -156,6 +156,7 @@ else
                                 <button class="btn-admin btn-danger" @onclick="RemoveHero">@T("RemoveImage")</button>
                             }
                         </div>
+                        <div class="form-hint">@T("Source"): @AssetSourceLabel(_edit.HeroImageResourceSource, _edit.HeroImageResourceId)</div>
                         @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
                         {
                             <label style="margin-top:.75rem">@T("ImageDescription")</label>
@@ -225,8 +226,9 @@ else
                                                 <input class="form-control content-editor-input"
                                                        placeholder="@T("ImageUrl")"
                                                        value="@item.Url"
-                                                       @oninput="e => item.Url = e.Value?.ToString()" />
+                                                       @oninput="e => OnBodyMediaUrlChanged(item, e.Value?.ToString())" />
                                             </div>
+                                            <div class="form-hint">@T("Source"): @AssetSourceLabel(item.ResourceSource, item.ResourceId)</div>
                                             <input class="form-control content-editor-input"
                                                    style="margin-top:.75rem"
                                                    placeholder="@T("ImageDescription")"
@@ -241,8 +243,9 @@ else
                                                 <input class="form-control content-editor-input"
                                                        placeholder="@T("VideoUrl")"
                                                        value="@item.Url"
-                                                       @oninput="e => item.Url = e.Value?.ToString()" />
+                                                       @oninput="e => OnBodyMediaUrlChanged(item, e.Value?.ToString())" />
                                             </div>
+                                            <div class="form-hint">@T("Source"): @AssetSourceLabel(item.ResourceSource, item.ResourceId)</div>
                                             <input class="form-control content-editor-input"
                                                    style="margin-top:.75rem"
                                                    placeholder="@T("Caption")"
@@ -264,8 +267,9 @@ else
                                                 <input class="form-control content-editor-input"
                                                        placeholder="@T("FileUrl")"
                                                        value="@item.Url"
-                                                       @oninput="e => item.Url = e.Value?.ToString()" />
+                                                       @oninput="e => OnBodyMediaUrlChanged(item, e.Value?.ToString())" />
                                             </div>
+                                            <div class="form-hint">@T("Source"): @AssetSourceLabel(item.ResourceSource, item.ResourceId)</div>
                                             <input class="form-control content-editor-input"
                                                    style="margin-top:.75rem"
                                                    placeholder="@T("FileName")"
@@ -309,6 +313,112 @@ else
                 }
             </div>
 
+            @if (ShowsGallery)
+            {
+                <div class="admin-card content-editor-card" style="margin-bottom:1rem">
+                    <div class="content-body-editor__header">
+                        <div>
+                            <h2 style="font-size:1rem;margin:0 0 .35rem">@T("GalleryItems")</h2>
+                            <div class="form-hint">@T("GalleryItemsHint")</div>
+                        </div>
+                        <span>@_edit.GalleryItems.Count/@MaxGalleryItems</span>
+                    </div>
+
+                    @if (_edit.GalleryItems.Count == 0)
+                    {
+                        <div class="form-hint" style="margin-bottom:.85rem">@T("NoGalleryItemsYet")</div>
+                    }
+
+                    @foreach (var item in _edit.GalleryItems.OrderBy(i => i.Order).ToList())
+                    {
+                        var kind = NormalizeGalleryKind(item.Kind);
+                        <article class="content-body-item">
+                            <div class="content-body-item__toolbar">
+                                <div class="content-body-item__summary">
+                                    <i class="fas @(kind == "video" ? "fa-play" : "fa-image")"></i>
+                                    <strong>@GalleryItemLabel(item.Kind) @(item.Order + 1)</strong>
+                                </div>
+                                <div>
+                                    <button class="btn-admin btn-ghost content-icon-btn" disabled="@(item.Order == 0)" @onclick="() => MoveGalleryItem(item, -1)" title="@T("MoveUp")">
+                                        <i class="fas fa-arrow-up"></i>
+                                    </button>
+                                    <button class="btn-admin btn-ghost content-icon-btn" disabled="@(item.Order >= _edit.GalleryItems.Count - 1)" @onclick="() => MoveGalleryItem(item, 1)" title="@T("MoveDown")">
+                                        <i class="fas fa-arrow-down"></i>
+                                    </button>
+                                    <button class="btn-admin btn-danger content-icon-btn" @onclick="() => RemoveGalleryItem(item)" title="@T("Remove")">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            @if (kind == "image" && !string.IsNullOrWhiteSpace(item.Url))
+                            {
+                                <img class="content-editor-preview" src="@item.Url" alt="" />
+                            }
+                            else if (kind == "video" && !string.IsNullOrWhiteSpace(item.ThumbnailUrl))
+                            {
+                                <img class="content-editor-preview" src="@item.ThumbnailUrl" alt="" />
+                            }
+
+                            <label>@T("Type")</label>
+                            <select class="form-control content-editor-input" value="@kind" @onchange="e => OnGalleryKindChanged(item, e.Value?.ToString())">
+                                <option value="image">@T("Image")</option>
+                                <option value="video">@T("Video")</option>
+                            </select>
+
+                            @if (kind == "image")
+                            {
+                                <div class="content-body-upload-row" style="margin-top:.75rem">
+                                    <InputFile class="content-editor-file-input"
+                                               id="@($"content-gallery-image-{item.Id}")"
+                                               OnChange="e => UploadGalleryImage(item, e)"
+                                               accept="image/*" />
+                                    <label class="btn-admin btn-ghost" for="@($"content-gallery-image-{item.Id}")">
+                                        <i class="fas fa-image"></i> @T("UploadNew")
+                                    </label>
+                                    <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenGalleryResourcePicker("image", item)'>
+                                        <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                                    </button>
+                                    <input class="form-control content-editor-input"
+                                           placeholder="@T("ImageUrl")"
+                                           value="@item.Url"
+                                           @oninput="e => OnGalleryItemUrlChanged(item, e.Value?.ToString())" />
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="content-body-upload-row" style="margin-top:.75rem">
+                                    <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenGalleryResourcePicker("video", item)'>
+                                        <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                                    </button>
+                                    <input class="form-control content-editor-input"
+                                           placeholder="@T("VideoUrl")"
+                                           value="@item.Url"
+                                           @oninput="e => OnGalleryItemUrlChanged(item, e.Value?.ToString())" />
+                                </div>
+                                <input class="form-control content-editor-input"
+                                       style="margin-top:.75rem"
+                                       placeholder="@T("ThumbnailUrl")"
+                                       value="@item.ThumbnailUrl"
+                                       @oninput="e => item.ThumbnailUrl = e.Value?.ToString()" />
+                            }
+
+                            <div class="form-hint">@T("Source"): @AssetSourceLabel(item.ResourceSource, item.ResourceId)</div>
+                            <input class="form-control content-editor-input"
+                                   style="margin-top:.75rem"
+                                   placeholder="@T("Caption")"
+                                   value="@GetValue(item.Caption, CurrentLang)"
+                                   @oninput="e => SetValue(item.Caption, CurrentLang, e.Value?.ToString())" />
+                        </article>
+                    }
+
+                    <div class="content-body-actions">
+                        <button class="btn-admin btn-ghost" disabled="@GalleryLimitReached" @onclick='() => AddGalleryItem("image")'><i class="fas fa-image"></i> @T("AddImage")</button>
+                        <button class="btn-admin btn-ghost" disabled="@GalleryLimitReached" @onclick='() => AddGalleryItem("video")'><i class="fas fa-play"></i> @T("AddVideo")</button>
+                    </div>
+                </div>
+            }
+
             @if (ShowsFile)
             {
                 <div class="admin-card content-editor-card" style="margin-bottom:1rem">
@@ -346,6 +456,7 @@ else
                             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
                         </button>
                     </div>
+                    <div class="form-hint">@T("Source"): @AssetSourceLabel(_fileResourceSource, _fileResourceId)</div>
                 </div>
             }
 
@@ -359,8 +470,9 @@ else
                         <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("video", "video")'>
                             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
                         </button>
-                        <input class="form-control content-editor-input" value="@_edit.VideoUrl" @oninput="e => _edit.VideoUrl = e.Value?.ToString()" />
+                        <input class="form-control content-editor-input" value="@_edit.VideoUrl" @oninput="OnVideoUrlChanged" />
                     </div>
+                    <div class="form-hint">@T("Source"): @AssetSourceLabel(_edit.VideoResourceSource, _edit.VideoResourceId)</div>
                 </div>
             }
 
@@ -374,7 +486,7 @@ else
                         <img class="content-editor-preview" src="@_edit.ThumbnailUrl" alt="" />
                     }
                     <label>@T("ThumbnailUrl")</label>
-                    <input class="form-control content-editor-input" value="@_edit.ThumbnailUrl" @oninput="e => _edit.ThumbnailUrl = e.Value?.ToString()" />
+                    <input class="form-control content-editor-input" value="@_edit.ThumbnailUrl" @oninput="OnThumbnailUrlChanged" />
                     <div style="margin-top:.75rem">
                         <InputFile class="content-editor-file-input"
                                    id="content-thumbnail-upload"
@@ -386,76 +498,27 @@ else
                         <button class="btn-admin btn-ghost" type="button" @onclick='() => OpenResourcePicker("image", "thumbnail")'>
                             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
                         </button>
+                        @if (!string.IsNullOrWhiteSpace(_edit.ThumbnailUrl))
+                        {
+                            <button class="btn-admin btn-danger" type="button" @onclick="RemoveThumbnail">@T("RemoveImage")</button>
+                        }
                     </div>
+                    <div class="form-hint">@T("Source"): @AssetSourceLabel(_edit.ThumbnailResourceSource, _edit.ThumbnailResourceId)</div>
                 </div>
             }
         </div>
     </div>
 }
 
-@if (_resourcePickerOpen)
-{
-    <div class="modal-backdrop" @onclick="CloseResourcePicker">
-        <div class="modal-box content-resource-picker" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <span>@ResourcePickerTitle</span>
-                <button type="button" class="btn-admin btn-ghost content-icon-btn" @onclick="CloseResourcePicker" title="@T("Close")">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="content-resource-picker__toolbar">
-                    <input class="form-control" placeholder="@T("SearchResources")" value="@_resourcePickerSearch" @oninput="OnResourcePickerSearchChanged" />
-                    <a class="btn-admin btn-ghost" href="/content/resources" target="_blank" rel="noopener">
-                        <i class="fas fa-up-right-from-square"></i> @T("ResourceLibrary")
-                    </a>
-                </div>
-                <div class="form-hint">@T("ResourcePickerHint")</div>
-
-                @if (_resourcePickerLoading)
-                {
-                    <p class="text-muted">@T("Loading")</p>
-                }
-                else if (!_resourcePickerItems.Any())
-                {
-                    <p class="text-muted">@T("NoMatchingResources")</p>
-                }
-                else
-                {
-                    <div class="content-resource-picker__grid">
-                        @foreach (var resource in _resourcePickerItems)
-                        {
-                            <button type="button" class="content-resource-picker__item" @key="resource.Id" @onclick="() => SelectResource(resource)">
-                                <span class="content-resource-picker__thumb">
-                                    @if (ResourceThumbnailUrl(resource) is { Length: > 0 } thumbnail)
-                                    {
-                                        <img src="@thumbnail" alt="" />
-                                    }
-                                    else
-                                    {
-                                        <i class="fas @ResourceIcon(resource)"></i>
-                                    }
-                                </span>
-                                <span class="content-resource-picker__meta">
-                                    <strong>@ResourceName(resource)</strong>
-                                    <small>@DisplayResourceKind(resource.Kind)</small>
-                                    @if (!string.IsNullOrWhiteSpace(ResourceDescription(resource)))
-                                    {
-                                        <em>@ResourceDescription(resource)</em>
-                                    }
-                                </span>
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-admin btn-ghost" @onclick="CloseResourcePicker">@T("Cancel")</button>
-            </div>
-        </div>
-    </div>
-}
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="_resourcePickerKind"
+                     ResourceSelected="SelectResource"
+                     Closed="CloseResourcePicker" />
 @code {
+    private const string DirectUploadSource = "DirectUpload";
+    private const string ManagedResourceSource = "ManagedResource";
+    private const int MaxGalleryItems = 30;
+
     [Parameter] public string? Id { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
@@ -469,15 +532,16 @@ else
     private string _fileName = string.Empty;
     private string _fileContentType = "application/pdf";
     private long _fileSize;
+    private string? _fileResourceId;
+    private string _fileResourceSource = DirectUploadSource;
+    private string? _fileStorageKey;
     private bool _loading = true;
     private HashSet<string> _expandedBodyItemIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _resourcePickerOpen;
-    private bool _resourcePickerLoading;
     private string _resourcePickerKind = "file";
     private string _resourcePickerTarget = string.Empty;
-    private string _resourcePickerSearch = string.Empty;
-    private List<ManagedResourceModel> _resourcePickerItems = new();
     private ContentBodyItemModel? _resourcePickerBodyItem;
+    private ContentGalleryItemModel? _resourcePickerGalleryItem;
 
     private bool IsNew => string.IsNullOrWhiteSpace(Id);
     private string CurrentLang => NormalizeLang(AdminLanguage);
@@ -486,33 +550,39 @@ else
     private bool IsPageContent => string.Equals(SelectedBehavior, "page", StringComparison.OrdinalIgnoreCase);
     private bool IsFileResource => string.Equals(SelectedBehavior, "file-resource", StringComparison.OrdinalIgnoreCase);
     private bool IsVideoResource => string.Equals(SelectedBehavior, "video-resource", StringComparison.OrdinalIgnoreCase);
-    private string ClickBehavior => SelectedType?.ClickBehavior?.ToLowerInvariant() ?? (IsVideoResource ? "video" : IsFileResource ? "download" : "detail");
+    private bool IsImageResource => string.Equals(SelectedBehavior, "image-resource", StringComparison.OrdinalIgnoreCase);
+    private bool IsGalleryResource => string.Equals(SelectedBehavior, "gallery", StringComparison.OrdinalIgnoreCase);
+    private string ClickBehavior => SelectedType?.ClickBehavior?.ToLowerInvariant() ?? (IsVideoResource ? "video" : IsFileResource ? "download" : (IsImageResource || IsGalleryResource) ? "image" : "detail");
     private bool ShowsBody => IsPageContent;
     private bool ShowsHero => IsPageContent || SelectedType?.RequiresHeroImage == true;
     private bool ShowsTemplate => IsPageContent;
     private bool ShowsFile => IsFileResource || (!IsPageContent && (SelectedType?.RequiresFile == true || ClickBehavior == "download"));
     private bool ShowsVideo => IsVideoResource || (!IsPageContent && (SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video"));
-    private bool ShowsThumbnail => ShowsFile || ShowsVideo;
+    private bool ShowsThumbnail => ShowsFile || ShowsVideo || IsImageResource;
+    private bool ShowsGallery => IsGalleryResource;
     private string SelectedBehaviorLabel => SelectedBehavior switch
     {
         "file-resource" => T("FileResource"),
         "video-resource" => T("VideoResource"),
+        "image-resource" => T("ImageResource"),
+        "gallery" => T("Gallery"),
         _ => T("PageContent")
     };
     private string SelectedBehaviorHint => SelectedBehavior switch
     {
         "file-resource" => T("FileResourceEditorHint"),
         "video-resource" => T("VideoResourceEditorHint"),
+        "image-resource" => T("ImageResourceEditorHint"),
+        "gallery" => T("GalleryEditorHint"),
         _ => T("PageContentEditorHint")
     };
     private string SummaryLabel => IsPageContent ? T("Summary") : T("ResourceDescription");
-    private string ResourcePickerTitle => _resourcePickerKind switch
-    {
-        "image" => T("ChooseImageResource"),
-        "video" => T("ChooseVideoResource"),
-        _ => T("ChooseFileResource")
-    };
+    private string AssetSourceLabel(string? source, string? resourceId) =>
+        string.Equals(NormalizeResourceSource(source, resourceId), ManagedResourceSource, StringComparison.OrdinalIgnoreCase)
+            ? T("ManagedResource")
+            : T("DirectUpload");
     private bool BodyLimitReached => _edit.BodyItems.Count >= 10;
+    private bool GalleryLimitReached => _edit.GalleryItems.Count >= MaxGalleryItems;
     private string ReturnUrl => GetReturnUrl();
     private bool IsDraft => string.Equals(_status, "Draft", StringComparison.OrdinalIgnoreCase);
     private bool IsSubmitted => string.Equals(_status, "Submitted", StringComparison.OrdinalIgnoreCase);
@@ -545,6 +615,7 @@ else
             return behavior;
 
         var clickBehavior = type.ClickBehavior?.Trim().ToLowerInvariant();
+        if (clickBehavior == "image") return "image-resource";
         if (type.RequiresVideoUrl || clickBehavior == "video") return "video-resource";
         if (type.RequiresFile || clickBehavior == "download" || !type.RequiresBody) return "file-resource";
         return "page";
@@ -554,6 +625,8 @@ else
     {
         "file" or "file-resource" or "download" or "resource" => "file-resource",
         "video" or "video-resource" or "webinar" => "video-resource",
+        "image" or "image-resource" or "photo" or "picture" => "image-resource",
+        "gallery" or "image-gallery" or "photo-gallery" or "media-gallery" => "gallery",
         _ => "page"
     };
 
@@ -588,10 +661,20 @@ else
             Summary = EnsureLangs(item.Summary),
             BodyHtml = EnsureLangs(item.BodyHtml),
             BodyItems = NormalizeBodyItems(item.BodyItems, item.BodyHtml),
+            GalleryItems = NormalizeGalleryItems(item.GalleryItems),
             HeroImageUrl = item.HeroImageUrl,
+            HeroImageResourceId = item.HeroImageResourceId,
+            HeroImageResourceSource = NormalizeResourceSource(item.HeroImageResourceSource, item.HeroImageResourceId),
+            HeroImageStorageKey = item.HeroImageStorageKey,
             HeroImageAlt = item.HeroImageAlt,
             ThumbnailUrl = item.ThumbnailUrl,
+            ThumbnailResourceId = item.ThumbnailResourceId,
+            ThumbnailResourceSource = NormalizeResourceSource(item.ThumbnailResourceSource, item.ThumbnailResourceId),
+            ThumbnailStorageKey = item.ThumbnailStorageKey,
             VideoUrl = item.VideoUrl,
+            VideoResourceId = item.VideoResourceId,
+            VideoResourceSource = NormalizeResourceSource(item.VideoResourceSource, item.VideoResourceId),
+            VideoStorageKey = item.VideoStorageKey,
             ExternalUrl = item.ExternalUrl,
             TemplateKey = item.TemplateKey,
             Tags = item.Tags.ToList(),
@@ -606,6 +689,9 @@ else
         _fileName = file?.FileName ?? string.Empty;
         _fileContentType = string.IsNullOrWhiteSpace(file?.ContentType) ? "application/pdf" : file.ContentType;
         _fileSize = file?.SizeBytes ?? 0;
+        _fileResourceId = file?.ResourceId;
+        _fileResourceSource = NormalizeResourceSource(file?.ResourceSource, file?.ResourceId);
+        _fileStorageKey = file?.StorageKey;
         _expandedBodyItemIds = _edit.BodyItems.Take(1).Select(i => i.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -694,34 +780,22 @@ else
     }
 
 
-    private async Task OpenResourcePicker(string kind, string target, ContentBodyItemModel? bodyItem = null)
+    private void OpenResourcePicker(string kind, string target, ContentBodyItemModel? bodyItem = null)
     {
         _resourcePickerKind = NormalizeResourceKind(kind);
         _resourcePickerTarget = target;
         _resourcePickerBodyItem = bodyItem;
-        _resourcePickerSearch = string.Empty;
+        _resourcePickerGalleryItem = null;
         _resourcePickerOpen = true;
-        await LoadResourcePicker();
     }
 
-    private async Task LoadResourcePicker()
+    private void OpenGalleryResourcePicker(string kind, ContentGalleryItemModel item)
     {
-        _resourcePickerLoading = true;
-        var res = await ContentService.GetResourcesAsync(_resourcePickerKind, _resourcePickerSearch, includeInactive: false);
-        if (res.Success)
-            _resourcePickerItems = (res.Data ?? new()).Where(r => r.Active).ToList();
-        else
-        {
-            _resourcePickerItems = new();
-            Http.Toast(res.Message, res.StatusCode);
-        }
-        _resourcePickerLoading = false;
-    }
-
-    private async Task OnResourcePickerSearchChanged(ChangeEventArgs e)
-    {
-        _resourcePickerSearch = e.Value?.ToString() ?? string.Empty;
-        await LoadResourcePicker();
+        _resourcePickerKind = NormalizeResourceKind(kind);
+        _resourcePickerTarget = "gallery-item";
+        _resourcePickerBodyItem = null;
+        _resourcePickerGalleryItem = item;
+        _resourcePickerOpen = true;
     }
 
     private void SelectResource(ManagedResourceModel resource)
@@ -730,33 +804,48 @@ else
         {
             case "hero":
                 _edit.HeroImageUrl = resource.Url;
+                _edit.HeroImageResourceId = resource.Id;
+                _edit.HeroImageResourceSource = ManagedResourceSource;
+                _edit.HeroImageStorageKey = resource.StorageKey;
                 if (string.IsNullOrWhiteSpace(_edit.HeroImageAlt))
                     _edit.HeroImageAlt = ResourceName(resource);
                 break;
             case "thumbnail":
                 _edit.ThumbnailUrl = ResourceThumbnailUrl(resource);
+                _edit.ThumbnailResourceId = resource.Id;
+                _edit.ThumbnailResourceSource = ManagedResourceSource;
+                _edit.ThumbnailStorageKey = resource.StorageKey;
                 break;
             case "primary-file":
                 SetPrimaryFileFromResource(resource);
                 break;
             case "video":
                 _edit.VideoUrl = resource.Url;
+                _edit.VideoResourceId = resource.Id;
+                _edit.VideoResourceSource = ManagedResourceSource;
+                _edit.VideoStorageKey = resource.StorageKey;
                 if (string.IsNullOrWhiteSpace(_edit.ThumbnailUrl) && !string.IsNullOrWhiteSpace(resource.ThumbnailUrl))
                     _edit.ThumbnailUrl = resource.ThumbnailUrl;
                 break;
             case "body-image" when _resourcePickerBodyItem is not null:
                 _resourcePickerBodyItem.Url = resource.Url;
+                ApplyManagedResource(_resourcePickerBodyItem, resource);
                 if (string.IsNullOrWhiteSpace(GetValue(_resourcePickerBodyItem.Caption, CurrentLang)))
                     SetValue(_resourcePickerBodyItem.Caption, CurrentLang, ResourceDescription(resource));
                 break;
             case "body-file" when _resourcePickerBodyItem is not null:
                 _resourcePickerBodyItem.Url = resource.Url;
+                ApplyManagedResource(_resourcePickerBodyItem, resource);
                 _resourcePickerBodyItem.FileName = ResourceFileName(resource);
                 _resourcePickerBodyItem.ContentType = resource.ContentType;
                 _resourcePickerBodyItem.SizeBytes = resource.SizeBytes;
                 break;
             case "body-video" when _resourcePickerBodyItem is not null:
                 _resourcePickerBodyItem.Url = resource.Url;
+                ApplyManagedResource(_resourcePickerBodyItem, resource);
+                break;
+            case "gallery-item" when _resourcePickerGalleryItem is not null:
+                SetGalleryItemFromResource(_resourcePickerGalleryItem, resource);
                 break;
         }
 
@@ -766,9 +855,9 @@ else
     private void CloseResourcePicker()
     {
         _resourcePickerOpen = false;
-        _resourcePickerLoading = false;
         _resourcePickerTarget = string.Empty;
         _resourcePickerBodyItem = null;
+        _resourcePickerGalleryItem = null;
     }
 
     private void SetPrimaryFileFromResource(ManagedResourceModel resource)
@@ -777,6 +866,44 @@ else
         _fileName = ResourceFileName(resource);
         _fileContentType = string.IsNullOrWhiteSpace(resource.ContentType) ? "application/octet-stream" : resource.ContentType;
         _fileSize = resource.SizeBytes;
+        _fileResourceId = resource.Id;
+        _fileResourceSource = ManagedResourceSource;
+        _fileStorageKey = resource.StorageKey;
+    }
+
+    private void SetGalleryItemFromResource(ContentGalleryItemModel item, ManagedResourceModel resource)
+    {
+        var kind = NormalizeResourceKind(resource.Kind);
+        item.Kind = kind == "video" ? "video" : "image";
+        item.Url = resource.Url;
+        item.ThumbnailUrl = ResourceThumbnailUrl(resource);
+        item.ResourceId = resource.Id;
+        item.ResourceSource = ManagedResourceSource;
+        item.StorageKey = resource.StorageKey;
+
+        if (string.IsNullOrWhiteSpace(GetValue(item.Caption, CurrentLang)))
+            SetValue(item.Caption, CurrentLang, ResourceDescription(resource));
+    }
+
+    private void ApplyGalleryThumbnail()
+    {
+        var first = _edit.GalleryItems
+            .OrderBy(i => i.Order)
+            .FirstOrDefault(i => i.Visible && !string.IsNullOrWhiteSpace(i.Url));
+
+        if (first is null)
+        {
+            _edit.ThumbnailUrl = string.Empty;
+            _edit.ThumbnailResourceId = string.Empty;
+            _edit.ThumbnailResourceSource = DirectUploadSource;
+            _edit.ThumbnailStorageKey = string.Empty;
+            return;
+        }
+
+        _edit.ThumbnailUrl = !string.IsNullOrWhiteSpace(first.ThumbnailUrl) ? first.ThumbnailUrl : first.Url;
+        _edit.ThumbnailResourceId = first.ResourceId;
+        _edit.ThumbnailResourceSource = NormalizeResourceSource(first.ResourceSource, first.ResourceId);
+        _edit.ThumbnailStorageKey = first.StorageKey;
     }
 
     private string ResourceName(ManagedResourceModel resource)
@@ -794,7 +921,7 @@ else
         string.IsNullOrWhiteSpace(resource.FileName) ? ResourceName(resource) : resource.FileName;
 
     private static string ResourceThumbnailUrl(ManagedResourceModel resource) =>
-        !string.IsNullOrWhiteSpace(resource.ThumbnailUrl) ? resource.ThumbnailUrl! : resource.Kind == "image" ? resource.Url : string.Empty;
+        !string.IsNullOrWhiteSpace(resource.ThumbnailUrl) ? resource.ThumbnailUrl! : NormalizeResourceKind(resource.Kind) == "image" ? resource.Url : string.Empty;
 
     private static string ResourceIcon(ManagedResourceModel resource) => NormalizeResourceKind(resource.Kind) switch
     {
@@ -816,6 +943,21 @@ else
         "video" or "webinar" => "video",
         _ => "file"
     };
+
+    private static void ApplyManagedResource(ContentBodyItemModel item, ManagedResourceModel resource)
+    {
+        item.ResourceId = resource.Id;
+        item.ResourceSource = ManagedResourceSource;
+        item.StorageKey = resource.StorageKey;
+    }
+
+    private static void ApplyDirectUpload(ContentBodyItemModel item, string? storageKey = null)
+    {
+        item.ResourceId = null;
+        item.ResourceSource = DirectUploadSource;
+        item.StorageKey = storageKey;
+    }
+
     private void PrepareRequest()
     {
         EnsureEnglishFallback(_edit.Title);
@@ -830,17 +972,27 @@ else
                 EnsureEnglishFallback(item.Content);
                 EnsureEnglishFallback(item.Caption);
             }
-            _edit.VideoUrl = null;
-            _edit.ThumbnailUrl = null;
+            _edit.VideoUrl = string.Empty;
+            _edit.VideoResourceId = string.Empty;
+            _edit.VideoResourceSource = DirectUploadSource;
+            _edit.VideoStorageKey = string.Empty;
+            _edit.ThumbnailUrl = string.Empty;
+            _edit.ThumbnailResourceId = string.Empty;
+            _edit.ThumbnailResourceSource = DirectUploadSource;
+            _edit.ThumbnailStorageKey = string.Empty;
             _edit.Attachments = new();
+            _edit.GalleryItems = new();
         }
         else
         {
             _edit.BodyHtml = EnsureLangs(null);
             _edit.BodyItems = new();
-            _edit.TemplateKey = null;
-            _edit.HeroImageUrl = null;
-            _edit.HeroImageAlt = null;
+            _edit.TemplateKey = string.Empty;
+            _edit.HeroImageUrl = string.Empty;
+            _edit.HeroImageResourceId = string.Empty;
+            _edit.HeroImageResourceSource = DirectUploadSource;
+            _edit.HeroImageStorageKey = string.Empty;
+            _edit.HeroImageAlt = string.Empty;
         }
 
         AddPendingTag();
@@ -849,7 +1001,11 @@ else
 
         if (IsFileResource)
         {
-            _edit.VideoUrl = null;
+            _edit.VideoUrl = string.Empty;
+            _edit.VideoResourceId = string.Empty;
+            _edit.VideoResourceSource = DirectUploadSource;
+            _edit.VideoStorageKey = string.Empty;
+            _edit.GalleryItems = new();
             _edit.Attachments = string.IsNullOrWhiteSpace(_fileUrl)
                 ? new()
                 : new()
@@ -858,6 +1014,9 @@ else
                     {
                         FileName = string.IsNullOrWhiteSpace(_fileName) ? "download.pdf" : _fileName,
                         Url = _fileUrl,
+                        ResourceId = _fileResourceId,
+                        ResourceSource = NormalizeResourceSource(_fileResourceSource, _fileResourceId),
+                        StorageKey = _fileStorageKey,
                         ContentType = string.IsNullOrWhiteSpace(_fileContentType) ? "application/pdf" : _fileContentType,
                         SizeBytes = _fileSize
                     }
@@ -866,10 +1025,33 @@ else
         else if (IsVideoResource)
         {
             _edit.Attachments = new();
+            _edit.GalleryItems = new();
+        }
+        else if (IsImageResource)
+        {
+            _edit.VideoUrl = string.Empty;
+            _edit.VideoResourceId = string.Empty;
+            _edit.VideoResourceSource = DirectUploadSource;
+            _edit.VideoStorageKey = string.Empty;
+            _edit.Attachments = new();
+            _edit.GalleryItems = new();
+        }
+        else if (IsGalleryResource)
+        {
+            _edit.VideoUrl = string.Empty;
+            _edit.VideoResourceId = string.Empty;
+            _edit.VideoResourceSource = DirectUploadSource;
+            _edit.VideoStorageKey = string.Empty;
+            _edit.Attachments = new();
+            _edit.GalleryItems = NormalizeGalleryItems(_edit.GalleryItems);
+            foreach (var item in _edit.GalleryItems)
+                EnsureEnglishFallback(item.Caption);
+            ApplyGalleryThumbnail();
         }
         else
         {
             _edit.Attachments = new();
+            _edit.GalleryItems = new();
         }
     }
     private void OnTypeChanged(ChangeEventArgs e)
@@ -880,8 +1062,33 @@ else
     private void OnFileUrlChanged(ChangeEventArgs e)
     {
         _fileUrl = e.Value?.ToString() ?? string.Empty;
+        _fileResourceId = null;
+        _fileResourceSource = DirectUploadSource;
+        _fileStorageKey = null;
         if (string.IsNullOrWhiteSpace(_fileName) && !string.IsNullOrWhiteSpace(_fileUrl))
             _fileName = _fileUrl.Split('/').LastOrDefault() ?? "download.pdf";
+    }
+
+    private void OnVideoUrlChanged(ChangeEventArgs e)
+    {
+        _edit.VideoUrl = e.Value?.ToString();
+        _edit.VideoResourceId = null;
+        _edit.VideoResourceSource = DirectUploadSource;
+        _edit.VideoStorageKey = null;
+    }
+
+    private void OnThumbnailUrlChanged(ChangeEventArgs e)
+    {
+        _edit.ThumbnailUrl = e.Value?.ToString();
+        _edit.ThumbnailResourceId = null;
+        _edit.ThumbnailResourceSource = DirectUploadSource;
+        _edit.ThumbnailStorageKey = null;
+    }
+
+    private static void OnBodyMediaUrlChanged(ContentBodyItemModel item, string? value)
+    {
+        item.Url = value;
+        ApplyDirectUpload(item);
     }
 
     private async Task UploadHero(InputFileChangeEventArgs e)
@@ -889,19 +1096,52 @@ else
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-hero", e.File, maxBytes: 5 * 1024 * 1024);
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
+        {
             _edit.HeroImageUrl = res.Data.Url;
+            _edit.HeroImageResourceId = null;
+            _edit.HeroImageResourceSource = DirectUploadSource;
+            _edit.HeroImageStorageKey = res.Data.StorageKey;
+        }
     }
 
     private async Task UploadThumbnail(InputFileChangeEventArgs e)
     {
+        if (IsImageResource)
+        {
+            var managed = await ContentService.UploadResourceAsync(e.File);
+            Http.Toast(managed.Message, managed.StatusCode);
+            if (managed.Success && managed.Data is not null)
+            {
+                _edit.ThumbnailUrl = ResourceThumbnailUrl(managed.Data);
+                _edit.ThumbnailResourceId = managed.Data.Id;
+                _edit.ThumbnailResourceSource = ManagedResourceSource;
+                _edit.ThumbnailStorageKey = managed.Data.StorageKey;
+            }
+            return;
+        }
+
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-thumbnails", e.File, maxBytes: 5 * 1024 * 1024);
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
+        {
             _edit.ThumbnailUrl = res.Data.Url;
+            _edit.ThumbnailResourceId = null;
+            _edit.ThumbnailResourceSource = DirectUploadSource;
+            _edit.ThumbnailStorageKey = res.Data.StorageKey;
+        }
     }
 
     private async Task UploadFile(InputFileChangeEventArgs e)
     {
+        if (!IsPageContent)
+        {
+            var managed = await ContentService.UploadResourceAsync(e.File);
+            Http.Toast(managed.Message, managed.StatusCode);
+            if (managed.Success && managed.Data is not null)
+                SetPrimaryFileFromResource(managed.Data);
+            return;
+        }
+
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-files", e.File, maxBytes: 20 * 1024 * 1024);
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
@@ -910,6 +1150,9 @@ else
             _fileName = res.Data.FileName;
             _fileContentType = res.Data.ContentType;
             _fileSize = res.Data.Size;
+            _fileResourceId = null;
+            _fileResourceSource = DirectUploadSource;
+            _fileStorageKey = res.Data.StorageKey;
         }
     }
 
@@ -918,7 +1161,10 @@ else
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-body", e.File, maxBytes: 5 * 1024 * 1024);
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
+        {
             item.Url = res.Data.Url;
+            ApplyDirectUpload(item, res.Data.StorageKey);
+        }
     }
 
     private async Task UploadBodyFile(ContentBodyItemModel item, InputFileChangeEventArgs e)
@@ -931,7 +1177,16 @@ else
             item.FileName = res.Data.FileName;
             item.ContentType = res.Data.ContentType;
             item.SizeBytes = res.Data.Size;
+            ApplyDirectUpload(item, res.Data.StorageKey);
         }
+    }
+
+    private async Task UploadGalleryImage(ContentGalleryItemModel item, InputFileChangeEventArgs e)
+    {
+        var managed = await ContentService.UploadResourceAsync(e.File);
+        Http.Toast(managed.Message, managed.StatusCode);
+        if (managed.Success && managed.Data is not null)
+            SetGalleryItemFromResource(item, managed.Data);
     }
 
     private void AddBodyItem(string type)
@@ -942,6 +1197,63 @@ else
         _edit.BodyItems.Add(item);
         _expandedBodyItemIds.Add(item.Id);
         ReorderBodyItems();
+    }
+
+    private void AddGalleryItem(string kind)
+    {
+        if (GalleryLimitReached) return;
+        var item = NewGalleryItem(kind, _edit.GalleryItems.Count);
+        _edit.GalleryItems.Add(item);
+        ReorderGalleryItems();
+    }
+
+    private void RemoveGalleryItem(ContentGalleryItemModel item)
+    {
+        _edit.GalleryItems.Remove(item);
+        ReorderGalleryItems();
+    }
+
+    private void MoveGalleryItem(ContentGalleryItemModel item, int direction)
+    {
+        var ordered = _edit.GalleryItems.OrderBy(i => i.Order).ToList();
+        var index = ordered.FindIndex(i => i.Id == item.Id);
+        var target = index + direction;
+        if (index < 0 || target < 0 || target >= ordered.Count) return;
+
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        _edit.GalleryItems = ordered;
+        ReorderGalleryItems();
+    }
+
+    private void ReorderGalleryItems()
+    {
+        _edit.GalleryItems = _edit.GalleryItems
+            .Select((item, index) =>
+            {
+                item.Order = index;
+                return item;
+            })
+            .ToList();
+    }
+
+    private void OnGalleryKindChanged(ContentGalleryItemModel item, string? kind)
+    {
+        item.Kind = NormalizeGalleryKind(kind);
+        item.Url = string.Empty;
+        item.ThumbnailUrl = string.Empty;
+        item.ResourceId = null;
+        item.ResourceSource = DirectUploadSource;
+        item.StorageKey = null;
+    }
+
+    private static void OnGalleryItemUrlChanged(ContentGalleryItemModel item, string? value)
+    {
+        item.Url = value;
+        if (NormalizeGalleryKind(item.Kind) == "image")
+            item.ThumbnailUrl = value;
+        item.ResourceId = null;
+        item.ResourceSource = DirectUploadSource;
+        item.StorageKey = null;
     }
 
     private void RemoveBodyItem(ContentBodyItemModel item)
@@ -991,6 +1303,12 @@ else
         _ => T("Text")
     };
 
+    private string GalleryItemLabel(string kind) => NormalizeGalleryKind(kind) switch
+    {
+        "video" => T("Video"),
+        _ => T("Image")
+    };
+
     private bool IsBodyItemExpanded(ContentBodyItemModel item) =>
         _expandedBodyItemIds.Contains(item.Id);
 
@@ -1024,6 +1342,9 @@ else
         _fileUrl = string.Empty;
         _fileName = string.Empty;
         _fileSize = 0;
+        _fileResourceId = null;
+        _fileResourceSource = DirectUploadSource;
+        _fileStorageKey = null;
     }
 
     private void OnTagKeyDown(KeyboardEventArgs e)
@@ -1051,8 +1372,19 @@ else
 
     private void RemoveHero()
     {
-        _edit.HeroImageUrl = null;
-        _edit.HeroImageAlt = null;
+        _edit.HeroImageUrl = string.Empty;
+        _edit.HeroImageResourceId = string.Empty;
+        _edit.HeroImageResourceSource = DirectUploadSource;
+        _edit.HeroImageStorageKey = string.Empty;
+        _edit.HeroImageAlt = string.Empty;
+    }
+
+    private void RemoveThumbnail()
+    {
+        _edit.ThumbnailUrl = string.Empty;
+        _edit.ThumbnailResourceId = string.Empty;
+        _edit.ThumbnailResourceSource = DirectUploadSource;
+        _edit.ThumbnailStorageKey = string.Empty;
     }
 
     private string DisplayStatus(string status) =>
@@ -1139,6 +1471,7 @@ else
                 item.Type = NormalizeBodyType(item.Type);
                 item.Content = EnsureLangs(item.Content);
                 item.Caption = EnsureLangs(item.Caption);
+                item.ResourceSource = NormalizeResourceSource(item.ResourceSource, item.ResourceId);
                 item.Visible = true;
                 item.Order = index;
                 return item;
@@ -1168,9 +1501,49 @@ else
         Type = NormalizeBodyType(type),
         Content = EnsureLangs(null),
         Caption = EnsureLangs(null),
+        ResourceSource = DirectUploadSource,
         Visible = true,
         Order = order
     };
+
+    private static List<ContentGalleryItemModel> NormalizeGalleryItems(List<ContentGalleryItemModel>? source)
+    {
+        return (source ?? new())
+            .OrderBy(i => i.Order)
+            .Take(MaxGalleryItems)
+            .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+            .Select((item, index) =>
+            {
+                item.Id = string.IsNullOrWhiteSpace(item.Id) ? Guid.NewGuid().ToString("N") : item.Id;
+                item.Kind = NormalizeGalleryKind(item.Kind);
+                item.Caption = EnsureLangs(item.Caption);
+                item.ResourceSource = NormalizeResourceSource(item.ResourceSource, item.ResourceId);
+                item.Visible = true;
+                item.Order = index;
+                return item;
+            })
+            .ToList();
+    }
+
+    private static ContentGalleryItemModel NewGalleryItem(string kind, int order) => new()
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Kind = NormalizeGalleryKind(kind),
+        Caption = EnsureLangs(null),
+        ResourceSource = DirectUploadSource,
+        Visible = true,
+        Order = order
+    };
+
+    private static string NormalizeResourceSource(string? source, string? resourceId)
+    {
+        if (!string.IsNullOrWhiteSpace(resourceId))
+            return ManagedResourceSource;
+
+        return string.Equals(source, ManagedResourceSource, StringComparison.OrdinalIgnoreCase)
+            ? ManagedResourceSource
+            : DirectUploadSource;
+    }
 
     private static string NormalizeBodyType(string? type)
     {
@@ -1185,6 +1558,12 @@ else
             "divider" => "divider",
             _ => "text"
         };
+    }
+
+    private static string NormalizeGalleryKind(string? kind)
+    {
+        var value = (kind ?? string.Empty).Trim().ToLowerInvariant();
+        return value is "video" or "webinar" ? "video" : "image";
     }
 
     private static string NormalizeLang(string? lang)
@@ -1225,6 +1604,7 @@ else
         Summary = EnsureLangs(null),
         BodyHtml = EnsureLangs(null),
         BodyItems = new() { NewBodyItem("text", 0) },
+        GalleryItems = new(),
         Visible = true
     };
 }

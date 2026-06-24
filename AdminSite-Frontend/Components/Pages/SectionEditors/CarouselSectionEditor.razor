@@ -17,6 +17,7 @@
 
 @foreach (var (item, i) in _items.Select((x, i) => (x, i)))
 {
+    var uploadId = $"carousel-item-image-upload-{i}";
     <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin:.5rem 0">
         <div style="display:flex;justify-content:space-between">
             <strong>@T("Slide") @(i + 1)</strong>
@@ -74,12 +75,28 @@
                     </button>
                 </div>
             }
-            <InputFile OnChange="@(e => OnItemImageSelected(e, item))" accept="image/*" />
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                <InputFile id="@uploadId"
+                           OnChange="@(e => OnItemImageSelected(e, item))"
+                           accept="image/*"
+                           style="display:none" />
+                <label class="btn-admin btn-ghost" for="@uploadId">
+                    <i class="fas fa-image"></i> @T("UploadNew")
+                </label>
+                <button type="button" class="btn-admin btn-ghost" @onclick="() => OpenResourcePicker(item)">
+                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                </button>
+            </div>
         </div>
     </div>
 }
 <button class="btn-admin btn-outline" @onclick="AddItem"><i class="fas fa-plus"></i> @T("AddSlide")</button>
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem"><button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">@T("Save")</button></div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectResourceImage"
+                     Closed="CloseResourcePicker" />
 
 @code {
     [Parameter] public SectionModel Section { get; set; } = new();
@@ -95,6 +112,8 @@
     private List<CarouselItemModel> _items = new();
     private bool _saving;
     private string? _loadedSectionId;
+    private bool _resourcePickerOpen;
+    private CarouselItemModel? _resourcePickerItem;
     private readonly string[] _layouts = { "cards", "case-metrics" };
     private readonly string[] _metricTones = { "positive", "negative", "neutral" };
 
@@ -164,6 +183,24 @@
     private static void ClearItemImage(CarouselItemModel item)
     {
         item.ImageUrl = string.Empty;
+    }
+
+    private void OpenResourcePicker(CarouselItemModel item)
+    {
+        _resourcePickerItem = item;
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+        _resourcePickerItem = null;
+    }
+
+    private void SelectResourceImage(ManagedResourceModel resource)
+    {
+        if (_resourcePickerItem is not null)
+            _resourcePickerItem.ImageUrl = resource.Url;
     }
 
     private async Task Save()

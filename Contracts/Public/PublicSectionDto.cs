@@ -5,7 +5,6 @@ namespace Contracts.Public
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
     [JsonDerivedType(typeof(PublicHeroSectionDto), "hero")]
     [JsonDerivedType(typeof(PublicCtaSectionDto), "cta")]
-    [JsonDerivedType(typeof(PublicGallerySectionDto), "gallery")]
     [JsonDerivedType(typeof(PublicListSectionDto), "list")]
     [JsonDerivedType(typeof(PublicHtmlSectionDto), "html")]
     [JsonDerivedType(typeof(PublicColumnsSectionDto), "columns")]
@@ -45,14 +44,6 @@ namespace Contracts.Public
         public string? Layout { get; set; }
         public PublicSectionButtonDto? Button { get; set; }
         public List<PublicSectionButtonDto>? Buttons { get; set; }
-    }
-
-    public class PublicGallerySectionDto : PublicSectionDto
-    {
-        public int? Columns { get; set; }
-        public string? Gap { get; set; }
-        public bool? ShowCaptions { get; set; }
-        public List<PublicGalleryImageDto>? Images { get; set; }
     }
 
     public class PublicListSectionDto : PublicSectionDto

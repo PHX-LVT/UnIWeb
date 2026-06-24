@@ -86,6 +86,8 @@
         <div class="@ItemsClass(pageItems.Count)">
             @foreach (var item in pageItems)
             {
+                var galleryItems = GalleryMediaItems(item).ToList();
+                var primaryGalleryItem = galleryItems.FirstOrDefault();
                 if (LayoutClass == "lists")
                 {
                     <article @key="item.Id" class="sc-library__item">
@@ -100,7 +102,30 @@
                         </div>
                         @if (Section.ShowButton != false)
                         {
-                            @if (IsVideo(item))
+                            @if (IsGallery(item) && primaryGalleryItem is not null)
+                            {
+                                @if (GalleryItemIsVideo(primaryGalleryItem))
+                                {
+                                    <button type="button"
+                                            class="@ButtonClass"
+                                            data-sc-library-video
+                                            data-video-url="@GalleryItemUrl(primaryGalleryItem)"
+                                            data-video-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                        @ButtonText(item)
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button"
+                                            class="@ButtonClass"
+                                            data-sc-library-image
+                                            data-image-url="@GalleryItemUrl(primaryGalleryItem)"
+                                            data-image-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                        @ButtonText(item)
+                                    </button>
+                                }
+                            }
+                            else if (IsVideo(item))
                             {
                                 <button type="button"
                                         class="@ButtonClass"
@@ -137,6 +162,7 @@
                 {
                     var tag = ItemTag(item);
                     var isVideo = IsVideo(item);
+                    var isGallery = IsGallery(item);
                     var imageUrl = ImageUrl(item);
                     var canOpenImage = CanOpenImageLightbox(item);
                     var summary = StyleHelper.Lang(item.Summary, Lang);
@@ -145,9 +171,60 @@
                         {
                             <span class="sc-library__tag">@tag</span>
                         }
-                        @if (CanShowImage && !string.IsNullOrWhiteSpace(imageUrl))
+                        @if (CanShowImage && ((isGallery && galleryItems.Count > 0) || !string.IsNullOrWhiteSpace(imageUrl)))
                         {
-                            if (isVideo)
+                            if (isGallery && galleryItems.Count > 0)
+                            {
+                                <div class="sc-library__media sc-library__media--gallery-strip" aria-label="@($"{ItemTitle(item)} gallery")">
+                                    <div class="sc-library__gallery-strip">
+                                        @foreach (var galleryItem in galleryItems)
+                                        {
+                                            var mediaUrl = GalleryItemUrl(galleryItem);
+                                            var mediaTitle = GalleryItemTitle(galleryItem, item);
+                                            var thumbUrl = GalleryItemThumbnailUrl(galleryItem);
+
+                                            @if (GalleryItemIsVideo(galleryItem))
+                                            {
+                                                <button type="button"
+                                                        class="sc-library__gallery-tile sc-library__gallery-tile--video"
+                                                        data-sc-library-video
+                                                        data-video-url="@mediaUrl"
+                                                        data-video-title="@mediaTitle"
+                                                        aria-label="Watch @mediaTitle">
+                                                    @if (!string.IsNullOrWhiteSpace(thumbUrl))
+                                                    {
+                                                        <img src="@thumbUrl" alt="@mediaTitle" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="sc-library__gallery-placeholder">Video</span>
+                                                    }
+                                                    <span class="sc-library__play" aria-hidden="true"></span>
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button"
+                                                        class="sc-library__gallery-tile"
+                                                        data-sc-library-image
+                                                        data-image-url="@mediaUrl"
+                                                        data-image-title="@mediaTitle"
+                                                        aria-label="View @mediaTitle">
+                                                    @if (!string.IsNullOrWhiteSpace(thumbUrl))
+                                                    {
+                                                        <img src="@thumbUrl" alt="@mediaTitle" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="sc-library__gallery-placeholder">Image</span>
+                                                    }
+                                                </button>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else if (isVideo)
                             {
                                 <button type="button"
                                         class="sc-library__media sc-library__media--video"
@@ -217,7 +294,30 @@
                             }
                             @if (Section.ShowButton != false)
                             {
-                                @if (isVideo)
+                                @if (isGallery && primaryGalleryItem is not null)
+                                {
+                                    @if (GalleryItemIsVideo(primaryGalleryItem))
+                                    {
+                                        <button type="button"
+                                                class="sc-library__link sc-btn sc-btn--filled"
+                                                data-sc-library-video
+                                                data-video-url="@GalleryItemUrl(primaryGalleryItem)"
+                                                data-video-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                            @ButtonText(item)
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button"
+                                                class="@ButtonClass"
+                                                data-sc-library-image
+                                                data-image-url="@GalleryItemUrl(primaryGalleryItem)"
+                                                data-image-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                            @ButtonText(item)
+                                        </button>
+                                    }
+                                }
+                                else if (isVideo)
                                 {
                                     <button type="button"
                                             class="sc-library__link sc-btn sc-btn--filled"
@@ -447,17 +547,25 @@
         _ => "card"
     };
 
-    private static string ImageUrl(PublicLibraryItemDto item) =>
-        !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? item.ThumbnailUrl! : item.HeroImageUrl ?? string.Empty;
+    private static string ImageUrl(PublicLibraryItemDto item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.ThumbnailUrl)) return item.ThumbnailUrl!;
+        if (!string.IsNullOrWhiteSpace(item.HeroImageUrl)) return item.HeroImageUrl!;
+
+        var galleryImage = GalleryMediaItems(item).FirstOrDefault(i => !GalleryItemIsVideo(i));
+        return galleryImage is null ? string.Empty : GalleryItemThumbnailUrl(galleryImage);
+    }
 
     private static string PlaceholderLabel(PublicLibraryItemDto item) =>
-        item.ClickBehavior switch
-        {
-            "download" => "PDF",
-            "video" => "Video",
-            "image" => "Image",
-            _ => "Report"
-        };
+        IsGallery(item)
+            ? "Gallery"
+            : item.ClickBehavior switch
+            {
+                "download" => "PDF",
+                "video" => "Video",
+                "image" => "Image",
+                _ => "Report"
+            };
 
     private string ItemTitle(PublicLibraryItemDto item) =>
         StyleHelper.Lang(item.Title, Lang) is { Length: > 0 } text ? text : item.Slug;
@@ -471,6 +579,9 @@
     private string ButtonText(PublicLibraryItemDto item)
     {
         var configured = StyleHelper.Lang(Section.ButtonLabel, Lang);
+        if (IsGallery(item) && IsGenericDetailLabel(configured))
+            return "View Gallery";
+
         if (IsVideo(item) && IsGenericDetailLabel(configured))
             return "Watch";
 
@@ -491,6 +602,11 @@
 
     private static string ItemHref(PublicLibraryItemDto item)
     {
+        if (IsGallery(item))
+            return GalleryMediaItems(item).FirstOrDefault() is { } galleryItem
+                ? GalleryItemUrl(galleryItem)
+                : "#";
+
         if (IsVideo(item))
             return item.VideoUrl ?? "#";
 
@@ -520,13 +636,40 @@
         || IsVideoLibraryType(item.ContentTypeKey);
 
     private bool CanOpenImageLightbox(PublicLibraryItemDto item) =>
-        !string.IsNullOrWhiteSpace(ImageUrl(item)) && (LayoutClass == "gallery" || IsImage(item));
+        !IsGallery(item) && !string.IsNullOrWhiteSpace(ImageUrl(item)) && (LayoutClass == "gallery" || IsImage(item));
 
-    private static bool IsImage(PublicLibraryItemDto item) =>
-        string.Equals(item.ClickBehavior, "image", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(item.ContentBehavior, "image-resource", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(item.ContentBehavior, "gallery", StringComparison.OrdinalIgnoreCase)
-        || IsImageLibraryType(item.ContentTypeKey);
+    private static bool IsGallery(PublicLibraryItemDto item) =>
+        string.Equals(item.ContentBehavior, "gallery", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsImage(PublicLibraryItemDto item)
+    {
+        if (IsGallery(item)) return false;
+
+        return string.Equals(item.ClickBehavior, "image", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(item.ContentBehavior, "image-resource", StringComparison.OrdinalIgnoreCase)
+            || IsImageLibraryType(item.ContentTypeKey);
+    }
+
+    private static IEnumerable<PublicLibraryGalleryItemDto> GalleryMediaItems(PublicLibraryItemDto item) =>
+        (item.GalleryItems ?? new())
+            .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+            .OrderBy(i => i.Order);
+
+    private static bool GalleryItemIsVideo(PublicLibraryGalleryItemDto item) =>
+        string.Equals(item.Kind, "video", StringComparison.OrdinalIgnoreCase);
+
+    private static string GalleryItemUrl(PublicLibraryGalleryItemDto item) => item.Url;
+
+    private static string GalleryItemThumbnailUrl(PublicLibraryGalleryItemDto item) =>
+        !string.IsNullOrWhiteSpace(item.ThumbnailUrl)
+            ? item.ThumbnailUrl!
+            : GalleryItemIsVideo(item) ? string.Empty : item.Url;
+
+    private string GalleryItemTitle(PublicLibraryGalleryItemDto galleryItem, PublicLibraryItemDto parent)
+    {
+        var caption = StyleHelper.Lang(galleryItem.Caption, Lang);
+        return !string.IsNullOrWhiteSpace(caption) ? caption : ItemTitle(parent);
+    }
 
     private static bool IsVideoLibraryType(string? key)
     {

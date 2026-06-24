@@ -49,6 +49,8 @@ else
             <option value="page">@T("PageContent")</option>
             <option value="file-resource">@T("FileResource")</option>
             <option value="video-resource">@T("VideoResource")</option>
+            <option value="image-resource">@T("ImageResource")</option>
+            <option value="gallery">@T("Gallery")</option>
         </select>
         <p class="text-muted" style="font-size:.8rem;margin:.25rem 0 0">
             @T("ContentBehaviorHint")
@@ -74,6 +76,7 @@ else
             <option value="detail">@T("DetailPage")</option>
             <option value="download">@T("FileDownload")</option>
             <option value="video">@T("VideoModal")</option>
+            <option value="image">@T("ImageModal")</option>
             <option value="external">@T("ExternalLink")</option>
         </select>
         <label style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
@@ -234,6 +237,8 @@ else
     {
         "file-resource" => T("FileResource"),
         "video-resource" => T("VideoResource"),
+        "image-resource" => T("ImageResource"),
+        "gallery" => T("Gallery"),
         _ => T("PageContent")
     };
 
@@ -241,6 +246,7 @@ else
     {
         "download" => T("FileDownload"),
         "video" => T("VideoModal"),
+        "image" => T("ImageModal"),
         "external" => T("ExternalLink"),
         _ => T("DetailPage")
     };
@@ -262,6 +268,15 @@ else
                 _edit.RequiresVideoUrl = true;
                 _edit.AllowsAttachments = false;
                 _edit.ClickBehavior = "video";
+                break;
+            case "image-resource":
+            case "gallery":
+                _edit.RequiresBody = false;
+                _edit.RequiresHeroImage = false;
+                _edit.RequiresFile = false;
+                _edit.RequiresVideoUrl = false;
+                _edit.AllowsAttachments = false;
+                _edit.ClickBehavior = "image";
                 break;
             case "file-resource":
                 _edit.RequiresBody = false;
@@ -286,15 +301,22 @@ else
     {
         "file" or "file-resource" or "download" or "resource" => "file-resource",
         "video" or "video-resource" or "webinar" => "video-resource",
+        "image" or "image-resource" or "photo" or "picture" => "image-resource",
+        "gallery" or "image-gallery" or "photo-gallery" or "media-gallery" => "gallery",
         _ => "page"
     };
 
     private static string InferBehavior(ContentTypeModel type)
     {
+        if (!string.IsNullOrWhiteSpace(type.Behavior))
+            return NormalizeBehavior(type.Behavior);
+
         var key = (type.Key ?? string.Empty).Trim().ToLowerInvariant();
+        if (key.Contains("gallery")) return "gallery";
+        if (key.Contains("image") || key.Contains("photo")) return "image-resource";
         if (key.Contains("video") || key.Contains("webinar")) return "video-resource";
         if (key.Contains("whitepaper") || key.Contains("report") || key.Contains("tool") || key.Contains("template") || key.Contains("disclosure") || key.Contains("charter") || key.Contains("regulation")) return "file-resource";
-        return NormalizeBehavior(type.Behavior);
+        return "page";
     }
 
     private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)

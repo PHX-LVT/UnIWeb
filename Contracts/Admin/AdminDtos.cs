@@ -128,23 +128,6 @@ namespace Contracts.Admin
         public int Order { get; set; }
     }
 
-    public class GalleryImageDto
-    {
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string> Caption { get; set; } = new();
-        public bool Visible { get; set; } = true;
-        public int Order { get; set; } = 0;
-    }
-
-    public class GalleryImageResponseDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string> Caption { get; set; } = new();
-        public bool Visible { get; set; }
-        public int Order { get; set; }
-    }
-
     public class ListItemDto
     {
         public string Icon { get; set; } = string.Empty;
@@ -269,15 +252,6 @@ namespace Contracts.Admin
         public Dictionary<string, string> Subtext { get; set; } = new();
         public SectionButtonDto? Button { get; set; }
         public List<SectionButtonDto> Buttons { get; set; } = new();
-    }
-
-    public class GallerySectionCreateDto : SectionCreateDto
-    {
-        public string Layout { get; set; } = "grid";
-        public int Columns { get; set; } = 3;
-        public string Gap { get; set; } = "small";
-        public bool ShowCaptions { get; set; } = false;
-        public List<GalleryImageDto> Images { get; set; } = new();
     }
 
     public class ListSectionCreateDto : SectionCreateDto
@@ -435,16 +409,6 @@ namespace Contracts.Admin
         public List<SectionButtonDto>? Buttons { get; set; }
     }
 
-    public class GallerySectionUpdateDto : SectionUpdateDto
-    {
-        public string? Layout { get; set; }
-        public int? Columns { get; set; }
-        public string? Gap { get; set; }
-        public bool? ShowCaptions { get; set; }
-        // Null = don't touch images; empty list = clear all images
-        public List<GalleryImageDto>? Images { get; set; }
-    }
-
     public class ListSectionUpdateDto : SectionUpdateDto
     {
         public string? Layout { get; set; }
@@ -575,7 +539,6 @@ namespace Contracts.Admin
             {
                 "hero" => document.RootElement.Deserialize<HeroSectionCreateDto>(options),
                 "cta" => document.RootElement.Deserialize<CtaSectionCreateDto>(options),
-                "gallery" => document.RootElement.Deserialize<GallerySectionCreateDto>(options),
                 "list" => document.RootElement.Deserialize<ListSectionCreateDto>(options),
                 "html" => document.RootElement.Deserialize<HtmlSectionCreateDto>(options),
                 "columns" => document.RootElement.Deserialize<ColumnsSectionCreateDto>(options),
@@ -604,7 +567,6 @@ namespace Contracts.Admin
             {
                 "hero" => document.RootElement.Deserialize<HeroSectionUpdateDto>(options),
                 "cta" => document.RootElement.Deserialize<CtaSectionUpdateDto>(options),
-                "gallery" => document.RootElement.Deserialize<GallerySectionUpdateDto>(options),
                 "list" => document.RootElement.Deserialize<ListSectionUpdateDto>(options),
                 "html" => document.RootElement.Deserialize<HtmlSectionUpdateDto>(options),
                 "columns" => document.RootElement.Deserialize<ColumnsSectionUpdateDto>(options),
@@ -629,7 +591,6 @@ namespace Contracts.Admin
         {
             nameof(HeroSectionCreateDto) or nameof(HeroSectionUpdateDto) => "hero",
             nameof(CtaSectionCreateDto) or nameof(CtaSectionUpdateDto) => "cta",
-            nameof(GallerySectionCreateDto) or nameof(GallerySectionUpdateDto) => "gallery",
             nameof(ListSectionCreateDto) or nameof(ListSectionUpdateDto) => "list",
             nameof(HtmlSectionCreateDto) or nameof(HtmlSectionUpdateDto) => "html",
             nameof(ColumnsSectionCreateDto) or nameof(ColumnsSectionUpdateDto) => "columns",
@@ -682,11 +643,8 @@ namespace Contracts.Admin
         public Dictionary<string, string>? Subtext { get; set; }
         public SectionButtonResponseDto? Button { get; set; }
 
-        // Gallery
         public int? Columns { get; set; }
         public string? Gap { get; set; }
-        public bool? ShowCaptions { get; set; }
-        public List<GalleryImageResponseDto>? Images { get; set; }
 
         // List
         public Dictionary<string, string>? Eyebrow { get; set; }
@@ -792,6 +750,7 @@ public class ColumnSlotResponseDto
     public class AssetUploadResponseDto
     {
         public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public long Size { get; set; }

@@ -37,7 +37,9 @@ namespace FullProject.Controllers
             if (!IsContentManager) return Forbid();
 
             var resources = await _resources.GetAllAsync(kind, search, includeInactive);
-            return Ok(ApiResult.Ok(resources.Select(MapResource).ToList()));
+            var usageCounts = await _resources.GetUsageCountsAsync(resources);
+            return Ok(ApiResult.Ok(resources.Select(resource =>
+                MapResource(resource, usageCounts.GetValueOrDefault(resource.Id))).ToList()));
         }
 
         [HttpGet("{id}")]
@@ -47,7 +49,20 @@ namespace FullProject.Controllers
 
             var resource = await _resources.GetByIdAsync(id);
             if (resource is null) return NotFound(ApiResult.NotFound("Resource not found."));
-            return Ok(ApiResult.Ok(MapResource(resource)));
+            var usage = await _resources.GetUsageAsync(resource.Id);
+            return Ok(ApiResult.Ok(MapResource(resource, usage.UsageCount)));
+        }
+
+        [HttpGet("{id}/usage")]
+        public async Task<IActionResult> GetUsage(string id)
+        {
+            if (!IsContentManager) return Forbid();
+
+            var resource = await _resources.GetByIdAsync(id);
+            if (resource is null) return NotFound(ApiResult.NotFound("Resource not found."));
+
+            var usage = await _resources.GetUsageAsync(resource.Id);
+            return Ok(ApiResult.Ok(usage));
         }
 
         [HttpPost]
@@ -57,7 +72,7 @@ namespace FullProject.Controllers
 
             var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
             if (errors.Count > 0) return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
-            return Ok(ApiResult.Created(MapResource(resource!), "Resource created."));
+            return Ok(ApiResult.Created(MapResource(resource!, 0), "Resource created."));
         }
 
         [HttpPut("{id}")]
@@ -72,7 +87,25 @@ namespace FullProject.Controllers
                 return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
             }
 
-            return Ok(ApiResult.Ok(MapResource(resource!), "Resource updated."));
+            var usage = await _resources.GetUsageAsync(resource!.Id);
+            return Ok(ApiResult.Ok(MapResource(resource!, usage.UsageCount), "Resource updated."));
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(string id)
+        {
+            if (!IsContentManager) return Forbid();
+
+            var (deleted, usage, errors) = await _resources.DeleteAsync(id);
+            if (errors.Count > 0)
+            {
+                if (errors.Contains("Resource not found."))
+                    return NotFound(ApiResult.NotFound("Resource not found."));
+
+                return Conflict(ApiResult.BadRequest(errors[0], errors));
+            }
+
+            return Ok(ApiResult.Ok(new { deleted, usage?.UsageCount }, "Resource deleted."));
         }
 
         [HttpPost("upload")]
@@ -105,12 +138,12 @@ namespace FullProject.Controllers
                 return UnprocessableEntity(ApiResult.BadRequest("Video resources use a URL instead of file upload."));
 
             await using var stream = file.OpenReadStream();
-            var url = await _storage.UploadAsync(stream, file.FileName, file.ContentType, "managed-resources", HttpContext.RequestAborted);
-            var dto = _resources.BuildUploadCreateDto(url, inferredKind, file.FileName, file.ContentType, file.Length);
+            var upload = await _storage.UploadWithMetadataAsync(stream, file.FileName, file.ContentType, "managed-resources", HttpContext.RequestAborted);
+            var dto = _resources.BuildUploadCreateDto(upload.Url, upload.StorageKey, inferredKind, file.FileName, file.ContentType, file.Length);
             var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
             if (errors.Count > 0) return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
 
-            return Ok(ApiResult.Created(MapResource(resource!), "Resource uploaded."));
+            return Ok(ApiResult.Created(MapResource(resource!, 0), "Resource uploaded."));
         }
 
         public sealed class ManagedResourceUploadRequest
@@ -133,13 +166,14 @@ namespace FullProject.Controllers
         private bool IsContentManager =>
             ActorRole is AdminRole.AdminAdmin or AdminRole.Manager;
 
-        private static ManagedResourceResponseDto MapResource(ManagedResource resource) => new()
+        private static ManagedResourceResponseDto MapResource(ManagedResource resource, int usageCount = 0) => new()
         {
             Id = resource.Id,
             Kind = resource.Kind,
             Name = resource.Name,
             Description = resource.Description,
             Url = resource.Url,
+            StorageKey = resource.StorageKey,
             ThumbnailUrl = resource.ThumbnailUrl,
             FileName = resource.FileName,
             ContentType = resource.ContentType,
@@ -147,6 +181,8 @@ namespace FullProject.Controllers
             Source = resource.Source,
             Tags = resource.Tags,
             Active = resource.Active,
+            UsageCount = usageCount,
+            IsInUse = usageCount > 0,
             CreatedById = resource.CreatedById,
             UpdatedById = resource.UpdatedById,
             CreatedAt = resource.CreatedAt,
