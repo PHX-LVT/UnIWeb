@@ -209,7 +209,6 @@ namespace UserSite.Services
                         "hero" => DeserializeSectionShell<PublicHeroSectionDto>(section),
                         "cta" => DeserializeSectionShell<PublicCtaSectionDto>(section),
                         "list" => DeserializeSectionShell<PublicListSectionDto>(section),
-                        "gallery" => DeserializeSectionShell<PublicGallerySectionDto>(section),
                         "html" => DeserializeSectionShell<PublicHtmlSectionDto>(section),
                         "columns" => DeserializeSectionShell<PublicColumnsSectionDto>(section),
                         "showcase" => DeserializeSectionShell<PublicShowcaseSectionDto>(section),

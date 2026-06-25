@@ -46,8 +46,24 @@
             </button>
         </div>
     }
-    <InputFile OnChange="OnImageSelected" accept="image/*" />
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <InputFile id="hero-section-image-upload"
+                   OnChange="OnImageSelected"
+                   accept="image/*"
+                   style="display:none" />
+        <label class="btn-admin btn-ghost" for="hero-section-image-upload">
+            <i class="fas fa-image"></i> @T("UploadNew")
+        </label>
+        <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
+            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+        </button>
+    </div>
 </div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectResourceImage"
+                     Closed="CloseResourcePicker" />
 
 <div class="form-group">
     <label class="form-label">@T("Buttons")</label>
@@ -166,6 +182,7 @@
     private List<SectionButtonModel>   _buttons    = new();
     private bool _saving;
     private string? _loadedSectionId;
+    private bool _resourcePickerOpen;
     private List<FormDefinitionModel> _formDefinitions = new();
 
     private List<string> _layouts = new() { "centered", "split-left", "split-right" };
@@ -228,6 +245,21 @@
     private void RemoveImage()
     {
         _imageUrl = string.Empty;
+    }
+
+    private void OpenResourcePicker()
+    {
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+    }
+
+    private void SelectResourceImage(ManagedResourceModel resource)
+    {
+        _imageUrl = resource.Url;
     }
 
     private async Task Save()

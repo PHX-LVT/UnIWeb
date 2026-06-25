@@ -4,6 +4,7 @@
 @using DevExpress.Blazor
 @using Contracts.Admin
 @using System.Globalization
+@using AdminSite.Components.Pages.Content
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 
@@ -72,7 +73,18 @@
                     </button>
                 </div>
             }
-            <InputFile OnChange="OnBgImageSelected" accept="image/*" />
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                <InputFile id="section-background-upload"
+                           OnChange="OnBgImageSelected"
+                           accept="image/*"
+                           style="display:none" />
+                <label class="btn-admin btn-ghost" for="section-background-upload">
+                    <i class="fas fa-image"></i> @T("UploadNew")
+                </label>
+                <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
+                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                </button>
+            </div>
         </div>
     }
 
@@ -167,6 +179,11 @@
     </button>
 </div>
 
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectBackgroundResource"
+                     Closed="CloseResourcePicker" />
+
 @code {
     [Parameter] public string            PageId    { get; set; } = string.Empty;
     [Parameter] public string            SectionId { get; set; } = string.Empty;
@@ -181,6 +198,7 @@
     private string? _saveMessage;
     private string? _loadedSectionId;
     private SectionStyleModel? _loadedStyleRef;
+    private bool _resourcePickerOpen;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     // Backing properties for all nullable string fields
@@ -329,6 +347,21 @@
     private void ClearBackgroundImage()
     {
         _style.BackgroundImageUrl = string.Empty;
+    }
+
+    private void OpenResourcePicker()
+    {
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+    }
+
+    private void SelectBackgroundResource(ManagedResourceModel resource)
+    {
+        _style.BackgroundImageUrl = resource.Url;
     }
 
     private void SetOverlayOpacity(ChangeEventArgs e)

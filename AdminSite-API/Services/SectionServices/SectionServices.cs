@@ -76,21 +76,6 @@ namespace GlobalManager.Services.SectionServices
                     Button = c.Button != null ? MapButton(c.Button) : null,
                     Buttons = c.Buttons.Select(MapButton).ToList()
                 },
-                GallerySectionCreateDto g => new GallerySection
-                {
-                    Layout = g.Layout,
-                    Columns = g.Columns,
-                    Gap = g.Gap,
-                    ShowCaptions = g.ShowCaptions,
-                    Images = g.Images.Select((img, i) => new GalleryImage
-                    {
-                        Id = ObjectId.GenerateNewId().ToString(),
-                        ImageUrl = img.ImageUrl,
-                        Caption = img.Caption,
-                        Visible = img.Visible,
-                        Order = i
-                    }).ToList()
-                },
                 ListSectionCreateDto l => new ListSection
                 {
                     Layout = l.Layout,
@@ -350,25 +335,6 @@ namespace GlobalManager.Services.SectionServices
                         if (cDto.Subtext != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Subtext, cDto.Subtext));
                         if (cDto.Button != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Button, MapButton(cDto.Button)));
                         if (cDto.Buttons != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Buttons, cDto.Buttons.Select(MapButton).ToList()));
-                        await _context.SectionsDraft.UpdateOneAsync(s => s.Id == sectionId, Builders<Section>.Update.Combine(u));
-                        break;
-                    }
-                case (GallerySection _, GallerySectionUpdateDto gDto):
-                    {
-                        var u = new List<UpdateDefinition<Section>>(baseUpdate);
-                        if (gDto.Layout != null) u.Add(Builders<Section>.Update.Set(s => ((GallerySection)s).Layout, gDto.Layout));
-                        if (gDto.Columns != null) u.Add(Builders<Section>.Update.Set(s => ((GallerySection)s).Columns, gDto.Columns.Value));
-                        if (gDto.Gap != null) u.Add(Builders<Section>.Update.Set(s => ((GallerySection)s).Gap, gDto.Gap));
-                        if (gDto.ShowCaptions != null) u.Add(Builders<Section>.Update.Set(s => ((GallerySection)s).ShowCaptions, gDto.ShowCaptions.Value));
-                        if (gDto.Images != null) u.Add(Builders<Section>.Update.Set(s => ((GallerySection)s).Images,
-                            gDto.Images.Select((img, i) => new GalleryImage
-                            {
-                                Id = ObjectId.GenerateNewId().ToString(),
-                                ImageUrl = img.ImageUrl,
-                                Caption = img.Caption,
-                                Visible = img.Visible,
-                                Order = i
-                            }).ToList()));
                         await _context.SectionsDraft.UpdateOneAsync(s => s.Id == sectionId, Builders<Section>.Update.Combine(u));
                         break;
                     }
@@ -659,9 +625,6 @@ namespace GlobalManager.Services.SectionServices
             {
                 case (HeroSection hero, HeroSectionUpdateDto heroDto) when heroDto.ImageUrl != null:
                     await _r2Assets.DeleteIfUnusedAsync(hero.ImageUrl, heroDto.ImageUrl);
-                    break;
-                case (GallerySection gallery, GallerySectionUpdateDto galleryDto) when galleryDto.Images != null:
-                    await DeleteRemovedUrlsAsync(gallery.Images.Select(i => i.ImageUrl), galleryDto.Images.Select(i => i.ImageUrl));
                     break;
                 case (ListSection list, ListSectionUpdateDto listDto) when listDto.Items != null:
                     await DeleteRemovedUrlsAsync(list.Items.Select(i => i.ImageUrl), listDto.Items.Select(i => i.ImageUrl));

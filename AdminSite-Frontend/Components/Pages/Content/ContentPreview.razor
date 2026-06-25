@@ -8,8 +8,10 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<div class="page-header">
-    <h1 class="page-title"><i class="fas fa-eye"></i> @T("ContentPreview")</h1>
+<div class="page-header content-resource-preview-header">
+    <div>
+        <h1 class="page-title"><i class="fas fa-eye"></i> @T("ContentPreview")</h1>
+    </div>
 </div>
 
 @if (!Auth.CanViewContent)
@@ -33,7 +35,7 @@ else
                     <label>@T("ContentType")</label>
                     <select class="form-control" @bind="_typeFilter" @bind:after="ApplySelection">
                         <option value="">@T("AllTypes")</option>
-                        @foreach (var type in _types)
+                        @foreach (var type in PageTypes)
                         {
                             <option value="@type.Key">@GetLang(type.Name)</option>
                         }
@@ -54,7 +56,7 @@ else
                             class="content-preview-list__item @(item.Id == _selected?.Id ? "is-active" : "")"
                             @onclick="() => SelectContent(item.Id)">
                         <span>@GetLang(item.Title)</span>
-                        <small>@GetTypeLabel(item.ContentTypeKey) &middot; @T("Published")</small>
+                        <small>@GetTypeLabel(item.ContentTypeKey)</small>
                     </button>
                 }
             </div>
@@ -64,38 +66,15 @@ else
             @if (_selected is null)
             {
                 <div class="content-preview-empty">
-                    <p class="text-muted">@T("NoContentYet")</p>
+                    <h3>Page content preview only</h3>
+                    <p class="text-muted">This preview only renders published Page content. Resource-based content is monitored through All Content and My Contents.</p>
                 </div>
             }
-            else if (!CanPreviewOnUserSite(_selected) && !IsResourceContent(_selected))
+            else if (!CanPreviewOnUserSite(_selected))
             {
                 <div class="content-preview-empty">
                     <h3>@T("ContentPreview")</h3>
-                    <p class="text-muted">Only published content with a slug can be previewed as a real UserSite article.</p>
-                </div>
-            }
-            else if (IsResourceContent(_selected))
-            {
-                <div class="content-preview-empty content-preview-resource">
-                    <span class="content-type-badge">@GetTypeLabel(_selected.ContentTypeKey)</span>
-                    <h3>@GetLang(_selected.Title)</h3>
-                    @if (!string.IsNullOrWhiteSpace(GetLang(_selected.Summary)))
-                    {
-                        <p class="text-muted">@GetLang(_selected.Summary)</p>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(ResourceHref(_selected)))
-                    {
-                        <a class="btn-admin btn-primary"
-                           href="@ResourceHref(_selected)"
-                           target="_blank"
-                           rel="noopener">
-                            @ResourceButtonText(_selected)
-                        </a>
-                    }
-                    else
-                    {
-                        <p class="text-muted">This resource does not have a file, video, or external URL yet.</p>
-                    }
+                    <p class="text-muted">Only published Page content with a slug can be previewed as a real UserSite article.</p>
                 </div>
             }
             else
@@ -142,9 +121,13 @@ else
     private string UserSiteBaseUrl =>
         (Config["UserSiteBaseUrl"] ?? "https://localhost:7113").TrimEnd('/');
 
+    private IEnumerable<ContentTypeModel> PageTypes =>
+        _types.Where(IsPageContentType);
+
     private IEnumerable<ContentItemModel> FilteredItems =>
         _items
             .Where(item => string.Equals(item.Status, "Published", StringComparison.OrdinalIgnoreCase))
+            .Where(IsPageContent)
             .Where(item => string.IsNullOrWhiteSpace(_typeFilter) || string.Equals(item.ContentTypeKey, _typeFilter, StringComparison.OrdinalIgnoreCase))
             .Where(item => string.IsNullOrWhiteSpace(_search) ||
                            GetLang(item.Title).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
@@ -161,7 +144,19 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_selected is null || IsResourceContent(_selected) || !CanPreviewOnUserSite(_selected))
+        if (_selected is null)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("cmsWidgets.init");
+        }
+        catch
+        {
+            // The preview still renders if the shared modal script is unavailable during disposal/navigation.
+        }
+
+        if (!CanPreviewOnUserSite(_selected))
             return;
 
         if (!_previewViewportInitialized)
@@ -203,14 +198,19 @@ else
 
     private void ApplySelection()
     {
+        var previousId = _selected?.Id;
+
         _selected = !string.IsNullOrWhiteSpace(ContentId)
-            ? _items.FirstOrDefault(item => item.Id == ContentId)
+            ? _items.FirstOrDefault(item => item.Id == ContentId && IsPageContent(item))
             : null;
 
         if (_selected is not null && !FilteredItems.Any(item => item.Id == _selected.Id))
             _selected = null;
 
         _selected ??= FilteredItems.FirstOrDefault();
+
+        if (!string.Equals(previousId, _selected?.Id, StringComparison.Ordinal))
+            _previewViewportInitialized = false;
     }
 
     private void OnSearchChanged(ChangeEventArgs e)
@@ -229,53 +229,11 @@ else
         string.Equals(item.Status, "Published", StringComparison.OrdinalIgnoreCase) &&
         !string.IsNullOrWhiteSpace(item.Slug);
 
-    private bool IsResourceContent(ContentItemModel item)
-    {
-        var type = FindType(item.ContentTypeKey);
-        return type is not null && !type.RequiresBody;
-    }
+    private bool IsPageContent(ContentItemModel item) =>
+        FindType(item.ContentTypeKey) is { } type && IsPageContentType(type);
 
-    private string ResourceClickBehavior(ContentItemModel item)
-    {
-        var type = FindType(item.ContentTypeKey);
-        if (type is not null && type.RequiresBody)
-            return "detail";
-
-        var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
-        if (configured is "download" or "video" or "external")
-            return configured;
-        if (!string.IsNullOrWhiteSpace(item.VideoUrl) || item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))
-            return "video";
-        if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) || item.BodyItems.Any(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url)))
-            return "download";
-        if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
-            return "external";
-        return "detail";
-    }
-
-    private string ResourceHref(ContentItemModel item)
-    {
-        var behavior = ResourceClickBehavior(item);
-        return behavior switch
-        {
-            "video" => item.VideoUrl
-                ?? item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url
-                ?? string.Empty,
-            "external" => item.ExternalUrl ?? string.Empty,
-            "download" => item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url))?.Url
-                ?? item.BodyItems.FirstOrDefault(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url))?.Url
-                ?? string.Empty,
-            _ => string.Empty
-        };
-    }
-
-    private string ResourceButtonText(ContentItemModel item) =>
-        ResourceClickBehavior(item) switch
-        {
-            "video" => "Watch Video",
-            "external" => "Open Link",
-            _ => "Open File"
-        };
+    private static bool IsPageContentType(ContentTypeModel type) =>
+        string.Equals(ContentBehaviorUiHelper.InferBehavior(type), "page", StringComparison.OrdinalIgnoreCase);
 
     private string BuildUserSiteHref(ContentItemModel item)
     {

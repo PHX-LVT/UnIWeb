@@ -1,0 +1,222 @@
+@inject AdminContentService ContentService
+@inject IHttpService Http
+
+@if (Open)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="modal-box content-resource-picker" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@PickerTitle</span>
+                <button type="button" class="btn-admin btn-ghost content-icon-btn" @onclick="Close" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="content-resource-picker__toolbar">
+                    <input class="form-control"
+                           placeholder="@T("SearchResources")"
+                           value="@_search"
+                           @oninput="OnSearchChanged" />
+                    @if (GroupFilterOptions.Any())
+                    {
+                        <select class="form-control"
+                                style="min-width:190px"
+                                value="@_groupFilter"
+                                @onchange="OnGroupFilterChanged">
+                            <option value="">@T("AllGroups")</option>
+                            @if (GroupFilterOptions.Any(o => o.Scope == "media"))
+                            {
+                                <optgroup label="@T("MediaGroups")">
+                                    @foreach (var option in GroupFilterOptions.Where(o => o.Scope == "media"))
+                                    {
+                                        <option value="@option.Key">@option.Name (@option.Count)</option>
+                                    }
+                                </optgroup>
+                            }
+                            @if (GroupFilterOptions.Any(o => o.Scope == "file"))
+                            {
+                                <optgroup label="@T("FileGroups")">
+                                    @foreach (var option in GroupFilterOptions.Where(o => o.Scope == "file"))
+                                    {
+                                        <option value="@option.Key">@option.Name (@option.Count)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    }
+                    <a class="btn-admin btn-ghost" href="/content/resources" target="_blank" rel="noopener">
+                        <i class="fas fa-up-right-from-square"></i> @T("ResourceLibrary")
+                    </a>
+                </div>
+                <div class="form-hint">@T("ResourcePickerHint")</div>
+
+                @if (_loading)
+                {
+                    <p class="text-muted">@T("Loading")</p>
+                }
+                else if (!FilteredResources.Any())
+                {
+                    <p class="text-muted">@T("NoMatchingResources")</p>
+                }
+                else
+                {
+                    <div class="content-resource-picker__grid">
+                        @foreach (var resource in FilteredResources)
+                        {
+                            <article class="content-resource-picker__item" @key="resource.Id">
+                                <span class="content-resource-picker__thumb">
+                                    @if (ResourceThumbnailUrl(resource) is { Length: > 0 } thumbnail)
+                                    {
+                                        <img src="@thumbnail" alt="" />
+                                    }
+                                    else
+                                    {
+                                        <i class="fas @ResourceIcon(resource)"></i>
+                                    }
+                                </span>
+                                <span class="content-resource-picker__meta">
+                                    <strong>@ResourceName(resource)</strong>
+                                    <small>@DisplayResourceKind(resource.Kind)</small>
+                                    @if (!string.IsNullOrWhiteSpace(ResourceDescription(resource)))
+                                    {
+                                        <em>@ResourceDescription(resource)</em>
+                                    }
+                                </span>
+                                <button type="button"
+                                        class="btn-admin btn-primary"
+                                        @onclick="() => Choose(resource)">
+                                    @T("Choose")
+                                </button>
+                            </article>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-admin btn-ghost" @onclick="Close">@T("Cancel")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public string Kind { get; set; } = "file";
+    [Parameter] public EventCallback<ManagedResourceModel> ResourceSelected { get; set; }
+    [Parameter] public EventCallback Closed { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private bool _wasOpen;
+    private bool _loading;
+    private string _loadedKind = string.Empty;
+    private string _search = string.Empty;
+    private string _groupFilter = string.Empty;
+    private List<ManagedResourceModel> _resources = new();
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string CurrentLang => NormalizeLang(AdminLanguage);
+    private IEnumerable<ManagedResourceModel> FilteredResources => _resources.Where(MatchesGroupFilter);
+    private List<ResourceGroupFilterOption> GroupFilterOptions => ResourceLibraryUiHelper.BuildGroupFilterOptions(_resources);
+    private string PickerTitle => NormalizeKind(Kind) switch
+    {
+        "image" => T("ChooseImageResource"),
+        "video" => T("ChooseVideoResource"),
+        _ => T("ChooseFileResource")
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var normalizedKind = NormalizeKind(Kind);
+        if (Open && (!_wasOpen || !string.Equals(_loadedKind, normalizedKind, StringComparison.OrdinalIgnoreCase)))
+        {
+            _loadedKind = normalizedKind;
+            _search = string.Empty;
+            _groupFilter = string.Empty;
+            await LoadResources();
+        }
+
+        if (!Open)
+        {
+            _resources = new();
+            _groupFilter = string.Empty;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task LoadResources()
+    {
+        _loading = true;
+        var res = await ContentService.GetResourcesAsync(_loadedKind, _search, includeInactive: false);
+        if (res.Success)
+        {
+            _resources = (res.Data ?? new()).Where(r => r.Active).ToList();
+            ValidateGroupFilter();
+        }
+        else
+        {
+            _resources = new();
+            Http.Toast(res.Message, res.StatusCode);
+        }
+        _loading = false;
+    }
+
+    private async Task OnSearchChanged(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        await LoadResources();
+    }
+
+    private void OnGroupFilterChanged(ChangeEventArgs e)
+    {
+        _groupFilter = e.Value?.ToString() ?? string.Empty;
+        ValidateGroupFilter();
+    }
+
+    private async Task Choose(ManagedResourceModel resource)
+    {
+        await ResourceSelected.InvokeAsync(resource);
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        _loading = false;
+        await Closed.InvokeAsync();
+    }
+
+    private string ResourceName(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceName(resource, CurrentLang);
+
+    private string ResourceDescription(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceDescription(resource, CurrentLang);
+
+    private static string ResourceThumbnailUrl(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceThumbnailUrl(resource);
+
+    private static string ResourceIcon(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceIcon(resource);
+
+    private string DisplayResourceKind(string kind) => NormalizeKind(kind) switch
+    {
+        "image" => T("ImageResource"),
+        "video" => T("VideoResource"),
+        _ => T("FileResource")
+    };
+
+    private bool MatchesGroupFilter(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.MatchesGroupFilter(resource, _groupFilter);
+
+    private void ValidateGroupFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_groupFilter)) return;
+        if (!GroupFilterOptions.Any(option => string.Equals(option.Key, _groupFilter, StringComparison.OrdinalIgnoreCase)))
+            _groupFilter = string.Empty;
+    }
+
+    private static string NormalizeKind(string? value) =>
+        ResourceLibraryUiHelper.NormalizeKind(value);
+
+    private static string NormalizeLang(string? lang) =>
+        ResourceLibraryUiHelper.NormalizeLang(lang);
+}

@@ -198,6 +198,9 @@ else if (Auth.IsAuthenticated)
             path.StartsWith("/preview", StringComparison.OrdinalIgnoreCase))
             return Auth.IsAuthenticated;
 
+        if (path.StartsWith("/content/resources", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanManageAllContent || Auth.IsWriter;
+
         if (path.StartsWith("/content/types", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/content/templates", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/content/deleted", StringComparison.OrdinalIgnoreCase) ||

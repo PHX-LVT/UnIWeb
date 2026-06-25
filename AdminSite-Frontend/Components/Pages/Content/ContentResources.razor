@@ -1,0 +1,1439 @@
+@page "/content/resources"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@inject AdminContentService ContentService
+@inject AdminLanguageService AdminLanguageState
+@inject AdminAuthService Auth
+@inject IHttpService Http
+
+<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+    <h1 class="page-title"><i class="fas fa-photo-film"></i> @T("ResourceLibrary")</h1>
+    @if (CanManageResources)
+    {
+        <button class="btn-admin btn-primary" @onclick="NewResource">
+            <i class="fas fa-plus"></i> @T("NewResource")
+        </button>
+    }
+</div>
+
+@if (!CanViewResourceLibrary)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoPermission")</p>
+    </div>
+}
+else
+{
+    <div class="admin-card" style="margin-bottom:1rem">
+        <div style="display:flex;gap:.75rem;align-items:end;justify-content:space-between;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px">
+                <label>@T("Search")</label>
+                <input class="form-control" placeholder="@T("SearchResources")" value="@_search" @oninput="OnSearchChanged" />
+            </div>
+
+            <div>
+                <label>@T("Type")</label>
+                <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                    <button type="button" class="@KindButtonClass(string.Empty)" @onclick='() => SetKindFilter(string.Empty)'>@T("All")</button>
+                    <button type="button" class="@KindButtonClass("image")" @onclick='() => SetKindFilter("image")'>@T("ImageResource")</button>
+                    <button type="button" class="@KindButtonClass("video")" @onclick='() => SetKindFilter("video")'>@T("VideoResource")</button>
+                    <button type="button" class="@KindButtonClass("file")" @onclick='() => SetKindFilter("file")'>@T("FileResource")</button>
+                </div>
+            </div>
+
+            <div style="min-width:220px">
+                <label>@T("GroupFilter")</label>
+                <select class="form-control" value="@_groupFilter" @onchange="OnGroupFilterChanged">
+                    <option value="">@T("AllGroups")</option>
+                    @if (GroupFilterOptions.Any(o => o.Scope == "media"))
+                    {
+                        <optgroup label="@T("MediaGroups")">
+                            @foreach (var option in GroupFilterOptions.Where(o => o.Scope == "media"))
+                            {
+                                <option value="@option.Key">@option.Name (@option.Count)</option>
+                            }
+                        </optgroup>
+                    }
+                    @if (GroupFilterOptions.Any(o => o.Scope == "file"))
+                    {
+                        <optgroup label="@T("FileGroups")">
+                            @foreach (var option in GroupFilterOptions.Where(o => o.Scope == "file"))
+                            {
+                                <option value="@option.Key">@option.Name (@option.Count)</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label>@T("View")</label>
+                <div style="display:flex;gap:.35rem">
+                    <button type="button" class="@ViewButtonClass("grid")" @onclick='() => SetViewMode("grid")'>
+                        <i class="fas fa-grid-2"></i> @T("GridView")
+                    </button>
+                    <button type="button" class="@ViewButtonClass("list")" @onclick='() => SetViewMode("list")'>
+                        <i class="fas fa-list"></i> @T("ListView")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:minmax(260px,320px) minmax(0,1fr);gap:1rem;align-items:start">
+        <aside class="admin-card" style="position:sticky;top:1rem">
+            @if (_selectedResource is null)
+            {
+                <div style="min-height:260px;display:grid;place-items:center;text-align:center">
+                    <p class="text-muted">@T("NoResourceSelected")</p>
+                </div>
+            }
+            else
+            {
+                <div style="display:flex;flex-direction:column;gap:1rem">
+                    <button type="button"
+                            style="width:100%;aspect-ratio:4/3;border:1px solid #d8e0ea;border-radius:8px;background:#f8fafc;overflow:hidden;display:grid;place-items:center;padding:0;cursor:pointer"
+                            title="@T("PreviewResource")"
+                            @onclick="() => PreviewResource(_selectedResource)">
+                        @ResourceVisual(_selectedResource, "width:100%;height:100%;object-fit:cover", large: true)
+                    </button>
+
+                    <div>
+                        <span class="content-behavior-pill">@DisplayKind(_selectedResource.Kind)</span>
+                        <h2 style="font-size:1.1rem;margin:.5rem 0 .25rem">@ResourceName(_selectedResource)</h2>
+                        @if (!string.IsNullOrWhiteSpace(ResourceDescription(_selectedResource)))
+                        {
+                            <p class="text-muted" style="margin:.25rem 0 0">@ResourceDescription(_selectedResource)</p>
+                        }
+                    </div>
+
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <button class="btn-admin btn-primary" @onclick="() => PreviewResource(_selectedResource)">
+                            <i class="fas fa-eye"></i> @T("Preview")
+                        </button>
+                        <a class="btn-admin btn-ghost" href="@_selectedResource.Url" target="_blank" rel="noopener">
+                            <i class="fas fa-up-right-from-square"></i> @T("Open")
+                        </a>
+                        @if (CanManageResources)
+                        {
+                            <button class="btn-admin btn-ghost" @onclick="() => EditResource(_selectedResource)">
+                                <i class="fas fa-edit"></i> @T("Edit")
+                            </button>
+                            <button class="btn-admin btn-danger"
+                                    disabled="@_selectedResource.IsInUse"
+                                    title="@DeleteTitle(_selectedResource)"
+                                    @onclick="() => AskDeleteResource(_selectedResource)">
+                                <i class="fas fa-trash"></i> @T("Delete")
+                            </button>
+                        }
+                    </div>
+
+                    <dl style="display:grid;gap:.65rem;margin:0">
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("Usage")</dt>
+                            <dd style="margin:0"><span style="@UsageStyle(_selectedResource)">@UsageText(_selectedResource)</span></dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("FileName")</dt>
+                            <dd style="margin:0;word-break:break-word">@ResourceFileName(_selectedResource)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("FileSize")</dt>
+                            <dd style="margin:0">@FormatBytes(_selectedResource.SizeBytes)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("MimeType")</dt>
+                            <dd style="margin:0;word-break:break-word">@EmptyDash(_selectedResource.ContentType)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("UploadedBy")</dt>
+                            <dd style="margin:0;word-break:break-word">@EmptyDash(_selectedResource.CreatedById)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("Created")</dt>
+                            <dd style="margin:0">@_selectedResource.CreatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("Updated")</dt>
+                            <dd style="margin:0">@_selectedResource.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("StorageKey")</dt>
+                            <dd style="margin:0;word-break:break-word">@EmptyDash(_selectedResource.StorageKey)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("Groups")</dt>
+                            <dd style="margin:0">@GroupText(_selectedResource)</dd>
+                        </div>
+                    </dl>
+
+                    <div style="border-top:1px solid #e5e7eb;padding-top:1rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.65rem">
+                            <strong>@T("UsageDetails")</strong>
+                            @if (_selectedResource.UsageCount > 0)
+                            {
+                                <button type="button"
+                                        class="btn-admin btn-ghost content-icon-btn"
+                                        title="@T("RefreshUsage")"
+                                        disabled="@IsUsageLoading(_selectedResource)"
+                                        @onclick="() => LoadUsageDetails(_selectedResource, force: true)">
+                                    <i class="fas fa-rotate"></i>
+                                </button>
+                            }
+                        </div>
+
+                        @if (_selectedResource.UsageCount <= 0)
+                        {
+                            <p class="text-muted" style="margin:0">@T("NotUsedAnywhereSafeToDelete")</p>
+                        }
+                        else if (IsUsageLoading(_selectedResource))
+                        {
+                            <p class="text-muted" style="margin:0">@T("UsageLoading")</p>
+                        }
+                        else if (SelectedUsage is { References.Count: > 0 } usage)
+                        {
+                            <ul style="display:grid;gap:.5rem;margin:.5rem 0 0;padding:0;list-style:none;max-height:260px;overflow:auto">
+                                @foreach (var reference in usage.References)
+                                {
+                                    <li style="padding:.55rem;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc">
+                                        <div style="font-weight:600">@UsageReferenceTitle(reference)</div>
+                                        <div class="text-muted" style="font-size:.82rem">@UsageReferenceMeta(reference)</div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn-admin btn-ghost" @onclick="() => LoadUsageDetails(_selectedResource, force: true)">
+                                <i class="fas fa-list-check"></i> @T("LoadUsageDetails")
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </aside>
+
+        <section class="admin-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+                <div>
+                    <strong>@T("Resources")</strong>
+                    <span class="text-muted" style="margin-left:.5rem">@FilteredResourceCount</span>
+                </div>
+                @if (!_loading && FilteredResourceCount > 0)
+                {
+                    <span class="text-muted">
+                        @string.Format(T("ShowingRange"), PageStart, PageEnd, FilteredResourceCount)
+                    </span>
+                }
+            </div>
+
+            @if (_loading)
+            {
+                <p class="text-muted">@T("Loading")</p>
+            }
+            else if (FilteredResourceCount == 0)
+            {
+                <div style="min-height:280px;display:grid;place-items:center;text-align:center">
+                    <p class="text-muted">@T("NoResourcesYet")</p>
+                </div>
+            }
+            else if (CanManageResources && _selectedResourceIds.Any())
+            {
+                <div class="alert alert-info" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+                    <span>
+                        @string.Format(T("SelectedCount"), _selectedResourceIds.Count)
+                        @if (SelectedBlockedCount > 0)
+                        {
+                            <span> - @string.Format(T("BulkDeleteResourcesBlocked"), SelectedBlockedCount)</span>
+                        }
+                    </span>
+                    <span style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <button class="btn-admin btn-ghost" type="button" @onclick="ClearSelection">@T("ClearSelection")</button>
+                        <button class="btn-admin btn-danger"
+                                type="button"
+                                disabled="@(!BulkDeleteResources.Any())"
+                                @onclick="AskBulkDeleteResources">
+                            <i class="fas fa-trash"></i> @T("BulkDeleteResources")
+                        </button>
+                    </span>
+                </div>
+            }
+
+            @if (!_loading && FilteredResourceCount > 0 && _viewMode == "list")
+            {
+                <div style="overflow:auto">
+                    <table class="table content-table" style="width:100%">
+                        <thead>
+                            <tr>
+                                @if (CanManageResources)
+                                {
+                                    <th style="width:38px">
+                                        <input type="checkbox"
+                                               checked="@AllPagedBulkSelected"
+                                               title="@T("SelectPage")"
+                                               @onchange="ToggleAllPagedBulk" />
+                                    </th>
+                                }
+                                <th>@T("Preview")</th>
+                                <th>@T("Name")</th>
+                                <th>@T("Type")</th>
+                                <th>@T("Groups")</th>
+                                <th>@T("FileSize")</th>
+                                <th>@T("Updated")</th>
+                                <th>@T("Usage")</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var resource in PagedResources)
+                            {
+                                <tr class="@(IsSelected(resource) ? "is-selected" : string.Empty)"
+                                    style="cursor:pointer"
+                                    @onclick="() => SelectResource(resource)">
+                                    @if (CanManageResources)
+                                    {
+                                        <td>
+                                            <input type="checkbox"
+                                                   checked="@IsBulkSelected(resource)"
+                                                   disabled="@resource.IsInUse"
+                                                   title="@BulkSelectTitle(resource)"
+                                                   @onclick:stopPropagation="true"
+                                                   @onchange="e => ToggleBulkSelected(resource, e)" />
+                                        </td>
+                                    }
+                                    <td style="width:72px">@ResourceVisual(resource, "width:56px;height:42px;object-fit:cover;border-radius:6px")</td>
+                                    <td>
+                                        <strong>@ResourceName(resource)</strong>
+                                        <div class="text-muted" style="font-size:.8rem;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@resource.Url</div>
+                                    </td>
+                                    <td>@DisplayKind(resource.Kind)</td>
+                                    <td>@GroupText(resource)</td>
+                                    <td>@FormatBytes(resource.SizeBytes)</td>
+                                    <td>@resource.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                                    <td><span style="@UsageStyle(resource)">@UsageText(resource)</span></td>
+                                    <td style="width:130px">
+                                        <div style="display:flex;gap:.35rem;justify-content:flex-end">
+                                            <button class="btn-admin btn-ghost content-icon-btn"
+                                                    title="@T("Preview")"
+                                                    @onclick="() => PreviewResource(resource)"
+                                                    @onclick:stopPropagation="true">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            @if (CanManageResources)
+                                            {
+                                                <button class="btn-admin btn-ghost content-icon-btn"
+                                                        @onclick="() => EditResource(resource)"
+                                                        @onclick:stopPropagation="true"
+                                                        title="@T("Edit")">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn-admin btn-danger content-icon-btn"
+                                                        disabled="@resource.IsInUse"
+                                                        @onclick="() => AskDeleteResource(resource)"
+                                                        @onclick:stopPropagation="true"
+                                                        title="@DeleteTitle(resource)">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else if (!_loading && FilteredResourceCount > 0)
+            {
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.85rem">
+                    @foreach (var resource in PagedResources)
+                    {
+                        <div class="admin-card @(IsSelected(resource) ? "is-selected" : string.Empty)"
+                             style="position:relative;padding:.6rem;text-align:left;border-color:@(IsSelected(resource) ? "#0f2742" : "#d8e0ea");box-shadow:none">
+                            @if (CanManageResources)
+                            {
+                                <input type="checkbox"
+                                       checked="@IsBulkSelected(resource)"
+                                       disabled="@resource.IsInUse"
+                                       title="@BulkSelectTitle(resource)"
+                                       style="position:absolute;top:.55rem;right:.55rem;z-index:1"
+                                       @onchange="e => ToggleBulkSelected(resource, e)" />
+                            }
+                            <button type="button"
+                                    style="width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer"
+                                    @onclick="() => SelectResource(resource)">
+                                <span style="display:block;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:#f8fafc;border:1px solid #e5e7eb;margin-bottom:.55rem">
+                                    @ResourceVisual(resource, "width:100%;height:100%;object-fit:cover")
+                                </span>
+                                <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ResourceName(resource)</strong>
+                                <small class="text-muted" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                    @DisplayKind(resource.Kind) &middot; @FormatBytes(resource.SizeBytes)
+                                </small>
+                                <span style="@UsageStyle(resource)">@UsageText(resource)</span>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (TotalPages > 1)
+            {
+                <div class="admin-pagination" style="margin-top:1rem">
+                    <span>@string.Format(T("ShowingRange"), PageStart, PageEnd, FilteredResourceCount)</span>
+                    <div class="admin-pagination__buttons">
+                        <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="PreviousPage">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="btn-admin btn-ghost">@_page / @TotalPages</span>
+                        <button class="btn-admin btn-ghost" disabled="@(_page >= TotalPages)" @onclick="NextPage">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@if (CanManageResources && _showTypeChooser)
+{
+    <div class="modal-backdrop" @onclick="CancelTypeChooser">
+        <div class="modal-box" style="max-width:720px" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@T("ChooseResourceType")</span>
+                <button class="btn-admin btn-ghost content-icon-btn" @onclick="CancelTypeChooser" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="margin-top:0">@T("ChooseResourceTypeHint")</p>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.85rem">
+                    <button type="button" class="admin-card" style="text-align:left;box-shadow:none;border:1px solid #d8e0ea" @onclick='() => StartNewResource("image")'>
+                        <i class="fas fa-image" style="font-size:1.4rem;color:#0f2742"></i>
+                        <strong style="display:block;margin-top:.65rem">@T("ImageResource")</strong>
+                        <span class="text-muted" style="font-size:.85rem">@T("ImageResourceCreateHint")</span>
+                    </button>
+                    <button type="button" class="admin-card" style="text-align:left;box-shadow:none;border:1px solid #d8e0ea" @onclick='() => StartNewResource("video")'>
+                        <i class="fas fa-play" style="font-size:1.4rem;color:#0f2742"></i>
+                        <strong style="display:block;margin-top:.65rem">@T("VideoResource")</strong>
+                        <span class="text-muted" style="font-size:.85rem">@T("VideoResourceCreateHint")</span>
+                    </button>
+                    <button type="button" class="admin-card" style="text-align:left;box-shadow:none;border:1px solid #d8e0ea" @onclick='() => StartNewResource("file")'>
+                        <i class="fas fa-file-lines" style="font-size:1.4rem;color:#0f2742"></i>
+                        <strong style="display:block;margin-top:.65rem">@T("FileResource")</strong>
+                        <span class="text-muted" style="font-size:.85rem">@T("FileResourceCreateHint")</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CancelTypeChooser">@T("Cancel")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _showEditor)
+{
+    <div class="modal-backdrop" @onclick="CloseEditor">
+        <div class="modal-box" style="max-width:720px" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@T(_editingId is null ? "NewResource" : "EditResource")</span>
+                <button class="btn-admin btn-ghost content-icon-btn" @onclick="CloseEditor" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+                    <div>
+                        <label>@T("Type")</label>
+                        <div style="margin-top:.35rem">
+                            <span class="content-behavior-pill">@DisplayKind(_edit.Kind)</span>
+                        </div>
+                    </div>
+                    @if (_editingId is null)
+                    {
+                        <button type="button" class="btn-admin btn-ghost" @onclick="ChangeNewResourceType">
+                            <i class="fas fa-repeat"></i> @T("ChangeType")
+                        </button>
+                    }
+                </div>
+
+                <div style="border-top:1px solid #e5e7eb;padding-top:1rem;margin-top:1rem">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.75rem">
+                        <h3 style="font-size:.95rem;margin:0">@T("Content")</h3>
+                        <span class="text-muted" style="font-size:.85rem">@T("EditingLanguage"): @CurrentLang.ToUpperInvariant()</span>
+                    </div>
+                    <label>@T("Name")</label>
+                    <input class="form-control" value="@GetValue(_edit.Name, CurrentLang)" @oninput="e => SetValue(_edit.Name, CurrentLang, e.Value?.ToString())" />
+                    <label style="margin-top:.75rem">@T("Description")</label>
+                    <textarea class="form-control" rows="3" value="@GetValue(_edit.Description, CurrentLang)" @oninput="e => SetValue(_edit.Description, CurrentLang, e.Value?.ToString())"></textarea>
+                </div>
+
+                @if (_editingId is null)
+                {
+                    <div style="margin-top:1rem;padding:1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fffdf8">
+                        <label>@T("UploadManagedResource")</label>
+                        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.5rem">
+                            <InputFile id="managed-resource-upload" OnChange="UploadResource" accept="@UploadAccept" />
+                            <label class="btn-admin btn-ghost" for="managed-resource-upload">
+                                <i class="fas fa-upload"></i> @T("UploadFile")
+                            </label>
+                        </div>
+                        <div class="form-hint">@string.Format(T("ManagedTypeUploadHint"), DisplayKind(_edit.Kind))</div>
+                    </div>
+                }
+                else
+                {
+                    <div style="margin-top:1rem;padding:1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fffdf8">
+                        <label>@T("ReplaceResourceFile")</label>
+                        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.5rem">
+                            <InputFile id="managed-resource-replace-upload"
+                                       OnChange="ReplaceResourceFile"
+                                       accept="@UploadAccept"
+                                       disabled="@_replaceUploading" />
+                            <label class="btn-admin btn-ghost" for="managed-resource-replace-upload">
+                                <i class="fas fa-rotate"></i> @(_replaceUploading ? T("Replacing") : T("ReplaceResourceFile"))
+                            </label>
+                        </div>
+                        <div class="form-hint">@T("ReplaceResourceFileHint")</div>
+                    </div>
+                }
+
+                @if (_edit.Kind == "video")
+                {
+                    <div class="alert alert-info" style="margin-top:.75rem">
+                        @T("ResourceLibraryVideoRule")
+                    </div>
+                    <label style="margin-top:.75rem">@T("ResourceUrl")</label>
+                    <input class="form-control" value="@_edit.Url" disabled />
+                }
+                else
+                {
+                    <label style="margin-top:.75rem">@T("ResourceUrl")</label>
+                    <input class="form-control" value="@_edit.Url" disabled="@(_editingId is not null)" @oninput="e => _edit.Url = e.Value?.ToString() ?? string.Empty" />
+                    @if (_editingId is not null)
+                    {
+                        <div class="form-hint">@T("ReplaceResourceFileHint")</div>
+                    }
+                }
+
+                @if (_edit.Kind is "file")
+                {
+                    <label style="margin-top:.75rem">@T("PreviewImage")</label>
+                    <input class="form-control" value="@_edit.ThumbnailUrl" @oninput="e => _edit.ThumbnailUrl = e.Value?.ToString()" />
+                }
+
+                <label style="margin-top:.75rem">@T("FileName")</label>
+                <input class="form-control" value="@_edit.FileName" disabled="@(_editingId is not null)" @oninput="e => _edit.FileName = e.Value?.ToString()" />
+
+                <label style="margin-top:.75rem">@T("Groups")</label>
+                <div class="form-hint" style="margin-bottom:.5rem">
+                    @T(EditGroupScope == "media" ? "MediaGroups" : "FileGroups") - @T("GroupScopeHint")
+                </div>
+                <div class="content-tag-editor" style="margin-bottom:.5rem">
+                    @foreach (var group in _edit.Tags)
+                    {
+                        <span class="content-tag-pill">
+                            @group
+                            <button type="button" @onclick="() => RemoveGroup(group)">&times;</button>
+                        </span>
+                    }
+                    <input value="@_groupDraft"
+                           placeholder="@T("AddGroup")"
+                           @oninput="e => _groupDraft = e.Value?.ToString() ?? string.Empty" />
+                    <button type="button" class="btn-admin btn-ghost" @onclick="AddGroupDraft">@T("Add")</button>
+                </div>
+                @if (ExistingGroupSuggestions.Any())
+                {
+                    <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                        @foreach (var group in ExistingGroupSuggestions)
+                        {
+                            <button type="button" class="btn-admin btn-ghost" @onclick="() => AddGroup(group)">
+                                @group
+                            </button>
+                        }
+                    </div>
+                }
+                <div class="form-hint">@T("CommaSeparatedGroups")</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseEditor">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" disabled="@IsSaveDisabled" @onclick="SaveResource">
+                    <i class="fas fa-save"></i> @T("Save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _deleteResource is not null)
+{
+    <div class="modal-backdrop" @onclick="CancelDeleteResource">
+        <div class="modal-card" style="max-width:560px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("DeleteResource")</div>
+            <div style="padding:1rem">
+                <p style="margin-top:0">
+                    @string.Format(T("DeleteResourcePrompt"), GetValue(_deleteResource.Name, CurrentLang, fallback: true))
+                </p>
+                @if (_deleteLoading)
+                {
+                    <p class="text-muted">@T("UsageLoading")</p>
+                }
+                else if ((_deleteUsage?.UsageCount ?? 0) > 0)
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("UsageUsedInPlaces"), _deleteUsage!.UsageCount, _deleteUsage.UsageCount == 1 ? string.Empty : "s")
+                    </div>
+                    <ul style="margin:.5rem 0 0;padding-left:1.2rem">
+                        @foreach (var reference in _deleteUsage!.References.Take(6))
+                        {
+                            <li>@UsageReferenceText(reference)</li>
+                        }
+                    </ul>
+                    @if (_deleteUsage.References.Count > 6)
+                    {
+                        <div class="text-muted" style="font-size:.85rem;margin-top:.5rem">
+                            @string.Format(T("MoreCount"), _deleteUsage.References.Count - 6)
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="text-muted">@T("NotUsedAnywhereSafeToDelete")</p>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CancelDeleteResource">@T("Cancel")</button>
+                <button class="btn-admin btn-danger"
+                        disabled="@(_deleteLoading || (_deleteUsage?.UsageCount ?? 0) > 0)"
+                        @onclick="ConfirmDeleteResource">
+                    @T("Delete")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _showBulkDelete)
+{
+    <div class="modal-backdrop" @onclick="CancelBulkDeleteResources">
+        <div class="modal-card" style="max-width:620px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("BulkDeleteResources")</div>
+            <div style="padding:1rem">
+                <p style="margin-top:0">
+                    @string.Format(T("BulkDeleteResourcesPrompt"), BulkDeleteResources.Count)
+                </p>
+                @if (SelectedBlockedCount > 0)
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("BulkDeleteResourcesBlocked"), SelectedBlockedCount)
+                    </div>
+                }
+                <ul style="margin:.5rem 0 0;padding-left:1.2rem;max-height:240px;overflow:auto">
+                    @foreach (var resource in BulkDeleteResources.Take(10))
+                    {
+                        <li>@ResourceName(resource)</li>
+                    }
+                </ul>
+                @if (BulkDeleteResources.Count > 10)
+                {
+                    <div class="text-muted" style="font-size:.85rem;margin-top:.5rem">
+                        @string.Format(T("MoreCount"), BulkDeleteResources.Count - 10)
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" disabled="@_bulkDeleteLoading" @onclick="CancelBulkDeleteResources">@T("Cancel")</button>
+                <button class="btn-admin btn-danger"
+                        disabled="@(_bulkDeleteLoading || !BulkDeleteResources.Any())"
+                        @onclick="ConfirmBulkDeleteResources">
+                    @if (_bulkDeleteLoading)
+                    {
+                        <span>@T("Loading")</span>
+                    }
+                    else
+                    {
+                        <span>@T("Delete")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_previewResource is not null)
+{
+    <div class="modal-backdrop" @onclick="ClosePreview">
+        <div class="modal-box" style="max-width:min(1000px,95vw);width:95vw" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@ResourceName(_previewResource)</span>
+                <button class="btn-admin btn-ghost content-icon-btn" @onclick="ClosePreview" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                @if (NormalizeKind(_previewResource.Kind) == "image")
+                {
+                    <div style="display:grid;place-items:center;background:#0f172a;border-radius:8px;min-height:320px;overflow:hidden">
+                        <img src="@_previewResource.Url" alt="@ResourceName(_previewResource)" style="max-width:100%;max-height:72vh;object-fit:contain" />
+                    </div>
+                }
+                else if (NormalizeKind(_previewResource.Kind) == "video")
+                {
+                    <video src="@_previewResource.Url"
+                           controls
+                           preload="metadata"
+                           style="width:100%;max-height:72vh;border-radius:8px;background:#0f172a">
+                    </video>
+                }
+                else if (IsPdf(_previewResource))
+                {
+                    <iframe src="@_previewResource.Url" title="@ResourceName(_previewResource)" style="width:100%;height:72vh;border:1px solid #d8e0ea;border-radius:8px"></iframe>
+                }
+                else
+                {
+                    <div style="min-height:280px;display:grid;place-items:center;text-align:center;border:1px solid #d8e0ea;border-radius:8px;background:#f8fafc;padding:2rem">
+                        <div>
+                            <i class="fas fa-file-lines" style="font-size:3rem;color:#0f2742"></i>
+                            <h3 style="margin:.75rem 0 .25rem">@ResourceFileName(_previewResource)</h3>
+                            <p class="text-muted" style="margin:0">@T("PreviewUnavailable")</p>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <a class="btn-admin btn-primary" href="@_previewResource.Url" target="_blank" rel="noopener">
+                    <i class="fas fa-up-right-from-square"></i> @T("Open")
+                </a>
+                <button class="btn-admin btn-ghost" @onclick="ClosePreview">@T("Close")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private const int PageSize = 30;
+
+    private List<string> _languages = new() { "en" };
+    private List<ManagedResourceModel> _resources = new();
+    private ManagedResourceModel? _selectedResource;
+    private ManagedResourceRequest _edit = new();
+    private string? _editingId;
+    private string _search = string.Empty;
+    private string _kindFilter = string.Empty;
+    private string _groupDraft = string.Empty;
+    private string _viewMode = "grid";
+    private int _page = 1;
+    private bool _loading = true;
+    private bool _showTypeChooser;
+    private bool _showEditor;
+    private bool _showBulkDelete;
+    private ManagedResourceModel? _previewResource;
+    private ManagedResourceModel? _deleteResource;
+    private ManagedResourceUsageModel? _deleteUsage;
+    private bool _deleteLoading;
+    private bool _bulkDeleteLoading;
+    private bool _replaceUploading;
+    private string _groupFilter = string.Empty;
+    private readonly HashSet<string> _selectedResourceIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ManagedResourceUsageModel> _usageByResourceId = new(StringComparer.OrdinalIgnoreCase);
+    private string? _usageLoadingResourceId;
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string CurrentLang => NormalizeLang(AdminLanguage);
+    private bool CanViewResourceLibrary => Auth.CanManageAllContent || Auth.IsWriter;
+    private bool CanManageResources => Auth.CanManageAllContent;
+
+    private IEnumerable<ManagedResourceModel> FilteredResources => _resources.Where(MatchesGroupFilter);
+    private int FilteredResourceCount => FilteredResources.Count();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredResourceCount / (double)PageSize));
+    private int PageStart => FilteredResourceCount == 0 ? 0 : ((_page - 1) * PageSize) + 1;
+    private int PageEnd => Math.Min(FilteredResourceCount, _page * PageSize);
+    private IEnumerable<ManagedResourceModel> PagedResources => FilteredResources.Skip((_page - 1) * PageSize).Take(PageSize);
+    private IEnumerable<ManagedResourceModel> DeletablePagedResources => PagedResources.Where(r => !r.IsInUse);
+    private List<ManagedResourceModel> BulkDeleteResources =>
+        CanManageResources
+            ? _resources.Where(r => _selectedResourceIds.Contains(r.Id) && !r.IsInUse).ToList()
+            : new();
+    private int SelectedBlockedCount =>
+        CanManageResources
+            ? _resources.Count(r => _selectedResourceIds.Contains(r.Id) && r.IsInUse)
+            : 0;
+    private bool AllPagedBulkSelected =>
+        CanManageResources &&
+        DeletablePagedResources.Any() &&
+        DeletablePagedResources.All(r => _selectedResourceIds.Contains(r.Id));
+    private ManagedResourceUsageModel? SelectedUsage =>
+        _selectedResource is null ? null : _usageByResourceId.GetValueOrDefault(_selectedResource.Id);
+    private List<ResourceGroupFilterOption> GroupFilterOptions => ResourceLibraryUiHelper.BuildGroupFilterOptions(_resources);
+    private string EditGroupScope => NormalizeKind(_edit.Kind) == "file" ? "file" : "media";
+    private List<string> ExistingGroupSuggestions => GroupFilterOptions
+        .Where(option => string.Equals(option.Scope, EditGroupScope, StringComparison.OrdinalIgnoreCase))
+        .Select(option => option.Name)
+        .Where(group => !_edit.Tags.Contains(group, StringComparer.OrdinalIgnoreCase))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(group => group, StringComparer.OrdinalIgnoreCase)
+        .Take(12)
+        .ToList();
+    private string UploadAccept => NormalizeKind(_edit.Kind) switch
+    {
+        "image" => "image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif",
+        "video" => "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov",
+        _ => ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    };
+    private bool IsSaveDisabled =>
+        _editingId is null &&
+        NormalizeKind(_edit.Kind) == "video" &&
+        string.IsNullOrWhiteSpace(_edit.StorageKey);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        await AdminLanguageState.LoadSettingsAsync();
+        _languages = AdminLanguageState.SupportedLanguages.ToList();
+        _edit = NewRequest();
+        if (!CanViewResourceLibrary)
+        {
+            _loading = false;
+            return;
+        }
+
+        await LoadResources();
+    }
+
+    private async Task LoadResources()
+    {
+        if (!CanViewResourceLibrary)
+        {
+            _resources = new();
+            _selectedResource = null;
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        var previousSelectedId = _selectedResource?.Id;
+        var res = await ContentService.GetResourcesAsync(_kindFilter, _search, includeInactive: true);
+        _resources = res.Data ?? new();
+        ValidateGroupFilter();
+        PruneSelection();
+        ClampPage();
+        _selectedResource = FilteredResources.FirstOrDefault(r => r.Id == previousSelectedId)
+            ?? PagedResources.FirstOrDefault()
+            ?? FilteredResources.FirstOrDefault();
+        await LoadUsageDetails(_selectedResource);
+        _loading = false;
+    }
+
+    private async Task OnSearchChanged(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+        await LoadResources();
+    }
+
+    private async Task SetKindFilter(string kind)
+    {
+        _kindFilter = kind;
+        _page = 1;
+        await LoadResources();
+    }
+
+    private async Task OnGroupFilterChanged(ChangeEventArgs e)
+    {
+        _groupFilter = e.Value?.ToString() ?? string.Empty;
+        ValidateGroupFilter();
+        _page = 1;
+        ClampPage();
+        _selectedResource = PagedResources.FirstOrDefault() ?? FilteredResources.FirstOrDefault();
+        await LoadUsageDetails(_selectedResource);
+    }
+
+    private void SetViewMode(string mode)
+    {
+        _viewMode = mode == "list" ? "list" : "grid";
+    }
+
+    private async Task SelectResource(ManagedResourceModel resource)
+    {
+        _selectedResource = resource;
+        await LoadUsageDetails(resource);
+    }
+
+    private bool IsSelected(ManagedResourceModel resource) =>
+        string.Equals(resource.Id, _selectedResource?.Id, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsBulkSelected(ManagedResourceModel resource) =>
+        _selectedResourceIds.Contains(resource.Id);
+
+    private string BulkSelectTitle(ManagedResourceModel resource) =>
+        resource.IsInUse ? T("ResourceInUseCannotSelect") : T("Select");
+
+    private void ToggleBulkSelected(ManagedResourceModel resource, ChangeEventArgs e)
+    {
+        if (!CanManageResources) return;
+
+        if (resource.IsInUse)
+        {
+            _selectedResourceIds.Remove(resource.Id);
+            return;
+        }
+
+        var selected = e.Value is bool value && value;
+        if (selected)
+            _selectedResourceIds.Add(resource.Id);
+        else
+            _selectedResourceIds.Remove(resource.Id);
+    }
+
+    private void ToggleAllPagedBulk(ChangeEventArgs e)
+    {
+        if (!CanManageResources) return;
+
+        var selected = e.Value is bool value && value;
+        foreach (var resource in DeletablePagedResources)
+        {
+            if (selected)
+                _selectedResourceIds.Add(resource.Id);
+            else
+                _selectedResourceIds.Remove(resource.Id);
+        }
+    }
+
+    private void ClearSelection()
+    {
+        _selectedResourceIds.Clear();
+    }
+
+    private void PruneSelection()
+    {
+        if (!CanManageResources)
+        {
+            _selectedResourceIds.Clear();
+            return;
+        }
+
+        var ids = _resources.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _selectedResourceIds.RemoveWhere(id => !ids.Contains(id));
+    }
+
+    private async Task PreviousPage()
+    {
+        if (_page <= 1) return;
+        _page--;
+        _selectedResource = PagedResources.FirstOrDefault() ?? _selectedResource;
+        await LoadUsageDetails(_selectedResource);
+    }
+
+    private async Task NextPage()
+    {
+        if (_page >= TotalPages) return;
+        _page++;
+        _selectedResource = PagedResources.FirstOrDefault() ?? _selectedResource;
+        await LoadUsageDetails(_selectedResource);
+    }
+
+    private void ClampPage()
+    {
+        if (_page < 1) _page = 1;
+        if (_page > TotalPages) _page = TotalPages;
+    }
+
+    private void NewResource()
+    {
+        if (!EnsureCanManageResources()) return;
+
+        _showTypeChooser = true;
+        _showEditor = false;
+        _editingId = null;
+        _edit = NewRequest();
+        _groupDraft = string.Empty;
+    }
+
+    private void StartNewResource(string kind)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        _editingId = null;
+        _edit = NewRequest(kind);
+        _groupDraft = string.Empty;
+        _showTypeChooser = false;
+        _showEditor = true;
+    }
+
+    private void CancelTypeChooser()
+    {
+        _showTypeChooser = false;
+    }
+
+    private void ChangeNewResourceType()
+    {
+        if (!EnsureCanManageResources()) return;
+        if (_editingId is not null) return;
+
+        _showEditor = false;
+        _showTypeChooser = true;
+    }
+
+    private void EditResource(ManagedResourceModel resource)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        _selectedResource = resource;
+        _showTypeChooser = false;
+        _editingId = resource.Id;
+        _edit = new ManagedResourceRequest
+        {
+            Kind = NormalizeKind(resource.Kind),
+            Name = EnsureLangs(resource.Name),
+            Description = EnsureLangs(resource.Description),
+            Url = resource.Url,
+            StorageKey = resource.StorageKey,
+            ThumbnailUrl = resource.ThumbnailUrl,
+            FileName = resource.FileName,
+            ContentType = resource.ContentType,
+            SizeBytes = resource.SizeBytes,
+            Source = resource.Source,
+            Tags = resource.Tags.ToList(),
+            Active = resource.Active
+        };
+        _groupDraft = string.Empty;
+        _showEditor = true;
+    }
+
+    private void CloseEditor()
+    {
+        _showEditor = false;
+        _showTypeChooser = false;
+        _editingId = null;
+        _edit = NewRequest();
+        _groupDraft = string.Empty;
+    }
+
+    private async Task SaveResource()
+    {
+        if (!EnsureCanManageResources()) return;
+
+        if (_editingId is null &&
+            NormalizeKind(_edit.Kind) == "video" &&
+            string.IsNullOrWhiteSpace(_edit.StorageKey))
+        {
+            Http.Toast(T("UploadVideoFirst"), 422);
+            return;
+        }
+
+        PrepareRequest();
+        var res = _editingId is null
+            ? await ContentService.CreateResourceAsync(_edit)
+            : await ContentService.UpdateResourceAsync(_editingId, _edit);
+
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            var selectedId = res.Data?.Id;
+            _showEditor = false;
+            _editingId = null;
+            _edit = NewRequest();
+            _groupDraft = string.Empty;
+            await LoadResources();
+            if (!string.IsNullOrWhiteSpace(selectedId))
+                _selectedResource = _resources.FirstOrDefault(r => r.Id == selectedId) ?? _selectedResource;
+        }
+    }
+
+    private async Task UploadResource(InputFileChangeEventArgs e)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        var res = await ContentService.UploadResourceAsync(e.File, NormalizeKind(_edit.Kind));
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success && res.Data is not null)
+        {
+            await LoadResources();
+            EditResource(res.Data);
+        }
+    }
+
+    private async Task ReplaceResourceFile(InputFileChangeEventArgs e)
+    {
+        if (!EnsureCanManageResources()) return;
+        if (string.IsNullOrWhiteSpace(_editingId)) return;
+
+        _replaceUploading = true;
+        try
+        {
+            var res = await ContentService.ReplaceResourceFileAsync(_editingId, e.File, NormalizeKind(_edit.Kind));
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success && res.Data is not null)
+            {
+                await LoadResources();
+                EditResource(res.Data);
+            }
+        }
+        finally
+        {
+            _replaceUploading = false;
+        }
+    }
+
+    private async Task AskDeleteResource(ManagedResourceModel resource)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        if (resource.IsInUse)
+        {
+            Http.Toast(string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s"), 422);
+            return;
+        }
+
+        _deleteResource = resource;
+        _deleteUsage = null;
+        _deleteLoading = true;
+
+        var usage = await ContentService.GetResourceUsageAsync(resource.Id);
+        if (usage.Success)
+            _deleteUsage = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
+        else
+            Http.Toast(usage.Message, usage.StatusCode);
+
+        _deleteLoading = false;
+    }
+
+    private void CancelDeleteResource()
+    {
+        _deleteResource = null;
+        _deleteUsage = null;
+        _deleteLoading = false;
+    }
+
+    private async Task ConfirmDeleteResource()
+    {
+        if (!EnsureCanManageResources()) return;
+        if (_deleteResource is null) return;
+
+        var deletedId = _deleteResource.Id;
+        var res = await ContentService.DeleteResourceAsync(deletedId);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            _usageByResourceId.Remove(deletedId);
+            if (string.Equals(_editingId, deletedId, StringComparison.OrdinalIgnoreCase))
+                CloseEditor();
+
+            CancelDeleteResource();
+            await LoadResources();
+            if (string.Equals(_selectedResource?.Id, deletedId, StringComparison.OrdinalIgnoreCase))
+                _selectedResource = PagedResources.FirstOrDefault() ?? FilteredResources.FirstOrDefault();
+            return;
+        }
+
+        var usage = await ContentService.GetResourceUsageAsync(deletedId);
+        if (usage.Success)
+            _deleteUsage = usage.Data;
+        await LoadResources();
+    }
+
+    private void AskBulkDeleteResources()
+    {
+        if (!EnsureCanManageResources()) return;
+
+        if (!BulkDeleteResources.Any())
+        {
+            Http.Toast(T("NoResourcesSelectedForDelete"), 422);
+            return;
+        }
+
+        _showBulkDelete = true;
+    }
+
+    private void CancelBulkDeleteResources()
+    {
+        if (_bulkDeleteLoading) return;
+        _showBulkDelete = false;
+    }
+
+    private async Task ConfirmBulkDeleteResources()
+    {
+        if (!EnsureCanManageResources()) return;
+
+        var resources = BulkDeleteResources;
+        if (resources.Count == 0) return;
+
+        _bulkDeleteLoading = true;
+        var deleted = 0;
+        var failed = 0;
+
+        foreach (var resource in resources)
+        {
+            var res = await ContentService.DeleteResourceAsync(resource.Id);
+            if (res.Success)
+            {
+                deleted++;
+                _selectedResourceIds.Remove(resource.Id);
+                _usageByResourceId.Remove(resource.Id);
+            }
+            else
+            {
+                failed++;
+            }
+        }
+
+        _bulkDeleteLoading = false;
+        _showBulkDelete = false;
+        await LoadResources();
+
+        if (deleted > 0)
+            Http.Toast(string.Format(T("DeleteResourcesSucceeded"), deleted), 200);
+        if (failed > 0)
+            Http.Toast(string.Format(T("DeleteResourcesPartial"), failed), 422);
+    }
+
+    private async Task LoadUsageDetails(ManagedResourceModel? resource, bool force = false)
+    {
+        if (resource is null) return;
+
+        if (resource.UsageCount <= 0)
+        {
+            _usageByResourceId[resource.Id] = new ManagedResourceUsageModel { ResourceId = resource.Id };
+            return;
+        }
+
+        if (!force && _usageByResourceId.ContainsKey(resource.Id))
+            return;
+
+        _usageLoadingResourceId = resource.Id;
+        var usage = await ContentService.GetResourceUsageAsync(resource.Id);
+        if (usage.Success)
+            _usageByResourceId[resource.Id] = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
+        else
+            Http.Toast(usage.Message, usage.StatusCode);
+
+        if (string.Equals(_usageLoadingResourceId, resource.Id, StringComparison.OrdinalIgnoreCase))
+            _usageLoadingResourceId = null;
+    }
+
+    private bool IsUsageLoading(ManagedResourceModel? resource) =>
+        resource is not null &&
+        string.Equals(_usageLoadingResourceId, resource.Id, StringComparison.OrdinalIgnoreCase);
+
+    private void PreviewResource(ManagedResourceModel? resource)
+    {
+        if (resource is null || string.IsNullOrWhiteSpace(resource.Url)) return;
+        _previewResource = resource;
+    }
+
+    private void ClosePreview()
+    {
+        _previewResource = null;
+    }
+
+    private void PrepareRequest()
+    {
+        _edit.Kind = NormalizeKind(_edit.Kind);
+        _edit.Name = EnsureLangs(_edit.Name);
+        _edit.Description = EnsureLangs(_edit.Description);
+        _edit.Tags = NormalizeGroups(_edit.Tags.Concat(ParseGroups(_groupDraft)));
+        _groupDraft = string.Empty;
+        _edit.Source = string.Equals(_edit.Source, "managed-upload", StringComparison.OrdinalIgnoreCase) ? "managed-upload" : "external-url";
+    }
+
+    private bool EnsureCanManageResources()
+    {
+        if (CanManageResources) return true;
+
+        Http.Toast(T("NoPermission"), 403);
+        return false;
+    }
+
+    private void AddGroupDraft()
+    {
+        foreach (var group in ParseGroups(_groupDraft))
+            AddGroup(group);
+
+        _groupDraft = string.Empty;
+    }
+
+    private void AddGroup(string? group)
+    {
+        var clean = NormalizeGroup(group);
+        if (string.IsNullOrWhiteSpace(clean)) return;
+
+        _edit.Tags = NormalizeGroups(_edit.Tags.Append(clean));
+    }
+
+    private void RemoveGroup(string group)
+    {
+        _edit.Tags = _edit.Tags
+            .Where(existing => !string.Equals(existing, group, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private static IEnumerable<string> ParseGroups(string? value)
+    {
+        foreach (var part in (value ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var clean = NormalizeGroup(part);
+            if (!string.IsNullOrWhiteSpace(clean))
+                yield return clean;
+        }
+    }
+
+    private static List<string> NormalizeGroups(IEnumerable<string>? groups)
+    {
+        var result = new List<string>();
+        foreach (var group in groups ?? [])
+        {
+            var clean = NormalizeGroup(group);
+            if (string.IsNullOrWhiteSpace(clean)) continue;
+            if (result.Contains(clean, StringComparer.OrdinalIgnoreCase)) continue;
+
+            result.Add(clean);
+            if (result.Count >= 20) break;
+        }
+
+        return result;
+    }
+
+    private static string? NormalizeGroup(string? group)
+    {
+        var clean = (group ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(clean) ? null : clean;
+    }
+
+    private MarkupString ResourceVisual(ManagedResourceModel resource, string style, bool large = false)
+    {
+        if (resource.Kind == "image" && !string.IsNullOrWhiteSpace(resource.Url))
+        {
+            var url = HtmlAttr(resource.Url);
+            return (MarkupString)$"<img src='{url}' alt='' style='{HtmlAttr(style)}' />";
+        }
+
+        if (!string.IsNullOrWhiteSpace(resource.ThumbnailUrl))
+        {
+            var url = HtmlAttr(resource.ThumbnailUrl);
+            return (MarkupString)$"<img src='{url}' alt='' style='{HtmlAttr(style)}' />";
+        }
+
+        var icon = resource.Kind == "video" ? "fa-play" : "fa-file";
+        var size = large ? "font-size:2rem;width:100%;height:100%;" : "width:56px;height:42px;";
+        return (MarkupString)$"<span style='display:inline-flex;{size}align-items:center;justify-content:center;border-radius:8px;background:#fff7e6;color:#0f2742'><i class='fas {icon}'></i></span>";
+    }
+
+    private static string HtmlAttr(string? value) => System.Net.WebUtility.HtmlEncode(value ?? string.Empty);
+
+    private string DisplayKind(string kind) => NormalizeKind(kind) switch
+    {
+        "image" => T("ImageResource"),
+        "video" => T("VideoResource"),
+        _ => T("FileResource")
+    };
+
+    private string ResourceName(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceName(resource, CurrentLang);
+
+    private string ResourceDescription(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceDescription(resource, CurrentLang);
+
+    private static string ResourceFileName(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceFileName(resource);
+
+    private string UsageText(ManagedResourceModel resource) =>
+        resource.UsageCount <= 0
+            ? T("UsageNotUsed")
+            : string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s");
+
+    private static string UsageStyle(ManagedResourceModel resource) =>
+        resource.UsageCount <= 0
+            ? "display:inline-flex;padding:.2rem .45rem;border-radius:999px;background:#ecfdf5;color:#166534;font-size:.8rem"
+            : "display:inline-flex;padding:.2rem .45rem;border-radius:999px;background:#fff7ed;color:#9a3412;font-size:.8rem";
+
+    private string DeleteTitle(ManagedResourceModel resource) =>
+        resource.IsInUse ? T("DeleteResourceInUseBlocked") : T("Delete");
+
+    private static string UsageReferenceText(ManagedResourceUsageReferenceModel reference)
+    {
+        var title = string.IsNullOrWhiteSpace(reference.Title) ? reference.ItemId : reference.Title;
+        var detail = string.IsNullOrWhiteSpace(reference.Detail) ? string.Empty : $" - {reference.Detail}";
+        return $"{reference.Source}: {title} / {reference.Field}{detail}";
+    }
+
+    private static string UsageReferenceTitle(ManagedResourceUsageReferenceModel reference) =>
+        string.IsNullOrWhiteSpace(reference.Title) ? reference.ItemId : reference.Title;
+
+    private static string UsageReferenceMeta(ManagedResourceUsageReferenceModel reference)
+    {
+        var parts = new[]
+        {
+            reference.Source,
+            reference.Field,
+            reference.Status,
+            reference.Detail
+        }.Where(part => !string.IsNullOrWhiteSpace(part));
+
+        return string.Join(" / ", parts);
+    }
+
+    private static string FormatBytes(long bytes) =>
+        ResourceLibraryUiHelper.FormatBytes(bytes);
+
+    private static string EmptyDash(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private string GroupText(ManagedResourceModel resource) =>
+        resource.Tags.Count == 0 ? "-" : string.Join(", ", resource.Tags);
+
+    private bool MatchesGroupFilter(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.MatchesGroupFilter(resource, _groupFilter);
+
+    private void ValidateGroupFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_groupFilter)) return;
+        if (!GroupFilterOptions.Any(option => string.Equals(option.Key, _groupFilter, StringComparison.OrdinalIgnoreCase)))
+            _groupFilter = string.Empty;
+    }
+
+    private static bool IsPdf(ManagedResourceModel resource) =>
+        string.Equals(resource.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase) ||
+        resource.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ||
+        resource.Url.Contains(".pdf", StringComparison.OrdinalIgnoreCase);
+
+    private string KindButtonClass(string kind) =>
+        $"btn-admin {(string.Equals(_kindFilter, kind, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
+
+    private string ViewButtonClass(string mode) =>
+        $"btn-admin {(string.Equals(_viewMode, mode, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
+
+    private string GetValue(Dictionary<string, string> values, string lang, bool fallback = false) =>
+        ResourceLibraryUiHelper.GetValue(values, lang, fallback);
+
+    private static void SetValue(Dictionary<string, string> values, string lang, string? value)
+    {
+        values[lang] = value ?? string.Empty;
+    }
+
+    private Dictionary<string, string> EnsureLangs(Dictionary<string, string>? source)
+    {
+        var result = source is null ? new() : new Dictionary<string, string>(source, StringComparer.OrdinalIgnoreCase);
+        foreach (var lang in _languages)
+            result.TryAdd(lang, string.Empty);
+        return result;
+    }
+
+    private static string NormalizeKind(string? value) =>
+        ResourceLibraryUiHelper.NormalizeKind(value);
+
+    private static string NormalizeLang(string? lang) =>
+        ResourceLibraryUiHelper.NormalizeLang(lang);
+
+    private ManagedResourceRequest NewRequest(string kind = "file") => new()
+    {
+        Kind = NormalizeKind(kind),
+        Name = EnsureLangs(null),
+        Description = EnsureLangs(null),
+        Source = NormalizeKind(kind) == "video" ? "managed-upload" : "external-url",
+        Active = true
+    };
+}

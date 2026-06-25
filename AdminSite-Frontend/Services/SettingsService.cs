@@ -35,6 +35,12 @@ namespace AdminSite.Services
             return res;
         }
 
+        public Task<ApiResponse<ResourceLibrarySettingsModel>> GetResourceLibrarySettingsAsync() =>
+            _http.GetAsync<ResourceLibrarySettingsModel>("api/admin/settings/resource-library");
+
+        public Task<ApiResponse<ResourceLibrarySettingsModel>> UpdateResourceLibrarySettingsAsync(ResourceLibrarySettingsModel settings) =>
+            _http.PutAsync<ResourceLibrarySettingsModel>("api/admin/settings/resource-library", settings);
+
         public Task<ApiResponse<List<GlossaryTermModel>>> GetGlossaryAsync() =>
             _http.GetAsync<List<GlossaryTermModel>>("api/admin/settings/glossary");
 

@@ -65,6 +65,45 @@ namespace AdminSite.Services
         public Task<ApiResponse<object>> PermanentDeleteAsync(IEnumerable<string> ids) =>
             _http.PostAsync<object>("api/admin/content/permanent-delete", new { Ids = ids.ToList() });
 
+
+        public Task<ApiResponse<List<ManagedResourceModel>>> GetResourcesAsync(string? kind = null, string? search = null, bool includeInactive = true)
+        {
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(kind))
+                query.Add($"kind={Uri.EscapeDataString(kind)}");
+            if (!string.IsNullOrWhiteSpace(search))
+                query.Add($"search={Uri.EscapeDataString(search)}");
+            query.Add($"includeInactive={includeInactive.ToString().ToLowerInvariant()}");
+            var suffix = query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
+            return _http.GetAsync<List<ManagedResourceModel>>($"api/admin/resources{suffix}");
+        }
+
+        public Task<ApiResponse<ManagedResourceModel>> CreateResourceAsync(ManagedResourceRequest req) =>
+            _http.PostAsync<ManagedResourceModel>("api/admin/resources", req);
+
+        public Task<ApiResponse<ManagedResourceModel>> UpdateResourceAsync(string id, ManagedResourceRequest req) =>
+            _http.PutAsync<ManagedResourceModel>($"api/admin/resources/{id}", req);
+
+        public Task<ApiResponse<ManagedResourceUsageModel>> GetResourceUsageAsync(string id) =>
+            _http.GetAsync<ManagedResourceUsageModel>($"api/admin/resources/{id}/usage");
+
+        public Task<ApiResponse<object>> DeleteResourceAsync(string id) =>
+            _http.DeleteAsync<object>($"api/admin/resources/{id}");
+
+        public Task<ApiResponse<ManagedResourceModel>> UploadResourceAsync(Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string kind) =>
+            _http.PostFileAsync<ManagedResourceModel>(
+                "api/admin/resources/upload",
+                file,
+                maxBytes: 250 * 1024 * 1024,
+                formFields: new Dictionary<string, string> { ["Kind"] = kind });
+
+        public Task<ApiResponse<ManagedResourceModel>> ReplaceResourceFileAsync(string id, Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string kind) =>
+            _http.PostFileAsync<ManagedResourceModel>(
+                $"api/admin/resources/{id}/replace",
+                file,
+                maxBytes: 250 * 1024 * 1024,
+                formFields: new Dictionary<string, string> { ["Kind"] = kind });
+
         public Task<ApiResponse<List<ContentAuditLogModel>>> GetLogsAsync(string stableId) =>
             _http.GetAsync<List<ContentAuditLogModel>>($"api/admin/content/{stableId}/logs");
     }

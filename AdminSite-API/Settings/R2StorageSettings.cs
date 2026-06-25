@@ -8,7 +8,7 @@
         public string BucketName { get; set; } = string.Empty;
         public string PublicBaseUrl { get; set; } = string.Empty;
         public string KeyPrefix { get; set; } = "cms";
-        public long MaxUploadBytes { get; set; } = 10 * 1024 * 1024;
+        public long MaxUploadBytes { get; set; } = 250L * 1024 * 1024;
 
         public bool IsConfigured =>
             !string.IsNullOrWhiteSpace(AccountId) &&

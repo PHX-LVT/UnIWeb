@@ -70,14 +70,6 @@ namespace FullProject.Utils
                     Button = c.Button != null ? CloneSectionButton(c.Button) : null,
                     Buttons = c.Buttons.Select(CloneSectionButton).ToList()
                 },
-                GallerySection g => new GallerySection
-                {
-                    Layout = g.Layout,
-                    Columns = g.Columns,
-                    Gap = g.Gap,
-                    ShowCaptions = g.ShowCaptions,
-                    Images = g.Images.Select(CloneGalleryImage).ToList()
-                },
                 ListSection l => new ListSection
                 {
                     Layout = l.Layout,
@@ -441,15 +433,6 @@ namespace FullProject.Utils
             Style = b.Style,
             Visible = b.Visible,
             Order = b.Order
-        };
-
-        private static GalleryImage CloneGalleryImage(GalleryImage img) => new()
-        {
-            Id = ObjectId.GenerateNewId().ToString(),
-            ImageUrl = img.ImageUrl,
-            Caption = new Dictionary<string, string>(img.Caption),
-            Visible = img.Visible,
-            Order = img.Order
         };
 
         private static ShowcaseItemOverride CloneShowcaseItemOverride(ShowcaseItemOverride item) => new()

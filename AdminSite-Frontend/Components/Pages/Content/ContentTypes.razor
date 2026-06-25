@@ -44,13 +44,16 @@ else
                       value="@GetValue(_edit.Description, CurrentLang)"
                       @oninput="e => SetValue(_edit.Description, CurrentLang, e.Value?.ToString())"></textarea>
         </div>
-
-        <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem">
-            <input type="checkbox" checked="@ResourceOnly" @onchange="OnResourceOnlyChanged" />
-            @T("ResourceOnlyContent")
-        </label>
+        <label style="margin-top:.75rem">@T("ContentBehavior")</label>
+        <select class="form-control" @bind="_edit.Behavior" @bind:after="NormalizeWorkflow">
+            <option value="page">@T("PageContent")</option>
+            <option value="file-resource">@T("FileResource")</option>
+            <option value="video-resource">@T("VideoResource")</option>
+            <option value="image-resource">@T("ImageResource")</option>
+            <option value="gallery">@T("Gallery")</option>
+        </select>
         <p class="text-muted" style="font-size:.8rem;margin:.25rem 0 0">
-            @T("ResourceOnlyContentHint")
+            @T("ContentBehaviorHint")
         </p>
         <label style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
             <input type="checkbox" @bind="_edit.RequiresHeroImage" />
@@ -73,6 +76,7 @@ else
             <option value="detail">@T("DetailPage")</option>
             <option value="download">@T("FileDownload")</option>
             <option value="video">@T("VideoModal")</option>
+            <option value="image">@T("ImageModal")</option>
             <option value="external">@T("ExternalLink")</option>
         </select>
         <label style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
@@ -123,7 +127,7 @@ else
                             <tr>
                                 <td>@GetLang(type.Name)</td>
                                 <td>@type.Key</td>
-                                <td>@(type.RequiresBody ? T("DetailPage") : T("ResourceOnlyContent"))</td>
+                                <td>@DisplayBehavior(type.Behavior)</td>
                                 <td>@DisplayClickBehavior(type.ClickBehavior)</td>
                                 <td>@(type.Visible ? T("Yes") : T("No"))</td>
                                 <td style="text-align:right">
@@ -152,7 +156,7 @@ else
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
-    private bool ResourceOnly => !_edit.RequiresBody;
+    private bool ResourceOnly => !string.Equals(ContentBehaviorUiHelper.NormalizeBehavior(_edit.Behavior), "page", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -186,6 +190,7 @@ else
             Key = type.Key,
             Name = EnsureLangs(type.Name),
             Description = EnsureLangs(type.Description),
+            Behavior = ContentBehaviorUiHelper.InferBehavior(type),
             RequiresBody = type.RequiresBody,
             RequiresHeroImage = type.RequiresHeroImage,
             RequiresFile = type.RequiresFile,
@@ -228,53 +233,32 @@ else
     private string GetLang(Dictionary<string, string> values) =>
         GetValue(values, AdminLanguage, fallback: true);
 
+    private string DisplayBehavior(string? value) => ContentBehaviorUiHelper.NormalizeBehavior(value) switch
+    {
+        "file-resource" => T("FileResource"),
+        "video-resource" => T("VideoResource"),
+        "image-resource" => T("ImageResource"),
+        "gallery" => T("Gallery"),
+        _ => T("PageContent")
+    };
+
     private string DisplayClickBehavior(string? value) => (value ?? "detail").ToLowerInvariant() switch
     {
         "download" => T("FileDownload"),
         "video" => T("VideoModal"),
+        "image" => T("ImageModal"),
         "external" => T("ExternalLink"),
         _ => T("DetailPage")
     };
-
     private void OnResourceOnlyChanged(ChangeEventArgs e)
     {
-        var resourceOnly = e.Value is bool value && value;
-        _edit.RequiresBody = !resourceOnly;
-
-        if (resourceOnly)
-        {
-            _edit.RequiresHeroImage = false;
-            _edit.AllowsAttachments = true;
-            if (string.Equals(_edit.ClickBehavior, "detail", StringComparison.OrdinalIgnoreCase))
-                _edit.ClickBehavior = "download";
-            if (string.Equals(_edit.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase))
-                _edit.RequiresFile = true;
-            if (string.Equals(_edit.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase))
-                _edit.RequiresVideoUrl = true;
-        }
-        else
-        {
-            _edit.RequiresFile = false;
-            _edit.RequiresVideoUrl = false;
-            _edit.ClickBehavior = "detail";
-        }
+        _edit.Behavior = e.Value is bool value && value ? "file-resource" : "page";
+        NormalizeWorkflow();
     }
 
     private void NormalizeWorkflow()
     {
-        if (_edit.RequiresBody)
-        {
-            _edit.ClickBehavior = "detail";
-            _edit.RequiresFile = false;
-            _edit.RequiresVideoUrl = false;
-            return;
-        }
-
-        if (_edit.ClickBehavior is not ("download" or "video" or "external"))
-            _edit.ClickBehavior = "download";
-        _edit.RequiresFile = string.Equals(_edit.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase);
-        _edit.RequiresVideoUrl = string.Equals(_edit.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase);
-        _edit.AllowsAttachments = _edit.AllowsAttachments || _edit.RequiresFile;
+        ContentBehaviorUiHelper.ApplyWorkflow(_edit);
     }
 
     private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)
@@ -309,6 +293,7 @@ else
     {
         Name = EnsureLangs(null),
         Description = EnsureLangs(null),
+        Behavior = "page",
         RequiresBody = true,
         AllowsAttachments = true,
         ClickBehavior = "detail",

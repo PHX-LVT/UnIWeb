@@ -57,10 +57,11 @@ namespace FullProject.Controllers
             }
 
             await using var stream = file.OpenReadStream();
-            var url = await _storage.UploadAsync(stream, file.FileName, file.ContentType, folder, HttpContext.RequestAborted);
+            var upload = await _storage.UploadWithMetadataAsync(stream, file.FileName, file.ContentType, folder, HttpContext.RequestAborted);
             return Ok(ApiResult.Ok(new AssetUploadResponseDto
             {
-                Url = url,
+                Url = upload.Url,
+                StorageKey = upload.StorageKey,
                 ContentType = file.ContentType,
                 FileName = file.FileName,
                 Size = file.Length

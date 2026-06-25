@@ -83,13 +83,6 @@
                                       Languages="_languages"
                                       OnSaved="OnSectionSaved" />
             }
-            else if (Section.Type == "gallery")
-            {
-                <GallerySectionEditor Section="Section"
-                                      PageId="@EffectivePageId"
-                                      Languages="_languages"
-                                      OnSaved="OnSectionSaved" />
-            }
             else if (Section.Type == "html")
             {
                 <HtmlSectionEditor Section="Section"

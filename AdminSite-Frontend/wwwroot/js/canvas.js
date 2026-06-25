@@ -209,7 +209,10 @@ window.contentPreviewViewport = (() => {
 
         const availableWidth = Math.max(root.clientWidth - 2, 320);
         const scale = Math.min(1, availableWidth / width);
-        const viewportHeight = Math.max(root.clientHeight || 900, window.innerHeight * 0.72);
+        const rect = root.getBoundingClientRect();
+        const availableHeight = Math.max(360, window.innerHeight - Math.max(rect.top, 0) - 24);
+        const measuredHeight = root.clientHeight || availableHeight;
+        const viewportHeight = Math.max(360, Math.min(measuredHeight, availableHeight));
         const iframeHeight = Math.max(1100, Math.ceil(viewportHeight / Math.max(scale, 0.1)));
 
         stage.style.width = `${Math.ceil(width * scale)}px`;

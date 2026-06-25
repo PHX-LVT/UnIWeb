@@ -37,6 +37,7 @@ namespace FullProject.Data
         public IMongoCollection<ContentType> ContentTypes => _database.GetCollection<ContentType>("content_types");
         public IMongoCollection<ContentAuditLog> ContentAuditLogs => _database.GetCollection<ContentAuditLog>("content_audit_logs");
         public IMongoCollection<ContentRevision> ContentRevisions => _database.GetCollection<ContentRevision>("content_revisions");
+        public IMongoCollection<ManagedResource> ManagedResources => _database.GetCollection<ManagedResource>("managed_resources");
         public IMongoCollection<VisitorMetricCounter> VisitorMetrics => _database.GetCollection<VisitorMetricCounter>("visitor_metrics");
         public IMongoCollection<SiteSettings> Settings => _database.GetCollection<SiteSettings>("site_settings");
         public IMongoCollection<Branding> Branding => _database.GetCollection<Branding>("branding");

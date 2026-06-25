@@ -50,16 +50,69 @@ function initLibraryVideos() {
     window.__scLibraryVideosDelegated = true;
 
     document.addEventListener("click", e => {
-        const trigger = e.target.closest("[data-sc-library-video]");
-        if (!trigger) return;
+        const videoTrigger = e.target.closest("[data-sc-library-video]");
+        if (videoTrigger) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const playlist = collectLibraryVideoPlaylist(videoTrigger);
+            const selected = playlist.items[playlist.activeIndex];
+            if (!selected?.embedUrl) return;
+
+            openLibraryVideoModal(selected.embedUrl, selected.title, playlist.items, playlist.activeIndex);
+            return;
+        }
+
+        const imageTrigger = e.target.closest("[data-sc-library-image]");
+        if (!imageTrigger) return;
 
         e.preventDefault();
         e.stopPropagation();
 
+        const imageUrl = imageTrigger.dataset.imageUrl || "";
+        if (!imageUrl) return;
+        openLibraryImageModal(imageUrl, imageTrigger.dataset.imageTitle || "Image");
+    });
+}
+
+function collectLibraryVideoPlaylist(activeTrigger) {
+    const root = activeTrigger.closest("[data-sc-video-playlist]") || activeTrigger.closest("[data-section-id]");
+    const triggers = root ? [...root.querySelectorAll("[data-sc-library-video]")] : [activeTrigger];
+    const activeEmbedUrl = resolveVideoEmbedUrl(activeTrigger.dataset.videoUrl || "");
+    const activeTitle = activeTrigger.dataset.videoTitle || "Video";
+    const activeKey = videoPlaylistKey(activeEmbedUrl, activeTitle);
+    const byKey = new Map();
+
+    triggers.forEach(trigger => {
         const embedUrl = resolveVideoEmbedUrl(trigger.dataset.videoUrl || "");
         if (!embedUrl) return;
-        openLibraryVideoModal(embedUrl, trigger.dataset.videoTitle || "Video");
+
+        const title = trigger.dataset.videoTitle || "Video";
+        const thumb = trigger.dataset.videoThumb || trigger.querySelector("img")?.getAttribute("src") || "";
+        const key = videoPlaylistKey(embedUrl, title);
+
+        if (!byKey.has(key)) {
+            byKey.set(key, { embedUrl, title, thumb });
+        }
     });
+
+    if (activeEmbedUrl && !byKey.has(activeKey)) {
+        byKey.set(activeKey, {
+            embedUrl: activeEmbedUrl,
+            title: activeTitle,
+            thumb: activeTrigger.dataset.videoThumb || activeTrigger.querySelector("img")?.getAttribute("src") || ""
+        });
+    }
+
+    const items = [...byKey.values()];
+    let activeIndex = items.findIndex(item => videoPlaylistKey(item.embedUrl, item.title) === activeKey);
+    if (activeIndex < 0) activeIndex = 0;
+
+    return { items, activeIndex };
+}
+
+function videoPlaylistKey(embedUrl, title) {
+    return `${embedUrl || ""}|${title || ""}`.trim().toLowerCase();
 }
 
 
@@ -68,7 +121,7 @@ function initDownloadMetrics() {
     window.__scDownloadMetricsDelegated = true;
 
     document.addEventListener("click", e => {
-        const link = e.target.closest("a.sc-insight-download[href], a[download][href]");
+        const link = e.target.closest("a.sc-insight-download[href], a[download][href], a[data-sc-download][href]");
         if (!link) return;
 
         const href = link.getAttribute("href") || "";
@@ -194,24 +247,86 @@ function closePublicModal(modal) {
     modal.replaceChildren();
 }
 
-function openLibraryVideoModal(embedUrl, titleText) {
+function openLibraryVideoModal(embedUrl, titleText, playlist = null, activeIndex = 0) {
     const modal = ensureLibraryVideoModal();
+    const items = Array.isArray(playlist) && playlist.length > 0
+        ? playlist
+        : [{ embedUrl, title: titleText || "Video", thumb: "" }];
+
+    modal.__scVideoPlaylist = items;
+    modal.__scVideoIndex = Math.max(0, Math.min(Number(activeIndex) || 0, items.length - 1));
+    renderLibraryVideoModal(modal);
+
+    document.body.classList.add("sc-modal-open");
+    modal.classList.add("open");
+}
+
+function renderLibraryVideoModal(modal) {
+    const playlist = modal.__scVideoPlaylist || [];
+    const activeIndex = Math.max(0, Math.min(modal.__scVideoIndex || 0, playlist.length - 1));
+    const active = playlist[activeIndex];
+    if (!active) return;
+
     const title = modal.querySelector(".sc-video-modal__title");
     const frame = modal.querySelector(".sc-video-modal__frame");
+    const playlistRoot = modal.querySelector(".sc-video-modal__playlist");
 
-    if (title) title.textContent = titleText;
+    if (title) title.textContent = active.title || "Video";
     if (frame) {
         frame.replaceChildren();
         const iframe = document.createElement("iframe");
-        iframe.src = embedUrl;
-        iframe.title = titleText || "Video";
+        iframe.src = active.embedUrl;
+        iframe.title = active.title || "Video";
         iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
         iframe.allowFullscreen = true;
         frame.appendChild(iframe);
     }
 
-    document.body.classList.add("sc-modal-open");
-    modal.classList.add("open");
+    if (!playlistRoot) return;
+    playlistRoot.replaceChildren();
+
+    if (playlist.length <= 1) {
+        modal.classList.remove("sc-video-modal--playlist");
+        return;
+    }
+
+    modal.classList.add("sc-video-modal--playlist");
+
+    const heading = document.createElement("div");
+    heading.className = "sc-video-modal__playlist-heading";
+    heading.textContent = "More videos";
+    playlistRoot.appendChild(heading);
+
+    playlist.forEach((item, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = index === activeIndex
+            ? "sc-video-modal__playlist-item sc-video-modal__playlist-item--active"
+            : "sc-video-modal__playlist-item";
+
+        const thumb = document.createElement("span");
+        thumb.className = "sc-video-modal__playlist-thumb";
+        if (item.thumb) {
+            const image = document.createElement("img");
+            image.src = item.thumb;
+            image.alt = "";
+            thumb.appendChild(image);
+        } else {
+            thumb.textContent = "Video";
+        }
+
+        const label = document.createElement("span");
+        label.className = "sc-video-modal__playlist-title";
+        label.textContent = item.title || "Video";
+
+        button.append(thumb, label);
+        button.addEventListener("click", () => {
+            modal.__scVideoIndex = index;
+            renderLibraryVideoModal(modal);
+        });
+
+        playlistRoot.appendChild(button);
+    });
 }
 
 function ensureLibraryVideoModal() {
@@ -241,8 +356,20 @@ function ensureLibraryVideoModal() {
     const frame = document.createElement("div");
     frame.className = "sc-video-modal__frame";
 
+    const body = document.createElement("div");
+    body.className = "sc-video-modal__body";
+
+    const main = document.createElement("div");
+    main.className = "sc-video-modal__main";
+
+    const playlist = document.createElement("div");
+    playlist.className = "sc-video-modal__playlist";
+    playlist.setAttribute("aria-label", "More videos");
+
     header.append(title, close);
-    dialog.append(header, frame);
+    main.appendChild(frame);
+    body.append(main, playlist);
+    dialog.append(header, body);
     modal.appendChild(dialog);
     document.body.appendChild(modal);
 
@@ -262,10 +389,84 @@ function ensureLibraryVideoModal() {
 
 function closeLibraryVideoModal(modal) {
     modal.classList.remove("open");
+    modal.classList.remove("sc-video-modal--playlist");
     modal.querySelector(".sc-video-modal__frame")?.replaceChildren();
+    modal.querySelector(".sc-video-modal__playlist")?.replaceChildren();
+    modal.__scVideoPlaylist = [];
+    modal.__scVideoIndex = 0;
     document.body.classList.remove("sc-modal-open");
 }
 
+
+function openLibraryImageModal(imageUrl, titleText) {
+    const modal = ensureLibraryImageModal();
+    const title = modal.querySelector(".sc-image-modal__title");
+    const frame = modal.querySelector(".sc-image-modal__frame");
+
+    if (title) title.textContent = titleText;
+    if (frame) {
+        frame.replaceChildren();
+        const image = document.createElement("img");
+        image.src = imageUrl;
+        image.alt = titleText || "Image";
+        frame.appendChild(image);
+    }
+
+    document.body.classList.add("sc-modal-open");
+    modal.classList.add("open");
+}
+
+function ensureLibraryImageModal() {
+    let modal = document.querySelector(".sc-image-modal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.className = "sc-image-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+
+    const dialog = document.createElement("div");
+    dialog.className = "sc-image-modal__dialog";
+
+    const header = document.createElement("div");
+    header.className = "sc-image-modal__header";
+
+    const title = document.createElement("h2");
+    title.className = "sc-image-modal__title";
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "sc-image-modal__close";
+    close.setAttribute("aria-label", "Close image");
+    close.textContent = "x";
+
+    const frame = document.createElement("div");
+    frame.className = "sc-image-modal__frame";
+
+    header.append(title, close);
+    dialog.append(header, frame);
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    modal.addEventListener("click", e => {
+        if (e.target === modal || e.target.closest(".sc-image-modal__close")) {
+            closeLibraryImageModal(modal);
+        }
+    });
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape" && modal.classList.contains("open")) {
+            closeLibraryImageModal(modal);
+        }
+    });
+
+    return modal;
+}
+
+function closeLibraryImageModal(modal) {
+    modal.classList.remove("open");
+    modal.querySelector(".sc-image-modal__frame")?.replaceChildren();
+    document.body.classList.remove("sc-modal-open");
+}
 function resolveVideoEmbedUrl(rawUrl) {
     try {
         const url = new URL(rawUrl, window.location.origin);

@@ -250,21 +250,6 @@ else
                 Button = s.Button != null ? MapButton(s.Button) : null,
                 Buttons = s.Buttons?.Select(MapButton).ToList()
             },
-            "gallery" => new PublicGallerySectionDto
-            {
-                Columns = s.Columns,
-                Gap = s.Gap,
-                ShowCaptions = s.ShowCaptions,
-                Images = s.Images?
-                    .Where(i => i.Visible)
-                    .OrderBy(i => i.Order)
-                    .Select(i => new PublicGalleryImageDto
-                {
-                    Id = i.Id,
-                    ImageUrl = i.ImageUrl,
-                    Caption = i.Caption ?? new()
-                }).ToList()
-            },
             "list" => new PublicListSectionDto
             {
                 Layout = s.Layout,
@@ -802,36 +787,99 @@ else
         Id = item.Id,
         StableId = item.StableId,
         ContentTypeKey = item.ContentTypeKey,
+        ContentBehavior = ResolveLibraryContentBehavior(type),
         Slug = item.Slug,
         Title = item.Title,
         Summary = item.Summary,
         HeroImageUrl = item.HeroImageUrl,
         ThumbnailUrl = item.ThumbnailUrl,
-        VideoUrl = item.VideoUrl,
+        VideoUrl = !string.IsNullOrWhiteSpace(item.VideoUrl)
+            ? item.VideoUrl
+            : item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url,
         ExternalUrl = item.ExternalUrl,
         ClickBehavior = ResolveLibraryClickBehavior(item, type),
         Tags = item.Tags,
-        Attachments = item.Attachments.Select(a => new PublicLibraryAttachmentDto
-        {
-            Id = a.Id,
-            FileName = a.FileName,
-            Url = a.Url,
-            ContentType = a.ContentType,
-            SizeBytes = a.SizeBytes
-        }).ToList(),
+        Attachments = MapLibraryAttachments(item),
+        GalleryItems = MapLibraryGalleryItems(item),
         CreatedAt = item.CreatedAt,
         UpdatedAt = item.UpdatedAt,
         PublishedAt = item.PublishedAt
     };
 
+    private static List<PublicLibraryAttachmentDto> MapLibraryAttachments(ContentItemModel item)
+    {
+        var attachments = item.Attachments
+            .Where(a => !string.IsNullOrWhiteSpace(a.Url))
+            .Select(a => new PublicLibraryAttachmentDto
+            {
+                Id = a.Id,
+                FileName = a.FileName,
+                Url = a.Url,
+                ContentType = a.ContentType,
+                SizeBytes = a.SizeBytes
+            })
+            .ToList();
+
+        var existingUrls = attachments
+            .Select(a => a.Url)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var bodyFiles = item.BodyItems
+            .Where(i => i.Visible
+                && string.Equals(i.Type, "file", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(i.Url)
+                && existingUrls.Add(i.Url!))
+            .Select(i => new PublicLibraryAttachmentDto
+            {
+                Id = i.Id,
+                FileName = !string.IsNullOrWhiteSpace(i.FileName) ? i.FileName! : FileNameFromUrl(i.Url),
+                Url = i.Url!,
+                ContentType = i.ContentType ?? string.Empty,
+                SizeBytes = i.SizeBytes
+            });
+
+        attachments.AddRange(bodyFiles);
+        return attachments;
+    }
+
+    private static List<PublicLibraryGalleryItemDto> MapLibraryGalleryItems(ContentItemModel item) =>
+        item.GalleryItems
+            .Where(i => i.Visible && !string.IsNullOrWhiteSpace(i.Url))
+            .OrderBy(i => i.Order)
+            .Select(i => new PublicLibraryGalleryItemDto
+            {
+                Id = i.Id,
+                Kind = NormalizeGalleryItemKind(i.Kind),
+                Url = i.Url!,
+                ThumbnailUrl = i.ThumbnailUrl,
+                Caption = i.Caption,
+                Order = i.Order
+            })
+            .ToList();
+
+    private static string NormalizeGalleryItemKind(string? kind) =>
+        string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase) ? "video" : "image";
+
+    private static string FileNameFromUrl(string? url)
+    {
+        var fileName = System.IO.Path.GetFileName(url);
+        return string.IsNullOrWhiteSpace(fileName) ? "File" : fileName;
+    }
+
     private static string ResolveLibraryClickBehavior(ContentItemModel item, ContentTypeModel? type)
     {
         var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
-        if (type?.RequiresBody == true)
+        var behavior = ResolveLibraryContentBehavior(type);
+
+        if (configured == "video" || behavior == "video-resource" || IsVideoLibraryType(item.ContentTypeKey) || IsVideoLibraryType(type?.Key))
+            return "video";
+        if (configured == "image" || behavior is "image-resource" or "gallery" || IsImageLibraryType(item.ContentTypeKey) || IsImageLibraryType(type?.Key))
+            return "image";
+        if (type?.RequiresBody == true || behavior == "page")
             return "detail";
-        if (type?.RequiresBody == false && configured is "download" or "video" or "external")
+        if (configured is "download" or "external")
             return configured;
-        if (type?.RequiresBody == false)
+        if (behavior == "file-resource" || type?.RequiresBody == false)
         {
             if (!string.IsNullOrWhiteSpace(item.VideoUrl) ||
                 item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))
@@ -844,15 +892,59 @@ else
             string.Equals(item.ContentTypeKey, "case-study", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(item.ContentTypeKey, "technology", StringComparison.OrdinalIgnoreCase))
             return "detail";
-        if (string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase))
-            return "video";
         if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) ||
+            item.BodyItems.Any(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url)) ||
             string.Equals(item.ContentTypeKey, "whitepaper", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(item.ContentTypeKey, "tool", StringComparison.OrdinalIgnoreCase))
             return "download";
         if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
             return "external";
         return "detail";
+    }
+
+    private static string ResolveLibraryContentBehavior(ContentTypeModel? type)
+    {
+        var behavior = NormalizeLibraryContentBehavior(type?.Behavior);
+        if (!string.IsNullOrWhiteSpace(behavior))
+            return behavior;
+        if (string.Equals(type?.ClickBehavior, "image", StringComparison.OrdinalIgnoreCase))
+            return "image-resource";
+        if (type?.RequiresVideoUrl == true || string.Equals(type?.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase))
+            return "video-resource";
+        if (type?.RequiresFile == true || string.Equals(type?.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase))
+            return "file-resource";
+        return type?.RequiresBody == false ? "file-resource" : "page";
+    }
+
+    private static string NormalizeLibraryContentBehavior(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace("_", "-").Replace(" ", "-");
+        return normalized switch
+        {
+            "page" or "detail" or "article" => "page",
+            "file" or "fileresource" or "file-resource" or "download" or "resource" => "file-resource",
+            "video" or "videoresource" or "video-resource" or "webinar" => "video-resource",
+            "image" or "imageresource" or "image-resource" or "photo" or "picture" => "image-resource",
+            "gallery" or "imagegallery" or "image-gallery" or "photogallery" or "photo-gallery" or "mediagallery" or "media-gallery" => "gallery",
+            _ => string.Empty
+        };
+    }
+
+    private static bool IsVideoLibraryType(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var normalized = key.Trim().ToLowerInvariant();
+        return normalized.Contains("video", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("webinar", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsImageLibraryType(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var normalized = key.Trim().ToLowerInvariant();
+        return normalized.Contains("image", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("gallery", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("photo", StringComparison.OrdinalIgnoreCase);
     }
 
     private static PublicChildCardDto MapChildPage(PageModel page) => new()
