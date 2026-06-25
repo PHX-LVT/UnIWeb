@@ -59,7 +59,7 @@ function initLibraryVideos() {
             const selected = playlist.items[playlist.activeIndex];
             if (!selected?.embedUrl) return;
 
-            openLibraryVideoModal(selected.embedUrl, selected.title, playlist.items, playlist.activeIndex);
+            openLibraryVideoModal(selected.embedUrl, selected.title, playlist.items, playlist.activeIndex, selected.sourceType);
             return;
         }
 
@@ -78,41 +78,44 @@ function initLibraryVideos() {
 function collectLibraryVideoPlaylist(activeTrigger) {
     const root = activeTrigger.closest("[data-sc-video-playlist]") || activeTrigger.closest("[data-section-id]");
     const triggers = root ? [...root.querySelectorAll("[data-sc-library-video]")] : [activeTrigger];
-    const activeEmbedUrl = resolveVideoEmbedUrl(activeTrigger.dataset.videoUrl || "");
+    const activeSource = resolveVideoSource(activeTrigger.dataset.videoUrl || "");
+    const activeEmbedUrl = activeSource?.url || "";
+    const activeSourceType = activeSource?.type || "embed";
     const activeTitle = activeTrigger.dataset.videoTitle || "Video";
-    const activeKey = videoPlaylistKey(activeEmbedUrl, activeTitle);
+    const activeKey = videoPlaylistKey(activeEmbedUrl, activeTitle, activeSourceType);
     const byKey = new Map();
 
     triggers.forEach(trigger => {
-        const embedUrl = resolveVideoEmbedUrl(trigger.dataset.videoUrl || "");
-        if (!embedUrl) return;
+        const source = resolveVideoSource(trigger.dataset.videoUrl || "");
+        if (!source?.url) return;
 
         const title = trigger.dataset.videoTitle || "Video";
         const thumb = trigger.dataset.videoThumb || trigger.querySelector("img")?.getAttribute("src") || "";
-        const key = videoPlaylistKey(embedUrl, title);
+        const key = videoPlaylistKey(source.url, title, source.type);
 
         if (!byKey.has(key)) {
-            byKey.set(key, { embedUrl, title, thumb });
+            byKey.set(key, { embedUrl: source.url, sourceType: source.type, title, thumb });
         }
     });
 
     if (activeEmbedUrl && !byKey.has(activeKey)) {
         byKey.set(activeKey, {
             embedUrl: activeEmbedUrl,
+            sourceType: activeSourceType,
             title: activeTitle,
             thumb: activeTrigger.dataset.videoThumb || activeTrigger.querySelector("img")?.getAttribute("src") || ""
         });
     }
 
     const items = [...byKey.values()];
-    let activeIndex = items.findIndex(item => videoPlaylistKey(item.embedUrl, item.title) === activeKey);
+    let activeIndex = items.findIndex(item => videoPlaylistKey(item.embedUrl, item.title, item.sourceType) === activeKey);
     if (activeIndex < 0) activeIndex = 0;
 
     return { items, activeIndex };
 }
 
-function videoPlaylistKey(embedUrl, title) {
-    return `${embedUrl || ""}|${title || ""}`.trim().toLowerCase();
+function videoPlaylistKey(embedUrl, title, sourceType = "embed") {
+    return `${sourceType || "embed"}|${embedUrl || ""}|${title || ""}`.trim().toLowerCase();
 }
 
 
@@ -247,11 +250,12 @@ function closePublicModal(modal) {
     modal.replaceChildren();
 }
 
-function openLibraryVideoModal(embedUrl, titleText, playlist = null, activeIndex = 0) {
+function openLibraryVideoModal(embedUrl, titleText, playlist = null, activeIndex = 0, sourceType = null) {
     const modal = ensureLibraryVideoModal();
+    const source = resolveVideoSource(embedUrl) || { url: embedUrl, type: sourceType || "embed" };
     const items = Array.isArray(playlist) && playlist.length > 0
         ? playlist
-        : [{ embedUrl, title: titleText || "Video", thumb: "" }];
+        : [{ embedUrl: source.url, sourceType: source.type, title: titleText || "Video", thumb: "" }];
 
     modal.__scVideoPlaylist = items;
     modal.__scVideoIndex = Math.max(0, Math.min(Number(activeIndex) || 0, items.length - 1));
@@ -274,12 +278,22 @@ function renderLibraryVideoModal(modal) {
     if (title) title.textContent = active.title || "Video";
     if (frame) {
         frame.replaceChildren();
-        const iframe = document.createElement("iframe");
-        iframe.src = active.embedUrl;
-        iframe.title = active.title || "Video";
-        iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
-        iframe.allowFullscreen = true;
-        frame.appendChild(iframe);
+        if (active.sourceType === "file") {
+            const video = document.createElement("video");
+            video.src = active.embedUrl;
+            video.title = active.title || "Video";
+            video.controls = true;
+            video.playsInline = true;
+            video.preload = "metadata";
+            frame.appendChild(video);
+        } else {
+            const iframe = document.createElement("iframe");
+            iframe.src = active.embedUrl;
+            iframe.title = active.title || "Video";
+            iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+            iframe.allowFullscreen = true;
+            frame.appendChild(iframe);
+        }
     }
 
     if (!playlistRoot) return;
@@ -468,33 +482,51 @@ function closeLibraryImageModal(modal) {
     document.body.classList.remove("sc-modal-open");
 }
 function resolveVideoEmbedUrl(rawUrl) {
+    return resolveVideoSource(rawUrl)?.url || null;
+}
+
+function resolveVideoSource(rawUrl) {
     try {
         const url = new URL(rawUrl, window.location.origin);
         const host = url.hostname.toLowerCase().replace(/^www\./, "");
 
         if (host === "youtu.be") {
-            return buildYouTubeEmbed(url.pathname.split("/").filter(Boolean)[0]);
+            return buildVideoSource(buildYouTubeEmbed(url.pathname.split("/").filter(Boolean)[0]), "embed");
         }
 
-        if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+        if (host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")) {
             const path = url.pathname.split("/").filter(Boolean);
-            return buildYouTubeEmbed(
-                url.searchParams.get("v") ||
-                (path[0] === "embed" ? path[1] : "") ||
-                (path[0] === "shorts" ? path[1] : "") ||
-                (path[0] === "live" ? path[1] : "")
-            );
+            const route = (path[0] || "").toLowerCase();
+            const id = path.length === 0 || route === "watch"
+                ? url.searchParams.get("v")
+                : route === "embed"
+                    ? path[1]
+                    : route === "shorts"
+                        ? path[1]
+                        : route === "live"
+                            ? path[1]
+                            : "";
+            const embedUrl = buildYouTubeEmbed(id);
+            return buildVideoSource(embedUrl, "embed");
         }
 
         if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
             const id = url.pathname.split("/").find(part => /^\d+$/.test(part));
-            return id ? `https://player.vimeo.com/video/${id}?autoplay=1` : null;
+            return buildVideoSource(id ? `https://player.vimeo.com/video/${id}?autoplay=1` : null, "embed");
+        }
+
+        if (url.protocol === "http:" || url.protocol === "https:") {
+            return { url: url.href, type: "file" };
         }
     } catch {
         return null;
     }
 
     return null;
+}
+
+function buildVideoSource(url, type) {
+    return url ? { url, type } : null;
 }
 
 function buildYouTubeEmbed(id) {

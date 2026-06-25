@@ -3,6 +3,7 @@ using FullProject.DTOs;
 using FullProject.Models;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using SharedComponents.Helpers;
 
 namespace FullProject.Services
 {
@@ -42,6 +43,7 @@ namespace FullProject.Services
             if (string.IsNullOrWhiteSpace(resource.Name.GetValueOrDefault("en")))
                 resource.Name["en"] = DefaultNameFromUrl(resource.Url, resource.Kind);
 
+            NormalizeVideoExternalResource(resource);
             var errors = Validate(resource);
             return errors.Count == 0 ? (resource, errors) : (null, errors);
         }
@@ -72,11 +74,14 @@ namespace FullProject.Services
             resource.UpdatedById = actorId;
             resource.UpdatedAt = DateTime.UtcNow;
 
+            if (dto.Url is not null || dto.Source is not null)
+                NormalizeVideoExternalResource(resource);
+
             var errors = Validate(resource);
             if (!string.Equals(originalKind, "video", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(resource.Kind, "video", StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add("Create Resource Library videos by uploading a video file.");
+                errors.Add("Create Resource Library videos by uploading a video file or adding a YouTube link.");
             }
 
             var fileIdentityChanged =
@@ -220,18 +225,44 @@ namespace FullProject.Services
                 errors.Add("Album not found.");
             if (resource.Kind == "video")
             {
-                if (!string.Equals(resource.Source, "managed-upload", StringComparison.OrdinalIgnoreCase))
-                    errors.Add("Video resources in Resource Library must be uploaded video files, not URLs.");
-                if (string.IsNullOrWhiteSpace(resource.StorageKey))
-                    errors.Add("Video resources require a storage key from an uploaded video file.");
-                if (string.IsNullOrWhiteSpace(resource.FileName))
-                    errors.Add("Video resources require a file name.");
-                if (string.IsNullOrWhiteSpace(resource.ContentType) || !resource.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
-                    errors.Add("Video resources require a video MIME type.");
+                if (string.Equals(resource.Source, "external-url", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!VideoUrlHelper.IsYouTubeVideoUrl(resource.Url))
+                        errors.Add("Video URL must be a YouTube video link.");
+                }
+                else
+                {
+                    if (!string.Equals(resource.Source, "managed-upload", StringComparison.OrdinalIgnoreCase))
+                        errors.Add("Video resources must be uploaded video files or YouTube links.");
+                    if (string.IsNullOrWhiteSpace(resource.StorageKey))
+                        errors.Add("Uploaded video resources require a storage key.");
+                    if (string.IsNullOrWhiteSpace(resource.FileName))
+                        errors.Add("Uploaded video resources require a file name.");
+                    if (string.IsNullOrWhiteSpace(resource.ContentType) || !resource.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+                        errors.Add("Uploaded video resources require a video MIME type.");
+                }
             }
             if (resource.Kind != "video" && string.Equals(resource.Source, "external-url", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(resource.FileName))
                 resource.FileName = DefaultNameFromUrl(resource.Url, resource.Kind);
             return errors;
+        }
+
+        private static void NormalizeVideoExternalResource(ManagedResource resource)
+        {
+            if (!string.Equals(resource.Kind, "video", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(resource.Source, "external-url", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (VideoUrlHelper.TryGetYouTubeEmbedUrl(resource.Url, out var embedUrl))
+                resource.Url = embedUrl;
+
+            resource.StorageKey = null;
+            resource.ThumbnailUrl = null;
+            resource.FileName = string.Empty;
+            resource.ContentType = string.Empty;
+            resource.SizeBytes = 0;
         }
 
         private static string NormalizeSource(string? value)

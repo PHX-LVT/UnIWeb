@@ -5,6 +5,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
 using GlobalManager.Services.AssetService;
+using SharedComponents.Helpers;
 
 namespace FullProject.Services
 {
@@ -732,50 +733,7 @@ namespace FullProject.Services
         {
             var cleaned = CleanUrl(url);
             if (string.IsNullOrWhiteSpace(cleaned)) return cleaned;
-            if (!Uri.TryCreate(cleaned, UriKind.Absolute, out var uri)) return cleaned;
-            if (uri.Scheme is not ("http" or "https")) return null;
-
-            var host = uri.Host.ToLowerInvariant();
-            string? videoId = null;
-
-            if (host is "youtu.be")
-            {
-                videoId = uri.AbsolutePath.Trim('/').Split('/').FirstOrDefault();
-            }
-            else if (host.EndsWith("youtube.com", StringComparison.Ordinal))
-            {
-                if (uri.AbsolutePath.StartsWith("/embed/", StringComparison.OrdinalIgnoreCase))
-                {
-                    videoId = uri.AbsolutePath["/embed/".Length..].Split('/').FirstOrDefault();
-                }
-                else if (uri.AbsolutePath.StartsWith("/shorts/", StringComparison.OrdinalIgnoreCase))
-                {
-                    videoId = uri.AbsolutePath["/shorts/".Length..].Split('/').FirstOrDefault();
-                }
-                else
-                {
-                    videoId = ReadQueryValue(uri.Query, "v");
-                }
-            }
-
-            return string.IsNullOrWhiteSpace(videoId)
-                ? cleaned
-                : $"https://www.youtube.com/embed/{videoId}";
-        }
-
-        private static string? ReadQueryValue(string query, string key)
-        {
-            foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var pair = part.Split('=', 2);
-                if (pair.Length == 2 &&
-                    Uri.UnescapeDataString(pair[0]).Equals(key, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Uri.UnescapeDataString(pair[1]);
-                }
-            }
-
-            return null;
+            return VideoUrlHelper.ToEmbedUrl(cleaned) ?? cleaned;
         }
     }
 }

@@ -107,6 +107,9 @@ namespace AdminSite.Services
         public Task<ApiResponse<ManagedResourceModel>> UpdateResourceAsync(string id, ManagedResourceRequest req) =>
             _http.PutAsync<ManagedResourceModel>($"api/admin/resources/{id}", req);
 
+        public Task<ApiResponse<ManagedResourceModel>> CreateResourceAsync(ManagedResourceRequest req) =>
+            _http.PostAsync<ManagedResourceModel>("api/admin/resources", req);
+
         public Task<ApiResponse<ManagedResourceUsageModel>> GetResourceUsageAsync(string id) =>
             _http.GetAsync<ManagedResourceUsageModel>($"api/admin/resources/{id}/usage");
 

@@ -2186,11 +2186,17 @@ button.sc-library__media--video {
     box-shadow: 0 32px 90px rgba(0, 0, 0, 0.45);
 }
 
-.sc-video-modal__frame iframe {
+.sc-video-modal__frame iframe,
+.sc-video-modal__frame video {
     width: 100%;
     height: 100%;
     display: block;
     border: 0;
+}
+
+.sc-video-modal__frame video {
+    object-fit: contain;
+    background: #000;
 }
 
 .sc-video-modal__playlist {

@@ -160,9 +160,19 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Create([FromBody] ManagedResourceCreateDto dto)
         {
             if (!IsResourceUploader) return Forbid();
-            await Task.CompletedTask;
-            return UnprocessableEntity(ApiResult.BadRequest(
-                "Create Resource Library resources by uploading files. Direct URLs belong in sections, blocks, carousel, backgrounds, or content fields."));
+
+            var kind = _resources.NormalizeKind(dto.Kind);
+            var source = (dto.Source ?? string.Empty).Trim().ToLowerInvariant();
+            if (kind != "video" || source != "external-url")
+            {
+                return UnprocessableEntity(ApiResult.BadRequest(
+                    "Create Resource Library images and files by uploading files. Video resources can also use a YouTube link."));
+            }
+
+            var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
+            if (errors.Count > 0) return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
+
+            return Ok(ApiResult.Created(MapResource(resource!, 0), "YouTube video resource added."));
         }
 
         [HttpPut("{id}")]

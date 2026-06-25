@@ -36,7 +36,11 @@
                     <div class="content-resource-picker__grid">
                         @foreach (var resource in FilteredResources)
                         {
-                            <article class="content-resource-picker__item" @key="resource.Id">
+                            <button type="button"
+                                    class="content-resource-picker__item @(IsSelected(resource) ? "content-resource-picker__item--selected" : "")"
+                                    @key="resource.Id"
+                                    @onclick="() => SelectResource(resource)"
+                                    @ondblclick="() => Choose(resource)">
                                 <span class="content-resource-picker__thumb">
                                     @if (ResourceThumbnailUrl(resource) is { Length: > 0 } thumbnail)
                                     {
@@ -55,18 +59,19 @@
                                         <em>@ResourceDescription(resource)</em>
                                     }
                                 </span>
-                                <button type="button"
-                                        class="btn-admin btn-primary"
-                                        @onclick="() => Choose(resource)">
-                                    @T("Choose")
-                                </button>
-                            </article>
+                            </button>
                         }
                     </div>
                 }
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-admin btn-ghost" @onclick="Close">@T("Cancel")</button>
+                <button type="button"
+                        class="btn-admin btn-primary"
+                        disabled="@(_selectedResource is null)"
+                        @onclick="ChooseSelected">
+                    @T("Choose")
+                </button>
             </div>
         </div>
     </div>
@@ -83,6 +88,7 @@
     private bool _loading;
     private string _loadedKind = string.Empty;
     private string _search = string.Empty;
+    private ManagedResourceModel? _selectedResource;
     private List<ManagedResourceModel> _resources = new();
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
@@ -102,12 +108,14 @@
         {
             _loadedKind = normalizedKind;
             _search = string.Empty;
+            _selectedResource = null;
             await LoadResources();
         }
 
         if (!Open)
         {
             _resources = new();
+            _selectedResource = null;
         }
 
         _wasOpen = Open;
@@ -120,10 +128,16 @@
         if (res.Success)
         {
             _resources = (res.Data ?? new()).Where(r => r.Active).ToList();
+            if (_selectedResource is not null &&
+                !_resources.Any(r => string.Equals(r.Id, _selectedResource.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                _selectedResource = null;
+            }
         }
         else
         {
             _resources = new();
+            _selectedResource = null;
             Http.Toast(res.Message, res.StatusCode);
         }
         _loading = false;
@@ -135,6 +149,17 @@
         await LoadResources();
     }
 
+    private void SelectResource(ManagedResourceModel resource)
+    {
+        _selectedResource = resource;
+    }
+
+    private async Task ChooseSelected()
+    {
+        if (_selectedResource is null) return;
+        await Choose(_selectedResource);
+    }
+
     private async Task Choose(ManagedResourceModel resource)
     {
         await ResourceSelected.InvokeAsync(resource);
@@ -144,8 +169,13 @@
     private async Task Close()
     {
         _loading = false;
+        _selectedResource = null;
         await Closed.InvokeAsync();
     }
+
+    private bool IsSelected(ManagedResourceModel resource) =>
+        _selectedResource is not null &&
+        string.Equals(_selectedResource.Id, resource.Id, StringComparison.OrdinalIgnoreCase);
 
     private string ResourceName(ManagedResourceModel resource) =>
         ResourceLibraryUiHelper.ResourceName(resource, CurrentLang);

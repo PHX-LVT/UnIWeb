@@ -982,11 +982,18 @@
     color: var(--navy);
     text-align: left;
     cursor: pointer;
+    font: inherit;
 }
 
 .content-resource-picker__item:hover {
     border-color: var(--accent);
     background: #fffaf0;
+}
+
+.content-resource-picker__item--selected {
+    border-color: var(--primary);
+    background: #f0f4ff;
+    box-shadow: 0 0 0 2px rgba(20, 63, 107, .12);
 }
 
 .content-resource-picker__thumb {

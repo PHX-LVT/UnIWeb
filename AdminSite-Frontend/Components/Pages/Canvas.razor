@@ -545,7 +545,11 @@
             HeightPx = heightPx
         });
 
-        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+        {
+            Http.Toast(res.Message, res.StatusCode);
+        }
+
         if (res.Success)
         {
             ApplyFreeformBlockLayoutLocally(sectionId, blockId, leftPercent, topPx, widthPercent, heightPx);

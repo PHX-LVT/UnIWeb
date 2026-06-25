@@ -2,6 +2,7 @@ using FullProject.DTOs;
 using FullProject.Models;
 using FullProject.Security;
 using MongoDB.Bson;
+using SharedComponents.Helpers;
 using System.Net;
 using System.Text.RegularExpressions;
 using static FullProject.Security.ContentSecurityPolicy;
@@ -398,11 +399,7 @@ namespace FullProject.Services
 
         private static string ToEmbedVideoUrl(string url)
         {
-            if (url.Contains("youtube.com/embed/", StringComparison.OrdinalIgnoreCase))
-                return url;
-
-            var match = Regex.Match(url, @"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{6,})", RegexOptions.IgnoreCase);
-            return match.Success ? $"https://www.youtube.com/embed/{match.Groups[1].Value}" : url;
+            return VideoUrlHelper.ToEmbedUrl(url) ?? url;
         }
 
         private static string PlainTextToParagraphHtml(string value)

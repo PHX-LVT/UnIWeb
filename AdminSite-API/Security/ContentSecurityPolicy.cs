@@ -1,3 +1,5 @@
+using SharedComponents.Helpers;
+
 namespace FullProject.Security
 {
     public static class ContentSecurityPolicy
@@ -19,11 +21,7 @@ namespace FullProject.Security
 
         public static bool IsAllowedVideoUrl(string url)
         {
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-                return false;
-
-            var host = uri.Host.ToLowerInvariant();
-            return host is "youtube.com" or "www.youtube.com" or "youtu.be";
+            return VideoUrlHelper.IsYouTubeVideoUrl(url);
         }
 
         public static bool IsAllowedAttachment(string? fileName, string? contentType)

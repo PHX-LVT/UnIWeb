@@ -463,7 +463,7 @@ else
                         <label>@T("UploadType")</label>
                         <select class="form-control"
                                 value="@_uploadKind"
-                                disabled="@(_uploadingQueue || _uploadQueue.Any() || IsUploadKindLocked)"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadKindLocked)"
                                 @onchange="OnUploadKindChanged">
                             @foreach (var kind in AvailableUploadKinds)
                             {
@@ -476,7 +476,7 @@ else
                         <label>@T("Album")</label>
                         <select class="form-control"
                                 value="@_uploadAlbumId"
-                                disabled="@(_uploadingQueue || _uploadQueue.Any() || IsUploadAlbumLocked)"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadAlbumLocked)"
                                 @onchange="OnUploadAlbumChanged">
                             <option value="">@T("NoAlbum")</option>
                             @foreach (var album in AlbumsForKind(_uploadKind))
@@ -491,18 +491,69 @@ else
                     </div>
                 </div>
 
-                <div style="position:relative;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;padding:1.4rem;min-height:140px;display:grid;place-items:center;text-align:center;margin-bottom:1rem">
-                    <InputFile OnChange="QueueUploadFiles"
-                               multiple
-                               accept="@UploadAcceptForKind(_uploadKind)"
-                               disabled="@_uploadingQueue"
-                               style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
-                    <div style="pointer-events:none">
-                        <i class="fas fa-cloud-arrow-up" style="font-size:2rem;color:#0f2742"></i>
-                        <strong style="display:block;margin-top:.5rem">@T("DragDropOrSelectFiles")</strong>
-                        <span class="text-muted">@string.Format(T("UploadQueueTypeHint"), DisplayKind(_uploadKind))</span>
+                @if (_uploadKind == "video")
+                {
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem">
+                        <button type="button"
+                                class="@VideoSourceModeButtonClass(VideoUploadModes.File)"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any())"
+                                @onclick="() => SetVideoUploadMode(VideoUploadModes.File)">
+                            <i class="fas fa-upload"></i> @T("UploadVideoFile")
+                        </button>
+                        <button type="button"
+                                class="@VideoSourceModeButtonClass(VideoUploadModes.YouTube)"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any())"
+                                @onclick="() => SetVideoUploadMode(VideoUploadModes.YouTube)">
+                            <i class="fab fa-youtube"></i> @T("YouTubeLink")
+                        </button>
                     </div>
-                </div>
+                }
+
+                @if (IsYoutubeLinkMode)
+                {
+                    <div style="border:1px solid #d8e0ea;border-radius:10px;background:#fff;padding:1rem;margin-bottom:1rem">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem">
+                            <div>
+                                <label>@T("VideoName")</label>
+                                <input class="form-control"
+                                       value="@_youtubeName"
+                                       disabled="@_savingYoutubeResource"
+                                       placeholder="@T("VideoNamePlaceholder")"
+                                       @oninput="e => _youtubeName = e.Value?.ToString() ?? string.Empty" />
+                            </div>
+                            <div>
+                                <label>@T("YouTubeLink")</label>
+                                <input class="form-control"
+                                       value="@_youtubeUrl"
+                                       disabled="@_savingYoutubeResource"
+                                       placeholder="https://www.youtube.com/watch?v=..."
+                                       @oninput="e => _youtubeUrl = e.Value?.ToString() ?? string.Empty" />
+                                <div class="form-hint">@T("YouTubeLinkHint")</div>
+                            </div>
+                        </div>
+                        <label style="margin-top:.85rem">@T("Description")</label>
+                        <textarea class="form-control"
+                                  rows="2"
+                                  value="@_youtubeDescription"
+                                  disabled="@_savingYoutubeResource"
+                                  @oninput="e => _youtubeDescription = e.Value?.ToString() ?? string.Empty"></textarea>
+                    </div>
+                }
+                else
+                {
+                    <div style="position:relative;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;padding:1.4rem;min-height:140px;display:grid;place-items:center;text-align:center;margin-bottom:1rem">
+                        <InputFile OnChange="QueueUploadFiles"
+                                   multiple
+                                   accept="@UploadAcceptForKind(_uploadKind)"
+                                   disabled="@_uploadingQueue"
+                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
+                        <div style="pointer-events:none">
+                            <i class="fas fa-cloud-arrow-up" style="font-size:2rem;color:#0f2742"></i>
+                            <strong style="display:block;margin-top:.5rem">@T("DragDropOrSelectFiles")</strong>
+                            <span class="text-muted">@string.Format(T("UploadQueueTypeHint"), DisplayKind(_uploadKind))</span>
+                        </div>
+                    </div>
+                }
 
                 @if (SelectedAlbum is not null)
                 {
@@ -574,73 +625,87 @@ else
                     </div>
                 }
 
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.65rem">
-                    <strong>@T("UploadQueue")</strong>
-                    <span class="text-muted">@string.Format(T("QueuedFileCount"), _uploadQueue.Count)</span>
-                </div>
-
-                @if (!_uploadQueue.Any())
+                @if (!IsYoutubeLinkMode)
                 {
-                    <div style="padding:1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-align:center">
-                        <span class="text-muted">@T("QueueEmpty")</span>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.65rem">
+                        <strong>@T("UploadQueue")</strong>
+                        <span class="text-muted">@string.Format(T("QueuedFileCount"), _uploadQueue.Count)</span>
                     </div>
+
+                    @if (!_uploadQueue.Any())
+                    {
+                        <div style="padding:1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-align:center">
+                            <span class="text-muted">@T("QueueEmpty")</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="display:grid;gap:.55rem;max-height:42vh;overflow:auto;padding-right:.15rem">
+                            @foreach (var item in _uploadQueue)
+                            {
+                                <div @key="item.Id" style="display:grid;grid-template-columns:48px minmax(150px,1.2fr) minmax(160px,1fr) minmax(110px,.65fr) auto;gap:.65rem;align-items:center;border:1px solid #e5e7eb;border-radius:8px;background:#fff;padding:.55rem">
+                                    <span style="width:48px;height:42px;border-radius:7px;background:#fff7e6;color:#0f2742;display:inline-flex;align-items:center;justify-content:center">
+                                        <i class="fas @UploadQueueIconClass(item)"></i>
+                                    </span>
+                                    <div style="min-width:0">
+                                        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@item.OriginalFileName">@item.OriginalFileName</div>
+                                        <small class="text-muted">@FormatBytes(item.File.Size)</small>
+                                    </div>
+                                    <input class="form-control"
+                                           value="@item.ResourceName"
+                                           disabled="@(_uploadingQueue || item.IsComplete)"
+                                           @oninput="e => item.ResourceName = e.Value?.ToString() ?? string.Empty" />
+                                    <div>
+                                        <span style="@UploadQueueStatusStyle(item)">@UploadQueueStatusText(item)</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.Error))
+                                        {
+                                            <small style="display:block;color:#b91c1c;margin-top:.25rem">@item.Error</small>
+                                        }
+                                    </div>
+                                    <div style="display:flex;gap:.35rem;justify-content:flex-end">
+                                        @if (item.IsFailed)
+                                        {
+                                            <button type="button"
+                                                    class="btn-admin btn-ghost content-icon-btn"
+                                                    title="@T("Retry")"
+                                                    disabled="@_uploadingQueue"
+                                                    @onclick="() => RetryUpload(item)">
+                                                <i class="fas fa-rotate"></i>
+                                            </button>
+                                        }
+                                        <button type="button"
+                                                class="btn-admin btn-ghost content-icon-btn"
+                                                title="@T("Remove")"
+                                                disabled="@_uploadingQueue"
+                                                @onclick="() => RemoveUploadQueueItem(item)">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        }
+                    }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" disabled="@(_uploadingQueue || _savingYoutubeResource)" @onclick="CloseUploadModal">@T("Close")</button>
+                @if (IsYoutubeLinkMode)
+                {
+                    <button class="btn-admin btn-primary"
+                            disabled="@(_savingYoutubeResource || string.IsNullOrWhiteSpace(_youtubeUrl))"
+                            @onclick="CreateYouTubeVideoResource">
+                        <i class="fab fa-youtube"></i> @(_savingYoutubeResource ? T("Saving") : T("AddYouTubeVideo"))
+                    </button>
                 }
                 else
                 {
-                    <div style="display:grid;gap:.55rem;max-height:42vh;overflow:auto;padding-right:.15rem">
-                        @foreach (var item in _uploadQueue)
-                        {
-                            <div @key="item.Id" style="display:grid;grid-template-columns:48px minmax(150px,1.2fr) minmax(160px,1fr) minmax(110px,.65fr) auto;gap:.65rem;align-items:center;border:1px solid #e5e7eb;border-radius:8px;background:#fff;padding:.55rem">
-                                <span style="width:48px;height:42px;border-radius:7px;background:#fff7e6;color:#0f2742;display:inline-flex;align-items:center;justify-content:center">
-                                    <i class="fas @UploadQueueIconClass(item)"></i>
-                                </span>
-                                <div style="min-width:0">
-                                    <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@item.OriginalFileName">@item.OriginalFileName</div>
-                                    <small class="text-muted">@FormatBytes(item.File.Size)</small>
-                                </div>
-                                <input class="form-control"
-                                       value="@item.ResourceName"
-                                       disabled="@(_uploadingQueue || item.IsComplete)"
-                                       @oninput="e => item.ResourceName = e.Value?.ToString() ?? string.Empty" />
-                                <div>
-                                    <span style="@UploadQueueStatusStyle(item)">@UploadQueueStatusText(item)</span>
-                                    @if (!string.IsNullOrWhiteSpace(item.Error))
-                                    {
-                                        <small style="display:block;color:#b91c1c;margin-top:.25rem">@item.Error</small>
-                                    }
-                                </div>
-                                <div style="display:flex;gap:.35rem;justify-content:flex-end">
-                                    @if (item.IsFailed)
-                                    {
-                                        <button type="button"
-                                                class="btn-admin btn-ghost content-icon-btn"
-                                                title="@T("Retry")"
-                                                disabled="@_uploadingQueue"
-                                                @onclick="() => RetryUpload(item)">
-                                            <i class="fas fa-rotate"></i>
-                                        </button>
-                                    }
-                                    <button type="button"
-                                            class="btn-admin btn-ghost content-icon-btn"
-                                            title="@T("Remove")"
-                                            disabled="@_uploadingQueue"
-                                            @onclick="() => RemoveUploadQueueItem(item)">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        }
-                    </div>
+                    <button class="btn-admin btn-ghost" disabled="@(_uploadingQueue || !_uploadQueue.Any(i => i.IsComplete))" @onclick="ClearCompletedUploads">
+                        @T("ClearCompleted")
+                    </button>
+                    <button class="btn-admin btn-primary" disabled="@(_uploadingQueue || !UploadableQueueItems.Any())" @onclick="UploadQueuedResources">
+                        <i class="fas fa-upload"></i> @(_uploadingQueue ? T("Uploading") : T("UploadSelectedFiles"))
+                    </button>
                 }
-            </div>
-            <div class="modal-footer">
-                <button class="btn-admin btn-ghost" disabled="@_uploadingQueue" @onclick="CloseUploadModal">@T("Close")</button>
-                <button class="btn-admin btn-ghost" disabled="@(_uploadingQueue || !_uploadQueue.Any(i => i.IsComplete))" @onclick="ClearCompletedUploads">
-                    @T("ClearCompleted")
-                </button>
-                <button class="btn-admin btn-primary" disabled="@(_uploadingQueue || !UploadableQueueItems.Any())" @onclick="UploadQueuedResources">
-                    <i class="fas fa-upload"></i> @(_uploadingQueue ? T("Uploading") : T("UploadSelectedFiles"))
-                </button>
             </div>
         </div>
     </div>
@@ -913,11 +978,22 @@ else
                 }
                 else if (NormalizeKind(_previewResource.Kind) == "video")
                 {
-                    <video src="@_previewResource.Url"
-                           controls
-                           preload="metadata"
-                           style="width:100%;max-height:72vh;border-radius:8px;background:#0f172a">
-                    </video>
+                    @if (IsExternalVideoResource(_previewResource))
+                    {
+                        <iframe src="@_previewResource.Url"
+                                title="@ResourceName(_previewResource)"
+                                style="width:100%;height:72vh;border:1px solid #d8e0ea;border-radius:8px;background:#0f172a"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowfullscreen></iframe>
+                    }
+                    else
+                    {
+                        <video src="@_previewResource.Url"
+                               controls
+                               preload="metadata"
+                               style="width:100%;max-height:72vh;border-radius:8px;background:#0f172a">
+                        </video>
+                    }
                 }
                 else if (IsPdf(_previewResource))
                 {
@@ -970,7 +1046,12 @@ else
     private bool _showBulkDelete;
     private string _uploadKind = "image";
     private string _uploadAlbumId = string.Empty;
+    private string _videoUploadMode = VideoUploadModes.File;
+    private string _youtubeUrl = string.Empty;
+    private string _youtubeName = string.Empty;
+    private string _youtubeDescription = string.Empty;
     private bool _uploadingQueue;
+    private bool _savingYoutubeResource;
     private readonly List<ResourceUploadQueueItem> _uploadQueue = new();
     private readonly List<ManagedResourceModel> _albumExistingResources = new();
     private readonly HashSet<string> _albumExistingSelectedIds = new(StringComparer.OrdinalIgnoreCase);
@@ -1066,12 +1147,17 @@ else
     private bool IsUploadKindLocked => AvailableUploadKinds.Count() == 1;
     private bool IsUploadAlbumLocked => SelectedAlbum is not null;
     private string UploadLimitHint =>
-        _uploadKind switch
-        {
-            "image" => string.Format(T("UploadMaxHint"), FormatBytes(MaxImageUploadBytes)),
-            "video" => string.Format(T("UploadMaxHint"), FormatBytes(MaxVideoUploadBytes)),
-            _ => string.Format(T("UploadMaxHint"), FormatBytes(MaxFileUploadBytes))
-        };
+        IsYoutubeLinkMode
+            ? T("YouTubeNoFileUploadHint")
+            : _uploadKind switch
+            {
+                "image" => string.Format(T("UploadMaxHint"), FormatBytes(MaxImageUploadBytes)),
+                "video" => string.Format(T("UploadMaxHint"), FormatBytes(MaxVideoUploadBytes)),
+                _ => string.Format(T("UploadMaxHint"), FormatBytes(MaxFileUploadBytes))
+            };
+    private bool IsYoutubeLinkMode =>
+        string.Equals(_uploadKind, "video", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(_videoUploadMode, VideoUploadModes.YouTube, StringComparison.OrdinalIgnoreCase);
     private bool IsSaveDisabled =>
         _editingId is null &&
         string.IsNullOrWhiteSpace(_edit.StorageKey);
@@ -1295,6 +1381,8 @@ else
         _uploadAlbumId = SelectedAlbum?.Id ?? string.Empty;
         ApplyUploadAlbumConstraints();
         _uploadQueue.Clear();
+        _videoUploadMode = VideoUploadModes.File;
+        ResetYouTubeDraft();
         _albumExistingSearch = string.Empty;
         _albumExistingResources.Clear();
         _albumExistingSelectedIds.Clear();
@@ -1308,18 +1396,19 @@ else
 
     private void CloseUploadModal()
     {
-        if (_uploadingQueue) return;
+        if (_uploadingQueue || _savingYoutubeResource) return;
 
         _showUploadModal = false;
         _uploadQueue.Clear();
         _albumExistingResources.Clear();
         _albumExistingSelectedIds.Clear();
         _albumExistingSearch = string.Empty;
+        ResetYouTubeDraft();
     }
 
     private void OnUploadKindChanged(ChangeEventArgs e)
     {
-        if (_uploadingQueue || _uploadQueue.Any()) return;
+        if (_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any()) return;
 
         var nextKind = NormalizeKind(e.Value?.ToString());
         if (!AvailableUploadKinds.Contains(nextKind, StringComparer.OrdinalIgnoreCase))
@@ -1333,14 +1422,28 @@ else
         }
 
         ApplyUploadAlbumConstraints();
+        if (_uploadKind != "video")
+            _videoUploadMode = VideoUploadModes.File;
+        ResetYouTubeDraft();
     }
 
     private void OnUploadAlbumChanged(ChangeEventArgs e)
     {
-        if (_uploadingQueue || _uploadQueue.Any() || IsUploadAlbumLocked) return;
+        if (_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadAlbumLocked) return;
 
         _uploadAlbumId = e.Value?.ToString() ?? string.Empty;
         ApplyUploadAlbumConstraints();
+    }
+
+    private void SetVideoUploadMode(string mode)
+    {
+        if (_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any()) return;
+
+        _videoUploadMode = string.Equals(mode, VideoUploadModes.YouTube, StringComparison.OrdinalIgnoreCase)
+            ? VideoUploadModes.YouTube
+            : VideoUploadModes.File;
+        if (!IsYoutubeLinkMode)
+            ResetYouTubeDraft();
     }
 
     private Task QueueUploadFiles(InputFileChangeEventArgs e)
@@ -1468,6 +1571,57 @@ else
         {
             _uploadingQueue = false;
         }
+    }
+
+    private async Task CreateYouTubeVideoResource()
+    {
+        if (!EnsureCanUploadResources()) return;
+
+        if (string.IsNullOrWhiteSpace(_youtubeUrl))
+        {
+            Http.Toast(T("YouTubeLinkRequired"), 422);
+            return;
+        }
+
+        _savingYoutubeResource = true;
+        try
+        {
+            var cleanName = string.IsNullOrWhiteSpace(_youtubeName)
+                ? T("DefaultYouTubeVideoName")
+                : _youtubeName.Trim();
+
+            var request = new ManagedResourceRequest
+            {
+                Kind = "video",
+                Name = LocalizedResourceValue(cleanName),
+                Description = LocalizedResourceValue(_youtubeDescription.Trim()),
+                Url = _youtubeUrl.Trim(),
+                Source = "external-url",
+                AlbumId = EmptyToNull(_uploadAlbumId),
+                Active = true
+            };
+
+            var res = await ContentService.CreateResourceAsync(request);
+            Http.Toast(res.Message, res.StatusCode);
+            if (!res.Success) return;
+
+            ResetYouTubeDraft();
+            await LoadAlbums();
+            await LoadResources();
+            if (!string.IsNullOrWhiteSpace(res.Data?.Id))
+                _selectedResource = _resources.FirstOrDefault(r => r.Id == res.Data.Id) ?? _selectedResource;
+        }
+        finally
+        {
+            _savingYoutubeResource = false;
+        }
+    }
+
+    private void ResetYouTubeDraft()
+    {
+        _youtubeUrl = string.Empty;
+        _youtubeName = string.Empty;
+        _youtubeDescription = string.Empty;
     }
 
     private void RemoveUploadQueueItem(ResourceUploadQueueItem item)
@@ -2270,6 +2424,10 @@ else
         resource.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ||
         resource.Url.Contains(".pdf", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsExternalVideoResource(ManagedResourceModel resource) =>
+        NormalizeKind(resource.Kind) == "video" &&
+        string.Equals(resource.Source, "external-url", StringComparison.OrdinalIgnoreCase);
+
     private string KindButtonClass(string kind) =>
         $"btn-admin {(string.Equals(_kindFilter, kind, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
 
@@ -2279,12 +2437,28 @@ else
     private string ModeButtonClass(string mode) =>
         $"btn-admin {(string.Equals(_libraryMode, mode, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
 
+    private string VideoSourceModeButtonClass(string mode) =>
+        $"btn-admin {(string.Equals(_videoUploadMode, mode, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
+
     private string GetValue(Dictionary<string, string> values, string lang, bool fallback = false) =>
         ResourceLibraryUiHelper.GetValue(values, lang, fallback);
 
     private static void SetValue(Dictionary<string, string> values, string lang, string? value)
     {
         values[lang] = value ?? string.Empty;
+    }
+
+    private Dictionary<string, string> LocalizedResourceValue(string? value)
+    {
+        var clean = value?.Trim() ?? string.Empty;
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lang in _languages)
+            result[lang] = clean;
+
+        result.TryAdd("en", clean);
+        result.TryAdd("vi", clean);
+        result.TryAdd("cn", clean);
+        return result;
     }
 
     private Dictionary<string, string> EnsureLangs(Dictionary<string, string>? source)
@@ -2317,6 +2491,12 @@ else
         public const string Done = "Done";
         public const string Failed = "Failed";
         public const string Blocked = "Blocked";
+    }
+
+    private static class VideoUploadModes
+    {
+        public const string File = "file";
+        public const string YouTube = "youtube";
     }
 
     private sealed class ResourceUploadQueueItem
