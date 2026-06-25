@@ -557,6 +557,42 @@ namespace FullProject.DTOs
     }
 
 
+    public class ResourceAlbumCreateDto
+    {
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class ResourceAlbumUpdateDto
+    {
+        public string? Scope { get; set; }
+        public string? Name { get; set; }
+    }
+
+    public class ResourceAlbumResponseDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+        public int ResourceCount { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ResourceAlbumAssignResourcesDto
+    {
+        public List<string> ResourceIds { get; set; } = new();
+    }
+
+    public class ResourceAlbumAssignResourcesResponseDto
+    {
+        public string AlbumId { get; set; } = string.Empty;
+        public int RequestedCount { get; set; }
+        public int UpdatedCount { get; set; }
+    }
+
     public class ManagedResourceCreateDto
     {
         public string Kind { get; set; } = "file";
@@ -570,6 +606,7 @@ namespace FullProject.DTOs
         public long? SizeBytes { get; set; }
         public string? Source { get; set; }
         public List<string> Tags { get; set; } = new();
+        public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
     }
 
@@ -586,6 +623,7 @@ namespace FullProject.DTOs
         public long? SizeBytes { get; set; }
         public string? Source { get; set; }
         public List<string>? Tags { get; set; }
+        public string? AlbumId { get; set; }
         public bool? Active { get; set; }
     }
 
@@ -603,6 +641,7 @@ namespace FullProject.DTOs
         public long SizeBytes { get; set; }
         public string Source { get; set; } = "managed-upload";
         public List<string> Tags { get; set; } = new();
+        public string? AlbumId { get; set; }
         public bool Active { get; set; }
         public int UsageCount { get; set; }
         public bool IsInUse { get; set; }
@@ -610,6 +649,29 @@ namespace FullProject.DTOs
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ManagedResourceUploadBatchResponseDto
+    {
+        public List<ManagedResourceUploadResultDto> Results { get; set; } = new();
+        public int SuccessCount { get; set; }
+        public int FailedCount { get; set; }
+    }
+
+    public class ManagedResourceUploadResultDto
+    {
+        public int Index { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string? Error { get; set; }
+        public ManagedResourceResponseDto? Resource { get; set; }
+    }
+
+    public class ManagedResourceDeleteResultDto
+    {
+        public bool Deleted { get; set; }
+        public int UsageCount { get; set; }
+        public ManagedResourceUsageDto? Usage { get; set; }
     }
 
     public class ManagedResourceUsageDto

@@ -125,6 +125,20 @@ namespace FullProject.Services
                     .Descending(r => r.CreatedAt)));
             await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
                 Builders<ManagedResource>.IndexKeys.Ascending(r => r.Url)));
+            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
+                Builders<ManagedResource>.IndexKeys
+                    .Ascending(r => r.AlbumId)
+                    .Descending(r => r.UpdatedAt)));
+
+            var albums = _database.GetCollection<ResourceAlbum>("resource_albums");
+            await albums.Indexes.CreateOneAsync(new CreateIndexModel<ResourceAlbum>(
+                Builders<ResourceAlbum>.IndexKeys
+                    .Ascending(a => a.Scope)
+                    .Ascending(a => a.Name)));
+            await albums.Indexes.CreateOneAsync(new CreateIndexModel<ResourceAlbum>(
+                Builders<ResourceAlbum>.IndexKeys
+                    .Ascending(a => a.CreatedById)
+                    .Descending(a => a.CreatedAt)));
         }
         private async Task EnsureUserIndexesAsync()
         {

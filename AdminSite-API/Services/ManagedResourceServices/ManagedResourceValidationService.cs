@@ -1,11 +1,20 @@
+using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace FullProject.Services
 {
     public class ManagedResourceValidationService
     {
         private static readonly string[] RequiredLanguages = ["en", "vi", "cn"];
+        private readonly MongoDbContext _context;
+
+        public ManagedResourceValidationService(MongoDbContext context)
+        {
+            _context = context;
+        }
 
         public (ManagedResource? Resource, List<string> Errors) BuildResource(ManagedResourceCreateDto dto, string actorId)
         {
@@ -22,6 +31,7 @@ namespace FullProject.Services
                 SizeBytes = Math.Max(0, dto.SizeBytes ?? 0),
                 Source = NormalizeSource(dto.Source),
                 Tags = NormalizeTags(dto.Tags),
+                AlbumId = CleanOptionalObjectId(dto.AlbumId),
                 Active = dto.Active,
                 CreatedById = actorId,
                 UpdatedById = actorId,
@@ -57,6 +67,7 @@ namespace FullProject.Services
             if (dto.SizeBytes is not null) resource.SizeBytes = Math.Max(0, dto.SizeBytes.Value);
             if (dto.Source is not null) resource.Source = NormalizeSource(dto.Source);
             if (dto.Tags is not null) resource.Tags = NormalizeTags(dto.Tags);
+            if (dto.AlbumId is not null) resource.AlbumId = CleanOptionalObjectId(dto.AlbumId);
             if (dto.Active is not null) resource.Active = dto.Active.Value;
             resource.UpdatedById = actorId;
             resource.UpdatedAt = DateTime.UtcNow;
@@ -115,7 +126,7 @@ namespace FullProject.Services
             return Validate(resource);
         }
 
-        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes)
+        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes, string? albumId = null)
         {
             var cleanName = string.IsNullOrWhiteSpace(fileName) ? "Managed resource" : Path.GetFileNameWithoutExtension(fileName);
             return new ManagedResourceCreateDto
@@ -129,6 +140,7 @@ namespace FullProject.Services
                 ContentType = contentType,
                 SizeBytes = sizeBytes,
                 Source = "managed-upload",
+                AlbumId = CleanOptionalObjectId(albumId),
                 Active = true
             };
         }
@@ -151,10 +163,36 @@ namespace FullProject.Services
             bool Contains(string? value) => !string.IsNullOrWhiteSpace(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
             return resource.Name.Values.Any(Contains) ||
                    resource.Description.Values.Any(Contains) ||
-                   resource.Tags.Any(Contains) ||
                    Contains(resource.FileName) ||
                    Contains(resource.Url) ||
                    Contains(resource.Kind);
+        }
+
+        public async Task AddAlbumAssignmentErrorsAsync(ManagedResource resource, List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(resource.AlbumId))
+                return;
+
+            if (!ObjectId.TryParse(resource.AlbumId, out _))
+            {
+                AddError(errors, "Album not found.");
+                return;
+            }
+
+            var album = await _context.ResourceAlbums.Find(a => a.Id == resource.AlbumId).FirstOrDefaultAsync();
+            if (album is null)
+            {
+                AddError(errors, "Album not found.");
+                return;
+            }
+
+            var expectedScope = ManagedResourceAlbumService.ScopeForKind(resource.Kind);
+            if (!string.Equals(album.Scope, expectedScope, StringComparison.OrdinalIgnoreCase))
+            {
+                var resourceType = expectedScope == "file" ? "File resources" : "Image and video resources";
+                var albumType = expectedScope == "file" ? "file albums" : "media albums";
+                AddError(errors, $"{resourceType} can only be assigned to {albumType}.");
+            }
         }
 
         public static string InferKindFromUpload(string fileName, string? contentType)
@@ -178,6 +216,8 @@ namespace FullProject.Services
             if (string.IsNullOrWhiteSpace(resource.Name.GetValueOrDefault("en"))) errors.Add("Resource name is required.");
             if (string.IsNullOrWhiteSpace(resource.Url)) errors.Add("Resource URL is required.");
             if (!string.IsNullOrWhiteSpace(resource.Url) && CleanUrl(resource.Url) is null) errors.Add("Resource URL must be a valid http or https URL.");
+            if (!string.IsNullOrWhiteSpace(resource.AlbumId) && !ObjectId.TryParse(resource.AlbumId, out _))
+                errors.Add("Album not found.");
             if (resource.Kind == "video")
             {
                 if (!string.Equals(resource.Source, "managed-upload", StringComparison.OrdinalIgnoreCase))
@@ -243,6 +283,18 @@ namespace FullProject.Services
 
         private static string? CleanStorageKey(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        private static string? CleanOptionalObjectId(string? value)
+        {
+            var clean = (value ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(clean) ? null : clean;
+        }
+
+        private static void AddError(List<string> errors, string error)
+        {
+            if (!errors.Contains(error, StringComparer.OrdinalIgnoreCase))
+                errors.Add(error);
+        }
 
         private static bool ValueChanged(string? providedValue, string? originalValue, string? nextValue) =>
             providedValue is not null && !string.Equals(originalValue ?? string.Empty, nextValue ?? string.Empty, StringComparison.Ordinal);

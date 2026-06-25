@@ -1,5 +1,6 @@
 ﻿using FullProject.Data;
 using FullProject.Models;
+using GlobalManager.Services.AssetService;
 using MongoDB.Driver;
 
 namespace FullProject.Services
@@ -7,10 +8,12 @@ namespace FullProject.Services
     public class PageCleanupService
     {
         private readonly MongoDbContext _context;
+        private readonly AssetCleanupService _assetCleanup;
 
-        public PageCleanupService(MongoDbContext context)
+        public PageCleanupService(MongoDbContext context, AssetCleanupService assetCleanup)
         {
             _context = context;
+            _assetCleanup = assetCleanup;
         }
 
         public async Task DeletePageAndDependenciesAsync(string pageId)
@@ -28,19 +31,35 @@ namespace FullProject.Services
             foreach (var child in children)
                 await DeletePageAndDependenciesAsync(child.Id);
 
-            // Fetch all sections to get their StableIds for block cleanup
-            var sections = await _context.SectionsDraft
+            var publishedPage = await _context.PagesPublished
+                .Find(p => p.StableId == page.StableId)
+                .FirstOrDefaultAsync();
+
+            var draftSections = await _context.SectionsDraft
                 .Find(s => s.PageStableId == page.StableId)
                 .ToListAsync();
 
-            // Delete all blocks (draft + published) per section
-            foreach (var section in sections)
-            {
-                await _context.BlocksDraft.DeleteManyAsync(
-                    b => b.SectionStableId == section.StableId);
-                await _context.BlocksPublished.DeleteManyAsync(
-                    b => b.SectionStableId == section.StableId);
-            }
+            var publishedSections = await _context.SectionsPublished
+                .Find(s => s.PageStableId == page.StableId)
+                .ToListAsync();
+
+            var draftBlocks = await _context.BlocksDraft
+                .Find(b => b.PageStableId == page.StableId)
+                .ToListAsync();
+
+            var publishedBlocks = await _context.BlocksPublished
+                .Find(b => b.PageStableId == page.StableId)
+                .ToListAsync();
+
+            var removedPages = new[] { page, publishedPage };
+            var removedSections = draftSections.Concat(publishedSections).ToList();
+            var removedBlocks = draftBlocks.Concat(publishedBlocks).ToList();
+
+            // Delete all blocks (draft + published) for this page
+            await _context.BlocksDraft.DeleteManyAsync(
+                b => b.PageStableId == page.StableId);
+            await _context.BlocksPublished.DeleteManyAsync(
+                b => b.PageStableId == page.StableId);
 
             // Delete all sections (draft + published) for this page
             await _context.SectionsDraft.DeleteManyAsync(
@@ -52,6 +71,8 @@ namespace FullProject.Services
             await _context.PagesDraft.DeleteOneAsync(p => p.Id == pageId);
             await _context.PagesPublished.DeleteOneAsync(
                 p => p.StableId == page.StableId);
+
+            await _assetCleanup.DeleteUnusedPageGraphAssetsAsync(removedPages, removedSections, removedBlocks);
         }
     }
 }

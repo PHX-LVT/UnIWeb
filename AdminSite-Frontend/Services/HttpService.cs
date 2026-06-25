@@ -17,6 +17,7 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> PostAsync<T>(string uri, object body);
         Task<ApiResponse<T>> PutAsync<T>(string uri, object body);
         Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
+        Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         void Toast(string? message, int statusCode);
     }
@@ -68,6 +69,31 @@ namespace AdminSite.Services
             var fileContent = new StreamContent(file.OpenReadStream(maxBytes));
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
             content.Add(fileContent, fieldName, file.Name);
+            if (formFields is not null)
+            {
+                foreach (var field in formFields)
+                {
+                    if (!string.IsNullOrWhiteSpace(field.Key))
+                        content.Add(new StringContent(field.Value ?? string.Empty), field.Key);
+                }
+            }
+
+            return await SendAsync<T>(new HttpRequestMessage(HttpMethod.Post, uri)
+            {
+                Content = content
+            });
+        }
+
+        public async Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null)
+        {
+            var content = new MultipartFormDataContent();
+            foreach (var file in files)
+            {
+                var fileContent = new StreamContent(file.OpenReadStream(maxBytes));
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+                content.Add(fileContent, fieldName, file.Name);
+            }
+
             if (formFields is not null)
             {
                 foreach (var field in formFields)

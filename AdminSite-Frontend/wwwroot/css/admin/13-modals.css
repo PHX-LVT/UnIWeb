@@ -97,7 +97,8 @@
     padding: 1rem;
 }
 
-.modal-box {
+.modal-box,
+.modal-card {
     background: var(--surface);
     border-radius: 10px;
     width: 100%;

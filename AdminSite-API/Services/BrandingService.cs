@@ -8,12 +8,12 @@ namespace FullProject.Services
     public class BrandingService
     {
         private readonly IMongoCollection<Branding> _col;
-        private readonly R2AssetService _r2Assets;
+        private readonly AssetCleanupService _assetCleanup;
 
-        public BrandingService(IMongoDatabase db, R2AssetService r2Assets)
+        public BrandingService(IMongoDatabase db, AssetCleanupService assetCleanup)
         {
             _col = db.GetCollection<Branding>("branding");
-            _r2Assets = r2Assets;
+            _assetCleanup = assetCleanup;
         }
 
         public async Task<Branding> GetAsync()
@@ -49,7 +49,7 @@ namespace FullProject.Services
                 );
 
             if (dto.LogoUrl != null)
-                await _r2Assets.DeleteIfUnusedAsync(branding.LogoUrl, dto.LogoUrl);
+                await _assetCleanup.DeleteIfUnusedAsync(branding.LogoUrl, dto.LogoUrl);
 
             return updated;
         }

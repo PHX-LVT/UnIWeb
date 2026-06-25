@@ -1,6 +1,8 @@
 using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
+using GlobalManager.Services.AssetService;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace FullProject.Services
@@ -12,23 +14,35 @@ namespace FullProject.Services
         private readonly MongoDbContext _context;
         private readonly ManagedResourceValidationService _validation;
         private readonly ManagedResourceUsageService _usage;
+        private readonly ManagedResourceAlbumService _albums;
+        private readonly AssetCleanupService _assetCleanup;
 
         public ManagedResourceService(
             MongoDbContext context,
             ManagedResourceValidationService validation,
-            ManagedResourceUsageService usage)
+            ManagedResourceUsageService usage,
+            ManagedResourceAlbumService albums,
+            AssetCleanupService assetCleanup)
         {
             _context = context;
             _validation = validation;
             _usage = usage;
+            _albums = albums;
+            _assetCleanup = assetCleanup;
         }
 
-        public async Task<List<ManagedResource>> GetAllAsync(string? kind = null, string? search = null, bool includeInactive = false)
+        public async Task<List<ManagedResource>> GetAllAsync(string? kind = null, string? search = null, bool includeInactive = false, string? albumId = null)
         {
             var filter = Builders<ManagedResource>.Filter.Empty;
             var normalizedKind = _validation.NormalizeKind(kind, allowEmpty: true);
             if (!string.IsNullOrWhiteSpace(normalizedKind))
                 filter &= Builders<ManagedResource>.Filter.Eq(r => r.Kind, normalizedKind);
+            if (!string.IsNullOrWhiteSpace(albumId))
+            {
+                var cleanAlbumId = albumId.Trim();
+                if (!ObjectId.TryParse(cleanAlbumId, out _)) return [];
+                filter &= Builders<ManagedResource>.Filter.Eq(r => r.AlbumId, cleanAlbumId);
+            }
             if (!includeInactive)
                 filter &= Builders<ManagedResource>.Filter.Eq(r => r.Active, true);
 
@@ -49,6 +63,8 @@ namespace FullProject.Services
         public async Task<(ManagedResource? Resource, List<string> Errors)> CreateAsync(ManagedResourceCreateDto dto, string actorId)
         {
             var (resource, errors) = _validation.BuildResource(dto, actorId);
+            if (resource is not null)
+                await _validation.AddAlbumAssignmentErrorsAsync(resource, errors);
             if (errors.Count > 0) return (null, errors);
 
             await _context.ManagedResources.InsertOneAsync(resource!);
@@ -61,6 +77,7 @@ namespace FullProject.Services
             if (resource is null) return (null, ["Resource not found."]);
 
             var errors = _validation.ApplyUpdate(resource, dto, actorId);
+            await _validation.AddAlbumAssignmentErrorsAsync(resource, errors);
             if (errors.Count > 0) return (null, errors);
 
             await _context.ManagedResources.ReplaceOneAsync(r => r.Id == id, resource);
@@ -92,11 +109,63 @@ namespace FullProject.Services
 
             await _context.ManagedResources.ReplaceOneAsync(r => r.Id == id, resource);
             var updatedDocuments = await PropagateUploadReplacementAsync(resource, oldUrl);
+            await _assetCleanup.DeleteIfUnusedAsync(oldUrl, resource.Url);
             return (resource, updatedDocuments, errors);
         }
 
         public Task<Dictionary<string, int>> GetUsageCountsAsync(IEnumerable<ManagedResource> resources) =>
             _usage.GetUsageCountsAsync(resources);
+
+        public async Task<(int UpdatedCount, List<string> Errors)> AssignToAlbumAsync(string albumId, IEnumerable<string>? resourceIds, string actorId)
+        {
+            var errors = new List<string>();
+            if (string.IsNullOrWhiteSpace(albumId) || !ObjectId.TryParse(albumId.Trim(), out _))
+                return (0, ["Album not found."]);
+
+            var album = await _albums.GetByIdAsync(albumId.Trim());
+            if (album is null)
+                return (0, ["Album not found."]);
+
+            var ids = (resourceIds ?? [])
+                .Select(id => id?.Trim() ?? string.Empty)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (ids.Count == 0)
+                return (0, ["Choose at least one resource."]);
+
+            if (ids.Any(id => !ObjectId.TryParse(id, out _)))
+                return (0, ["One or more resources were not found."]);
+
+            var resources = await _context.ManagedResources.Find(r => ids.Contains(r.Id)).ToListAsync();
+            var foundIds = resources.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (ids.Any(id => !foundIds.Contains(id)))
+                errors.Add("One or more resources were not found.");
+
+            foreach (var resource in resources)
+            {
+                var expectedScope = ManagedResourceAlbumService.ScopeForKind(resource.Kind);
+                if (!string.Equals(album.Scope, expectedScope, StringComparison.OrdinalIgnoreCase))
+                {
+                    var resourceName = resource.Name.GetValueOrDefault("en") ?? resource.FileName ?? resource.Id;
+                    errors.Add($"{resourceName} does not match this album type.");
+                }
+            }
+
+            if (errors.Count > 0)
+                return (0, errors);
+
+            var now = DateTime.UtcNow;
+            var result = await _context.ManagedResources.UpdateManyAsync(
+                r => ids.Contains(r.Id),
+                Builders<ManagedResource>.Update
+                    .Set(r => r.AlbumId, album.Id)
+                    .Set(r => r.UpdatedById, actorId)
+                    .Set(r => r.UpdatedAt, now));
+
+            return ((int)result.ModifiedCount, []);
+        }
 
         public async Task<ManagedResourceUsageDto> GetUsageAsync(string id)
         {
@@ -119,13 +188,15 @@ namespace FullProject.Services
             }
 
             var result = await _context.ManagedResources.DeleteOneAsync(r => r.Id == resource.Id);
-            return result.DeletedCount > 0
-                ? (true, usage, [])
-                : (false, usage, ["Resource not found."]);
+            if (result.DeletedCount <= 0)
+                return (false, usage, ["Resource not found."]);
+
+            await _assetCleanup.DeleteUnusedAsync([resource.Url, resource.ThumbnailUrl]);
+            return (true, usage, []);
         }
 
-        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes) =>
-            _validation.BuildUploadCreateDto(url, storageKey, kind, fileName, contentType, sizeBytes);
+        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes, string? albumId = null) =>
+            _validation.BuildUploadCreateDto(url, storageKey, kind, fileName, contentType, sizeBytes, albumId);
 
         public string? NormalizeKind(string? value, bool allowEmpty = false) =>
             _validation.NormalizeKind(value, allowEmpty);

@@ -2,8 +2,6 @@ using AdminSite.Models;
 
 namespace AdminSite.Helpers
 {
-    public sealed record ResourceGroupFilterOption(string Key, string Scope, string Name, int Count);
-
     public static class ResourceLibraryUiHelper
     {
         public static string ResourceName(ManagedResourceModel resource, string lang)
@@ -66,38 +64,5 @@ namespace AdminSite.Helpers
                 return value;
             return fallback && values.TryGetValue("en", out var en) ? en : string.Empty;
         }
-
-        public static bool MatchesGroupFilter(ManagedResourceModel resource, string? groupFilter)
-        {
-            if (string.IsNullOrWhiteSpace(groupFilter)) return true;
-            var parts = groupFilter.Split('|', 2, StringSplitOptions.TrimEntries);
-            if (parts.Length != 2) return true;
-
-            var scope = ResourceGroupScope(resource);
-            return string.Equals(scope, parts[0], StringComparison.OrdinalIgnoreCase) &&
-                   resource.Tags.Any(tag => string.Equals(tag, parts[1], StringComparison.OrdinalIgnoreCase));
-        }
-
-        public static List<ResourceGroupFilterOption> BuildGroupFilterOptions(IEnumerable<ManagedResourceModel> resources) =>
-            resources
-                .SelectMany(resource => resource.Tags
-                    .Where(tag => !string.IsNullOrWhiteSpace(tag))
-                    .Select(tag => new
-                    {
-                        Scope = ResourceGroupScope(resource),
-                        Name = tag.Trim()
-                    }))
-                .GroupBy(item => $"{item.Scope}|{item.Name}", StringComparer.OrdinalIgnoreCase)
-                .Select(group =>
-                {
-                    var first = group.First();
-                    return new ResourceGroupFilterOption($"{first.Scope}|{first.Name}", first.Scope, first.Name, group.Count());
-                })
-                .OrderBy(option => option.Scope)
-                .ThenBy(option => option.Name)
-                .ToList();
-
-        public static string ResourceGroupScope(ManagedResourceModel resource) =>
-            NormalizeKind(resource.Kind) == "file" ? "file" : "media";
     }
 }

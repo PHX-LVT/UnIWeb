@@ -1,6 +1,7 @@
 ﻿using FullProject.Data;
 using FullProject.Models;
 using FullProject.Utils;
+using GlobalManager.Services.AssetService;
 using MongoDB.Driver;
 
 namespace GlobalManager.Services.PublishAndResetService
@@ -8,10 +9,12 @@ namespace GlobalManager.Services.PublishAndResetService
     public class ResetService
     {
         private readonly MongoDbContext _context;
+        private readonly AssetCleanupService _assetCleanup;
 
-        public ResetService(MongoDbContext context)
+        public ResetService(MongoDbContext context, AssetCleanupService assetCleanup)
         {
             _context = context;
+            _assetCleanup = assetCleanup;
         }
 
         public async Task<ResetResult> ResetPageAsync(string pageId)
@@ -34,11 +37,23 @@ namespace GlobalManager.Services.PublishAndResetService
             if (publishedPage is null)
                 return ResetResult.Fail("No published version found to reset to.");
 
+            var replacedPages = new List<Page?> { draftPage };
+            var replacedSections = new List<Section>();
+            var replacedBlocks = new List<Block>();
+
             using var session = await _context.Client.StartSessionAsync();
             session.StartTransaction();
 
             try
             {
+                replacedSections = await _context.SectionsDraft
+                    .Find(session, s => s.PageStableId == draftPage.StableId)
+                    .ToListAsync();
+
+                replacedBlocks = await _context.BlocksDraft
+                    .Find(session, b => b.PageStableId == draftPage.StableId)
+                    .ToListAsync();
+
                 // Fetch published sections and blocks to restore
                 var publishedSections = await _context.SectionsPublished
                     .Find(session, s => s.PageStableId == draftPage.StableId)
@@ -90,13 +105,15 @@ namespace GlobalManager.Services.PublishAndResetService
                         .Inc(p => p.Version, 1));
 
                 await session.CommitTransactionAsync();
-                return ResetResult.Ok();
             }
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
                 return ResetResult.Fail($"Reset failed: {ex.Message}");
             }
+
+            await _assetCleanup.DeleteUnusedPageGraphAssetsAsync(replacedPages, replacedSections, replacedBlocks);
+            return ResetResult.Ok();
         }
     }
 

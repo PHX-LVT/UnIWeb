@@ -13,14 +13,14 @@ namespace GlobalManager.Services.SectionServices
     {
         private readonly MongoDbContext _context;
         private readonly BlockService _blockService;
-        private readonly R2AssetService _r2Assets;
+        private readonly AssetCleanupService _assetCleanup;
         private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
 
-        public SectionService(MongoDbContext context, BlockService blockService, R2AssetService r2Assets)
+        public SectionService(MongoDbContext context, BlockService blockService, AssetCleanupService assetCleanup)
         {
             _context = context;
             _blockService = blockService;
-            _r2Assets = r2Assets;
+            _assetCleanup = assetCleanup;
         }
 
         // -----------------------------------------------------------
@@ -227,7 +227,9 @@ namespace GlobalManager.Services.SectionServices
                 if (s.BackgroundType != null) section.Style.BackgroundType = s.BackgroundType;
                 if (s.BackgroundColor != null) section.Style.BackgroundColor = s.BackgroundColor;
                 if (s.BackgroundImageUrl != null) section.Style.BackgroundImageUrl = s.BackgroundImageUrl;
-                if (s.BackgroundVideoUrl != null) section.Style.BackgroundVideoUrl = s.BackgroundVideoUrl;
+                if (s.BackgroundVideoUrl != null) section.Style.BackgroundVideoUrl = CleanBackgroundVideoUrl(s.BackgroundVideoUrl);
+                if (s.BackgroundImageFit != null) section.Style.BackgroundImageFit = NormalizeBackgroundImageFit(s.BackgroundImageFit);
+                if (s.BackgroundImagePosition != null) section.Style.BackgroundImagePosition = NormalizeBackgroundImagePosition(s.BackgroundImagePosition);
                 if (s.GradientFrom != null) section.Style.GradientFrom = s.GradientFrom;
                 if (s.GradientTo != null) section.Style.GradientTo = s.GradientTo;
                 if (s.GradientDirection != null) section.Style.GradientDirection = s.GradientDirection;
@@ -550,11 +552,16 @@ namespace GlobalManager.Services.SectionServices
                 .FirstOrDefaultAsync();
             if (section is null) return false;
 
+            var removedAssetUrls = _assetCleanup.SectionAssetUrls(section).ToList();
+
             var result = await _context.SectionsDraft.DeleteOneAsync(
                 s => s.PageStableId == page.StableId && s.Id == sectionId);
 
             if (result.DeletedCount > 0)
+            {
                 await _blockService.DeleteBySectionAsync(page.StableId, section.StableId);
+                await _assetCleanup.DeleteUnusedAsync(removedAssetUrls);
+            }
 
             return result.DeletedCount > 0;
         }
@@ -584,12 +591,15 @@ namespace GlobalManager.Services.SectionServices
             if (section is null) return null;
 
             var oldBackgroundImageUrl = section.Style?.BackgroundImageUrl;
+            var oldBackgroundVideoUrl = section.Style?.BackgroundVideoUrl;
             var style = section.Style ?? new SectionStyle();
 
             if (dto.BackgroundType != null) style.BackgroundType = dto.BackgroundType;
             if (dto.BackgroundColor != null) style.BackgroundColor = dto.BackgroundColor;
             if (dto.BackgroundImageUrl != null) style.BackgroundImageUrl = EmptyToNull(dto.BackgroundImageUrl);
-            if (dto.BackgroundVideoUrl != null) style.BackgroundVideoUrl = EmptyToNull(dto.BackgroundVideoUrl);
+            if (dto.BackgroundVideoUrl != null) style.BackgroundVideoUrl = CleanBackgroundVideoUrl(dto.BackgroundVideoUrl);
+            if (dto.BackgroundImageFit != null) style.BackgroundImageFit = NormalizeBackgroundImageFit(dto.BackgroundImageFit);
+            if (dto.BackgroundImagePosition != null) style.BackgroundImagePosition = NormalizeBackgroundImagePosition(dto.BackgroundImagePosition);
             if (dto.GradientFrom != null) style.GradientFrom = EmptyToNull(dto.GradientFrom);
             if (dto.GradientTo != null) style.GradientTo = EmptyToNull(dto.GradientTo);
             if (dto.GradientDirection != null) style.GradientDirection = string.IsNullOrWhiteSpace(dto.GradientDirection) ? "top" : dto.GradientDirection;
@@ -614,7 +624,9 @@ namespace GlobalManager.Services.SectionServices
 
             if (result.MatchedCount == 0) return null;
             if (dto.BackgroundImageUrl != null)
-                await _r2Assets.DeleteIfUnusedAsync(oldBackgroundImageUrl, dto.BackgroundImageUrl);
+                await _assetCleanup.DeleteIfUnusedAsync(oldBackgroundImageUrl, style.BackgroundImageUrl);
+            if (dto.BackgroundVideoUrl != null)
+                await _assetCleanup.DeleteIfUnusedAsync(oldBackgroundVideoUrl, style.BackgroundVideoUrl);
             return await GetByIdAsync(pageId, sectionId);
         }
 
@@ -624,7 +636,7 @@ namespace GlobalManager.Services.SectionServices
             switch (existing, dto)
             {
                 case (HeroSection hero, HeroSectionUpdateDto heroDto) when heroDto.ImageUrl != null:
-                    await _r2Assets.DeleteIfUnusedAsync(hero.ImageUrl, heroDto.ImageUrl);
+                    await _assetCleanup.DeleteIfUnusedAsync(hero.ImageUrl, heroDto.ImageUrl);
                     break;
                 case (ListSection list, ListSectionUpdateDto listDto) when listDto.Items != null:
                     await DeleteRemovedUrlsAsync(list.Items.Select(i => i.ImageUrl), listDto.Items.Select(i => i.ImageUrl));
@@ -657,6 +669,21 @@ namespace GlobalManager.Services.SectionServices
             _ => "medium"
         };
 
+        private static string NormalizeBackgroundImageFit(string? value) => value switch
+        {
+            "contain" => "contain",
+            _ => "cover"
+        };
+
+        private static string NormalizeBackgroundImagePosition(string? value) => value switch
+        {
+            "top" => "top",
+            "bottom" => "bottom",
+            "left" => "left",
+            "right" => "right",
+            _ => "center"
+        };
+
         private async Task DeleteRemovedUrlsAsync(IEnumerable<string?> oldUrls, IEnumerable<string?> newUrls)
         {
             var newSet = new HashSet<string>(
@@ -666,11 +693,34 @@ namespace GlobalManager.Services.SectionServices
             foreach (var oldUrl in oldUrls.Where(u => !string.IsNullOrWhiteSpace(u)).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (!newSet.Contains(oldUrl!))
-                    await _r2Assets.DeleteIfUnusedAsync(oldUrl, null);
+                    await _assetCleanup.DeleteIfUnusedAsync(oldUrl, null);
             }
         }
         private static string? EmptyToNull(string value) =>
             string.IsNullOrWhiteSpace(value) ? null : value;
+
+        private static string? CleanBackgroundVideoUrl(string value)
+        {
+            var cleaned = EmptyToNull(value);
+            if (cleaned is null) return null;
+
+            if (!Uri.TryCreate(cleaned, UriKind.Absolute, out var uri))
+                return cleaned.StartsWith("/", StringComparison.Ordinal) &&
+                       !cleaned.StartsWith("//", StringComparison.Ordinal) &&
+                       HasAllowedVideoExtension(cleaned)
+                    ? cleaned
+                    : null;
+
+            if (uri.Scheme is not ("http" or "https")) return null;
+            return HasAllowedVideoExtension(uri.AbsolutePath) ? cleaned : null;
+        }
+
+        private static bool HasAllowedVideoExtension(string value)
+        {
+            var path = value.Split(new[] { '?', '#' }, 2)[0];
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".mp4" or ".webm" or ".mov";
+        }
 
         public async Task<bool> ReorderAsync(string pageId, List<string> orderedIds)
         {

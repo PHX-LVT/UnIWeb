@@ -302,6 +302,8 @@ namespace AdminSite.Models
         public string? BackgroundColor { get; set; }
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string? BackgroundImageFit { get; set; }
+        public string? BackgroundImagePosition { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string? GradientDirection { get; set; }
@@ -905,6 +907,36 @@ namespace AdminSite.Models
         public DateTime CreatedAt { get; set; }
     }
 
+    public class ResourceAlbumModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+        public int ResourceCount { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ResourceAlbumRequest
+    {
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class ResourceAlbumAssignResourcesRequest
+    {
+        public List<string> ResourceIds { get; set; } = new();
+    }
+
+    public class ResourceAlbumAssignResourcesResult
+    {
+        public string AlbumId { get; set; } = string.Empty;
+        public int RequestedCount { get; set; }
+        public int UpdatedCount { get; set; }
+    }
+
     public class ManagedResourceModel
     {
         public string Id { get; set; } = string.Empty;
@@ -919,6 +951,7 @@ namespace AdminSite.Models
         public long SizeBytes { get; set; }
         public string Source { get; set; } = "managed-upload";
         public List<string> Tags { get; set; } = new();
+        public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
         public int UsageCount { get; set; }
         public bool IsInUse { get; set; }
@@ -926,6 +959,22 @@ namespace AdminSite.Models
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ManagedResourceUploadBatchModel
+    {
+        public List<ManagedResourceUploadResultModel> Results { get; set; } = new();
+        public int SuccessCount { get; set; }
+        public int FailedCount { get; set; }
+    }
+
+    public class ManagedResourceUploadResultModel
+    {
+        public int Index { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string? Error { get; set; }
+        public ManagedResourceModel? Resource { get; set; }
     }
 
     public class ManagedResourceUsageModel
@@ -959,8 +1008,9 @@ namespace AdminSite.Models
         public string? FileName { get; set; }
         public string? ContentType { get; set; }
         public long? SizeBytes { get; set; }
-        public string? Source { get; set; } = "external-url";
-        public List<string> Tags { get; set; } = new();
+        public string? Source { get; set; } = "managed-upload";
+        public List<string>? Tags { get; set; }
+        public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
     }
     public class CanvasSectionPresetModel

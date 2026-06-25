@@ -372,6 +372,8 @@ namespace FullProject.Utils
             BackgroundColor = s.BackgroundColor,
             BackgroundImageUrl = s.BackgroundImageUrl,
             BackgroundVideoUrl = s.BackgroundVideoUrl,
+            BackgroundImageFit = s.BackgroundImageFit,
+            BackgroundImagePosition = s.BackgroundImagePosition,
             GradientFrom = s.GradientFrom,
             GradientTo = s.GradientTo,
             GradientDirection = s.GradientDirection,

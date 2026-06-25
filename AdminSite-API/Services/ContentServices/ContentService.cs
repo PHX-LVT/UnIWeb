@@ -1,6 +1,7 @@
 using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
+using GlobalManager.Services.AssetService;
 using MongoDB.Driver;
 
 namespace FullProject.Services
@@ -13,6 +14,7 @@ namespace FullProject.Services
         private readonly ContentWorkflowService _workflow;
         private readonly ContentRevisionService _revisions;
         private readonly ContentAssetMetadataService _assets;
+        private readonly AssetCleanupService _assetCleanup;
 
         public ContentService(
             MongoDbContext context,
@@ -20,7 +22,8 @@ namespace FullProject.Services
             ContentValidationService validation,
             ContentWorkflowService workflow,
             ContentRevisionService revisions,
-            ContentAssetMetadataService assets)
+            ContentAssetMetadataService assets,
+            AssetCleanupService assetCleanup)
         {
             _context = context;
             _types = types;
@@ -28,6 +31,7 @@ namespace FullProject.Services
             _workflow = workflow;
             _revisions = revisions;
             _assets = assets;
+            _assetCleanup = assetCleanup;
         }
 
         public Task<List<ContentType>> GetTypesAsync() =>
@@ -213,8 +217,13 @@ namespace FullProject.Services
             if (dto.Visible is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.Visible, dto.Visible.Value));
 
             await _context.ContentDraft.UpdateOneAsync(c => c.Id == id, Builders<ContentItem>.Update.Combine(updates));
+            var updated = await GetByIdAsync(id);
+            if (updated is not null)
+                await _assetCleanup.DeleteUnusedAsync(_assetCleanup.RemovedAssetUrls(
+                    _assetCleanup.ContentAssetUrls(existing),
+                    _assetCleanup.ContentAssetUrls(updated)));
             await _revisions.LogAsync(existing.StableId, "updated", actorId);
-            return (await GetByIdAsync(id), []);
+            return (updated, []);
         }
 
         public Task<(ContentItem? Item, List<string> Errors)> SetStatusAsync(string id, ContentStatusUpdateDto dto, string actorId) =>

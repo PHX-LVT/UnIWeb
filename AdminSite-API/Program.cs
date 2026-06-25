@@ -85,6 +85,7 @@ builder.Services.AddScoped<ContentMappingService>();
 builder.Services.AddScoped<ContentRevisionService>();
 builder.Services.AddScoped<ContentWorkflowService>();
 builder.Services.AddScoped<ContentService>();
+builder.Services.AddScoped<ManagedResourceAlbumService>();
 builder.Services.AddScoped<ManagedResourceValidationService>();
 builder.Services.AddScoped<ManagedResourceUsageService>();
 builder.Services.AddScoped<ManagedResourceService>();
@@ -94,6 +95,7 @@ builder.Services.AddScoped<FullProject.Services.PublicService.PublicMetadataServ
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicFormSubmissionHandler>();
 builder.Services.AddHttpClient<R2StorageService>();
 builder.Services.AddScoped<AssetReferenceService>();
+builder.Services.AddScoped<AssetCleanupService>();
 builder.Services.AddScoped<R2AssetService>();
 
 // --- Memory Cache (Phase 1 - Maybe Redis in Phase 2) ---
@@ -289,6 +291,17 @@ catch (Exception ex)
 try
 {
     using var scope = app.Services.CreateScope();
+    var resourceAlbumCleanup = await scope.ServiceProvider.GetRequiredService<ManagedResourceAlbumService>()
+        .RemoveLegacyDefaultAlbumsAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    if (resourceAlbumCleanup.AlbumCount > 0 || resourceAlbumCleanup.ResourceCount > 0)
+    {
+        logger.LogInformation(
+            "Legacy default resource albums removed. Albums: {AlbumCount}, resources unfiled: {ResourceCount}.",
+            resourceAlbumCleanup.AlbumCount,
+            resourceAlbumCleanup.ResourceCount);
+    }
+
     await scope.ServiceProvider.GetRequiredService<FormDefinitionService>()
         .EnsureDefaultDefinitionsAsync()
         .WaitAsync(TimeSpan.FromSeconds(10));
@@ -297,7 +310,7 @@ try
 catch (Exception ex)
 {
     logger.LogWarning(ex,
-        "Default form definition seed failed. Public modal forms may be unavailable until definitions are created.");
+        "Startup cleanup or form definition seed failed. Resource album cleanup or public modal forms may be unavailable until the next startup.");
 }
 
 // --- Seed admin user ---

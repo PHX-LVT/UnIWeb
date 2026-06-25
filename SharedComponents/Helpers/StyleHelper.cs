@@ -27,15 +27,20 @@ namespace SharedComponents.Helpers
             var parts = new List<string>();
 
             // Background
-            switch (s.BackgroundType)
+            switch ((s.BackgroundType ?? "color").Trim().ToLowerInvariant())
             {
                 case "none":
                     break;
 
+                case "theme":
+                    parts.Add("background-color: var(--theme-color-background)");
+                    break;
+
                 case "image" when !string.IsNullOrEmpty(s.BackgroundImageUrl):
                     parts.Add($"background-image: url('{s.BackgroundImageUrl}')");
-                    parts.Add("background-size: cover");
-                    parts.Add("background-position: center");
+                    parts.Add($"background-size: {NormalizeBackgroundImageFit(s.BackgroundImageFit)}");
+                    parts.Add($"background-position: {NormalizeBackgroundImagePosition(s.BackgroundImagePosition)}");
+                    parts.Add("background-repeat: no-repeat");
                     break;
 
                 case "gradient":
@@ -117,6 +122,19 @@ namespace SharedComponents.Helpers
             // pointer-events: none  ?  overlay never intercepts clicks.
             return $"position: absolute; inset: 0; background-color: {s.OverlayColor}; opacity: {s.OverlayOpacity}; pointer-events: none; z-index: 0";
         }
+
+        public static string NormalizeBackgroundImageFit(string? value) =>
+            string.Equals(value, "contain", StringComparison.OrdinalIgnoreCase) ? "contain" : "cover";
+
+        public static string NormalizeBackgroundImagePosition(string? value) =>
+            value?.Trim().ToLowerInvariant() switch
+            {
+                "top" => "center top",
+                "bottom" => "center bottom",
+                "left" => "left center",
+                "right" => "right center",
+                _ => "center center"
+            };
 
         public static string Lang(Dictionary<string, string>? dict, string lang)
         {

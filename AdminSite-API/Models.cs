@@ -331,6 +331,8 @@ namespace FullProject.Models
         public string BackgroundColor { get; set; } = "#ffffff";
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string BackgroundImageFit { get; set; } = "cover";      // cover | contain
+        public string BackgroundImagePosition { get; set; } = "center"; // center | top | bottom | left | right
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";      // top | left | diagonal
@@ -1070,6 +1072,20 @@ namespace FullProject.Models
     // ----------------------------------------------------------------
 
     [BsonIgnoreExtraElements]
+    public class ResourceAlbum
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string Scope { get; set; } = "media"; // media | file
+        public string Name { get; set; } = string.Empty;
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
     public class ManagedResource
     {
         [BsonId]
@@ -1086,6 +1102,8 @@ namespace FullProject.Models
         public long SizeBytes { get; set; }
         public string Source { get; set; } = "managed-upload";
         public List<string> Tags { get; set; } = new();
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
         public string CreatedById { get; set; } = string.Empty;
         public string? UpdatedById { get; set; }

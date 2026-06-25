@@ -23,6 +23,8 @@ namespace Contracts.Admin
         public string? BackgroundColor { get; set; }
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string? BackgroundImageFit { get; set; }
+        public string? BackgroundImagePosition { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string? GradientDirection { get; set; }
@@ -45,6 +47,8 @@ namespace Contracts.Admin
         public string BackgroundColor { get; set; } = "#ffffff";
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string BackgroundImageFit { get; set; } = "cover";
+        public string BackgroundImagePosition { get; set; } = "center";
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";

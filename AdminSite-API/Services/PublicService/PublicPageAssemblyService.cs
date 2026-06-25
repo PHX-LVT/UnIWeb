@@ -1067,6 +1067,8 @@ namespace FullProject.Services.PublicService
             BackgroundColor = style.BackgroundColor,
             BackgroundImageUrl = style.BackgroundImageUrl,
             BackgroundVideoUrl = style.BackgroundVideoUrl,
+            BackgroundImageFit = style.BackgroundImageFit,
+            BackgroundImagePosition = style.BackgroundImagePosition,
             GradientFrom = style.GradientFrom,
             GradientTo = style.GradientTo,
             GradientDirection = style.GradientDirection,

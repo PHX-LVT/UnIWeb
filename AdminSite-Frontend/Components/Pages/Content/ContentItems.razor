@@ -659,6 +659,10 @@
         _types.FirstOrDefault(type => string.Equals(type.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase)) is { } type &&
         string.Equals(ContentBehaviorUiHelper.InferBehavior(type), "page", StringComparison.OrdinalIgnoreCase);
 
+    private bool IsFileContent(ContentItemModel item) =>
+        _types.FirstOrDefault(type => string.Equals(type.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase)) is { } type &&
+        string.Equals(ContentBehaviorUiHelper.InferBehavior(type), "file-resource", StringComparison.OrdinalIgnoreCase);
+
     private bool CanEditItem(ContentItemModel item) =>
         CanManageAllContent ||
         (Auth.IsWriter && IsMine(item) && !IsDeleted(item));
@@ -667,7 +671,9 @@
         CanManageAllContent && !IsDeleted(item);
 
     private string TitleHref(ContentItemModel item) =>
-        CanEditItem(item) && _view is not "all"
+        IsFileContent(item)
+            ? PrimaryFileHref(item)
+            : CanEditItem(item) && _view is not "all"
             ? EditHref(item.Id)
             : PublicContentHref(item);
 
@@ -677,10 +683,15 @@
     private string? TitleRel(ContentItemModel item) =>
         TitleTarget(item) is null ? null : "noopener";
 
-    private string PublicContentHref(ContentItemModel item) =>
-        string.IsNullOrWhiteSpace(item.Slug)
+    private string PublicContentHref(ContentItemModel item)
+    {
+        return string.IsNullOrWhiteSpace(item.Slug)
             ? "#"
             : $"{UserSiteBaseUrl}/insights/{ContentTypeRoute(item.ContentTypeKey)}/{Uri.EscapeDataString(item.Slug)}";
+    }
+
+    private static string PrimaryFileHref(ContentItemModel item) =>
+        item.Attachments.FirstOrDefault(attachment => !string.IsNullOrWhiteSpace(attachment.Url))?.Url ?? "#";
 
     private string UserSiteBaseUrl =>
         (Config["UserSiteBaseUrl"] ?? "https://localhost:7113").TrimEnd('/');

@@ -1,5 +1,5 @@
 <div class="ez-modal-overlay" @onclick="OnCancel">
-    <div class="ez-modal" @onclick:stopPropagation="true">
+    <div class="ez-modal ez-modal--section-picker" @onclick:stopPropagation="true">
         <div class="ez-modal__header">
             <h2>@T("AddSection")</h2>
             <button class="ez-icon-btn" @onclick="OnCancel">
@@ -7,7 +7,7 @@
             </button>
         </div>
 
-        <div class="ez-modal__body">
+        <div class="ez-modal__body ez-section-picker">
             @foreach (var group in _templates)
             {
                 <div class="ez-picker-group">

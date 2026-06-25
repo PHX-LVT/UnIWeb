@@ -1,6 +1,7 @@
 using FullProject.Data;
 using FullProject.Models;
 using FullProject.Utils;
+using GlobalManager.Services.AssetService;
 using MongoDB.Driver;
 
 namespace GlobalManager.Services.PublishAndResetService
@@ -8,10 +9,12 @@ namespace GlobalManager.Services.PublishAndResetService
     public class PublishService
     {
         private readonly MongoDbContext _context;
+        private readonly AssetCleanupService _assetCleanup;
 
-        public PublishService(MongoDbContext context)
+        public PublishService(MongoDbContext context, AssetCleanupService assetCleanup)
         {
             _context = context;
+            _assetCleanup = assetCleanup;
         }
 
         public async Task<PublishResult> PublishPageAsync(string pageId)
@@ -23,6 +26,9 @@ namespace GlobalManager.Services.PublishAndResetService
                 return PublishResult.Fail("Page not found.");
 
             var now = DateTime.UtcNow;
+            var replacedPages = new List<Page?>();
+            var replacedSections = new List<Section>();
+            var replacedBlocks = new List<Block>();
 
             using var session = await _context.Client.StartSessionAsync();
             session.StartTransaction();
@@ -35,6 +41,22 @@ namespace GlobalManager.Services.PublishAndResetService
                     .ToListAsync();
 
                 var blocks = await _context.BlocksDraft
+                    .Find(session, b => b.PageStableId == page.StableId)
+                    .ToListAsync();
+
+                var existingPublishedPage = await _context.PagesPublished
+                    .Find(session, p => p.StableId == page.StableId)
+                    .FirstOrDefaultAsync();
+                replacedPages.Add(existingPublishedPage);
+
+                if (string.IsNullOrWhiteSpace(page.ParentPageId))
+                    replacedPages.AddRange(await GetPublishedChildPagesForParentAsync(session, page));
+
+                replacedSections = await _context.SectionsPublished
+                    .Find(session, s => s.PageStableId == page.StableId)
+                    .ToListAsync();
+
+                replacedBlocks = await _context.BlocksPublished
                     .Find(session, b => b.PageStableId == page.StableId)
                     .ToListAsync();
 
@@ -82,13 +104,34 @@ namespace GlobalManager.Services.PublishAndResetService
                         .Inc(p => p.Version, 1));
 
                 await session.CommitTransactionAsync();
-                return PublishResult.Ok(now);
             }
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
                 return PublishResult.Fail($"Publish failed: {ex.Message}");
             }
+
+            await _assetCleanup.DeleteUnusedPageGraphAssetsAsync(replacedPages, replacedSections, replacedBlocks);
+            return PublishResult.Ok(now);
+        }
+
+        private async Task<List<Page>> GetPublishedChildPagesForParentAsync(IClientSessionHandle session, Page parentPage)
+        {
+            var draftChildren = await _context.PagesDraft
+                .Find(session, p => p.ParentPageId == parentPage.Id)
+                .ToListAsync();
+
+            if (draftChildren.Count == 0) return new();
+
+            var stableIds = draftChildren
+                .Select(p => p.StableId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return stableIds.Count == 0
+                ? new()
+                : await _context.PagesPublished.Find(session, p => stableIds.Contains(p.StableId)).ToListAsync();
         }
 
         private async Task SyncPublishedChildPageCardsAsync(IClientSessionHandle session, Page parentPage, DateTime publishedAt)

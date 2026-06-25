@@ -17,14 +17,14 @@ namespace FullProject.Services
         private readonly MongoDbContext _context; // Changed from raw IMongoCollection
         private readonly SectionService _sectionService;
         private readonly PageCleanupService _cleanupService;
-        private readonly R2AssetService _r2Assets;
+        private readonly AssetCleanupService _assetCleanup;
 
-        public PageService(MongoDbContext context, SectionService sectionService, PageCleanupService cleanupService, R2AssetService r2Assets)
+        public PageService(MongoDbContext context, SectionService sectionService, PageCleanupService cleanupService, AssetCleanupService assetCleanup)
         {
             _context = context;
             _sectionService = sectionService;
             _cleanupService = cleanupService;
-            _r2Assets = r2Assets;
+            _assetCleanup = assetCleanup;
         }
 
         // -----------------------------------------------------------
@@ -191,7 +191,7 @@ namespace FullProject.Services
                 Builders<Page>.Update.Combine(updates));
 
             if (result.ModifiedCount > 0 && dto.CardImageUrl != null)
-                await _r2Assets.DeleteIfUnusedAsync(oldCardImageUrl, dto.CardImageUrl);
+                await _assetCleanup.DeleteIfUnusedAsync(oldCardImageUrl, dto.CardImageUrl);
 
             return result.ModifiedCount > 0;
         }
@@ -276,6 +276,9 @@ namespace FullProject.Services
             restored.Version = current.Version + 1;
 
             await _context.PagesDraft.ReplaceOneAsync(p => p.Id == pageId, restored);
+            await _assetCleanup.DeleteUnusedAsync(_assetCleanup.RemovedAssetUrls(
+                _assetCleanup.PageAssetUrls(current),
+                _assetCleanup.PageAssetUrls(restored)));
             await TrimPageRevisionsAsync(current.StableId);
             return await GetByIdAsync(pageId);
         }

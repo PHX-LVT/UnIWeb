@@ -150,6 +150,8 @@ namespace FullProject.Controllers
                     BackgroundColor = s.Style.BackgroundColor,
                     BackgroundImageUrl = s.Style.BackgroundImageUrl,
                     BackgroundVideoUrl = s.Style.BackgroundVideoUrl,
+                    BackgroundImageFit = s.Style.BackgroundImageFit,
+                    BackgroundImagePosition = s.Style.BackgroundImagePosition,
                     GradientFrom = s.Style.GradientFrom,
                     GradientTo = s.Style.GradientTo,
                     GradientDirection = s.Style.GradientDirection,

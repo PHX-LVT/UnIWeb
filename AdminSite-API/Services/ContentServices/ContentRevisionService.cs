@@ -1,6 +1,7 @@
 using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
+using GlobalManager.Services.AssetService;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
@@ -11,11 +12,13 @@ namespace FullProject.Services
     {
         private readonly MongoDbContext _context;
         private readonly ContentMappingService _mapping;
+        private readonly AssetCleanupService _assetCleanup;
 
-        public ContentRevisionService(MongoDbContext context, ContentMappingService mapping)
+        public ContentRevisionService(MongoDbContext context, ContentMappingService mapping, AssetCleanupService assetCleanup)
         {
             _context = context;
             _mapping = mapping;
+            _assetCleanup = assetCleanup;
         }
 
         public async Task<List<RevisionResponseDto>> GetRevisionsAsync(string id)
@@ -52,6 +55,9 @@ namespace FullProject.Services
             restored.UpdatedById = actorId;
 
             await _context.ContentDraft.ReplaceOneAsync(c => c.Id == id, restored);
+            await _assetCleanup.DeleteUnusedAsync(_assetCleanup.RemovedAssetUrls(
+                _assetCleanup.ContentAssetUrls(current),
+                _assetCleanup.ContentAssetUrls(restored)));
             await TrimAsync(current.StableId);
             await LogAsync(current.StableId, "revision-restored", actorId);
             return (await _context.ContentDraft.Find(c => c.Id == id).FirstOrDefaultAsync(), []);

@@ -11,13 +11,13 @@ namespace FullProject.Services
     public class BlockService
     {
         private readonly MongoDbContext _context;
-        private readonly R2AssetService _r2Assets;
+        private readonly AssetCleanupService _assetCleanup;
         private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
 
-        public BlockService(MongoDbContext context, R2AssetService r2Assets)
+        public BlockService(MongoDbContext context, AssetCleanupService assetCleanup)
         {
             _context = context;
-            _r2Assets = r2Assets;
+            _assetCleanup = assetCleanup;
         }
 
         private static Dictionary<string, string> SanitizeDictionary(Dictionary<string, string>? input)
@@ -435,13 +435,13 @@ namespace FullProject.Services
             switch (existing, dto)
             {
                 case (ImageBlock image, ImageBlockUpdateDto imageDto) when imageDto.ImageUrl != null:
-                    await _r2Assets.DeleteIfUnusedAsync(image.ImageUrl, imageDto.ImageUrl);
+                    await _assetCleanup.DeleteIfUnusedAsync(image.ImageUrl, imageDto.ImageUrl);
                     break;
                 case (FileBlock file, FileBlockUpdateDto fileDto) when fileDto.FileUrl != null:
-                    await _r2Assets.DeleteIfUnusedAsync(file.FileUrl, fileDto.FileUrl);
+                    await _assetCleanup.DeleteIfUnusedAsync(file.FileUrl, fileDto.FileUrl);
                     break;
                 case (CardBlock card, CardBlockUpdateDto cardDto) when cardDto.ImageUrl != null:
-                    await _r2Assets.DeleteIfUnusedAsync(card.ImageUrl, cardDto.ImageUrl);
+                    await _assetCleanup.DeleteIfUnusedAsync(card.ImageUrl, cardDto.ImageUrl);
                     break;
             }
         }
@@ -467,16 +467,35 @@ namespace FullProject.Services
             if (page is null) return false;
             var section = await _context.SectionsDraft.Find(s => s.Id == sectionId).FirstOrDefaultAsync();
             if (section is null) return false;
+            var block = await _context.BlocksDraft.Find(b =>
+                    b.PageStableId == page.StableId &&
+                    b.SectionStableId == section.StableId &&
+                    b.Id == blockId)
+                .FirstOrDefaultAsync();
+            if (block is null) return false;
+
+            var removedAssetUrls = _assetCleanup.BlockAssetUrls(block).ToList();
             var result = await _context.BlocksDraft.DeleteOneAsync(
                 b => b.PageStableId == page.StableId &&
                      b.SectionStableId == section.StableId &&
                      b.Id == blockId);
+            if (result.DeletedCount > 0)
+                await _assetCleanup.DeleteUnusedAsync(removedAssetUrls);
             return result.DeletedCount > 0;
         }
 
-        public async Task DeleteBySectionAsync(string pageStableId, string sectionStableId) =>
+        public async Task DeleteBySectionAsync(string pageStableId, string sectionStableId)
+        {
+            var blocks = await _context.BlocksDraft
+                .Find(b => b.PageStableId == pageStableId && b.SectionStableId == sectionStableId)
+                .ToListAsync();
+            var removedAssetUrls = blocks.SelectMany(_assetCleanup.BlockAssetUrls).ToList();
+
             await _context.BlocksDraft.DeleteManyAsync(
                 b => b.PageStableId == pageStableId && b.SectionStableId == sectionStableId);
+
+            await _assetCleanup.DeleteUnusedAsync(removedAssetUrls);
+        }
 
         public async Task DeleteByColumnSlotsAsync(string pageStableId, string sectionStableId, IEnumerable<string> slotIds)
         {
