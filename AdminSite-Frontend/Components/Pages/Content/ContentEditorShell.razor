@@ -906,29 +906,20 @@ else
         _edit.ThumbnailStorageKey = first.StorageKey;
     }
 
-    private string ResourceName(ManagedResourceModel resource)
-    {
-        var name = GetValue(resource.Name, CurrentLang, fallback: true);
-        if (!string.IsNullOrWhiteSpace(name)) return name;
-        if (!string.IsNullOrWhiteSpace(resource.FileName)) return resource.FileName;
-        return resource.Url.Split('/').LastOrDefault() ?? T("Resource");
-    }
+    private string ResourceName(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceName(resource, CurrentLang);
 
     private string ResourceDescription(ManagedResourceModel resource) =>
-        GetValue(resource.Description, CurrentLang, fallback: true);
+        ResourceLibraryUiHelper.ResourceDescription(resource, CurrentLang);
 
     private string ResourceFileName(ManagedResourceModel resource) =>
-        string.IsNullOrWhiteSpace(resource.FileName) ? ResourceName(resource) : resource.FileName;
+        ResourceLibraryUiHelper.ResourceFileName(resource);
 
     private static string ResourceThumbnailUrl(ManagedResourceModel resource) =>
-        !string.IsNullOrWhiteSpace(resource.ThumbnailUrl) ? resource.ThumbnailUrl! : NormalizeResourceKind(resource.Kind) == "image" ? resource.Url : string.Empty;
+        ResourceLibraryUiHelper.ResourceThumbnailUrl(resource);
 
-    private static string ResourceIcon(ManagedResourceModel resource) => NormalizeResourceKind(resource.Kind) switch
-    {
-        "image" => "fa-image",
-        "video" => "fa-play",
-        _ => "fa-file"
-    };
+    private static string ResourceIcon(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceIcon(resource);
 
     private string DisplayResourceKind(string kind) => NormalizeResourceKind(kind) switch
     {
@@ -937,12 +928,8 @@ else
         _ => T("FileResource")
     };
 
-    private static string NormalizeResourceKind(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
-    {
-        "image" or "gallery" => "image",
-        "video" or "webinar" => "video",
-        _ => "file"
-    };
+    private static string NormalizeResourceKind(string? value) =>
+        ResourceLibraryUiHelper.NormalizeKind(value);
 
     private static void ApplyManagedResource(ContentBodyItemModel item, ManagedResourceModel resource)
     {
@@ -1108,7 +1095,7 @@ else
     {
         if (IsImageResource)
         {
-            var managed = await ContentService.UploadResourceAsync(e.File);
+            var managed = await ContentService.UploadResourceAsync(e.File, "image");
             Http.Toast(managed.Message, managed.StatusCode);
             if (managed.Success && managed.Data is not null)
             {
@@ -1135,7 +1122,7 @@ else
     {
         if (!IsPageContent)
         {
-            var managed = await ContentService.UploadResourceAsync(e.File);
+            var managed = await ContentService.UploadResourceAsync(e.File, "file");
             Http.Toast(managed.Message, managed.StatusCode);
             if (managed.Success && managed.Data is not null)
                 SetPrimaryFileFromResource(managed.Data);
@@ -1183,7 +1170,7 @@ else
 
     private async Task UploadGalleryImage(ContentGalleryItemModel item, InputFileChangeEventArgs e)
     {
-        var managed = await ContentService.UploadResourceAsync(e.File);
+        var managed = await ContentService.UploadResourceAsync(e.File, "image");
         Http.Toast(managed.Message, managed.StatusCode);
         if (managed.Success && managed.Data is not null)
             SetGalleryItemFromResource(item, managed.Data);
@@ -1395,12 +1382,8 @@ else
     private string GetLang(Dictionary<string, string> values) =>
         GetValue(values, CurrentLang, fallback: true);
 
-    private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)
-    {
-        if (values.TryGetValue(lang, out var value) && !string.IsNullOrWhiteSpace(value))
-            return value;
-        return fallback && values.TryGetValue("en", out var en) ? en : string.Empty;
-    }
+    private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false) =>
+        ResourceLibraryUiHelper.GetValue(values, lang, fallback);
 
     private static string GetBodyText(Dictionary<string, string> values, string lang)
     {
@@ -1566,12 +1549,8 @@ else
         return value is "video" or "webinar" ? "video" : "image";
     }
 
-    private static string NormalizeLang(string? lang)
-    {
-        if (string.Equals(lang, "vi", StringComparison.OrdinalIgnoreCase)) return "vi";
-        if (string.Equals(lang, "cn", StringComparison.OrdinalIgnoreCase)) return "cn";
-        return "en";
-    }
+    private static string NormalizeLang(string? lang) =>
+        ResourceLibraryUiHelper.NormalizeLang(lang);
 
     private string GetReturnUrl()
     {

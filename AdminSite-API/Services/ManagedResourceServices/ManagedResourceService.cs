@@ -7,6 +7,8 @@ namespace FullProject.Services
 {
     public class ManagedResourceService
     {
+        private const string ManagedResourceSource = "ManagedResource";
+
         private readonly MongoDbContext _context;
         private readonly ManagedResourceValidationService _validation;
         private readonly ManagedResourceUsageService _usage;
@@ -65,6 +67,34 @@ namespace FullProject.Services
             return (resource, errors);
         }
 
+        public async Task<(ManagedResource? Resource, int UpdatedDocuments, List<string> Errors)> ReplaceUploadAsync(
+            string id,
+            string url,
+            string storageKey,
+            string kind,
+            string fileName,
+            string contentType,
+            long sizeBytes,
+            string actorId)
+        {
+            var resource = await GetByIdAsync(id);
+            if (resource is null) return (null, 0, ["Resource not found."]);
+
+            var normalizedKind = _validation.NormalizeKind(kind);
+            if (normalizedKind is null)
+                return (null, 0, ["Resource kind must be image, file, or video."]);
+            if (!string.Equals(resource.Kind, normalizedKind, StringComparison.OrdinalIgnoreCase))
+                return (null, 0, [$"Replacement file must be a {resource.Kind} resource."]);
+
+            var oldUrl = resource.Url;
+            var errors = _validation.ApplyUploadReplacement(resource, url, storageKey, fileName, contentType, sizeBytes, actorId);
+            if (errors.Count > 0) return (null, 0, errors);
+
+            await _context.ManagedResources.ReplaceOneAsync(r => r.Id == id, resource);
+            var updatedDocuments = await PropagateUploadReplacementAsync(resource, oldUrl);
+            return (resource, updatedDocuments, errors);
+        }
+
         public Task<Dictionary<string, int>> GetUsageCountsAsync(IEnumerable<ManagedResource> resources) =>
             _usage.GetUsageCountsAsync(resources);
 
@@ -97,7 +127,290 @@ namespace FullProject.Services
         public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes) =>
             _validation.BuildUploadCreateDto(url, storageKey, kind, fileName, contentType, sizeBytes);
 
+        public string? NormalizeKind(string? value, bool allowEmpty = false) =>
+            _validation.NormalizeKind(value, allowEmpty);
+
         public static string InferKindFromUpload(string fileName, string? contentType) =>
             ManagedResourceValidationService.InferKindFromUpload(fileName, contentType);
+
+        private async Task<int> PropagateUploadReplacementAsync(ManagedResource resource, string oldUrl)
+        {
+            var updated = 0;
+            updated += await PropagateContentReplacementAsync(_context.ContentDraft, resource, oldUrl);
+            updated += await PropagateContentReplacementAsync(_context.ContentPublished, resource, oldUrl);
+            updated += await PropagatePageReplacementAsync(_context.PagesDraft, resource, oldUrl);
+            updated += await PropagatePageReplacementAsync(_context.PagesPublished, resource, oldUrl);
+            updated += await PropagateSectionReplacementAsync(_context.SectionsDraft, resource, oldUrl);
+            updated += await PropagateSectionReplacementAsync(_context.SectionsPublished, resource, oldUrl);
+            updated += await PropagateBlockReplacementAsync(_context.BlocksDraft, resource, oldUrl);
+            updated += await PropagateBlockReplacementAsync(_context.BlocksPublished, resource, oldUrl);
+            updated += await PropagateBrandingReplacementAsync(resource, oldUrl);
+            return updated;
+        }
+
+        private async Task<int> PropagateContentReplacementAsync(
+            IMongoCollection<ContentItem> collection,
+            ManagedResource resource,
+            string oldUrl)
+        {
+            var items = await collection.Find(ContentReplacementFilter(resource, oldUrl)).ToListAsync();
+            var updated = 0;
+            foreach (var item in items)
+            {
+                if (!ReplaceContentReferences(item, resource, oldUrl)) continue;
+
+                item.UpdatedAt = DateTime.UtcNow;
+                await collection.ReplaceOneAsync(i => i.Id == item.Id, item);
+                updated++;
+            }
+
+            return updated;
+        }
+
+        private async Task<int> PropagatePageReplacementAsync(
+            IMongoCollection<Page> collection,
+            ManagedResource resource,
+            string oldUrl)
+        {
+            if (string.IsNullOrWhiteSpace(oldUrl)) return 0;
+
+            var pages = await collection
+                .Find(p => p.Card != null && p.Card.CardImageUrl == oldUrl)
+                .ToListAsync();
+            var updated = 0;
+            foreach (var page in pages)
+            {
+                if (page.Card is null || !ManagedResourceReferenceHelper.SameUrl(page.Card.CardImageUrl, oldUrl)) continue;
+
+                page.Card.CardImageUrl = resource.Url;
+                page.UpdatedAt = DateTime.UtcNow;
+                await collection.ReplaceOneAsync(p => p.Id == page.Id, page);
+                updated++;
+            }
+
+            return updated;
+        }
+
+        private async Task<int> PropagateSectionReplacementAsync(
+            IMongoCollection<Section> collection,
+            ManagedResource resource,
+            string oldUrl)
+        {
+            if (string.IsNullOrWhiteSpace(oldUrl)) return 0;
+
+            var sections = await collection.Find(SectionReplacementFilter(oldUrl)).ToListAsync();
+            var updated = 0;
+            foreach (var section in sections)
+            {
+                if (!ReplaceSectionReferences(section, resource, oldUrl)) continue;
+
+                section.UpdatedAt = DateTime.UtcNow;
+                await collection.ReplaceOneAsync(s => s.Id == section.Id, section);
+                updated++;
+            }
+
+            return updated;
+        }
+
+        private async Task<int> PropagateBlockReplacementAsync(
+            IMongoCollection<Block> collection,
+            ManagedResource resource,
+            string oldUrl)
+        {
+            if (string.IsNullOrWhiteSpace(oldUrl)) return 0;
+
+            var blocks = await collection.Find(BlockReplacementFilter(oldUrl)).ToListAsync();
+            var updated = 0;
+            foreach (var block in blocks)
+            {
+                if (!ReplaceBlockReferences(block, resource, oldUrl)) continue;
+
+                block.UpdatedAt = DateTime.UtcNow;
+                await collection.ReplaceOneAsync(b => b.Id == block.Id, block);
+                updated++;
+            }
+
+            return updated;
+        }
+
+        private async Task<int> PropagateBrandingReplacementAsync(ManagedResource resource, string oldUrl)
+        {
+            if (string.IsNullOrWhiteSpace(oldUrl)) return 0;
+
+            var brands = await _context.Branding.Find(b => b.LogoUrl == oldUrl).ToListAsync();
+            var updated = 0;
+            foreach (var brand in brands)
+            {
+                if (!ManagedResourceReferenceHelper.SameUrl(brand.LogoUrl, oldUrl)) continue;
+
+                brand.LogoUrl = resource.Url;
+                await _context.Branding.ReplaceOneAsync(b => b.Id == brand.Id, brand);
+                updated++;
+            }
+
+            return updated;
+        }
+
+        private static bool ReplaceContentReferences(ContentItem item, ManagedResource resource, string oldUrl)
+        {
+            var changed = false;
+
+            if (ManagedResourceReferenceHelper.MatchesManagedReference(item.HeroImageResourceId, item.HeroImageUrl, resource, oldUrl))
+            {
+                item.HeroImageUrl = resource.Url;
+                item.HeroImageResourceId = resource.Id;
+                item.HeroImageResourceSource = ManagedResourceSource;
+                item.HeroImageStorageKey = resource.StorageKey;
+                changed = true;
+            }
+
+            if (ManagedResourceReferenceHelper.MatchesManagedReference(item.ThumbnailResourceId, item.ThumbnailUrl, resource, oldUrl))
+            {
+                item.ThumbnailUrl = ThumbnailReplacementUrl(resource);
+                item.ThumbnailResourceId = resource.Id;
+                item.ThumbnailResourceSource = ManagedResourceSource;
+                item.ThumbnailStorageKey = resource.StorageKey;
+                changed = true;
+            }
+
+            if (ManagedResourceReferenceHelper.MatchesManagedReference(item.VideoResourceId, item.VideoUrl, resource, oldUrl))
+            {
+                item.VideoUrl = resource.Url;
+                item.VideoResourceId = resource.Id;
+                item.VideoResourceSource = ManagedResourceSource;
+                item.VideoStorageKey = resource.StorageKey;
+                changed = true;
+            }
+
+            foreach (var attachment in item.Attachments.Where(a => ManagedResourceReferenceHelper.MatchesManagedReference(a.ResourceId, a.Url, resource, oldUrl)))
+            {
+                attachment.Url = resource.Url;
+                attachment.ResourceId = resource.Id;
+                attachment.ResourceSource = ManagedResourceSource;
+                attachment.StorageKey = resource.StorageKey;
+                attachment.FileName = resource.FileName;
+                attachment.ContentType = resource.ContentType;
+                attachment.SizeBytes = resource.SizeBytes;
+                changed = true;
+            }
+
+            foreach (var bodyItem in item.BodyItems.Where(b => ManagedResourceReferenceHelper.MatchesManagedReference(b.ResourceId, b.Url, resource, oldUrl)))
+            {
+                bodyItem.Url = resource.Url;
+                bodyItem.ResourceId = resource.Id;
+                bodyItem.ResourceSource = ManagedResourceSource;
+                bodyItem.StorageKey = resource.StorageKey;
+                bodyItem.FileName = resource.FileName;
+                bodyItem.ContentType = resource.ContentType;
+                bodyItem.SizeBytes = resource.SizeBytes;
+                changed = true;
+            }
+
+            foreach (var galleryItem in item.GalleryItems.Where(g => ManagedResourceReferenceHelper.MatchesManagedReference(g.ResourceId, g.Url, resource, oldUrl)))
+            {
+                galleryItem.Url = resource.Url;
+                galleryItem.ResourceId = resource.Id;
+                galleryItem.ResourceSource = ManagedResourceSource;
+                galleryItem.StorageKey = resource.StorageKey;
+                if (string.Equals(resource.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                    ManagedResourceReferenceHelper.SameUrl(galleryItem.ThumbnailUrl, oldUrl))
+                {
+                    galleryItem.ThumbnailUrl = ThumbnailReplacementUrl(resource);
+                }
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private static bool ReplaceSectionReferences(Section section, ManagedResource resource, string oldUrl)
+        {
+            var changed = false;
+            if (ManagedResourceReferenceHelper.SameUrl(section.Style.BackgroundImageUrl, oldUrl))
+            {
+                section.Style.BackgroundImageUrl = resource.Url;
+                changed = true;
+            }
+            if (ManagedResourceReferenceHelper.SameUrl(section.Style.BackgroundVideoUrl, oldUrl))
+            {
+                section.Style.BackgroundVideoUrl = resource.Url;
+                changed = true;
+            }
+
+            switch (section)
+            {
+                case HeroSection hero when ManagedResourceReferenceHelper.SameUrl(hero.ImageUrl, oldUrl):
+                    hero.ImageUrl = resource.Url;
+                    changed = true;
+                    break;
+                case ListSection list:
+                    foreach (var item in list.Items.Where(i => ManagedResourceReferenceHelper.SameUrl(i.ImageUrl, oldUrl)))
+                    {
+                        item.ImageUrl = resource.Url;
+                        changed = true;
+                    }
+                    break;
+                case CarouselSection carousel:
+                    foreach (var item in carousel.Items.Where(i => ManagedResourceReferenceHelper.SameUrl(i.ImageUrl, oldUrl)))
+                    {
+                        item.ImageUrl = resource.Url;
+                        changed = true;
+                    }
+                    break;
+                case TestimonialSection testimonial:
+                    foreach (var item in testimonial.Items.Where(i => ManagedResourceReferenceHelper.SameUrl(i.ImageUrl, oldUrl)))
+                    {
+                        item.ImageUrl = resource.Url;
+                        changed = true;
+                    }
+                    break;
+                case ShowcaseSection showcase:
+                    foreach (var item in showcase.ItemOverrides.Where(i => ManagedResourceReferenceHelper.SameUrl(i.CardImageUrl, oldUrl)))
+                    {
+                        item.CardImageUrl = resource.Url;
+                        changed = true;
+                    }
+                    break;
+            }
+
+            return changed;
+        }
+
+        private static bool ReplaceBlockReferences(Block block, ManagedResource resource, string oldUrl)
+        {
+            switch (block)
+            {
+                case ImageBlock image when ManagedResourceReferenceHelper.SameUrl(image.ImageUrl, oldUrl):
+                    image.ImageUrl = resource.Url;
+                    return true;
+                case FileBlock file when ManagedResourceReferenceHelper.SameUrl(file.FileUrl, oldUrl):
+                    file.FileUrl = resource.Url;
+                    file.Filename = resource.FileName;
+                    file.FileType = resource.ContentType;
+                    return true;
+                case VideoBlock video when ManagedResourceReferenceHelper.SameUrl(video.EmbedUrl, oldUrl):
+                    video.EmbedUrl = resource.Url;
+                    return true;
+                case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.ImageUrl, oldUrl):
+                    card.ImageUrl = resource.Url;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static FilterDefinition<ContentItem> ContentReplacementFilter(ManagedResource resource, string oldUrl) =>
+            ManagedResourceReferenceHelper.ContentFilter(resource, oldUrl);
+
+        private static FilterDefinition<Section> SectionReplacementFilter(string oldUrl) =>
+            ManagedResourceReferenceHelper.SectionUrlFilter(oldUrl);
+
+        private static FilterDefinition<Block> BlockReplacementFilter(string oldUrl) =>
+            ManagedResourceReferenceHelper.BlockUrlFilter([oldUrl]);
+
+        private static string ThumbnailReplacementUrl(ManagedResource resource) =>
+            string.Equals(resource.Kind, "image", StringComparison.OrdinalIgnoreCase)
+                ? resource.Url
+                : resource.ThumbnailUrl ?? resource.Url;
     }
 }

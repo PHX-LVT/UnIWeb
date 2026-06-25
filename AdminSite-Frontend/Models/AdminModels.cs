@@ -596,6 +596,16 @@ namespace AdminSite.Models
         public string Preset { get; set; } = "navy-gold";
     }
 
+    public class ResourceLibrarySettingsModel
+    {
+        public int MaxImageMb { get; set; } = 20;
+        public int MaxFileMb { get; set; } = 100;
+        public int MaxVideoMb { get; set; } = 250;
+        public List<string> AllowedImageFormats { get; set; } = new() { "jpg", "jpeg", "png", "webp", "gif" };
+        public List<string> AllowedFileFormats { get; set; } = new() { "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt" };
+        public List<string> AllowedVideoFormats { get; set; } = new() { "mp4", "webm", "mov" };
+    }
+
     public class AdminAppearancePresetModel
     {
         public string Key { get; set; } = string.Empty;

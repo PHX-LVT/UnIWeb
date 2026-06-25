@@ -34,8 +34,8 @@ namespace FullProject.Services
             Title = item.Title,
             Summary = item.Summary,
             BodyHtml = item.BodyHtml,
-            BodyItems = item.BodyItems.Select(MapBodyItem).ToList(),
-            GalleryItems = item.GalleryItems.Select(MapGalleryItem).ToList(),
+            BodyItems = item.BodyItems.Select(ContentAssetMetadataService.ToDto).ToList(),
+            GalleryItems = item.GalleryItems.Select(ContentAssetMetadataService.ToDto).ToList(),
             HeroImageUrl = item.HeroImageUrl,
             HeroImageResourceId = item.HeroImageResourceId,
             HeroImageResourceSource = item.HeroImageResourceSource,
@@ -52,7 +52,7 @@ namespace FullProject.Services
             ExternalUrl = item.ExternalUrl,
             TemplateKey = item.TemplateKey,
             Tags = item.Tags,
-            Attachments = item.Attachments.Select(MapAttachment).ToList(),
+            Attachments = item.Attachments.Select(ContentAssetMetadataService.ToDto).ToList(),
             Status = item.Status,
             Visible = item.Visible,
             AuthorId = item.AuthorId,
@@ -132,50 +132,6 @@ namespace FullProject.Services
             UpdatedAt = publishedAt,
             SubmittedAt = item.SubmittedAt,
             PublishedAt = publishedAt
-        };
-
-        private static ContentAttachmentDto MapAttachment(ContentAttachment attachment) => new()
-        {
-            Id = attachment.Id,
-            FileName = attachment.FileName,
-            Url = attachment.Url,
-            ResourceId = attachment.ResourceId,
-            ResourceSource = attachment.ResourceSource,
-            StorageKey = attachment.StorageKey,
-            ContentType = attachment.ContentType,
-            SizeBytes = attachment.SizeBytes
-        };
-
-        private static ContentBodyItemDto MapBodyItem(ContentBodyItem item) => new()
-        {
-            Id = item.Id,
-            Type = item.Type,
-            Content = item.Content,
-            Caption = item.Caption,
-            Url = item.Url,
-            ResourceId = item.ResourceId,
-            ResourceSource = item.ResourceSource,
-            StorageKey = item.StorageKey,
-            FileName = item.FileName,
-            ContentType = item.ContentType,
-            SizeBytes = item.SizeBytes,
-            Style = item.Style,
-            Visible = item.Visible,
-            Order = item.Order
-        };
-
-        private static ContentGalleryItemDto MapGalleryItem(ContentGalleryItem item) => new()
-        {
-            Id = item.Id,
-            Kind = item.Kind,
-            Url = item.Url,
-            ThumbnailUrl = item.ThumbnailUrl,
-            ResourceId = item.ResourceId,
-            ResourceSource = item.ResourceSource,
-            StorageKey = item.StorageKey,
-            Caption = item.Caption,
-            Visible = item.Visible,
-            Order = item.Order
         };
 
         private static ContentBodyItem CloneBodyItem(ContentBodyItem item) => new()

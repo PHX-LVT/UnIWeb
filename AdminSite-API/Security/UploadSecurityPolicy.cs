@@ -1,9 +1,13 @@
+using FullProject.Models;
+
 namespace FullProject.Security
 {
     public static class UploadSecurityPolicy
     {
         public const string UnsupportedUploadMessage =
             "Only image, PDF, Word, Excel, PowerPoint, and text uploads are supported here.";
+        public const string UnsupportedManagedResourceUploadMessage =
+            "Resource Library uploads must match the selected type and allowed formats.";
         public const string UnsupportedFolderMessage =
             "Upload folder is not supported.";
         public const string InvalidSignatureMessage =
@@ -51,6 +55,27 @@ namespace FullProject.Security
                 ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".txt";
         }
 
+        public static bool IsAllowedManagedResourceUpload(
+            string fileName,
+            string? contentType,
+            string kind,
+            ResourceLibrarySettings settings)
+        {
+            var ext = NormalizeExtension(fileName);
+            if (string.IsNullOrWhiteSpace(ext)) return false;
+
+            var normalizedType = contentType?.Trim().ToLowerInvariant() ?? string.Empty;
+            return kind switch
+            {
+                "image" => settings.AllowedImageFormats.Contains(ext, StringComparer.OrdinalIgnoreCase) &&
+                           (normalizedType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) || KnownImageExtensions.Contains(ext)),
+                "video" => settings.AllowedVideoFormats.Contains(ext, StringComparer.OrdinalIgnoreCase) &&
+                           (normalizedType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) || KnownVideoExtensions.Contains(ext)),
+                _ => settings.AllowedFileFormats.Contains(ext, StringComparer.OrdinalIgnoreCase) &&
+                     KnownFileExtensions.Contains(ext)
+            };
+        }
+
         public static bool IsAllowedFolder(string? folder) =>
             !string.IsNullOrWhiteSpace(folder) && AllowedFolders.Contains(folder.Trim());
 
@@ -65,6 +90,22 @@ namespace FullProject.Security
             if (read <= 0) return false;
 
             return HasAllowedSignature(sample, read, fileName, contentType);
+        }
+
+        public static async Task<bool> HasAllowedManagedResourceSignatureAsync(
+            Stream stream,
+            string fileName,
+            string? contentType,
+            string kind,
+            CancellationToken cancellationToken = default)
+        {
+            var sample = new byte[Math.Min(512, stream.CanSeek ? (int)Math.Min(stream.Length, 512) : 512)];
+            var read = await stream.ReadAsync(sample.AsMemory(0, sample.Length), cancellationToken);
+            if (read <= 0) return false;
+
+            return kind == "video"
+                ? HasAllowedVideoSignature(sample, read, fileName, contentType)
+                : HasAllowedSignature(sample, read, fileName, contentType);
         }
 
         private static bool HasAllowedSignature(byte[] sample, int read, string fileName, string? contentType)
@@ -111,6 +152,43 @@ namespace FullProject.Security
 
             return false;
         }
+
+        private static bool HasAllowedVideoSignature(byte[] sample, int read, string fileName, string? contentType)
+        {
+            var bytes = sample.AsSpan(0, read);
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            var normalized = contentType?.Trim().ToLowerInvariant() ?? string.Empty;
+
+            if (ext == ".webm" || normalized == "video/webm")
+                return StartsWith(bytes, [0x1A, 0x45, 0xDF, 0xA3]);
+
+            if (ext is ".mp4" or ".mov" ||
+                normalized is "video/mp4" or "video/quicktime")
+            {
+                return bytes.Length >= 12 &&
+                       bytes.Slice(4, 4).SequenceEqual("ftyp"u8);
+            }
+
+            return false;
+        }
+
+        private static readonly HashSet<string> KnownImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "jpg", "jpeg", "png", "webp", "gif"
+        };
+
+        private static readonly HashSet<string> KnownFileExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"
+        };
+
+        private static readonly HashSet<string> KnownVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "mp4", "webm", "mov"
+        };
+
+        private static string NormalizeExtension(string fileName) =>
+            Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
 
         private static bool StartsWith(ReadOnlySpan<byte> bytes, ReadOnlySpan<byte> signature) =>
             bytes.Length >= signature.Length && bytes[..signature.Length].SequenceEqual(signature);

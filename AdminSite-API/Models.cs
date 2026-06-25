@@ -1288,6 +1288,17 @@ namespace FullProject.Models
     }
 
     [BsonIgnoreExtraElements]
+    public class ResourceLibrarySettings
+    {
+        public long MaxImageBytes { get; set; } = 20L * 1024 * 1024;
+        public long MaxFileBytes { get; set; } = 100L * 1024 * 1024;
+        public long MaxVideoBytes { get; set; } = 250L * 1024 * 1024;
+        public List<string> AllowedImageFormats { get; set; } = new() { "jpg", "jpeg", "png", "webp", "gif" };
+        public List<string> AllowedFileFormats { get; set; } = new() { "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt" };
+        public List<string> AllowedVideoFormats { get; set; } = new() { "mp4", "webm", "mov" };
+    }
+
+    [BsonIgnoreExtraElements]
     public class SiteSettings
     {
         [BsonId]
@@ -1304,6 +1315,7 @@ namespace FullProject.Models
         public string DefaultLanguage { get; set; } = "en";
         public int LanguageRegistryVersion { get; set; } = 1;
         public string AdminAppearancePreset { get; set; } = "navy-gold";
+        public ResourceLibrarySettings ResourceLibrary { get; set; } = new();
     }
 
     public class GlossaryTerm

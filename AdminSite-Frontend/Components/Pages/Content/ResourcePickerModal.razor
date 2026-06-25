@@ -17,6 +17,33 @@
                            placeholder="@T("SearchResources")"
                            value="@_search"
                            @oninput="OnSearchChanged" />
+                    @if (GroupFilterOptions.Any())
+                    {
+                        <select class="form-control"
+                                style="min-width:190px"
+                                value="@_groupFilter"
+                                @onchange="OnGroupFilterChanged">
+                            <option value="">@T("AllGroups")</option>
+                            @if (GroupFilterOptions.Any(o => o.Scope == "media"))
+                            {
+                                <optgroup label="@T("MediaGroups")">
+                                    @foreach (var option in GroupFilterOptions.Where(o => o.Scope == "media"))
+                                    {
+                                        <option value="@option.Key">@option.Name (@option.Count)</option>
+                                    }
+                                </optgroup>
+                            }
+                            @if (GroupFilterOptions.Any(o => o.Scope == "file"))
+                            {
+                                <optgroup label="@T("FileGroups")">
+                                    @foreach (var option in GroupFilterOptions.Where(o => o.Scope == "file"))
+                                    {
+                                        <option value="@option.Key">@option.Name (@option.Count)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    }
                     <a class="btn-admin btn-ghost" href="/content/resources" target="_blank" rel="noopener">
                         <i class="fas fa-up-right-from-square"></i> @T("ResourceLibrary")
                     </a>
@@ -27,14 +54,14 @@
                 {
                     <p class="text-muted">@T("Loading")</p>
                 }
-                else if (!_resources.Any())
+                else if (!FilteredResources.Any())
                 {
                     <p class="text-muted">@T("NoMatchingResources")</p>
                 }
                 else
                 {
                     <div class="content-resource-picker__grid">
-                        @foreach (var resource in _resources)
+                        @foreach (var resource in FilteredResources)
                         {
                             <article class="content-resource-picker__item" @key="resource.Id">
                                 <span class="content-resource-picker__thumb">
@@ -83,10 +110,13 @@
     private bool _loading;
     private string _loadedKind = string.Empty;
     private string _search = string.Empty;
+    private string _groupFilter = string.Empty;
     private List<ManagedResourceModel> _resources = new();
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
+    private IEnumerable<ManagedResourceModel> FilteredResources => _resources.Where(MatchesGroupFilter);
+    private List<ResourceGroupFilterOption> GroupFilterOptions => ResourceLibraryUiHelper.BuildGroupFilterOptions(_resources);
     private string PickerTitle => NormalizeKind(Kind) switch
     {
         "image" => T("ChooseImageResource"),
@@ -101,11 +131,15 @@
         {
             _loadedKind = normalizedKind;
             _search = string.Empty;
+            _groupFilter = string.Empty;
             await LoadResources();
         }
 
         if (!Open)
+        {
             _resources = new();
+            _groupFilter = string.Empty;
+        }
 
         _wasOpen = Open;
     }
@@ -115,7 +149,10 @@
         _loading = true;
         var res = await ContentService.GetResourcesAsync(_loadedKind, _search, includeInactive: false);
         if (res.Success)
+        {
             _resources = (res.Data ?? new()).Where(r => r.Active).ToList();
+            ValidateGroupFilter();
+        }
         else
         {
             _resources = new();
@@ -130,6 +167,12 @@
         await LoadResources();
     }
 
+    private void OnGroupFilterChanged(ChangeEventArgs e)
+    {
+        _groupFilter = e.Value?.ToString() ?? string.Empty;
+        ValidateGroupFilter();
+    }
+
     private async Task Choose(ManagedResourceModel resource)
     {
         await ResourceSelected.InvokeAsync(resource);
@@ -142,28 +185,17 @@
         await Closed.InvokeAsync();
     }
 
-    private string ResourceName(ManagedResourceModel resource)
-    {
-        var name = GetValue(resource.Name, CurrentLang, fallback: true);
-        if (!string.IsNullOrWhiteSpace(name)) return name;
-        if (!string.IsNullOrWhiteSpace(resource.FileName)) return resource.FileName;
-        return resource.Url.Split('/').LastOrDefault() ?? T("Resource");
-    }
+    private string ResourceName(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceName(resource, CurrentLang);
 
     private string ResourceDescription(ManagedResourceModel resource) =>
-        GetValue(resource.Description, CurrentLang, fallback: true);
+        ResourceLibraryUiHelper.ResourceDescription(resource, CurrentLang);
 
     private static string ResourceThumbnailUrl(ManagedResourceModel resource) =>
-        !string.IsNullOrWhiteSpace(resource.ThumbnailUrl)
-            ? resource.ThumbnailUrl!
-            : NormalizeKind(resource.Kind) == "image" ? resource.Url : string.Empty;
+        ResourceLibraryUiHelper.ResourceThumbnailUrl(resource);
 
-    private static string ResourceIcon(ManagedResourceModel resource) => NormalizeKind(resource.Kind) switch
-    {
-        "image" => "fa-image",
-        "video" => "fa-play",
-        _ => "fa-file"
-    };
+    private static string ResourceIcon(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceIcon(resource);
 
     private string DisplayResourceKind(string kind) => NormalizeKind(kind) switch
     {
@@ -172,25 +204,19 @@
         _ => T("FileResource")
     };
 
-    private static string NormalizeKind(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
-    {
-        "image" or "gallery" => "image",
-        "video" or "webinar" => "video",
-        _ => "file"
-    };
+    private bool MatchesGroupFilter(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.MatchesGroupFilter(resource, _groupFilter);
 
-    private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)
+    private void ValidateGroupFilter()
     {
-        if (values.TryGetValue(lang, out var value) && !string.IsNullOrWhiteSpace(value))
-            return value;
-        return fallback && values.TryGetValue("en", out var en) ? en : string.Empty;
+        if (string.IsNullOrWhiteSpace(_groupFilter)) return;
+        if (!GroupFilterOptions.Any(option => string.Equals(option.Key, _groupFilter, StringComparison.OrdinalIgnoreCase)))
+            _groupFilter = string.Empty;
     }
 
-    private static string NormalizeLang(string? lang)
-    {
-        lang = (lang ?? string.Empty).Trim().ToLowerInvariant();
-        return string.IsNullOrWhiteSpace(lang)
-            ? "en"
-            : string.Concat(lang.Where(c => char.IsLetterOrDigit(c) || c == '-'));
-    }
+    private static string NormalizeKind(string? value) =>
+        ResourceLibraryUiHelper.NormalizeKind(value);
+
+    private static string NormalizeLang(string? lang) =>
+        ResourceLibraryUiHelper.NormalizeLang(lang);
 }

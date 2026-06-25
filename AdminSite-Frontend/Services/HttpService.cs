@@ -16,7 +16,7 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> GetAsync<T>(string uri);
         Task<ApiResponse<T>> PostAsync<T>(string uri, object body);
         Task<ApiResponse<T>> PutAsync<T>(string uri, object body);
-                Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024);
+        Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         void Toast(string? message, int statusCode);
     }
@@ -62,12 +62,20 @@ namespace AdminSite.Services
                 Content = Json(body)
             });
 
-        public async Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024)
+        public async Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null)
         {
             var content = new MultipartFormDataContent();
             var fileContent = new StreamContent(file.OpenReadStream(maxBytes));
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
             content.Add(fileContent, fieldName, file.Name);
+            if (formFields is not null)
+            {
+                foreach (var field in formFields)
+                {
+                    if (!string.IsNullOrWhiteSpace(field.Key))
+                        content.Add(new StringContent(field.Value ?? string.Empty), field.Key);
+                }
+            }
 
             return await SendAsync<T>(new HttpRequestMessage(HttpMethod.Post, uri)
             {

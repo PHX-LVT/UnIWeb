@@ -107,6 +107,7 @@ namespace FullProject.Services
                 settings.DefaultLanguage = settings.Languages.First(l => l.Active).Slug;
 
             settings.AdminAppearancePreset = NormalizeAdminAppearancePreset(settings.AdminAppearancePreset);
+            settings.ResourceLibrary = NormalizeResourceLibrarySettings(settings.ResourceLibrary);
             settings.LanguageRegistryVersion = 1;
             return settings;
         }
@@ -139,6 +140,101 @@ namespace FullProject.Services
                 _ => "navy-gold"
             };
         }
+
+        public async Task<ResourceLibrarySettings> GetResourceLibrarySettingsAsync()
+        {
+            var settings = await GetAsync();
+            return NormalizeResourceLibrarySettings(settings.ResourceLibrary);
+        }
+
+        public async Task<ResourceLibrarySettings> UpdateResourceLibrarySettingsAsync(ResourceLibrarySettingsUpdateDto dto)
+        {
+            var settings = await GetAsync();
+            var current = NormalizeResourceLibrarySettings(settings.ResourceLibrary);
+            var updated = new ResourceLibrarySettings
+            {
+                MaxImageBytes = ToBytes(dto.MaxImageMb, current.MaxImageBytes, minMb: 1, maxMb: 100),
+                MaxFileBytes = ToBytes(dto.MaxFileMb, current.MaxFileBytes, minMb: 1, maxMb: 500),
+                MaxVideoBytes = ToBytes(dto.MaxVideoMb, current.MaxVideoBytes, minMb: 1, maxMb: 2048),
+                AllowedImageFormats = NormalizeFormats(dto.AllowedImageFormats, DefaultImageFormats, DefaultImageFormats),
+                AllowedFileFormats = NormalizeFormats(dto.AllowedFileFormats, DefaultFileFormats, DefaultFileFormats),
+                AllowedVideoFormats = NormalizeFormats(dto.AllowedVideoFormats, DefaultVideoFormats, DefaultVideoFormats)
+            };
+
+            updated = NormalizeResourceLibrarySettings(updated);
+            await _settings.UpdateOneAsync(s => s.Id == settings.Id,
+                Builders<SiteSettings>.Update.Set(s => s.ResourceLibrary, updated));
+            return updated;
+        }
+
+        public static ResourceLibrarySettingsDto ToResourceLibrarySettingsDto(ResourceLibrarySettings settings)
+        {
+            settings = NormalizeResourceLibrarySettings(settings);
+            return new ResourceLibrarySettingsDto
+            {
+                MaxImageMb = ToMegabytes(settings.MaxImageBytes),
+                MaxFileMb = ToMegabytes(settings.MaxFileBytes),
+                MaxVideoMb = ToMegabytes(settings.MaxVideoBytes),
+                AllowedImageFormats = settings.AllowedImageFormats.ToList(),
+                AllowedFileFormats = settings.AllowedFileFormats.ToList(),
+                AllowedVideoFormats = settings.AllowedVideoFormats.ToList()
+            };
+        }
+
+        private static readonly string[] DefaultImageFormats = ["jpg", "jpeg", "png", "webp", "gif"];
+        private static readonly string[] DefaultFileFormats = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"];
+        private static readonly string[] DefaultVideoFormats = ["mp4", "webm", "mov"];
+
+        private static ResourceLibrarySettings NormalizeResourceLibrarySettings(ResourceLibrarySettings? settings)
+        {
+            settings ??= new ResourceLibrarySettings();
+            settings.MaxImageBytes = ClampBytes(settings.MaxImageBytes, 1, 100, 20);
+            settings.MaxFileBytes = ClampBytes(settings.MaxFileBytes, 1, 500, 100);
+            settings.MaxVideoBytes = ClampBytes(settings.MaxVideoBytes, 1, 2048, 250);
+            settings.AllowedImageFormats = NormalizeFormats(settings.AllowedImageFormats, DefaultImageFormats, DefaultImageFormats);
+            settings.AllowedFileFormats = NormalizeFormats(settings.AllowedFileFormats, DefaultFileFormats, DefaultFileFormats);
+            settings.AllowedVideoFormats = NormalizeFormats(settings.AllowedVideoFormats, DefaultVideoFormats, DefaultVideoFormats);
+            return settings;
+        }
+
+        private static long ClampBytes(long bytes, int minMb, int maxMb, int fallbackMb)
+        {
+            if (bytes <= 0) return fallbackMb * 1024L * 1024L;
+            var mb = Math.Clamp((int)Math.Ceiling(bytes / 1024d / 1024d), minMb, maxMb);
+            return mb * 1024L * 1024L;
+        }
+
+        private static long ToBytes(int? mb, long fallbackBytes, int minMb, int maxMb)
+        {
+            if (mb is null) return fallbackBytes;
+            var clamped = Math.Clamp(mb.Value, minMb, maxMb);
+            return clamped * 1024L * 1024L;
+        }
+
+        private static int ToMegabytes(long bytes) =>
+            Math.Max(1, (int)Math.Ceiling(bytes / 1024d / 1024d));
+
+        private static List<string> NormalizeFormats(IEnumerable<string>? source, IEnumerable<string> allowed, IEnumerable<string> fallback)
+        {
+            var allowedSet = allowed
+                .Select(NormalizeFormat)
+                .Where(f => !string.IsNullOrWhiteSpace(f))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var values = (source ?? [])
+                .Select(NormalizeFormat)
+                .Where(f => allowedSet.Contains(f))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(f => f)
+                .ToList();
+
+            return values.Count > 0
+                ? values
+                : fallback.Select(NormalizeFormat).Where(f => !string.IsNullOrWhiteSpace(f)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private static string NormalizeFormat(string? value) =>
+            (value ?? string.Empty).Trim().TrimStart('.').ToLowerInvariant();
 
         private static List<LanguageSetting> NormalizeLanguages(List<LanguageCreateDto> source, string fallback)
         {

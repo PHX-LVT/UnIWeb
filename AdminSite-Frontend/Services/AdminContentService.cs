@@ -90,8 +90,20 @@ namespace AdminSite.Services
         public Task<ApiResponse<object>> DeleteResourceAsync(string id) =>
             _http.DeleteAsync<object>($"api/admin/resources/{id}");
 
-        public Task<ApiResponse<ManagedResourceModel>> UploadResourceAsync(Microsoft.AspNetCore.Components.Forms.IBrowserFile file) =>
-            _http.PostFileAsync<ManagedResourceModel>("api/admin/resources/upload", file, maxBytes: 20 * 1024 * 1024);
+        public Task<ApiResponse<ManagedResourceModel>> UploadResourceAsync(Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string kind) =>
+            _http.PostFileAsync<ManagedResourceModel>(
+                "api/admin/resources/upload",
+                file,
+                maxBytes: 250 * 1024 * 1024,
+                formFields: new Dictionary<string, string> { ["Kind"] = kind });
+
+        public Task<ApiResponse<ManagedResourceModel>> ReplaceResourceFileAsync(string id, Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string kind) =>
+            _http.PostFileAsync<ManagedResourceModel>(
+                $"api/admin/resources/{id}/replace",
+                file,
+                maxBytes: 250 * 1024 * 1024,
+                formFields: new Dictionary<string, string> { ["Kind"] = kind });
+
         public Task<ApiResponse<List<ContentAuditLogModel>>> GetLogsAsync(string stableId) =>
             _http.GetAsync<List<ContentAuditLogModel>>($"api/admin/content/{stableId}/logs");
     }

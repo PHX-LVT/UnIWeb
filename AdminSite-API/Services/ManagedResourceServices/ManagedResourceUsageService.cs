@@ -3,7 +3,6 @@ using FullProject.DTOs;
 using FullProject.Models;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
-using SharedComponents.Helpers;
 
 namespace FullProject.Services
 {
@@ -59,7 +58,7 @@ namespace FullProject.Services
             ManagedResource resource,
             string source)
         {
-            var filter = ContentUsageFilter(resource);
+            var filter = ManagedResourceReferenceHelper.ContentFilter(resource, resource.Url);
             var items = await collection.Find(filter).ToListAsync();
             return items.SelectMany(item => BuildContentReferences(item, resource, source)).ToList();
         }
@@ -67,7 +66,7 @@ namespace FullProject.Services
         private async Task<List<ManagedResourceUsageReferenceDto>> GetContentRevisionUsageAsync(ManagedResource resource)
         {
             var revisions = await _context.ContentRevisions
-                .Find(ContentRevisionUsageFilter(resource))
+                .Find(ManagedResourceReferenceHelper.ContentRevisionFilter(resource, resource.Url))
                 .ToListAsync();
 
             var references = new List<ManagedResourceUsageReferenceDto>();
@@ -120,39 +119,39 @@ namespace FullProject.Services
             string source)
         {
             if (string.IsNullOrWhiteSpace(resource.Url)) return new();
-            var sections = await collection.Find(SectionUsageFilter(resource.Url)).ToListAsync();
+            var sections = await collection.Find(ManagedResourceReferenceHelper.SectionUrlFilter(resource.Url)).ToListAsync();
             var references = new List<ManagedResourceUsageReferenceDto>();
 
             foreach (var section in sections)
             {
-                if (MatchesUrl(section.Style.BackgroundImageUrl, resource.Url))
+                if (ManagedResourceReferenceHelper.SameUrl(section.Style.BackgroundImageUrl, resource.Url))
                     references.Add(UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Background image", string.Empty, section.UpdatedAt));
-                if (MatchesUrl(section.Style.BackgroundVideoUrl, resource.Url))
+                if (ManagedResourceReferenceHelper.SameUrl(section.Style.BackgroundVideoUrl, resource.Url))
                     references.Add(UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Background video", string.Empty, section.UpdatedAt));
 
                 switch (section)
                 {
-                    case HeroSection hero when MatchesUrl(hero.ImageUrl, resource.Url):
+                    case HeroSection hero when ManagedResourceReferenceHelper.SameUrl(hero.ImageUrl, resource.Url):
                         references.Add(UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Hero image", string.Empty, section.UpdatedAt));
                         break;
                     case ListSection list:
                         references.AddRange(list.Items
-                            .Where(item => MatchesUrl(item.ImageUrl, resource.Url))
+                            .Where(item => ManagedResourceReferenceHelper.SameUrl(item.ImageUrl, resource.Url))
                             .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "List item image", FirstText(item.Title), section.UpdatedAt)));
                         break;
                     case CarouselSection carousel:
                         references.AddRange(carousel.Items
-                            .Where(item => MatchesUrl(item.ImageUrl, resource.Url))
+                            .Where(item => ManagedResourceReferenceHelper.SameUrl(item.ImageUrl, resource.Url))
                             .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Carousel item image", FirstText(item.Title), section.UpdatedAt)));
                         break;
                     case TestimonialSection testimonial:
                         references.AddRange(testimonial.Items
-                            .Where(item => MatchesUrl(item.ImageUrl, resource.Url))
+                            .Where(item => ManagedResourceReferenceHelper.SameUrl(item.ImageUrl, resource.Url))
                             .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Testimonial image", FirstText(item.Title), section.UpdatedAt)));
                         break;
                     case ShowcaseSection showcase:
                         references.AddRange(showcase.ItemOverrides
-                            .Where(item => MatchesUrl(item.CardImageUrl, resource.Url))
+                            .Where(item => ManagedResourceReferenceHelper.SameUrl(item.CardImageUrl, resource.Url))
                             .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Showcase override image", FirstText(item.CardTitle), section.UpdatedAt)));
                         break;
                 }
@@ -167,23 +166,23 @@ namespace FullProject.Services
             string source)
         {
             if (string.IsNullOrWhiteSpace(resource.Url)) return new();
-            var blocks = await collection.Find(BlockUsageFilter(resource)).ToListAsync();
+            var blocks = await collection.Find(ManagedResourceReferenceHelper.BlockUrlFilter(ManagedResourceReferenceHelper.ResourceUrlVariants(resource.Url))).ToListAsync();
             var references = new List<ManagedResourceUsageReferenceDto>();
 
             foreach (var block in blocks)
             {
                 switch (block)
                 {
-                    case ImageBlock image when MatchesUrl(image.ImageUrl, resource.Url):
+                    case ImageBlock image when ManagedResourceReferenceHelper.SameUrl(image.ImageUrl, resource.Url):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, FirstText(image.AltText), "Image block", string.Empty, block.UpdatedAt));
                         break;
-                    case FileBlock file when MatchesUrl(file.FileUrl, resource.Url):
+                    case FileBlock file when ManagedResourceReferenceHelper.SameUrl(file.FileUrl, resource.Url):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, file.Filename, "File block", file.FileType, block.UpdatedAt));
                         break;
-                    case VideoBlock video when MatchesAnyUrl(video.EmbedUrl, ResourceUrlVariants(resource.Url)):
+                    case VideoBlock video when ManagedResourceReferenceHelper.MatchesAnyUrl(video.EmbedUrl, ManagedResourceReferenceHelper.ResourceUrlVariants(resource.Url)):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, FirstText(video.Title), "Video block", string.Empty, block.UpdatedAt));
                         break;
-                    case CardBlock card when MatchesUrl(card.ImageUrl, resource.Url):
+                    case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.ImageUrl, resource.Url):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, FirstText(card.Title), "Card block image", string.Empty, block.UpdatedAt));
                         break;
                 }
@@ -204,20 +203,20 @@ namespace FullProject.Services
             ManagedResource resource,
             string source)
         {
-            if (MatchesResource(item.HeroImageResourceId, item.HeroImageUrl, resource))
+            if (ManagedResourceReferenceHelper.MatchesResource(item.HeroImageResourceId, item.HeroImageUrl, resource))
                 yield return ContentRef(item, resource, source, "Hero image", string.Empty);
-            if (MatchesResource(item.ThumbnailResourceId, item.ThumbnailUrl, resource))
+            if (ManagedResourceReferenceHelper.MatchesResource(item.ThumbnailResourceId, item.ThumbnailUrl, resource))
                 yield return ContentRef(item, resource, source, "Thumbnail", string.Empty);
-            if (MatchesResource(item.VideoResourceId, item.VideoUrl, resource))
+            if (ManagedResourceReferenceHelper.MatchesResource(item.VideoResourceId, item.VideoUrl, resource))
                 yield return ContentRef(item, resource, source, "Video", string.Empty);
 
-            foreach (var attachment in item.Attachments.Where(a => MatchesResource(a.ResourceId, a.Url, resource)))
+            foreach (var attachment in item.Attachments.Where(a => ManagedResourceReferenceHelper.MatchesResource(a.ResourceId, a.Url, resource)))
                 yield return ContentRef(item, resource, source, "Attachment", attachment.FileName);
 
-            foreach (var bodyItem in item.BodyItems.Where(b => MatchesResource(b.ResourceId, b.Url, resource)))
+            foreach (var bodyItem in item.BodyItems.Where(b => ManagedResourceReferenceHelper.MatchesResource(b.ResourceId, b.Url, resource)))
                 yield return ContentRef(item, resource, source, "Body media", bodyItem.FileName ?? FirstText(bodyItem.Caption));
 
-            foreach (var galleryItem in item.GalleryItems.Where(g => MatchesResource(g.ResourceId, g.Url, resource)))
+            foreach (var galleryItem in item.GalleryItems.Where(g => ManagedResourceReferenceHelper.MatchesResource(g.ResourceId, g.Url, resource)))
                 yield return ContentRef(item, resource, source, "Gallery item", FirstText(galleryItem.Caption));
         }
 
@@ -250,102 +249,6 @@ namespace FullProject.Services
                 Status = status,
                 UpdatedAt = updatedAt
             };
-
-        private static FilterDefinition<ContentItem> ContentUsageFilter(ManagedResource resource)
-        {
-            var filters = new List<FilterDefinition<ContentItem>>
-            {
-                Builders<ContentItem>.Filter.Eq(c => c.HeroImageResourceId, resource.Id),
-                Builders<ContentItem>.Filter.Eq(c => c.ThumbnailResourceId, resource.Id),
-                Builders<ContentItem>.Filter.Eq(c => c.VideoResourceId, resource.Id),
-                Builders<ContentItem>.Filter.Eq("Attachments.ResourceId", resource.Id),
-                Builders<ContentItem>.Filter.Eq("BodyItems.ResourceId", resource.Id),
-                Builders<ContentItem>.Filter.Eq("GalleryItems.ResourceId", resource.Id)
-            };
-
-            if (!string.IsNullOrWhiteSpace(resource.Url))
-            {
-                filters.Add(Builders<ContentItem>.Filter.Eq(c => c.HeroImageUrl, resource.Url));
-                filters.Add(Builders<ContentItem>.Filter.Eq(c => c.ThumbnailUrl, resource.Url));
-                filters.Add(Builders<ContentItem>.Filter.Eq(c => c.VideoUrl, resource.Url));
-                filters.Add(Builders<ContentItem>.Filter.Eq("Attachments.Url", resource.Url));
-                filters.Add(Builders<ContentItem>.Filter.Eq("BodyItems.Url", resource.Url));
-                filters.Add(Builders<ContentItem>.Filter.Eq("GalleryItems.Url", resource.Url));
-            }
-
-            return Builders<ContentItem>.Filter.Or(filters);
-        }
-
-        private static FilterDefinition<ContentRevision> ContentRevisionUsageFilter(ManagedResource resource)
-        {
-            var filters = new List<FilterDefinition<ContentRevision>>
-            {
-                Builders<ContentRevision>.Filter.Eq("Snapshot.HeroImageResourceId", resource.Id),
-                Builders<ContentRevision>.Filter.Eq("Snapshot.ThumbnailResourceId", resource.Id),
-                Builders<ContentRevision>.Filter.Eq("Snapshot.VideoResourceId", resource.Id),
-                Builders<ContentRevision>.Filter.Eq("Snapshot.Attachments.ResourceId", resource.Id),
-                Builders<ContentRevision>.Filter.Eq("Snapshot.BodyItems.ResourceId", resource.Id),
-                Builders<ContentRevision>.Filter.Eq("Snapshot.GalleryItems.ResourceId", resource.Id)
-            };
-
-            if (!string.IsNullOrWhiteSpace(resource.Url))
-            {
-                filters.Add(Builders<ContentRevision>.Filter.Eq("Snapshot.HeroImageUrl", resource.Url));
-                filters.Add(Builders<ContentRevision>.Filter.Eq("Snapshot.ThumbnailUrl", resource.Url));
-                filters.Add(Builders<ContentRevision>.Filter.Eq("Snapshot.VideoUrl", resource.Url));
-                filters.Add(Builders<ContentRevision>.Filter.Eq("Snapshot.Attachments.Url", resource.Url));
-                filters.Add(Builders<ContentRevision>.Filter.Eq("Snapshot.BodyItems.Url", resource.Url));
-                filters.Add(Builders<ContentRevision>.Filter.Eq("Snapshot.GalleryItems.Url", resource.Url));
-            }
-
-            return Builders<ContentRevision>.Filter.Or(filters);
-        }
-
-        private static FilterDefinition<Section> SectionUsageFilter(string url) =>
-            Builders<Section>.Filter.Or(
-                Builders<Section>.Filter.Eq("Style.BackgroundImageUrl", url),
-                Builders<Section>.Filter.Eq("Style.BackgroundVideoUrl", url),
-                Builders<Section>.Filter.Eq("ImageUrl", url),
-                Builders<Section>.Filter.Eq("Items.ImageUrl", url),
-                Builders<Section>.Filter.Eq("ItemOverrides.CardImageUrl", url));
-
-        private static FilterDefinition<Block> BlockUsageFilter(ManagedResource resource)
-        {
-            var filters = ResourceUrlVariants(resource.Url)
-                .SelectMany(url => new[]
-                {
-                    Builders<Block>.Filter.Eq("ImageUrl", url),
-                    Builders<Block>.Filter.Eq("FileUrl", url),
-                    Builders<Block>.Filter.Eq("EmbedUrl", url)
-                })
-                .ToList();
-
-            return Builders<Block>.Filter.Or(filters);
-        }
-
-        private static bool MatchesResource(string? resourceId, string? url, ManagedResource resource) =>
-            string.Equals(resourceId, resource.Id, StringComparison.OrdinalIgnoreCase) ||
-            MatchesUrl(url, resource.Url);
-
-        private static bool MatchesUrl(string? value, string? resourceUrl) =>
-            !string.IsNullOrWhiteSpace(value) &&
-            !string.IsNullOrWhiteSpace(resourceUrl) &&
-            string.Equals(value.Trim(), resourceUrl.Trim(), StringComparison.OrdinalIgnoreCase);
-
-        private static bool MatchesAnyUrl(string? value, IEnumerable<string> urls) =>
-            urls.Any(url => MatchesUrl(value, url));
-
-        private static List<string> ResourceUrlVariants(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return new();
-
-            var variants = new List<string> { value.Trim() };
-            var embedUrl = VideoUrlHelper.ToEmbedUrl(value);
-            if (!string.IsNullOrWhiteSpace(embedUrl) && !variants.Contains(embedUrl, StringComparer.OrdinalIgnoreCase))
-                variants.Add(embedUrl);
-
-            return variants;
-        }
 
         private static string FirstText(Dictionary<string, string>? values)
         {

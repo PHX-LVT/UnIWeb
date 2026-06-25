@@ -38,6 +38,14 @@ namespace FullProject.Services
 
         public List<string> ApplyUpdate(ManagedResource resource, ManagedResourceUpdateDto dto, string actorId)
         {
+            var originalKind = resource.Kind;
+            var originalUrl = resource.Url;
+            var originalStorageKey = resource.StorageKey;
+            var originalFileName = resource.FileName;
+            var originalContentType = resource.ContentType;
+            var originalSizeBytes = resource.SizeBytes;
+            var originalSource = resource.Source;
+
             if (dto.Kind is not null) resource.Kind = NormalizeKind(dto.Kind) ?? resource.Kind;
             if (dto.Name is not null) resource.Name = NormalizeLang(dto.Name);
             if (dto.Description is not null) resource.Description = NormalizeLang(dto.Description, requireEnglish: false);
@@ -50,6 +58,57 @@ namespace FullProject.Services
             if (dto.Source is not null) resource.Source = NormalizeSource(dto.Source);
             if (dto.Tags is not null) resource.Tags = NormalizeTags(dto.Tags);
             if (dto.Active is not null) resource.Active = dto.Active.Value;
+            resource.UpdatedById = actorId;
+            resource.UpdatedAt = DateTime.UtcNow;
+
+            var errors = Validate(resource);
+            if (!string.Equals(originalKind, "video", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(resource.Kind, "video", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add("Create Resource Library videos by uploading a video file.");
+            }
+
+            var fileIdentityChanged =
+                ValueChanged(dto.Kind, originalKind, resource.Kind) ||
+                ValueChanged(dto.Url, originalUrl, resource.Url) ||
+                ValueChanged(dto.StorageKey, originalStorageKey, resource.StorageKey) ||
+                ValueChanged(dto.FileName, originalFileName, resource.FileName) ||
+                ValueChanged(dto.ContentType, originalContentType, resource.ContentType) ||
+                ValueChanged(dto.Source, originalSource, resource.Source) ||
+                (dto.SizeBytes is not null && originalSizeBytes != resource.SizeBytes);
+
+            if (fileIdentityChanged)
+            {
+                errors.Add("Resource file fields cannot be changed directly. Use Replace File to update the stored asset.");
+            }
+
+            return errors;
+        }
+
+        public List<string> ApplyUploadReplacement(
+            ManagedResource resource,
+            string url,
+            string storageKey,
+            string fileName,
+            string contentType,
+            long sizeBytes,
+            string actorId)
+        {
+            var originalUrl = resource.Url;
+
+            resource.Url = CleanUrl(url) ?? string.Empty;
+            resource.StorageKey = CleanStorageKey(storageKey);
+            resource.FileName = fileName.Trim();
+            resource.ContentType = contentType.Trim();
+            resource.SizeBytes = Math.Max(0, sizeBytes);
+            resource.Source = "managed-upload";
+            if (string.Equals(resource.Kind, "image", StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(resource.ThumbnailUrl) ||
+                 string.Equals(resource.ThumbnailUrl.Trim(), originalUrl.Trim(), StringComparison.OrdinalIgnoreCase)))
+            {
+                resource.ThumbnailUrl = null;
+            }
+
             resource.UpdatedById = actorId;
             resource.UpdatedAt = DateTime.UtcNow;
 
@@ -102,8 +161,14 @@ namespace FullProject.Services
         {
             var normalized = contentType?.Trim().ToLowerInvariant() ?? string.Empty;
             if (normalized.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return "image";
+            if (normalized.StartsWith("video/", StringComparison.OrdinalIgnoreCase)) return "video";
             var ext = Path.GetExtension(fileName).ToLowerInvariant();
-            return ext is ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" ? "image" : "file";
+            return ext switch
+            {
+                ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" => "image",
+                ".mp4" or ".webm" or ".mov" => "video",
+                _ => "file"
+            };
         }
 
         private List<string> Validate(ManagedResource resource)
@@ -113,7 +178,17 @@ namespace FullProject.Services
             if (string.IsNullOrWhiteSpace(resource.Name.GetValueOrDefault("en"))) errors.Add("Resource name is required.");
             if (string.IsNullOrWhiteSpace(resource.Url)) errors.Add("Resource URL is required.");
             if (!string.IsNullOrWhiteSpace(resource.Url) && CleanUrl(resource.Url) is null) errors.Add("Resource URL must be a valid http or https URL.");
-            if (resource.Kind == "video" && !IsAllowedVideoUrl(resource.Url)) errors.Add("Video resources must use a YouTube URL.");
+            if (resource.Kind == "video")
+            {
+                if (!string.Equals(resource.Source, "managed-upload", StringComparison.OrdinalIgnoreCase))
+                    errors.Add("Video resources in Resource Library must be uploaded video files, not URLs.");
+                if (string.IsNullOrWhiteSpace(resource.StorageKey))
+                    errors.Add("Video resources require a storage key from an uploaded video file.");
+                if (string.IsNullOrWhiteSpace(resource.FileName))
+                    errors.Add("Video resources require a file name.");
+                if (string.IsNullOrWhiteSpace(resource.ContentType) || !resource.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+                    errors.Add("Video resources require a video MIME type.");
+            }
             if (resource.Kind != "video" && string.Equals(resource.Source, "external-url", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(resource.FileName))
                 resource.FileName = DefaultNameFromUrl(resource.Url, resource.Kind);
             return errors;
@@ -169,12 +244,8 @@ namespace FullProject.Services
         private static string? CleanStorageKey(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-        private static bool IsAllowedVideoUrl(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return false;
-            var host = uri.Host.ToLowerInvariant();
-            return host.Contains("youtube.com") || host.Contains("youtu.be");
-        }
+        private static bool ValueChanged(string? providedValue, string? originalValue, string? nextValue) =>
+            providedValue is not null && !string.Equals(originalValue ?? string.Empty, nextValue ?? string.Empty, StringComparison.Ordinal);
 
         private static string DefaultNameFromUrl(string url, string kind)
         {

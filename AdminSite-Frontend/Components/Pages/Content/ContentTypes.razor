@@ -156,7 +156,7 @@ else
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
-    private bool ResourceOnly => !string.Equals(NormalizeBehavior(_edit.Behavior), "page", StringComparison.OrdinalIgnoreCase);
+    private bool ResourceOnly => !string.Equals(ContentBehaviorUiHelper.NormalizeBehavior(_edit.Behavior), "page", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -190,7 +190,7 @@ else
             Key = type.Key,
             Name = EnsureLangs(type.Name),
             Description = EnsureLangs(type.Description),
-            Behavior = InferBehavior(type),
+            Behavior = ContentBehaviorUiHelper.InferBehavior(type),
             RequiresBody = type.RequiresBody,
             RequiresHeroImage = type.RequiresHeroImage,
             RequiresFile = type.RequiresFile,
@@ -233,7 +233,7 @@ else
     private string GetLang(Dictionary<string, string> values) =>
         GetValue(values, AdminLanguage, fallback: true);
 
-    private string DisplayBehavior(string? value) => NormalizeBehavior(value) switch
+    private string DisplayBehavior(string? value) => ContentBehaviorUiHelper.NormalizeBehavior(value) switch
     {
         "file-resource" => T("FileResource"),
         "video-resource" => T("VideoResource"),
@@ -258,65 +258,7 @@ else
 
     private void NormalizeWorkflow()
     {
-        _edit.Behavior = NormalizeBehavior(_edit.Behavior);
-        switch (_edit.Behavior)
-        {
-            case "video-resource":
-                _edit.RequiresBody = false;
-                _edit.RequiresHeroImage = false;
-                _edit.RequiresFile = false;
-                _edit.RequiresVideoUrl = true;
-                _edit.AllowsAttachments = false;
-                _edit.ClickBehavior = "video";
-                break;
-            case "image-resource":
-            case "gallery":
-                _edit.RequiresBody = false;
-                _edit.RequiresHeroImage = false;
-                _edit.RequiresFile = false;
-                _edit.RequiresVideoUrl = false;
-                _edit.AllowsAttachments = false;
-                _edit.ClickBehavior = "image";
-                break;
-            case "file-resource":
-                _edit.RequiresBody = false;
-                _edit.RequiresHeroImage = false;
-                _edit.RequiresFile = true;
-                _edit.RequiresVideoUrl = false;
-                _edit.AllowsAttachments = true;
-                _edit.ClickBehavior = "download";
-                break;
-            default:
-                _edit.Behavior = "page";
-                _edit.RequiresBody = true;
-                _edit.RequiresFile = false;
-                _edit.RequiresVideoUrl = false;
-                _edit.AllowsAttachments = true;
-                _edit.ClickBehavior = "detail";
-                break;
-        }
-    }
-
-    private static string NormalizeBehavior(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
-    {
-        "file" or "file-resource" or "download" or "resource" => "file-resource",
-        "video" or "video-resource" or "webinar" => "video-resource",
-        "image" or "image-resource" or "photo" or "picture" => "image-resource",
-        "gallery" or "image-gallery" or "photo-gallery" or "media-gallery" => "gallery",
-        _ => "page"
-    };
-
-    private static string InferBehavior(ContentTypeModel type)
-    {
-        if (!string.IsNullOrWhiteSpace(type.Behavior))
-            return NormalizeBehavior(type.Behavior);
-
-        var key = (type.Key ?? string.Empty).Trim().ToLowerInvariant();
-        if (key.Contains("gallery")) return "gallery";
-        if (key.Contains("image") || key.Contains("photo")) return "image-resource";
-        if (key.Contains("video") || key.Contains("webinar")) return "video-resource";
-        if (key.Contains("whitepaper") || key.Contains("report") || key.Contains("tool") || key.Contains("template") || key.Contains("disclosure") || key.Contains("charter") || key.Contains("regulation")) return "file-resource";
-        return "page";
+        ContentBehaviorUiHelper.ApplyWorkflow(_edit);
     }
 
     private static string GetValue(Dictionary<string, string> values, string lang, bool fallback = false)

@@ -695,6 +695,26 @@ namespace FullProject.DTOs
         public string Preset { get; set; } = "navy-gold";
     }
 
+    public class ResourceLibrarySettingsDto
+    {
+        public int MaxImageMb { get; set; } = 20;
+        public int MaxFileMb { get; set; } = 100;
+        public int MaxVideoMb { get; set; } = 250;
+        public List<string> AllowedImageFormats { get; set; } = new();
+        public List<string> AllowedFileFormats { get; set; } = new();
+        public List<string> AllowedVideoFormats { get; set; } = new();
+    }
+
+    public class ResourceLibrarySettingsUpdateDto
+    {
+        public int? MaxImageMb { get; set; }
+        public int? MaxFileMb { get; set; }
+        public int? MaxVideoMb { get; set; }
+        public List<string>? AllowedImageFormats { get; set; }
+        public List<string>? AllowedFileFormats { get; set; }
+        public List<string>? AllowedVideoFormats { get; set; }
+    }
+
     public class GlossaryTermResponseDto
     {
         public string Id { get; set; } = string.Empty;

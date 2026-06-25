@@ -10,11 +10,7 @@
 
 <div class="page-header content-resource-preview-header">
     <div>
-        <h1 class="page-title"><i class="fas @PreviewIcon"></i> @PreviewTitle</h1>
-        @if (ResourcePreviewMode)
-        {
-            <p class="text-muted">@T("ContentResourcePreviewHint")</p>
-        }
+        <h1 class="page-title"><i class="fas fa-eye"></i> @T("ContentPreview")</h1>
     </div>
 </div>
 
@@ -369,14 +365,6 @@ else
 
     private string UserSiteBaseUrl =>
         (Config["UserSiteBaseUrl"] ?? "https://localhost:7113").TrimEnd('/');
-
-    private bool ResourcePreviewMode =>
-        (_selected is not null && IsResourceContent(_selected)) ||
-        _behaviorFilter is "file-resource" or "video-resource" or "media";
-
-    private string PreviewTitle => ResourcePreviewMode ? T("ResourcePreview") : T("ContentPreview");
-
-    private string PreviewIcon => ResourcePreviewMode ? "fa-photo-film" : "fa-eye";
 
     private IEnumerable<ContentItemModel> FilteredItems =>
         _items

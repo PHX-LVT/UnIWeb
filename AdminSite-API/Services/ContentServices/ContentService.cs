@@ -202,28 +202,10 @@ namespace FullProject.Services
             }
             if (dto.GalleryItems is not null)
                 updates.Add(Builders<ContentItem>.Update.Set(c => c.GalleryItems, _assets.NormalizeGalleryItems(dto.GalleryItems)));
-            if (dto.HeroImageUrl is not null)
-            {
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageUrl, ContentAssetMetadataService.CleanUrl(dto.HeroImageUrl)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageResourceId, ContentAssetMetadataService.CleanResourceId(dto.HeroImageResourceId)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.HeroImageResourceSource, dto.HeroImageResourceId)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.HeroImageStorageKey)));
-            }
+            AddHeroImageUpdates(updates, dto);
             if (dto.HeroImageAlt is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageAlt, dto.HeroImageAlt.Trim()));
-            if (dto.ThumbnailUrl is not null)
-            {
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.ThumbnailUrl, ContentAssetMetadataService.CleanUrl(dto.ThumbnailUrl)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.ThumbnailResourceId, ContentAssetMetadataService.CleanResourceId(dto.ThumbnailResourceId)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.ThumbnailResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.ThumbnailResourceSource, dto.ThumbnailResourceId)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.ThumbnailStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.ThumbnailStorageKey)));
-            }
-            if (dto.VideoUrl is not null)
-            {
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.VideoUrl, ContentAssetMetadataService.CleanUrl(dto.VideoUrl)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.VideoResourceId, ContentAssetMetadataService.CleanResourceId(dto.VideoResourceId)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.VideoResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.VideoResourceSource, dto.VideoResourceId)));
-                updates.Add(Builders<ContentItem>.Update.Set(c => c.VideoStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.VideoStorageKey)));
-            }
+            AddThumbnailUpdates(updates, dto);
+            AddVideoUpdates(updates, dto);
             if (dto.ExternalUrl is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.ExternalUrl, ContentAssetMetadataService.CleanUrl(dto.ExternalUrl)));
             if (dto.TemplateKey is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.TemplateKey, ContentAssetMetadataService.CleanTemplateKey(dto.TemplateKey)));
             if (dto.Tags is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.Tags, ContentAssetMetadataService.NormalizeTags(dto.Tags)));
@@ -258,6 +240,39 @@ namespace FullProject.Services
 
         public Task<List<ContentAuditLog>> GetLogsAsync(string stableId) =>
             _revisions.GetLogsAsync(stableId);
+
+        private static void AddHeroImageUpdates(List<UpdateDefinition<ContentItem>> updates, ContentUpdateDto dto)
+        {
+            if (dto.HeroImageUrl is null) return;
+
+            var update = Builders<ContentItem>.Update;
+            updates.Add(update.Set(c => c.HeroImageUrl, ContentAssetMetadataService.CleanUrl(dto.HeroImageUrl)));
+            updates.Add(update.Set(c => c.HeroImageResourceId, ContentAssetMetadataService.CleanResourceId(dto.HeroImageResourceId)));
+            updates.Add(update.Set(c => c.HeroImageResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.HeroImageResourceSource, dto.HeroImageResourceId)));
+            updates.Add(update.Set(c => c.HeroImageStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.HeroImageStorageKey)));
+        }
+
+        private static void AddThumbnailUpdates(List<UpdateDefinition<ContentItem>> updates, ContentUpdateDto dto)
+        {
+            if (dto.ThumbnailUrl is null) return;
+
+            var update = Builders<ContentItem>.Update;
+            updates.Add(update.Set(c => c.ThumbnailUrl, ContentAssetMetadataService.CleanUrl(dto.ThumbnailUrl)));
+            updates.Add(update.Set(c => c.ThumbnailResourceId, ContentAssetMetadataService.CleanResourceId(dto.ThumbnailResourceId)));
+            updates.Add(update.Set(c => c.ThumbnailResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.ThumbnailResourceSource, dto.ThumbnailResourceId)));
+            updates.Add(update.Set(c => c.ThumbnailStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.ThumbnailStorageKey)));
+        }
+
+        private static void AddVideoUpdates(List<UpdateDefinition<ContentItem>> updates, ContentUpdateDto dto)
+        {
+            if (dto.VideoUrl is null) return;
+
+            var update = Builders<ContentItem>.Update;
+            updates.Add(update.Set(c => c.VideoUrl, ContentAssetMetadataService.CleanUrl(dto.VideoUrl)));
+            updates.Add(update.Set(c => c.VideoResourceId, ContentAssetMetadataService.CleanResourceId(dto.VideoResourceId)));
+            updates.Add(update.Set(c => c.VideoResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.VideoResourceSource, dto.VideoResourceId)));
+            updates.Add(update.Set(c => c.VideoStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.VideoStorageKey)));
+        }
 
         private static FilterDefinition<ContentItem> BuildLibraryFilter(IEnumerable<string>? typeKeys, bool draft)
         {

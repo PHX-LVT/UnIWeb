@@ -90,6 +90,12 @@
             <NavLink class="ez-nav-link ez-nav-child" href="/content/preview" @onclick='() => ExpandGroup("content")'>
                 <span>@T("ContentPreview")</span>
             </NavLink>
+            @if (CanViewResourceLibrary)
+            {
+                <NavLink class="ez-nav-link ez-nav-child" href="/content/resources" @onclick='() => ExpandGroup("content")'>
+                    <span>@T("ResourceLibrary")</span>
+                </NavLink>
+            }
             @if (Auth.CanManageAllContent)
             {
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/published" @onclick='() => ExpandGroup("content")'>
@@ -104,12 +110,6 @@
                 </NavLink>
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/templates" @onclick='() => ExpandGroup("content")'>
                     <span>@T("Templates")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/resources" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("ResourceLibrary")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/resource-preview" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("ResourcePreview")</span>
                 </NavLink>
             }
         }
@@ -180,6 +180,7 @@
     }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private bool CanViewResourceLibrary => Auth.CanManageAllContent || Auth.IsWriter;
 
     private void ToggleGroup(string group)
     {
