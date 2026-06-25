@@ -2113,6 +2113,10 @@ button.sc-library__media--video {
     color: #fff;
 }
 
+.sc-video-modal--playlist .sc-video-modal__dialog {
+    width: min(1280px, 100%);
+}
+
 .sc-video-modal__header {
     display: flex;
     align-items: center;
@@ -2141,6 +2145,21 @@ button.sc-library__media--video {
     cursor: pointer;
 }
 
+.sc-video-modal__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.sc-video-modal--playlist .sc-video-modal__body {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+}
+
+.sc-video-modal__main {
+    min-width: 0;
+}
+
 .sc-video-modal__frame {
     overflow: hidden;
     aspect-ratio: 16 / 9;
@@ -2154,6 +2173,90 @@ button.sc-library__media--video {
     height: 100%;
     display: block;
     border: 0;
+}
+
+.sc-video-modal__playlist {
+    display: none;
+}
+
+.sc-video-modal--playlist .sc-video-modal__playlist {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: min(62vh, 580px);
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .08);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, .25);
+}
+
+.sc-video-modal__playlist-heading {
+    color: rgba(255, 255, 255, .72);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.sc-video-modal__playlist-item {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 8px;
+    color: #fff;
+    text-align: left;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .07);
+    cursor: pointer;
+}
+
+.sc-video-modal__playlist-item:hover,
+.sc-video-modal__playlist-item--active {
+    border-color: rgba(255, 255, 255, .34);
+    background: rgba(255, 255, 255, .14);
+}
+
+.sc-video-modal__playlist-thumb {
+    display: grid;
+    place-items: center;
+    width: 86px;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, .38);
+    color: rgba(255, 255, 255, .68);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.sc-video-modal__playlist-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.sc-video-modal__playlist-title {
+    min-width: 0;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+@media (max-width: 860px) {
+    .sc-video-modal--playlist .sc-video-modal__body {
+        grid-template-columns: 1fr;
+    }
+
+    .sc-video-modal--playlist .sc-video-modal__playlist {
+        max-height: 230px;
+    }
 }
 
 .sc-image-modal {

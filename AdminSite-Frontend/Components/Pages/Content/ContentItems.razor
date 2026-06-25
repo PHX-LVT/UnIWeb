@@ -653,7 +653,11 @@
         $"/content/preview/{Uri.EscapeDataString(item.Id)}";
 
     private bool CanUseAdminPreview(ContentItemModel item) =>
-        CanManageAllContent || (Auth.IsWriter && IsMine(item));
+        IsPageContent(item) && (CanManageAllContent || (Auth.IsWriter && IsMine(item)));
+
+    private bool IsPageContent(ContentItemModel item) =>
+        _types.FirstOrDefault(type => string.Equals(type.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase)) is { } type &&
+        string.Equals(ContentBehaviorUiHelper.InferBehavior(type), "page", StringComparison.OrdinalIgnoreCase);
 
     private bool CanEditItem(ContentItemModel item) =>
         CanManageAllContent ||

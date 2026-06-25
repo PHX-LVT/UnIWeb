@@ -4,14 +4,17 @@ namespace AdminSite.Helpers
 {
     public static class ContentBehaviorUiHelper
     {
-        public static string NormalizeBehavior(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
+        public static string NormalizeBehavior(string? value) => NormalizeBehaviorToken(value) switch
         {
-            "file" or "file-resource" or "download" or "resource" => "file-resource",
-            "video" or "video-resource" or "webinar" => "video-resource",
-            "image" or "image-resource" or "photo" or "picture" => "image-resource",
-            "gallery" or "image-gallery" or "photo-gallery" or "media-gallery" => "gallery",
+            "file" or "fileresource" or "file-resource" or "download" or "resource" => "file-resource",
+            "video" or "videoresource" or "video-resource" or "webinar" => "video-resource",
+            "image" or "imageresource" or "image-resource" or "photo" or "picture" => "image-resource",
+            "gallery" or "imagegallery" or "image-gallery" or "photogallery" or "photo-gallery" or "mediagallery" or "media-gallery" => "gallery",
             _ => "page"
         };
+
+        private static string NormalizeBehaviorToken(string? value) =>
+            (value ?? string.Empty).Trim().ToLowerInvariant().Replace("_", "-").Replace(" ", "-");
 
         public static string InferBehavior(ContentTypeModel type)
         {

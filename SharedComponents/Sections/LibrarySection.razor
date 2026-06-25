@@ -4,6 +4,7 @@
 @inject NavigationManager Navigation
 
 <section data-section-id="@Section.Id"
+         data-sc-video-playlist="@Section.Id"
          class="@StyleHelper.GetSectionClass(Section.Style)"
          style="@StyleHelper.GetSectionStyle(Section.Style)">
     <div class="sc-section-overlay"
@@ -110,7 +111,8 @@
                                             class="@ButtonClass"
                                             data-sc-library-video
                                             data-video-url="@GalleryItemUrl(primaryGalleryItem)"
-                                            data-video-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                            data-video-title="@GalleryItemTitle(primaryGalleryItem, item)"
+                                            data-video-thumb="@GalleryItemThumbnailUrl(primaryGalleryItem)">
                                         @ButtonText(item)
                                     </button>
                                 }
@@ -131,7 +133,8 @@
                                         class="@ButtonClass"
                                         data-sc-library-video
                                         data-video-url="@ItemHref(item)"
-                                        data-video-title="@ItemTitle(item)">
+                                        data-video-title="@ItemTitle(item)"
+                                        data-video-thumb="@ImageUrl(item)">
                                     @ButtonText(item)
                                 </button>
                             }
@@ -190,6 +193,7 @@
                                                         data-sc-library-video
                                                         data-video-url="@mediaUrl"
                                                         data-video-title="@mediaTitle"
+                                                        data-video-thumb="@thumbUrl"
                                                         aria-label="Watch @mediaTitle">
                                                     @if (!string.IsNullOrWhiteSpace(thumbUrl))
                                                     {
@@ -231,6 +235,7 @@
                                         data-sc-library-video
                                         data-video-url="@ItemHref(item)"
                                         data-video-title="@ItemTitle(item)"
+                                        data-video-thumb="@imageUrl"
                                         aria-label="Watch @ItemTitle(item)">
                                     <img src="@imageUrl" alt="@ItemTitle(item)" />
                                     <span class="sc-library__play" aria-hidden="true"></span>
@@ -262,6 +267,7 @@
                                         data-sc-library-video
                                         data-video-url="@ItemHref(item)"
                                         data-video-title="@ItemTitle(item)"
+                                        data-video-thumb="@ImageUrl(item)"
                                         aria-label="Watch @ItemTitle(item)">
                                     <span>@PlaceholderLabel(item)</span>
                                     <span class="sc-library__play" aria-hidden="true"></span>
@@ -302,7 +308,8 @@
                                                 class="sc-library__link sc-btn sc-btn--filled"
                                                 data-sc-library-video
                                                 data-video-url="@GalleryItemUrl(primaryGalleryItem)"
-                                                data-video-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                                data-video-title="@GalleryItemTitle(primaryGalleryItem, item)"
+                                                data-video-thumb="@GalleryItemThumbnailUrl(primaryGalleryItem)">
                                             @ButtonText(item)
                                         </button>
                                     }
@@ -323,7 +330,8 @@
                                             class="sc-library__link sc-btn sc-btn--filled"
                                             data-sc-library-video
                                             data-video-url="@ItemHref(item)"
-                                            data-video-title="@ItemTitle(item)">
+                                            data-video-title="@ItemTitle(item)"
+                                            data-video-thumb="@imageUrl">
                                         @ButtonText(item)
                                     </button>
                                 }

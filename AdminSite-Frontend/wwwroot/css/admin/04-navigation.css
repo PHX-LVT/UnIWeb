@@ -586,7 +586,8 @@
 }
 
 .content-preview-iframe-shell {
-    min-height: calc(100vh - 140px);
+    height: calc(100vh - 140px);
+    min-height: 0;
     overflow: hidden;
     padding: 0;
     display: flex;
@@ -622,7 +623,7 @@
 
 .content-preview-viewport {
     width: 100%;
-    min-height: calc(100vh - 197px);
+    min-height: 0;
     flex: 1 1 auto;
     overflow: auto;
     padding: 16px;

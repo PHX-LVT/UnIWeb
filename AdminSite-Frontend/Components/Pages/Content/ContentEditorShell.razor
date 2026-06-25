@@ -621,14 +621,18 @@ else
         return "page";
     }
 
-    private static string NormalizeContentBehavior(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
+    private static string NormalizeContentBehavior(string? value)
     {
-        "file" or "file-resource" or "download" or "resource" => "file-resource",
-        "video" or "video-resource" or "webinar" => "video-resource",
-        "image" or "image-resource" or "photo" or "picture" => "image-resource",
-        "gallery" or "image-gallery" or "photo-gallery" or "media-gallery" => "gallery",
-        _ => "page"
-    };
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace("_", "-").Replace(" ", "-");
+        return normalized switch
+        {
+            "file" or "fileresource" or "file-resource" or "download" or "resource" => "file-resource",
+            "video" or "videoresource" or "video-resource" or "webinar" => "video-resource",
+            "image" or "imageresource" or "image-resource" or "photo" or "picture" => "image-resource",
+            "gallery" or "imagegallery" or "image-gallery" or "photogallery" or "photo-gallery" or "mediagallery" or "media-gallery" => "gallery",
+            _ => "page"
+        };
+    }
 
     protected override async Task OnInitializedAsync()
     {

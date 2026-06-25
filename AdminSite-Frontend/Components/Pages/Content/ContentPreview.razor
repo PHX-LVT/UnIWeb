@@ -35,30 +35,12 @@ else
                     <label>@T("ContentType")</label>
                     <select class="form-control" @bind="_typeFilter" @bind:after="ApplySelection">
                         <option value="">@T("AllTypes")</option>
-                        @foreach (var type in _types)
+                        @foreach (var type in PageTypes)
                         {
                             <option value="@type.Key">@GetLang(type.Name)</option>
                         }
                     </select>
                 </div>
-            </div>
-
-            <div class="content-resource-preview-tabs content-preview-mode-tabs" role="group" aria-label='@T("PreviewMode")'>
-                <button type="button" class="@BehaviorFilterClass(string.Empty)" @onclick='() => SetBehaviorFilter(string.Empty)'>
-                    <i class="fas fa-layer-group"></i> @T("All")
-                </button>
-                <button type="button" class='@BehaviorFilterClass("page")' @onclick='() => SetBehaviorFilter("page")'>
-                    <i class="fas fa-file-lines"></i> @T("PageContent")
-                </button>
-                <button type="button" class='@BehaviorFilterClass("file-resource")' @onclick='() => SetBehaviorFilter("file-resource")'>
-                    <i class="fas fa-download"></i> @T("FileResource")
-                </button>
-                <button type="button" class='@BehaviorFilterClass("video-resource")' @onclick='() => SetBehaviorFilter("video-resource")'>
-                    <i class="fas fa-play"></i> @T("VideoResource")
-                </button>
-                <button type="button" class='@BehaviorFilterClass("media")' @onclick='() => SetBehaviorFilter("media")'>
-                    <i class="fas fa-images"></i> @T("ImageResource") / @T("Gallery")
-                </button>
             </div>
 
             <input class="form-control"
@@ -74,7 +56,7 @@ else
                             class="content-preview-list__item @(item.Id == _selected?.Id ? "is-active" : "")"
                             @onclick="() => SelectContent(item.Id)">
                         <span>@GetLang(item.Title)</span>
-                        <small>@GetTypeLabel(item.ContentTypeKey) &middot; @PreviewBehaviorLabel(item)</small>
+                        <small>@GetTypeLabel(item.ContentTypeKey)</small>
                     </button>
                 }
             </div>
@@ -84,241 +66,15 @@ else
             @if (_selected is null)
             {
                 <div class="content-preview-empty">
-                    <p class="text-muted">@T("NoContentYet")</p>
+                    <h3>Page content preview only</h3>
+                    <p class="text-muted">This preview only renders published Page content. Resource-based content is monitored through All Content and My Contents.</p>
                 </div>
             }
-            else if (!CanPreviewOnUserSite(_selected) && !IsResourceContent(_selected))
+            else if (!CanPreviewOnUserSite(_selected))
             {
                 <div class="content-preview-empty">
                     <h3>@T("ContentPreview")</h3>
-                    <p class="text-muted">Only published content with a slug can be previewed as a real UserSite article.</p>
-                </div>
-            }
-            else if (IsResourceContent(_selected))
-            {
-                var selectedBehavior = PreviewBehavior(_selected);
-                var actionUrl = ResourceHref(_selected);
-                <div class="content-resource-preview-stage content-preview-resource-stage">
-                    <div class="content-resource-preview-stage__header">
-                        <div>
-                            <span class="content-behavior-pill">@PreviewBehaviorLabel(_selected)</span>
-                            <h2>@GetLang(_selected.Title)</h2>
-                            @if (!string.IsNullOrWhiteSpace(GetLang(_selected.Summary)))
-                            {
-                                <p>@GetLang(_selected.Summary)</p>
-                            }
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(actionUrl))
-                        {
-                            @if (ResourceActionIsVideo(_selected))
-                            {
-                                <button type="button"
-                                        class="btn-admin btn-primary"
-                                        data-sc-library-video
-                                        data-video-url="@actionUrl"
-                                        data-video-title="@GetLang(_selected.Title)">
-                                    <i class="fas fa-play"></i> @ResourceButtonText(_selected)
-                                </button>
-                            }
-                            else if (ResourceActionIsImage(_selected))
-                            {
-                                <button type="button"
-                                        class="btn-admin btn-primary"
-                                        data-sc-library-image
-                                        data-image-url="@actionUrl"
-                                        data-image-title="@GetLang(_selected.Title)">
-                                    <i class="fas fa-up-right-and-down-left-from-center"></i> @ResourceButtonText(_selected)
-                                </button>
-                            }
-                            else
-                            {
-                                <a class="btn-admin btn-primary"
-                                   href="@actionUrl"
-                                   target="_blank"
-                                   rel="noopener">
-                                    <i class="fas fa-up-right-from-square"></i> @ResourceButtonText(_selected)
-                                </a>
-                            }
-                        }
-                    </div>
-
-                    <div class="content-resource-preview-frame content-preview-media-frame">
-                        @switch (selectedBehavior)
-                        {
-                            case "file-resource":
-                                var fileUrl = PrimaryFileUrl(_selected);
-                                if (!string.IsNullOrWhiteSpace(fileUrl) && IsPdfUrl(fileUrl))
-                                {
-                                    <iframe class="content-resource-preview-file"
-                                            src="@fileUrl"
-                                            title="@GetLang(_selected.Title)">
-                                    </iframe>
-                                }
-                                else if (!string.IsNullOrWhiteSpace(fileUrl))
-                                {
-                                    <div class="content-resource-preview-file-card">
-                                        <i class="fas fa-file-lines"></i>
-                                        <strong>@PrimaryFileName(_selected)</strong>
-                                        <span>@FormatBytes(PrimaryFileSize(_selected))</span>
-                                        <a class="btn-admin btn-secondary" href="@fileUrl" target="_blank" rel="noopener">
-                                            @T("Open")
-                                        </a>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="content-resource-preview-file-card">
-                                        <i class="fas fa-file-lines"></i>
-                                        <p class="text-muted">@T("PreviewUnavailable")</p>
-                                    </div>
-                                }
-                                break;
-                            case "video-resource":
-                                var videoUrl = PrimaryVideoUrl(_selected);
-                                if (!string.IsNullOrWhiteSpace(videoUrl))
-                                {
-                                    <button type="button"
-                                            class="content-preview-media-trigger"
-                                            data-sc-library-video
-                                            data-video-url="@videoUrl"
-                                            data-video-title="@GetLang(_selected.Title)">
-                                        @if (!string.IsNullOrWhiteSpace(PrimaryImageUrl(_selected)))
-                                        {
-                                            <img src="@PrimaryImageUrl(_selected)" alt="" />
-                                        }
-                                        else
-                                        {
-                                            <span class="content-preview-media-trigger__placeholder">
-                                                <i class="fas fa-play"></i>
-                                            </span>
-                                        }
-                                        <span class="content-preview-media-trigger__label">
-                                            <i class="fas fa-play"></i> @T("VideoModal")
-                                        </span>
-                                    </button>
-                                }
-                                else
-                                {
-                                    <div class="content-resource-preview-file-card">
-                                        <i class="fas fa-play"></i>
-                                        <p class="text-muted">@T("PreviewUnavailable")</p>
-                                    </div>
-                                }
-                                break;
-                            case "image-resource":
-                                var imageUrl = PrimaryImageUrl(_selected);
-                                if (!string.IsNullOrWhiteSpace(imageUrl))
-                                {
-                                    <button type="button"
-                                            class="content-preview-media-trigger"
-                                            data-sc-library-image
-                                            data-image-url="@imageUrl"
-                                            data-image-title="@GetLang(_selected.Title)">
-                                        <img src="@imageUrl" alt="@GetLang(_selected.Title)" />
-                                        <span class="content-preview-media-trigger__label">
-                                            <i class="fas fa-up-right-and-down-left-from-center"></i> @T("ImageModal")
-                                        </span>
-                                    </button>
-                                }
-                                else
-                                {
-                                    <div class="content-resource-preview-file-card">
-                                        <i class="fas fa-image"></i>
-                                        <p class="text-muted">@T("PreviewUnavailable")</p>
-                                    </div>
-                                }
-                                break;
-                            case "gallery":
-                                var galleryItems = GalleryPreviewItems(_selected).ToList();
-                                if (galleryItems.Any())
-                                {
-                                    <div class="content-preview-gallery-strip">
-                                        @foreach (var galleryItem in galleryItems)
-                                        {
-                                            var galleryUrl = GalleryItemUrl(galleryItem);
-                                            var galleryTitle = GalleryItemTitle(galleryItem);
-                                            var isVideo = GalleryItemIsVideo(galleryItem);
-                                            if (isVideo)
-                                            {
-                                                <button type="button"
-                                                        class="content-preview-gallery-tile"
-                                                        data-sc-library-video
-                                                        data-video-url="@galleryUrl"
-                                                        data-video-title="@galleryTitle">
-                                                    @if (!string.IsNullOrWhiteSpace(GalleryItemThumb(galleryItem)))
-                                                    {
-                                                        <img src="@GalleryItemThumb(galleryItem)" alt="" />
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="content-preview-gallery-placeholder">
-                                                            <i class="fas fa-play"></i>
-                                                        </span>
-                                                    }
-                                                    <span><i class="fas fa-play"></i> @galleryTitle</span>
-                                                </button>
-                                            }
-                                            else
-                                            {
-                                                <button type="button"
-                                                        class="content-preview-gallery-tile"
-                                                        data-sc-library-image
-                                                        data-image-url="@galleryUrl"
-                                                        data-image-title="@galleryTitle">
-                                                    @if (!string.IsNullOrWhiteSpace(GalleryItemThumb(galleryItem)))
-                                                    {
-                                                        <img src="@GalleryItemThumb(galleryItem)" alt="" />
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="content-preview-gallery-placeholder">
-                                                            <i class="fas fa-image"></i>
-                                                        </span>
-                                                    }
-                                                    <span><i class="fas fa-image"></i> @galleryTitle</span>
-                                                </button>
-                                            }
-                                        }
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="content-resource-preview-file-card">
-                                        <i class="fas fa-images"></i>
-                                        <p class="text-muted">@T("NoGalleryItemsYet")</p>
-                                    </div>
-                                }
-                                break;
-                        }
-                    </div>
-
-                    <dl class="content-resource-preview-details">
-                        <div>
-                            <dt>@T("ContentBehavior")</dt>
-                            <dd>@PreviewBehaviorLabel(_selected)</dd>
-                        </div>
-                        <div>
-                            <dt>@T("ContentType")</dt>
-                            <dd>@GetTypeLabel(_selected.ContentTypeKey)</dd>
-                        </div>
-                        <div>
-                            <dt>@T("Updated")</dt>
-                            <dd>@_selected.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</dd>
-                        </div>
-                        <div>
-                            <dt>@T("ResourceUrl")</dt>
-                            <dd>
-                                @if (!string.IsNullOrWhiteSpace(actionUrl))
-                                {
-                                    <a href="@actionUrl" target="_blank" rel="noopener">@ResourceTargetLabel(_selected)</a>
-                                }
-                                else
-                                {
-                                    <span>@ResourceTargetLabel(_selected)</span>
-                                }
-                            </dd>
-                        </div>
-                    </dl>
+                    <p class="text-muted">Only published Page content with a slug can be previewed as a real UserSite article.</p>
                 </div>
             }
             else
@@ -360,17 +116,19 @@ else
     private ElementReference _previewViewport;
     private string _search = string.Empty;
     private string _typeFilter = string.Empty;
-    private string _behaviorFilter = string.Empty;
     private const int PreviewDesktopWidth = 1440;
 
     private string UserSiteBaseUrl =>
         (Config["UserSiteBaseUrl"] ?? "https://localhost:7113").TrimEnd('/');
 
+    private IEnumerable<ContentTypeModel> PageTypes =>
+        _types.Where(IsPageContentType);
+
     private IEnumerable<ContentItemModel> FilteredItems =>
         _items
             .Where(item => string.Equals(item.Status, "Published", StringComparison.OrdinalIgnoreCase))
+            .Where(IsPageContent)
             .Where(item => string.IsNullOrWhiteSpace(_typeFilter) || string.Equals(item.ContentTypeKey, _typeFilter, StringComparison.OrdinalIgnoreCase))
-            .Where(MatchesBehaviorFilter)
             .Where(item => string.IsNullOrWhiteSpace(_search) ||
                            GetLang(item.Title).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
                            GetLang(item.Summary).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
@@ -398,7 +156,7 @@ else
             // The preview still renders if the shared modal script is unavailable during disposal/navigation.
         }
 
-        if (IsResourceContent(_selected) || !CanPreviewOnUserSite(_selected))
+        if (!CanPreviewOnUserSite(_selected))
             return;
 
         if (!_previewViewportInitialized)
@@ -443,7 +201,7 @@ else
         var previousId = _selected?.Id;
 
         _selected = !string.IsNullOrWhiteSpace(ContentId)
-            ? _items.FirstOrDefault(item => item.Id == ContentId)
+            ? _items.FirstOrDefault(item => item.Id == ContentId && IsPageContent(item))
             : null;
 
         if (_selected is not null && !FilteredItems.Any(item => item.Id == _selected.Id))
@@ -471,283 +229,11 @@ else
         string.Equals(item.Status, "Published", StringComparison.OrdinalIgnoreCase) &&
         !string.IsNullOrWhiteSpace(item.Slug);
 
-    private void SetBehaviorFilter(string value)
-    {
-        _behaviorFilter = value;
-        _previewViewportInitialized = false;
-        ApplySelection();
-    }
+    private bool IsPageContent(ContentItemModel item) =>
+        FindType(item.ContentTypeKey) is { } type && IsPageContentType(type);
 
-    private string BehaviorFilterClass(string value) =>
-        $"btn-admin {(string.Equals(_behaviorFilter, value, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
-
-    private bool MatchesBehaviorFilter(ContentItemModel item)
-    {
-        var behavior = PreviewBehavior(item);
-        return _behaviorFilter switch
-        {
-            "" => true,
-            "page" => behavior == "page",
-            "file-resource" => behavior == "file-resource",
-            "video-resource" => behavior == "video-resource",
-            "media" => behavior is "image-resource" or "gallery",
-            _ => true
-        };
-    }
-
-    private bool IsResourceContent(ContentItemModel item) => PreviewBehavior(item) != "page";
-
-    private string PreviewBehavior(ContentItemModel item)
-    {
-        var type = FindType(item.ContentTypeKey);
-        var behavior = NormalizeContentBehavior(type?.Behavior);
-
-        if (!string.IsNullOrWhiteSpace(behavior) && (behavior != "page" || type?.RequiresBody == true))
-            return behavior;
-
-        var clickBehavior = NormalizeClickBehavior(type?.ClickBehavior);
-        if (clickBehavior == "video")
-            return "video-resource";
-        if (clickBehavior == "image")
-            return "image-resource";
-        if (clickBehavior == "gallery")
-            return "gallery";
-        if (clickBehavior is "download" or "external")
-            return "file-resource";
-
-        if (type?.RequiresVideoUrl == true || HasVideo(item))
-            return "video-resource";
-        if (GalleryPreviewItems(item).Any())
-            return "gallery";
-        if (HasImage(item) && type is not null && !type.RequiresBody)
-            return "image-resource";
-        if (type?.RequiresFile == true || HasFile(item) || !string.IsNullOrWhiteSpace(item.ExternalUrl))
-            return "file-resource";
-        if (type is not null && !type.RequiresBody)
-            return "file-resource";
-
-        return "page";
-    }
-
-    private string PreviewBehaviorLabel(ContentItemModel item) => PreviewBehavior(item) switch
-    {
-        "file-resource" => T("FileResource"),
-        "video-resource" => T("VideoResource"),
-        "image-resource" => T("ImageResource"),
-        "gallery" => T("Gallery"),
-        _ => T("PageContent")
-    };
-
-    private string ResourceClickBehavior(ContentItemModel item)
-    {
-        return PreviewBehavior(item) switch
-        {
-            "video-resource" => "video",
-            "image-resource" => "image",
-            "gallery" => FirstGalleryItem(item) is { } first && GalleryItemIsVideo(first) ? "video" : "image",
-            "file-resource" when string.IsNullOrWhiteSpace(PrimaryFileUrl(item)) && !string.IsNullOrWhiteSpace(item.ExternalUrl) => "external",
-            "file-resource" => "download",
-            _ => "detail"
-        };
-    }
-
-    private string ResourceHref(ContentItemModel item) => PreviewBehavior(item) switch
-    {
-        "file-resource" => PrimaryFileUrl(item),
-        "video-resource" => PrimaryVideoUrl(item),
-        "image-resource" => PrimaryImageUrl(item),
-        "gallery" => FirstGalleryItem(item) is { } first ? GalleryItemUrl(first) : string.Empty,
-        _ => string.Empty
-    };
-
-    private string ResourceButtonText(ContentItemModel item) =>
-        ResourceClickBehavior(item) switch
-        {
-            "video" => "Watch Video",
-            "image" => PreviewBehavior(item) == "gallery" ? "View Gallery" : "View Image",
-            "external" => "Open Link",
-            _ => "Open File"
-        };
-
-    private bool ResourceActionIsVideo(ContentItemModel item) => ResourceClickBehavior(item) == "video";
-
-    private bool ResourceActionIsImage(ContentItemModel item) => ResourceClickBehavior(item) == "image";
-
-    private string ResourceTargetLabel(ContentItemModel item)
-    {
-        if (PreviewBehavior(item) == "gallery")
-        {
-            var count = GalleryPreviewItems(item).Count();
-            return count > 0 ? $"{count} {T("GalleryItems")}" : T("NoGalleryItemsYet");
-        }
-
-        if (PreviewBehavior(item) == "file-resource")
-        {
-            var fileName = PrimaryFileName(item);
-            return string.IsNullOrWhiteSpace(fileName) ? T("PreviewUnavailable") : fileName;
-        }
-
-        var href = ResourceHref(item);
-        return string.IsNullOrWhiteSpace(href) ? T("PreviewUnavailable") : href;
-    }
-
-    private string PrimaryFileUrl(ContentItemModel item) =>
-        PrimaryAttachment(item)?.Url
-        ?? PrimaryBodyItem(item, "file")?.Url
-        ?? item.ExternalUrl
-        ?? string.Empty;
-
-    private string PrimaryVideoUrl(ContentItemModel item) =>
-        item.VideoUrl
-        ?? PrimaryBodyItem(item, "video")?.Url
-        ?? item.ExternalUrl
-        ?? string.Empty;
-
-    private string PrimaryImageUrl(ContentItemModel item) =>
-        item.ThumbnailUrl
-        ?? item.HeroImageUrl
-        ?? PrimaryBodyItem(item, "image")?.Url
-        ?? GalleryPreviewItems(item).FirstOrDefault(galleryItem => !GalleryItemIsVideo(galleryItem))?.Url
-        ?? string.Empty;
-
-    private string PrimaryFileName(ContentItemModel item) =>
-        PrimaryAttachment(item)?.FileName
-        ?? PrimaryBodyItem(item, "file")?.FileName
-        ?? FileNameFromUrl(PrimaryFileUrl(item));
-
-    private long PrimaryFileSize(ContentItemModel item) =>
-        PrimaryAttachment(item)?.SizeBytes
-        ?? PrimaryBodyItem(item, "file")?.SizeBytes
-        ?? 0;
-
-    private static ContentAttachmentModel? PrimaryAttachment(ContentItemModel item) =>
-        item.Attachments.FirstOrDefault(attachment => !string.IsNullOrWhiteSpace(attachment.Url));
-
-    private static ContentBodyItemModel? PrimaryBodyItem(ContentItemModel item, string type) =>
-        item.BodyItems
-            .Where(bodyItem => bodyItem.Visible)
-            .OrderBy(bodyItem => bodyItem.Order)
-            .FirstOrDefault(bodyItem =>
-                string.Equals(bodyItem.Type, type, StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(bodyItem.Url));
-
-    private static bool HasFile(ContentItemModel item) =>
-        item.Attachments.Any(attachment => !string.IsNullOrWhiteSpace(attachment.Url)) ||
-        PrimaryBodyItem(item, "file") is not null;
-
-    private static bool HasVideo(ContentItemModel item) =>
-        !string.IsNullOrWhiteSpace(item.VideoUrl) ||
-        PrimaryBodyItem(item, "video") is not null;
-
-    private static bool HasImage(ContentItemModel item) =>
-        !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ||
-        !string.IsNullOrWhiteSpace(item.HeroImageUrl) ||
-        PrimaryBodyItem(item, "image") is not null;
-
-    private IEnumerable<ContentGalleryItemModel> GalleryPreviewItems(ContentItemModel item) =>
-        item.GalleryItems
-            .Where(galleryItem => galleryItem.Visible && !string.IsNullOrWhiteSpace(GalleryItemUrl(galleryItem)))
-            .OrderBy(galleryItem => galleryItem.Order);
-
-    private ContentGalleryItemModel? FirstGalleryItem(ContentItemModel item) =>
-        GalleryPreviewItems(item).FirstOrDefault();
-
-    private static string GalleryItemUrl(ContentGalleryItemModel item) => item.Url ?? string.Empty;
-
-    private static string GalleryItemThumb(ContentGalleryItemModel item) =>
-        !string.IsNullOrWhiteSpace(item.ThumbnailUrl)
-            ? item.ThumbnailUrl!
-            : GalleryItemIsVideo(item) ? string.Empty : item.Url ?? string.Empty;
-
-    private string GalleryItemTitle(ContentGalleryItemModel item)
-    {
-        var caption = GetLang(item.Caption);
-        return string.IsNullOrWhiteSpace(caption) ? T("Gallery") : caption;
-    }
-
-    private static bool GalleryItemIsVideo(ContentGalleryItemModel item) =>
-        NormalizeResourceKind(item.Kind) == "video" || IsVideoUrl(item.Url);
-
-    private static bool IsPdfUrl(string? url) =>
-        !string.IsNullOrWhiteSpace(url) && url.Split('?', 2)[0].EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsVideoUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return false;
-
-        return url.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
-               url.Contains("youtu.be", StringComparison.OrdinalIgnoreCase) ||
-               url.Contains("vimeo.com", StringComparison.OrdinalIgnoreCase) ||
-               url.Split('?', 2)[0].EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
-               url.Split('?', 2)[0].EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeContentBehavior(string? value)
-    {
-        var normalized = NormalizeToken(value);
-        return normalized switch
-        {
-            "page" or "detail" or "article" => "page",
-            "file" or "fileresource" or "file-resource" or "download" or "resource" => "file-resource",
-            "video" or "videoresource" or "video-resource" or "webinar" => "video-resource",
-            "image" or "imageresource" or "image-resource" or "photo" or "picture" => "image-resource",
-            "gallery" or "imagegallery" or "image-gallery" or "photogallery" or "photo-gallery" or "mediagallery" or "media-gallery" => "gallery",
-            _ => string.Empty
-        };
-    }
-
-    private static string NormalizeClickBehavior(string? value)
-    {
-        var normalized = NormalizeToken(value);
-        return normalized switch
-        {
-            "download" or "filedownload" or "file-download" => "download",
-            "video" or "videomodal" or "video-modal" => "video",
-            "image" or "imagemodal" or "image-modal" => "image",
-            "gallery" => "gallery",
-            "external" or "externallink" or "external-link" => "external",
-            _ => string.Empty
-        };
-    }
-
-    private static string NormalizeResourceKind(string? value) =>
-        NormalizeToken(value) switch
-        {
-            "video" or "webinar" => "video",
-            _ => "image"
-        };
-
-    private static string NormalizeToken(string? value) =>
-        (value ?? string.Empty).Trim().ToLowerInvariant().Replace("_", "-").Replace(" ", "-");
-
-    private static string FileNameFromUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return string.Empty;
-
-        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            return Uri.UnescapeDataString(uri.Segments.LastOrDefault()?.Trim('/') ?? string.Empty);
-
-        return Uri.UnescapeDataString(url.Split('?', 2)[0].Split('/').LastOrDefault() ?? string.Empty);
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes <= 0)
-            return string.Empty;
-
-        string[] units = ["B", "KB", "MB", "GB"];
-        double size = bytes;
-        var unit = 0;
-        while (size >= 1024 && unit < units.Length - 1)
-        {
-            size /= 1024;
-            unit++;
-        }
-
-        return $"{size:0.#} {units[unit]}";
-    }
+    private static bool IsPageContentType(ContentTypeModel type) =>
+        string.Equals(ContentBehaviorUiHelper.InferBehavior(type), "page", StringComparison.OrdinalIgnoreCase);
 
     private string BuildUserSiteHref(ContentItemModel item)
     {
