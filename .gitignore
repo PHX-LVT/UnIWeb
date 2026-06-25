@@ -17,7 +17,13 @@ TestResults/
 
 # Local helper/generated folders
 build-check/
-tools/
+tools/*
+!tools/DemoDbImporter/
+!tools/DemoDbImporter/**
+tools/DemoDbImporter/bin/
+tools/DemoDbImporter/obj/
+tools/DemoDbImporter/publish/
+Tool For Demo Import/publish/
 tmp/
 temp/
 artifacts/
@@ -33,6 +39,8 @@ yarn-error.log*
 **/appsettings.*.json
 !**/appsettings.example.json
 !**/appsettings.Sample.json
+!tools/DemoDbImporter/appsettings.importer.json
+!Tool For Demo Import/appsettings.importer.json
 
 # Local database backups / exports
 *.bson

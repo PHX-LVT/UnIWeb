@@ -2,7 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.4.11626.88
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FullProject", "FullProject.csproj", "{502E65B2-6D3C-315E-AEAE-2AC61895B600}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Main-API", "Main-API.csproj", "{502E65B2-6D3C-315E-AEAE-2AC61895B600}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminSite", "..\AdminSite-Frontend\AdminSite.csproj", "{C733E5DD-F51E-9212-8D68-46F56C6957CC}"
 EndProject

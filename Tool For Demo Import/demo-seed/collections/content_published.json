@@ -1,0 +1,2709 @@
+[
+  {
+    "_id": {
+      "$oid": "6a2581eb445d0d8f06368302"
+    },
+    "StableId": "content-whitepaper-2030",
+    "ContentTypeKey": "whitepaper",
+    "Slug": "vietnam-china-2030-outlook-report",
+    "Title": {
+      "en": "Vietnam-China 2030 Outlook Report",
+      "vi": "Vietnam-China 2030 Outlook Report",
+      "cn": "Vietnam-China 2030 Outlook Report"
+    },
+    "Summary": {
+      "en": "Download the full outlook report for corridor planning and gateway strategy.",
+      "vi": "Download the full outlook report for corridor planning and gateway strategy.",
+      "cn": "Download the full outlook report for corridor planning and gateway strategy."
+    },
+    "BodyHtml": {
+      "en": "<p>Download the full outlook report for corridor planning and gateway strategy.</p>",
+      "vi": "<p>Download the full outlook report for corridor planning and gateway strategy.</p>",
+      "cn": "<p>Download the full outlook report for corridor planning and gateway strategy.</p>"
+    },
+    "HeroImageUrl": "/_content/SharedComponents/demo-assets/Insights1.png",
+    "HeroImageAlt": "Vietnam-China 2030 Outlook Report",
+    "ThumbnailUrl": "/_content/SharedComponents/demo-assets/Insights1.png",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "report",
+      "china",
+      "vietnam"
+    ],
+    "Attachments": [
+      {
+        "Id": "att-2030-report",
+        "FileName": "vietnam-china-2030-outlook.pdf",
+        "Url": "/downloads/vietnam-china-2030-outlook.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberInt": "2400000"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a2581eb445d0d8f06368304"
+    },
+    "StableId": "content-video-gateway-briefing",
+    "ContentTypeKey": "video",
+    "Slug": "gateway-planning-briefing",
+    "Title": {
+      "en": "Gateway Planning Briefing",
+      "vi": "Gateway Planning Briefing",
+      "cn": "Gateway Planning Briefing"
+    },
+    "Summary": {
+      "en": "A short webinar on gateway selection and multimodal coordination.",
+      "vi": "A short webinar on gateway selection and multimodal coordination.",
+      "cn": "A short webinar on gateway selection and multimodal coordination."
+    },
+    "BodyHtml": {
+      "en": "<p>A short webinar on gateway selection and multimodal coordination.</p>",
+      "vi": "<p>A short webinar on gateway selection and multimodal coordination.</p>",
+      "cn": "<p>A short webinar on gateway selection and multimodal coordination.</p>"
+    },
+    "HeroImageUrl": "/_content/SharedComponents/demo-assets/warehouse.jpg",
+    "HeroImageAlt": "Gateway Planning Briefing",
+    "ThumbnailUrl": "/_content/SharedComponents/demo-assets/warehouse.jpg",
+    "VideoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "webinar",
+      "gateway"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780842986276"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a2585bd125e831b3dc9f324"
+    },
+    "StableId": "341ccbe8f7e241feae56aa969d7b50a8",
+    "ContentTypeKey": "article",
+    "Slug": "optimizing-lead-time-variability-in-export-logistics",
+    "Title": {
+      "en": "Optimizing Lead Time Variability in Export Logistics",
+      "vi": "Optimizing Lead Time Variability in Export Logistics",
+      "cn": "Optimizing Lead Time Variability in Export Logistics"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "HIHIHEHE",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/744775eb2ef947658701edc935342fd6.png",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780839729657"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780843965954"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780839744011"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780843965954"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a2585ec125e831b3dc9f329"
+    },
+    "StableId": "92438186bb6743279154d765035c8acf",
+    "ContentTypeKey": "article",
+    "Slug": "ev-trucks-practical-readiness-for-vietnam-transport-sector",
+    "Title": {
+      "en": "EV Trucks: Practical Readiness for Vietnam Transport Sector",
+      "vi": "EV Trucks: Practical Readiness for Vietnam Transport Sector",
+      "cn": "EV Trucks: Practical Readiness for Vietnam Transport Sector"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "SDSAD",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/db4857d39b154f328d7cd952d6135824.png",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780839805297"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780844012795"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780839806651"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780844012795"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a2585ff125e831b3dc9f32c"
+    },
+    "StableId": "25ac6a12ae004279ba9f043306e8917d",
+    "ContentTypeKey": "article",
+    "Slug": "green-warehouse-solutions-for-high-volume-distribution",
+    "Title": {
+      "en": "Green Warehouse Solutions for High-Volume Distribution",
+      "vi": "Green Warehouse Solutions for High-Volume Distribution",
+      "cn": "Green Warehouse Solutions for High-Volume Distribution"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "DSADASD",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/88ecfab41fe94ab8a79c2c51991dfc41.png",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780839851726"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780844031657"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780839853087"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780844031657"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a25862d125e831b3dc9f32f"
+    },
+    "StableId": "b9e7401fcad348cd957fac1c39949934",
+    "ContentTypeKey": "article",
+    "Slug": "how-control-towers-reduce-operational-risks",
+    "Title": {
+      "en": "How Control Towers Reduce Operational Risks",
+      "vi": "How Control Towers Reduce Operational Risks",
+      "cn": "How Control Towers Reduce Operational Risks"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "SDASDSADA",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/c3bb6675bb3d4390bae0aa72a32e3e13.png",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780839879593"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780844077847"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780839881255"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780844077847"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a25863b125e831b3dc9f333"
+    },
+    "StableId": "cde642149e4a4df1aa9a18986b9db261",
+    "ContentTypeKey": "article",
+    "Slug": "choosing-the-right-freight-forwarder-a-decision-checklist",
+    "Title": {
+      "en": "Choosing the Right Freight Forwarder - A Decision Checklist",
+      "vi": "Choosing the Right Freight Forwarder - A Decision Checklist",
+      "cn": "Choosing the Right Freight Forwarder - A Decision Checklist"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "DSADASDASD",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/019564f250ae4e71ae64cceb21ca066d.png",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780839915645"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780844091055"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780839918480"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780844091055"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a258649125e831b3dc9f336"
+    },
+    "StableId": "e43b9d9bb3cb4592922485711ad5130e",
+    "ContentTypeKey": "article",
+    "Slug": "warehouse-layout-optimization-in-wood-furniture-sector",
+    "Title": {
+      "en": "Warehouse Layout Optimization in Wood & Furniture Sector",
+      "vi": "Warehouse Layout Optimization in Wood & Furniture Sector",
+      "cn": "Warehouse Layout Optimization in Wood & Furniture Sector"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "DSADASDASDA",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/e86d2574f19d432690820b69c3ad3af3.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780840027070"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780844105340"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780840031508"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780844105340"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a258652125e831b3dc9f339"
+    },
+    "StableId": "7b1ef98650854fe2858a2537c03a0d16",
+    "ContentTypeKey": "article",
+    "Slug": "e-commerce-fulfillment-cost-and-efficiency-analysis",
+    "Title": {
+      "en": "E-commerce Fulfillment: Cost and Efficiency Analysis",
+      "vi": "E-commerce Fulfillment: Cost and Efficiency Analysis",
+      "cn": "E-commerce Fulfillment: Cost and Efficiency Analysis"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "SADSAGFDSCV",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/6b0bb63934704a858eb546697fdb8b89.png",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780839966145"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780844114782"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780839968050"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780844114782"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a25a719026e07cdc7dd2331"
+    },
+    "StableId": "f6c5b3f737d842b9aa626827f8fabf36",
+    "ContentTypeKey": "whitepaper",
+    "Slug": "esg-in-supply-chain-practical-framework-for-vietnam",
+    "Title": {
+      "en": "ESG in Supply Chain: Practical Framework for Vietnam",
+      "vi": "ESG in Supply Chain: Practical Framework for Vietnam",
+      "cn": "ESG in Supply Chain: Practical Framework for Vietnam"
+    },
+    "Summary": {
+      "en": "A practical framework to integrate ESG principles into supply chain operations, enhancing sustainability, transparency, and long-term resilience in Vietnam.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/94ae0669ed184d489ebfb15a397e1558.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Customs"
+    ],
+    "Attachments": [
+      {
+        "Id": "f6b2014e8b6845c8bd201aea539eaabe",
+        "FileName": "01_Bachelor Thesis Felix Wiese.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/07/c8124e08da554369bfa33bc2c4d8625d.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1717950"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780840210317"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780852504990"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780840213952"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780852504990"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a25a71d026e07cdc7dd2334"
+    },
+    "StableId": "7471a9ec34d442d6a8da0b406676f1e8",
+    "ContentTypeKey": "whitepaper",
+    "Slug": "warehouse-productivity-assessment-template-wpa",
+    "Title": {
+      "en": "Warehouse Productivity Assessment Template (WPA)",
+      "vi": "Warehouse Productivity Assessment Template (WPA)",
+      "cn": "Warehouse Productivity Assessment Template (WPA)"
+    },
+    "Summary": {
+      "en": "A practical template to evaluate warehouse productivity, identify bottlenecks, and improve operational efficiency.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/b7107823b2b84d24998b5ebf0cc68901.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Customs"
+    ],
+    "Attachments": [
+      {
+        "Id": "e3f77e2bec254c0cbb72afb134afaeee",
+        "FileName": "Thesis_Gloria_Fachinger_Supervisory_Board_Gender_D.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/07/967c4312ad044af2a183e832320578d5.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "10064660"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780840244055"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780852509012"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780840248205"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780852509012"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a25a71f026e07cdc7dd2337"
+    },
+    "StableId": "0feb61a13c574532b1a5bb4e431c9e84",
+    "ContentTypeKey": "whitepaper",
+    "Slug": "vietnam-logistics-outlook-2026-2030",
+    "Title": {
+      "en": "Vietnam Logistics Outlook 2026-2030",
+      "vi": "Vietnam Logistics Outlook 2026-2030",
+      "cn": "Vietnam Logistics Outlook 2026-2030"
+    },
+    "Summary": {
+      "en": "Strategic insights into Vietnam’s logistics market trends, digital transformation, infrastructure, and sustainable growth.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/3359fb4de9d44a64bcd79bd23487ed02.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Customs"
+    ],
+    "Attachments": [
+      {
+        "Id": "9d42b844e52f4cc28c4234072c84bc68",
+        "FileName": "01_Bachelor Thesis Felix Wiese.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/07/c0616371579245899bff232920b882f8.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1717950"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780840116419"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780852511450"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780840126542"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780852511450"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a25a722026e07cdc7dd233a"
+    },
+    "StableId": "f66192d52799492e92b8154c8df5d8b5",
+    "ContentTypeKey": "whitepaper",
+    "Slug": "symbiotic-logistics-model-for-asean",
+    "Title": {
+      "en": "Symbiotic Logistics Model for ASEAN",
+      "vi": "Symbiotic Logistics Model for ASEAN",
+      "cn": "Symbiotic Logistics Model for ASEAN"
+    },
+    "Summary": {
+      "en": "An integrated logistics model promoting collaboration, shared infrastructure, and sustainable growth across ASEAN supply chains.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/35e2eb5ee84e4c758a582a7a08f8bae4.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Customs"
+    ],
+    "Attachments": [
+      {
+        "Id": "3a83e47ccd2f47e8a0e5c026cee56ee6",
+        "FileName": "01_Bachelor Thesis Felix Wiese.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/07/11bb41c0674644f9b4877a69e957b6e0.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1717950"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780840192036"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780852514006"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780840196893"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780852514006"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a26155c7d18d32b88e1e553"
+    },
+    "StableId": "95aeb3ca1c034f0bae8ebf7a0c6dc432",
+    "ContentTypeKey": "technology",
+    "Slug": "e-commerce",
+    "Title": {
+      "en": "E-commerce",
+      "vi": "E-commerce",
+      "cn": "E-commerce"
+    },
+    "Summary": {
+      "en": "Challenge: High error\nSolution: WMS + SLA dashboard",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "sdadsada",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/08/636595e904bc43498de00267129384a8.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "99.7%Accuracy"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780880692957"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780880732824"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780880732824"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a261fdb4a0fe09021a7758a"
+    },
+    "StableId": "4ec2dfd5f1234d019f25e55f9fde5221",
+    "ContentTypeKey": "technology",
+    "Slug": "fmcg",
+    "Title": {
+      "en": "FMCG",
+      "vi": "FMCG",
+      "cn": "FMCG"
+    },
+    "Summary": {
+      "en": "Challenge: Cost + OT issues\nSolution: TMS + optimization",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "sdadasfdafdadsadas",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/08/45c2bd9b9d374f8fa961194c68902a1a.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "12% Transport cost savings"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780880723100"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780883419696"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780883419696"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a261ffe4a0fe09021a77594"
+    },
+    "StableId": "da56c092b062453fbc7856413c5dc285",
+    "ContentTypeKey": "technology",
+    "Slug": "furniture-exporter",
+    "Title": {
+      "en": "Furniture Exporter",
+      "vi": "Furniture Exporter",
+      "cn": "Furniture Exporter"
+    },
+    "Summary": {
+      "en": "Challenge: Limited visibility\nSolution: SyncHub tracking",
+      "vi": "Challenge: Limited visibility Solution: SyncHub tracking",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "adsadsadasdasds",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/08/0e6c13a73b344ed0984d76586ea120ec.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "-35%Lead Time Variance"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780880658308"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780883454012"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780883454012"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a279395bbaba3d9e53682d6"
+    },
+    "StableId": "shareholder-financial-annual-2025",
+    "ContentTypeKey": "financial-report",
+    "Slug": "annual-report-2025",
+    "Title": {
+      "en": "Annual Report 2025",
+      "vi": "Annual Report 2025",
+      "cn": "Annual Report 2025"
+    },
+    "Summary": {
+      "en": "Comprehensive annual business, financial, and operational performance report for fiscal year 2025.",
+      "vi": "Comprehensive annual business, financial, and operational performance report for fiscal year 2025.",
+      "cn": "Comprehensive annual business, financial, and operational performance report for fiscal year 2025."
+    },
+    "BodyHtml": {
+      "en": "<p>Comprehensive annual business, financial, and operational performance report for fiscal year 2025.</p>",
+      "vi": "<p>Comprehensive annual business, financial, and operational performance report for fiscal year 2025.</p>",
+      "cn": "<p>Comprehensive annual business, financial, and operational performance report for fiscal year 2025.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Annual Report",
+      "2025"
+    ],
+    "Attachments": [
+      {
+        "Id": "shareholder-financial-annual-2025-file",
+        "FileName": "annual-report-2025.pdf",
+        "Url": "/downloads/shareholder-relations/annual-report-2025.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberInt": "1250000"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780460181706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780978581706"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780460181706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780460181706"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a279395bbaba3d9e53682d8"
+    },
+    "StableId": "shareholder-financial-q4-2025",
+    "ContentTypeKey": "financial-report",
+    "Slug": "q4-2025-financial-statements",
+    "Title": {
+      "en": "Q4 2025 Financial Statements",
+      "vi": "Q4 2025 Financial Statements",
+      "cn": "Q4 2025 Financial Statements"
+    },
+    "Summary": {
+      "en": "Quarterly financial statements and key operating indicators for Q4 2025.",
+      "vi": "Quarterly financial statements and key operating indicators for Q4 2025.",
+      "cn": "Quarterly financial statements and key operating indicators for Q4 2025."
+    },
+    "BodyHtml": {
+      "en": "<p>Quarterly financial statements and key operating indicators for Q4 2025.</p>",
+      "vi": "<p>Quarterly financial statements and key operating indicators for Q4 2025.</p>",
+      "cn": "<p>Quarterly financial statements and key operating indicators for Q4 2025.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Financial Statement",
+      "2025"
+    ],
+    "Attachments": [
+      {
+        "Id": "shareholder-financial-q4-2025-file",
+        "FileName": "q4-2025-financial-statements.pdf",
+        "Url": "/downloads/shareholder-relations/q4-2025-financial-statements.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberInt": "1250000"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1779423381706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780978581706"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1779423381706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1779423381706"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a279395bbaba3d9e53682da"
+    },
+    "StableId": "shareholder-financial-q3-2025",
+    "ContentTypeKey": "financial-report",
+    "Slug": "q3-2025-financial-statements",
+    "Title": {
+      "en": "Q3 2025 Financial Statements",
+      "vi": "Q3 2025 Financial Statements",
+      "cn": "Q3 2025 Financial Statements"
+    },
+    "Summary": {
+      "en": "Quarterly financial statements and key operating indicators for Q3 2025.",
+      "vi": "Quarterly financial statements and key operating indicators for Q3 2025.",
+      "cn": "Quarterly financial statements and key operating indicators for Q3 2025."
+    },
+    "BodyHtml": {
+      "en": "<p>Quarterly financial statements and key operating indicators for Q3 2025.</p>",
+      "vi": "<p>Quarterly financial statements and key operating indicators for Q3 2025.</p>",
+      "cn": "<p>Quarterly financial statements and key operating indicators for Q3 2025.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Financial Statement",
+      "2025"
+    ],
+    "Attachments": [
+      {
+        "Id": "shareholder-financial-q3-2025-file",
+        "FileName": "q3-2025-financial-statements.pdf",
+        "Url": "/downloads/shareholder-relations/q3-2025-financial-statements.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberInt": "1250000"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1777176981706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780978581706"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1777176981706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1777176981706"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a279395bbaba3d9e53682dc"
+    },
+    "StableId": "shareholder-governance-2025",
+    "ContentTypeKey": "governance-report",
+    "Slug": "corporate-governance-report-2025",
+    "Title": {
+      "en": "Corporate Governance Report 2025",
+      "vi": "Corporate Governance Report 2025",
+      "cn": "Corporate Governance Report 2025"
+    },
+    "Summary": {
+      "en": "Annual governance report covering board structure, shareholder rights, and compliance practices.",
+      "vi": "Annual governance report covering board structure, shareholder rights, and compliance practices.",
+      "cn": "Annual governance report covering board structure, shareholder rights, and compliance practices."
+    },
+    "BodyHtml": {
+      "en": "<p>Annual governance report covering board structure, shareholder rights, and compliance practices.</p>",
+      "vi": "<p>Annual governance report covering board structure, shareholder rights, and compliance practices.</p>",
+      "cn": "<p>Annual governance report covering board structure, shareholder rights, and compliance practices.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Governance",
+      "2025"
+    ],
+    "Attachments": [
+      {
+        "Id": "shareholder-governance-2025-file",
+        "FileName": "corporate-governance-report-2025.pdf",
+        "Url": "/downloads/shareholder-relations/corporate-governance-report-2025.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberInt": "1250000"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780200981706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780978581706"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780200981706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780200981706"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a279395bbaba3d9e53682de"
+    },
+    "StableId": "shareholder-governance-board-2025",
+    "ContentTypeKey": "governance-report",
+    "Slug": "board-activity-report-2025",
+    "Title": {
+      "en": "Board Activity Report 2025",
+      "vi": "Board Activity Report 2025",
+      "cn": "Board Activity Report 2025"
+    },
+    "Summary": {
+      "en": "Summary of board activities, committee oversight, and governance initiatives.",
+      "vi": "Summary of board activities, committee oversight, and governance initiatives.",
+      "cn": "Summary of board activities, committee oversight, and governance initiatives."
+    },
+    "BodyHtml": {
+      "en": "<p>Summary of board activities, committee oversight, and governance initiatives.</p>",
+      "vi": "<p>Summary of board activities, committee oversight, and governance initiatives.</p>",
+      "cn": "<p>Summary of board activities, committee oversight, and governance initiatives.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Governance",
+      "Board"
+    ],
+    "Attachments": [
+      {
+        "Id": "shareholder-governance-board-2025-file",
+        "FileName": "board-activity-report-2025.pdf",
+        "Url": "/downloads/shareholder-relations/board-activity-report-2025.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberInt": "1250000"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1778213781706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780978581706"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1778213781706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1778213781706"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a279395bbaba3d9e53682e0"
+    },
+    "StableId": "shareholder-governance-compliance-2025",
+    "ContentTypeKey": "governance-report",
+    "Slug": "compliance-and-risk-governance-report",
+    "Title": {
+      "en": "Compliance & Risk Governance Report",
+      "vi": "Compliance & Risk Governance Report",
+      "cn": "Compliance & Risk Governance Report"
+    },
+    "Summary": {
+      "en": "Governance disclosure covering compliance controls, risk oversight, and internal policies.",
+      "vi": "Governance disclosure covering compliance controls, risk oversight, and internal policies.",
+      "cn": "Governance disclosure covering compliance controls, risk oversight, and internal policies."
+    },
+    "BodyHtml": {
+      "en": "<p>Governance disclosure covering compliance controls, risk oversight, and internal policies.</p>",
+      "vi": "<p>Governance disclosure covering compliance controls, risk oversight, and internal policies.</p>",
+      "cn": "<p>Governance disclosure covering compliance controls, risk oversight, and internal policies.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Governance",
+      "Compliance"
+    ],
+    "Attachments": [
+      {
+        "Id": "shareholder-governance-compliance-2025-file",
+        "FileName": "compliance-and-risk-governance-report.pdf",
+        "Url": "/downloads/shareholder-relations/compliance-and-risk-governance-report.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberInt": "1250000"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "admin",
+    "PublishedById": "admin",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1774930581706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780978581706"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1774930581706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1774930581706"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27af45e628909aa1980e84"
+    },
+    "StableId": "f27b38fc52ea48c19009f854df159081",
+    "ContentTypeKey": "financial-report",
+    "Slug": "q2-financial-report-2026",
+    "Title": {
+      "en": "Q2 Financial Report 2026",
+      "vi": "Q2 Financial Report 2026",
+      "cn": "Q2 Financial Report 2026"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/09/8315d551c57546abba04c8a4885b40dc.jpg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "d66fb3cf536640a3bd7126e6bc75d723",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/520621a9dfe1415695a72ea55fdce302.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780985665140"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780985669418"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780985669418"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27af7ae628909aa1980e8b"
+    },
+    "StableId": "eef91ada07e042879e3c065844a3e9b6",
+    "ContentTypeKey": "financial-report",
+    "Slug": "q1-financial-report-2026",
+    "Title": {
+      "en": "Q1 Financial Report 2026",
+      "vi": "Q1 Financial Report 2026",
+      "cn": "Q1 Financial Report 2026"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/09/96fcbcc32f9c4c479132f5af143a779e.jpg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "07311562de4744f3a18a8e2fcf3d7cc2",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/434a8eff82b8414b95c7776841bd6ee3.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780985716513"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780985722741"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780985721681"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780985722741"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27afc6e628909aa1980e90"
+    },
+    "StableId": "8f2157efb93541638e2417825086e6a3",
+    "ContentTypeKey": "financial-report",
+    "Slug": "q4-financial-report-2023",
+    "Title": {
+      "en": "Q4 Financial Report 2023",
+      "vi": "Q4 Financial Report 2023",
+      "cn": "Q4 Financial Report 2023"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/09/33452a49993149ab9c35cafd375c871f.jpg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "5f626626b986433eb3f413ea1288c2af",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/37ddb40540a94b379d576c6c15ff474e.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780985797704"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780985798655"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780985798655"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b0b2e628909aa1980ea7"
+    },
+    "StableId": "544b09a4f6c84ebbbaf66260093c1697",
+    "ContentTypeKey": "financial-report",
+    "Slug": "q1-financial-report-2023",
+    "Title": {
+      "en": "Q1 Financial Report 2023",
+      "vi": "Q1 Financial Report 2023",
+      "cn": "Q1 Financial Report 2023"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/09/973a30c0d1454996b79a6d5f3f2ba9e0.jpg",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/09/1c1cdde57ec043ccb8dff3ec156f8626.jpg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "a73ca1e377e34051bc593f8aa088a863",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/fda74d3ae6c641b09e8f69551683b9c8.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780986033915"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986034988"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986034988"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b0e0e628909aa1980eac"
+    },
+    "StableId": "639cabad84184d629e607f1b5ca62161",
+    "ContentTypeKey": "financial-report",
+    "Slug": "q2-financial-report",
+    "Title": {
+      "en": "Q2 Financial Report",
+      "vi": "Q2 Financial Report",
+      "cn": "Q2 Financial Report"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/09/adf788b7617546b4bee250126c9aac24.jpg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "99c984fde6214fd1afe3e63f42aecca9",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/73f39e155d174d288f4918e7c6da3617.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780986075786"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986080737"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986080737"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b1eee628909aa1980ebb"
+    },
+    "StableId": "shareholder-charter-board",
+    "ContentTypeKey": "company-charter-regulation",
+    "Slug": "board-of-directors-regulation",
+    "Title": {
+      "en": "Board of Directors Regulation",
+      "vi": "Board of Directors Regulation",
+      "cn": "Board of Directors Regulation"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "Rules and operating framework for the Board of Directors.",
+      "cn": "Rules and operating framework for the Board of Directors."
+    },
+    "BodyHtml": {
+      "en": "<p>Rules and operating framework for the Board of Directors.</p>",
+      "vi": "<p>Rules and operating framework for the Board of Directors.</p>",
+      "cn": "<p>Rules and operating framework for the Board of Directors.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Regulation"
+    ],
+    "Attachments": [
+      {
+        "Id": "98481b11e4fe4a32872499084fb5a837",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/100daede2c4f4a70acf68c0a77bc500e.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1779336981706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986350224"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1779336981706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986350224"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b250e628909aa1980ebf"
+    },
+    "StableId": "shareholder-charter-company",
+    "ContentTypeKey": "company-charter-regulation",
+    "Slug": "company-charter",
+    "Title": {
+      "en": "Company Charter",
+      "vi": "Company Charter",
+      "cn": "Company Charter"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "The official company charter defining governance principles, shareholder rights, and operating rules.",
+      "cn": "The official company charter defining governance principles, shareholder rights, and operating rules."
+    },
+    "BodyHtml": {
+      "en": "<p>The official company charter defining governance principles, shareholder rights, and operating rules.</p>",
+      "vi": "<p>The official company charter defining governance principles, shareholder rights, and operating rules.</p>",
+      "cn": "<p>The official company charter defining governance principles, shareholder rights, and operating rules.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/09/0808c76e71ed479ebe9dbc30d9339c3b.jpg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Charter"
+    ],
+    "Attachments": [
+      {
+        "Id": "7dee5eadd6e94a71bb0358c47b5a5d35",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/562c25a817a64b8b8e83c9a390b55826.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1779941781706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986448083"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1779941781706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986448083"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b3abe628909aa1980ecb"
+    },
+    "StableId": "shareholder-disclosure-change-personnel",
+    "ContentTypeKey": "disclosure",
+    "Slug": "announcement-on-senior-personnel-change",
+    "Title": {
+      "en": "Announcement on Senior Personnel Change",
+      "vi": "Announcement on Senior Personnel Change",
+      "cn": "Announcement on Senior Personnel Change"
+    },
+    "Summary": {
+      "en": "Official disclosure of senior personnel changes.",
+      "vi": "Official disclosure of senior personnel changes.",
+      "cn": "Official disclosure of senior personnel changes."
+    },
+    "BodyHtml": {
+      "en": "<p>Official disclosure of senior personnel changes.</p>",
+      "vi": "<p>Official disclosure of senior personnel changes.</p>",
+      "cn": "<p>Official disclosure of senior personnel changes.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Personnel",
+      "2025"
+    ],
+    "Attachments": [
+      {
+        "Id": "2b2b09ae245f47a585462a4ce9f28861",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/42b95c3ae0c0492b96b379acff54c9a8.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1777349781706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986795058"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1777349781706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986795058"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b3b7e628909aa1980ece"
+    },
+    "StableId": "shareholder-disclosure-board-resolution",
+    "ContentTypeKey": "disclosure",
+    "Slug": "board-resolution-on-strategic-investment",
+    "Title": {
+      "en": "Board Resolution on Strategic Investment",
+      "vi": "Board Resolution on Strategic Investment",
+      "cn": "Board Resolution on Strategic Investment"
+    },
+    "Summary": {
+      "en": "Public disclosure of board resolution regarding strategic investment planning.",
+      "vi": "Public disclosure of board resolution regarding strategic investment planning.",
+      "cn": "Public disclosure of board resolution regarding strategic investment planning."
+    },
+    "BodyHtml": {
+      "en": "<p>Public disclosure of board resolution regarding strategic investment planning.</p>",
+      "vi": "<p>Public disclosure of board resolution regarding strategic investment planning.</p>",
+      "cn": "<p>Public disclosure of board resolution regarding strategic investment planning.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Resolution",
+      "2025"
+    ],
+    "Attachments": [
+      {
+        "Id": "8fb76149359649c084008a0881dc820a",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/5c1772675ae246a59463cd22f3c9b68e.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1778559381706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986807184"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1778559381706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986807184"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b3c3e628909aa1980ed1"
+    },
+    "StableId": "shareholder-disclosure-dividend-2025",
+    "ContentTypeKey": "disclosure",
+    "Slug": "dividend-payment-announcement-2025",
+    "Title": {
+      "en": "Dividend Payment Announcement 2025",
+      "vi": "Dividend Payment Announcement 2025",
+      "cn": "Dividend Payment Announcement 2025"
+    },
+    "Summary": {
+      "en": "Disclosure announcement on dividend payment schedule and shareholder eligibility.",
+      "vi": "Disclosure announcement on dividend payment schedule and shareholder eligibility.",
+      "cn": "Disclosure announcement on dividend payment schedule and shareholder eligibility."
+    },
+    "BodyHtml": {
+      "en": "<p>Disclosure announcement on dividend payment schedule and shareholder eligibility.</p>",
+      "vi": "<p>Disclosure announcement on dividend payment schedule and shareholder eligibility.</p>",
+      "cn": "<p>Disclosure announcement on dividend payment schedule and shareholder eligibility.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Dividend",
+      "2025"
+    ],
+    "Attachments": [
+      {
+        "Id": "3888923d2f8c488d8a90cfc394f3e250",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/3c11d90ae5b348a883cc693c27e1a571.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1779682581706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986819522"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1779682581706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986819522"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a27b3cee628909aa1980ed4"
+    },
+    "StableId": "shareholder-disclosure-agm-2026",
+    "ContentTypeKey": "disclosure",
+    "Slug": "notice-of-annual-general-meeting-2026",
+    "Title": {
+      "en": "Notice of Annual General Meeting 2026",
+      "vi": "Notice of Annual General Meeting 2026",
+      "cn": "Notice of Annual General Meeting 2026"
+    },
+    "Summary": {
+      "en": "Official notice of the 2026 Annual General Meeting.",
+      "vi": "Official notice of the 2026 Annual General Meeting.",
+      "cn": "Official notice of the 2026 Annual General Meeting."
+    },
+    "BodyHtml": {
+      "en": "<p>Official notice of the 2026 Annual General Meeting.</p>",
+      "vi": "<p>Official notice of the 2026 Annual General Meeting.</p>",
+      "cn": "<p>Official notice of the 2026 Annual General Meeting.</p>"
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "AGM",
+      "2026"
+    ],
+    "Attachments": [
+      {
+        "Id": "da5f0ff2c57f49c3895b30e6f9b93791",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/09/b0362eaebeb64e4190c7b6376afbdc00.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "admin",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780632981706"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1780986830834"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780632981706"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1780986830834"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a28cd8a172e783ec573a579"
+    },
+    "StableId": "a915dcbcb65c4f7f85d3f9829e7f6b66",
+    "ContentTypeKey": "tools-template",
+    "Slug": "kpi-dashboard-template",
+    "Title": {
+      "en": "KPI DASHBOARD TEMPLATE",
+      "vi": "KPI DASHBOARD TEMPLATE",
+      "cn": "KPI DASHBOARD TEMPLATE"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "c42da222948a4645b35739d4a90d8ecb",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/10/b1596eb262c5425cb36690b96f7c8a1f.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1781058878460"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1781058954645"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1781058954645"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a28cd97172e783ec573a57c"
+    },
+    "StableId": "eafd2bf40a614830bee084068ac025a4",
+    "ContentTypeKey": "tools-template",
+    "Slug": "cost-to-serve-calculator",
+    "Title": {
+      "en": "Cost-To-Serve Calculator",
+      "vi": "Cost-To-Serve Calculator",
+      "cn": "Cost-To-Serve Calculator"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "6627d327ed714142bcafd324da4dff37",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/10/bfb6707f92ba454cbd567861eea2f522.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1781058903382"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1781058967614"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1781058967614"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a28ce01172e783ec573a58b"
+    },
+    "StableId": "7ca6793e9a354d01bdc351de9f58e2bb",
+    "ContentTypeKey": "tools-template",
+    "Slug": "sla-design-worksheet",
+    "Title": {
+      "en": "SLA Design Worksheet",
+      "vi": "SLA Design Worksheet",
+      "cn": "SLA Design Worksheet"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "dbcd96e8f8b64416a5819fa982d34a2c",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/10/55e6036449fb4ecdb30d33b227eab2e6.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1781059072252"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1781059073208"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1781059073208"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a28e7c0634308638ee5e4bd"
+    },
+    "StableId": "6df7ff0070b8410db1d500f9a6c0553b",
+    "ContentTypeKey": "tools-template",
+    "Slug": "warehouse-audit-template",
+    "Title": {
+      "en": "Warehouse Audit Template",
+      "vi": "Warehouse Audit Template",
+      "cn": "Warehouse Audit Template"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/10/17672c9b167c4021b0c52b08af59c2cf.svg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "34f62cd1795044f59448116ad3208e97",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/10/e139620d93b54ae4bc98e8f907b0f36d.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1781059017509"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1781065664847"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1781065664847"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a28e7d3634308638ee5e4c0"
+    },
+    "StableId": "9fc0c568902248d1804496fb009ee0f3",
+    "ContentTypeKey": "tools-template",
+    "Slug": "route-optimization-checklist",
+    "Title": {
+      "en": "Route Optimization Checklist",
+      "vi": "Route Optimization Checklist",
+      "cn": "Route Optimization Checklist"
+    },
+    "Summary": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "HeroImageUrl": null,
+    "HeroImageAlt": null,
+    "ThumbnailUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-thumbnails/2026/06/10/8cd16aaefc604bc9baf4af2223e4b909.svg",
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [],
+    "Attachments": [
+      {
+        "Id": "135f24c1bfc64860bf462be0fc461cb2",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/10/e3ad6d83083f4a9d829065f7a6d0479f.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        }
+      }
+    ],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1781058995038"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1781065683801"
+      }
+    },
+    "SubmittedAt": null,
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1781065683801"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a3a3b33684a55350eb8e214"
+    },
+    "StableId": "71817d89ae4b45f9aec9685e785917e3",
+    "ContentTypeKey": "article",
+    "Slug": "digital-stack-integration-for-smes",
+    "Title": {
+      "en": "Digital Stack Integration for SMEs",
+      "vi": "Digital Stack Integration for SMEs",
+      "cn": "Digital Stack Integration for SMEs"
+    },
+    "Summary": {
+      "en": "An overview of lead time variability in export logistics and strategies to improve predictability and reliability.",
+      "vi": "",
+      "cn": ""
+    },
+    "BodyHtml": {
+      "en": "<span style=\"font-size: 15px\">For many small and medium-sized enterprises, logistics technology grows in pieces: one spreadsheet for orders, a courier portal for last-mile delivery, a customs document folder, and a separate accounting system for invoices. Each tool may solve a narrow problem, but the gaps between them create delays, manual re-entry, and poor visibility. Digital stack integration is the process of connecting these everyday tools into one practical operating flow.\nThe first priority is visibility. SMEs do not always need a large enterprise platform on day one, but they do need accurate shipment status, inventory movement, and exception alerts. Connecting order data, warehouse updates, transport milestones, and customer notifications allows teams to see what is happening without chasing information across email threads or chat messages.</span>\r\n<span style=\"font-size: 15px\"><br></span><span style=\"font-size: 15px\">A strong integration plan starts with the workflows that cost the most time. Typical candidates include purchase order confirmation, booking requests, packing list generation, customs documentation, delivery tracking, and proof-of-delivery capture. Once these workflows are mapped, the business can decide which systems should exchange data automatically and which steps still need human approval. The most effective approach for SMEs is phased implementation. Instead of replacing every tool at once, companies can connect the most important systems first, then expand gradually. A practical first phase might connect sales orders to warehouse preparation and transport booking. A second phase may add automated customer updates, exception reporting, and dashboard views for management.</span><span style=\"font-size: 15px\"></span>\r\n<span style=\"font-size: 15px\">Clean data is the foundation of every successful digital stack. Product codes, customer names, addresses, service types, and shipment references must be consistent across systems. Without clear data rules, integration simply moves errors faster. Before automation begins, SMEs should define ownership for master data and create simple standards for naming, formatting, and validation. Working with a logistics partner that understands integration can reduce the burden on internal teams. The partner can provide shipment milestones, document status, transport cost visibility, and exception alerts through structured data instead of manual updates. This lets SMEs improve service quality without building a large in-house technology department.</span>\r\n<p><a class=\"sc-insight-download\" href=\"https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/16/c17250ad7cb641c4870946ad298ec93c.pdf\" target=\"_blank\" rel=\"noopener\"><span><strong>CN_GS_FBA_3.10_AWD_Program_EN.pdf</strong><small>1.2 MB / application/pdf</small></span><b>Download</b></a></p>\r\n<hr class=\"sc-content-body-divider\" />\r\n<p>The goal is not technology for its own sake. A connected digital stack should reduce duplicated work, shorten response time, improve delivery reliability, and give managers better information for planning. When integration is designed around real operational pain points, SMEs can scale with more control and less administrative friction.</p>",
+      "vi": "<p>For many small and medium-sized enterprises, logistics technology grows in pieces: one spreadsheet for orders, a courier portal for last-mile delivery, a customs document folder, and a separate accounting system for invoices. Each tool may solve a narrow problem, but the gaps between them create delays, manual re-entry, and poor visibility. Digital stack integration is the process of connecting these everyday tools into one practical operating flow.</p>\r\n<p>A strong integration plan starts with the workflows that cost the most time. Typical candidates include purchase order confirmation, booking requests, packing list generation, customs documentation, delivery tracking, and proof-of-delivery capture. Once these workflows are mapped, the business can decide which systems should exchange data automatically and which steps still need human approval.</p>\r\n<p>Clean data is the foundation of every successful digital stack. Product codes, customer names, addresses, service types, and shipment references must be consistent across systems. Without clear data rules, integration simply moves errors faster. Before automation begins, SMEs should define ownership for master data and create simple standards for naming, formatting, and validation.</p>\r\n<p><a class=\"sc-insight-download\" href=\"https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/16/c17250ad7cb641c4870946ad298ec93c.pdf\" target=\"_blank\" rel=\"noopener\"><span><strong>CN_GS_FBA_3.10_AWD_Program_EN.pdf</strong><small>1.2 MB / application/pdf</small></span><b>Download</b></a></p>\r\n<hr class=\"sc-content-body-divider\" />\r\n<p>The goal is not technology for its own sake. A connected digital stack should reduce duplicated work, shorten response time, improve delivery reliability, and give managers better information for planning. When integration is designed around real operational pain points, SMEs can scale with more control and less administrative friction.</p>",
+      "cn": "<p>For many small and medium-sized enterprises, logistics technology grows in pieces: one spreadsheet for orders, a courier portal for last-mile delivery, a customs document folder, and a separate accounting system for invoices. Each tool may solve a narrow problem, but the gaps between them create delays, manual re-entry, and poor visibility. Digital stack integration is the process of connecting these everyday tools into one practical operating flow.</p>\r\n<p>A strong integration plan starts with the workflows that cost the most time. Typical candidates include purchase order confirmation, booking requests, packing list generation, customs documentation, delivery tracking, and proof-of-delivery capture. Once these workflows are mapped, the business can decide which systems should exchange data automatically and which steps still need human approval.</p>\r\n<p>Clean data is the foundation of every successful digital stack. Product codes, customer names, addresses, service types, and shipment references must be consistent across systems. Without clear data rules, integration simply moves errors faster. Before automation begins, SMEs should define ownership for master data and create simple standards for naming, formatting, and validation.</p>\r\n<p><a class=\"sc-insight-download\" href=\"https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/16/c17250ad7cb641c4870946ad298ec93c.pdf\" target=\"_blank\" rel=\"noopener\"><span><strong>CN_GS_FBA_3.10_AWD_Program_EN.pdf</strong><small>1.2 MB / application/pdf</small></span><b>Download</b></a></p>\r\n<hr class=\"sc-content-body-divider\" />\r\n<p>The goal is not technology for its own sake. A connected digital stack should reduce duplicated work, shorten response time, improve delivery reliability, and give managers better information for planning. When integration is designed around real operational pain points, SMEs can scale with more control and less administrative friction.</p>"
+    },
+    "BodyItems": [
+      {
+        "Id": "digital-stack-intro",
+        "Type": "text",
+        "Content": {
+          "en": "<span style=\"font-size: 15px\">For many small and medium-sized enterprises, logistics technology grows in pieces: one spreadsheet for orders, a courier portal for last-mile delivery, a customs document folder, and a separate accounting system for invoices. Each tool may solve a narrow problem, but the gaps between them create delays, manual re-entry, and poor visibility. Digital stack integration is the process of connecting these everyday tools into one practical operating flow.\nThe first priority is visibility. SMEs do not always need a large enterprise platform on day one, but they do need accurate shipment status, inventory movement, and exception alerts. Connecting order data, warehouse updates, transport milestones, and customer notifications allows teams to see what is happening without chasing information across email threads or chat messages.</span>",
+          "vi": "<p>For many small and medium-sized enterprises, logistics technology grows in pieces: one spreadsheet for orders, a courier portal for last-mile delivery, a customs document folder, and a separate accounting system for invoices. Each tool may solve a narrow problem, but the gaps between them create delays, manual re-entry, and poor visibility. Digital stack integration is the process of connecting these everyday tools into one practical operating flow.</p>",
+          "cn": "<p>For many small and medium-sized enterprises, logistics technology grows in pieces: one spreadsheet for orders, a courier portal for last-mile delivery, a customs document folder, and a separate accounting system for invoices. Each tool may solve a narrow problem, but the gaps between them create delays, manual re-entry, and poor visibility. Digital stack integration is the process of connecting these everyday tools into one practical operating flow.</p>"
+        },
+        "Caption": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Url": null,
+        "FileName": null,
+        "ContentType": null,
+        "SizeBytes": {
+          "$numberLong": "0"
+        },
+        "Style": null,
+        "Visible": true,
+        "Order": {
+          "$numberInt": "0"
+        }
+      },
+      {
+        "Id": "digital-stack-workflow",
+        "Type": "text",
+        "Content": {
+          "en": "<span style=\"font-size: 15px\"><br></span><span style=\"font-size: 15px\">A strong integration plan starts with the workflows that cost the most time. Typical candidates include purchase order confirmation, booking requests, packing list generation, customs documentation, delivery tracking, and proof-of-delivery capture. Once these workflows are mapped, the business can decide which systems should exchange data automatically and which steps still need human approval. The most effective approach for SMEs is phased implementation. Instead of replacing every tool at once, companies can connect the most important systems first, then expand gradually. A practical first phase might connect sales orders to warehouse preparation and transport booking. A second phase may add automated customer updates, exception reporting, and dashboard views for management.</span><span style=\"font-size: 15px\"></span>",
+          "vi": "<p>A strong integration plan starts with the workflows that cost the most time. Typical candidates include purchase order confirmation, booking requests, packing list generation, customs documentation, delivery tracking, and proof-of-delivery capture. Once these workflows are mapped, the business can decide which systems should exchange data automatically and which steps still need human approval.</p>",
+          "cn": "<p>A strong integration plan starts with the workflows that cost the most time. Typical candidates include purchase order confirmation, booking requests, packing list generation, customs documentation, delivery tracking, and proof-of-delivery capture. Once these workflows are mapped, the business can decide which systems should exchange data automatically and which steps still need human approval.</p>"
+        },
+        "Caption": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Url": null,
+        "FileName": null,
+        "ContentType": null,
+        "SizeBytes": {
+          "$numberLong": "0"
+        },
+        "Style": null,
+        "Visible": true,
+        "Order": {
+          "$numberInt": "1"
+        }
+      },
+      {
+        "Id": "digital-stack-data",
+        "Type": "text",
+        "Content": {
+          "en": "<span style=\"font-size: 15px\">Clean data is the foundation of every successful digital stack. Product codes, customer names, addresses, service types, and shipment references must be consistent across systems. Without clear data rules, integration simply moves errors faster. Before automation begins, SMEs should define ownership for master data and create simple standards for naming, formatting, and validation. Working with a logistics partner that understands integration can reduce the burden on internal teams. The partner can provide shipment milestones, document status, transport cost visibility, and exception alerts through structured data instead of manual updates. This lets SMEs improve service quality without building a large in-house technology department.</span>",
+          "vi": "<p>Clean data is the foundation of every successful digital stack. Product codes, customer names, addresses, service types, and shipment references must be consistent across systems. Without clear data rules, integration simply moves errors faster. Before automation begins, SMEs should define ownership for master data and create simple standards for naming, formatting, and validation.</p>",
+          "cn": "<p>Clean data is the foundation of every successful digital stack. Product codes, customer names, addresses, service types, and shipment references must be consistent across systems. Without clear data rules, integration simply moves errors faster. Before automation begins, SMEs should define ownership for master data and create simple standards for naming, formatting, and validation.</p>"
+        },
+        "Caption": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Url": null,
+        "FileName": null,
+        "ContentType": null,
+        "SizeBytes": {
+          "$numberLong": "0"
+        },
+        "Style": null,
+        "Visible": true,
+        "Order": {
+          "$numberInt": "2"
+        }
+      },
+      {
+        "Id": "b46bfd3f56ed4ceca35240e24f2f894e",
+        "Type": "file",
+        "Content": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Caption": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-files/2026/06/16/c17250ad7cb641c4870946ad298ec93c.pdf",
+        "FileName": "CN_GS_FBA_3.10_AWD_Program_EN.pdf",
+        "ContentType": "application/pdf",
+        "SizeBytes": {
+          "$numberLong": "1284251"
+        },
+        "Style": null,
+        "Visible": true,
+        "Order": {
+          "$numberInt": "3"
+        }
+      },
+      {
+        "Id": "01bdb01076dd45b7b60e8607a519ecb7",
+        "Type": "divider",
+        "Content": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Caption": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Url": null,
+        "FileName": null,
+        "ContentType": null,
+        "SizeBytes": {
+          "$numberLong": "0"
+        },
+        "Style": null,
+        "Visible": true,
+        "Order": {
+          "$numberInt": "4"
+        }
+      },
+      {
+        "Id": "digital-stack-outcome",
+        "Type": "text",
+        "Content": {
+          "en": "<p>The goal is not technology for its own sake. A connected digital stack should reduce duplicated work, shorten response time, improve delivery reliability, and give managers better information for planning. When integration is designed around real operational pain points, SMEs can scale with more control and less administrative friction.</p>",
+          "vi": "<p>The goal is not technology for its own sake. A connected digital stack should reduce duplicated work, shorten response time, improve delivery reliability, and give managers better information for planning. When integration is designed around real operational pain points, SMEs can scale with more control and less administrative friction.</p>",
+          "cn": "<p>The goal is not technology for its own sake. A connected digital stack should reduce duplicated work, shorten response time, improve delivery reliability, and give managers better information for planning. When integration is designed around real operational pain points, SMEs can scale with more control and less administrative friction.</p>"
+        },
+        "Caption": {
+          "en": "",
+          "vi": "",
+          "cn": ""
+        },
+        "Url": null,
+        "FileName": null,
+        "ContentType": null,
+        "SizeBytes": {
+          "$numberLong": "0"
+        },
+        "Style": null,
+        "Visible": true,
+        "Order": {
+          "$numberInt": "5"
+        }
+      }
+    ],
+    "HeroImageUrl": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/content-hero/2026/06/07/66ef87b1cbf046abbf808e8fb3dc647d.png",
+    "HeroImageAlt": null,
+    "ThumbnailUrl": null,
+    "VideoUrl": null,
+    "ExternalUrl": null,
+    "TemplateKey": null,
+    "Tags": [
+      "Tag category"
+    ],
+    "Attachments": [],
+    "Status": {
+      "$numberInt": "3"
+    },
+    "Visible": true,
+    "AuthorId": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "PublishedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1780840068177"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1782201139676"
+      }
+    },
+    "SubmittedAt": {
+      "$date": {
+        "$numberLong": "1780840069000"
+      }
+    },
+    "PublishedAt": {
+      "$date": {
+        "$numberLong": "1782201139676"
+      }
+    }
+  }
+]
