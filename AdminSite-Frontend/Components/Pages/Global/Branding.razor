@@ -3,10 +3,10 @@
 @inject IHttpService Http
 
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-paint-brush"></i> Branding</h1>
+    <h1 class="page-title"><i class="fas fa-paint-brush"></i> @T("Branding")</h1>
     <div class="page-actions">
         <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-            <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+            <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
         </button>
     </div>
 </div>
@@ -20,21 +20,21 @@
 else if (_model is not null)
 {
     <div class="admin-card">
-        <div class="admin-card-title">Company Info</div>
+        <div class="admin-card-title">@T("CompanyInfo")</div>
 
         <div class="form-group">
-            <label class="form-label">Company Name</label>
+            <label class="form-label">@T("CompanyName")</label>
             <DxTextBox @bind-Text="_model.CompanyName" CssClass="w-100" />
         </div>
 
         <div class="form-group">
-            <label class="form-label">URL or Slug</label>
+            <label class="form-label">@T("UrlOrSlug")</label>
             <DxTextBox @bind-Text="_model.Href" CssClass="w-100" NullText="https://yoursite.com" />
         </div>
     </div>
 
     <div class="admin-card">
-        <div class="admin-card-title">Logo</div>
+        <div class="admin-card-title">@T("Logo")</div>
 
         @if (!string.IsNullOrEmpty(_model.LogoUrl))
         {
@@ -43,16 +43,18 @@ else if (_model is not null)
                      style="max-height:80px;border:1px solid var(--border);border-radius:6px;padding:6px" />
             </div>
             <button class="btn-admin btn-danger" type="button" @onclick="ClearLogo">
-                <i class="fas fa-trash"></i> Delete Logo
+                <i class="fas fa-trash"></i> @T("DeleteLogo")
             </button>
         }
 
         <InputFile OnChange="OnLogoSelected" accept=".png,.svg,.jpg,.jpeg" />
-        <div class="form-hint">PNG or SVG recommended. Max 2MB.</div>
+        <div class="form-hint">@T("LogoUploadHint")</div>
     </div>
 }
 
 @code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
     private BrandingModel? _model;
     private bool _loading = true;
     private bool _saving = false;
@@ -73,11 +75,11 @@ else if (_model is not null)
         if (res.Success && res.Data is not null)
         {
             _model!.LogoUrl = res.Data.Url;
-            Http.Toast("Logo uploaded.", res.StatusCode);
+            Http.Toast(T("LogoUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? "Logo upload failed.", res.StatusCode);
+            Http.Toast(res.Message ?? T("LogoUploadFailed"), res.StatusCode);
         }
         StateHasChanged();
     }
@@ -95,8 +97,10 @@ else if (_model is not null)
         StateHasChanged();
         var res = await BrandingService.UpdateAsync(_model);
         if (res.Data is not null) _model = res.Data;
-        Http.Toast(res.Message ?? "Branding saved.", res.StatusCode);
+        Http.Toast(res.Message ?? T("BrandingSaved"), res.StatusCode);
         _saving = false;
         StateHasChanged();
     }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 }

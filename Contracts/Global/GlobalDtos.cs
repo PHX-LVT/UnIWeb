@@ -52,6 +52,7 @@ namespace Contracts.Global
         public Dictionary<string, string> LabelText { get; set; } = new();
         public GlobalButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition Position { get; set; }
         public int Order { get; set; }
     }

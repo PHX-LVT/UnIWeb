@@ -3,19 +3,19 @@
 @inject IHttpService Http
 
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-share-alt"></i> Social Buttons</h1>
+    <h1 class="page-title"><i class="fas fa-share-alt"></i> @T("SocialButtons")</h1>
     <div class="page-actions">
         @if (_group is not null)
         {
             <button class="visibility-toggle @(_group.Visible ? "visible" : "hidden")"
                     @onclick="ToggleGroup">
                 <i class="fas @(_group.Visible ? "fa-eye" : "fa-eye-slash")"></i>
-                Group @(_group.Visible ? "Visible" : "Hidden")
+                @T("Group") @(_group.Visible ? T("Visible") : T("Hidden"))
             </button>
         }
         <button class="btn-admin btn-primary" @onclick="() => OpenModal(null)"
                 disabled="@(_group?.Buttons.Count >= 4)">
-            <i class="fas fa-plus"></i> Add
+            <i class="fas fa-plus"></i> @T("Add")
         </button>
     </div>
 </div>
@@ -31,7 +31,7 @@ else if (_group is not null)
     <div class="admin-card">
         @if (!_group.Buttons.Any())
         {
-            <p class="text-muted">No social buttons yet.</p>
+            <p class="text-muted">@T("NoSocialButtonsYet")</p>
         }
         else
         {
@@ -66,34 +66,34 @@ else if (_group is not null)
     <div class="modal-backdrop" @onclick="CloseModal">
         <div class="modal-box" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <span>@(_editing is null ? "Add Social Button" : "Edit Social Button")</span>
+                <span>@(_editing is null ? T("AddSocialButton") : T("EditSocialButton"))</span>
                 <button class="btn-admin btn-ghost" @onclick="CloseModal">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label required">Label</label>
+                    <label class="form-label required">@T("Label")</label>
                     <DxTextBox @bind-Text="_form.Label" CssClass="w-100"
                                NullText="Facebook, Instagram..." />
                 </div>
                 <div class="form-group">
-                    <label class="form-label required">URL</label>
+                    <label class="form-label required">@T("Url")</label>
                     <DxTextBox @bind-Text="_form.Href" CssClass="w-100" />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Bootstrap Icon class</label>
+                    <label class="form-label">@T("BootstrapIconClass")</label>
                     <DxTextBox @bind-Text="_form.Icon" CssClass="w-100"
                                NullText="fab fa-facebook" />
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                    <DxCheckBox @bind-Checked="_form.Visible" /> Visible
+                    <DxCheckBox @bind-Checked="_form.Visible" /> @T("Visible")
                 </label>
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost" @onclick="CloseModal">Cancel</button>
+                <button class="btn-admin btn-ghost" @onclick="CloseModal">@T("Cancel")</button>
                 <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-                    @(_saving ? "Saving..." : "Save")
+                    @(_saving ? T("Saving") : T("Save"))
                 </button>
             </div>
         </div>
@@ -101,6 +101,8 @@ else if (_group is not null)
 }
 
 @code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
     private SocialGroupModel? _group;
     private SocialButtonModel? _editing;
     private SocialButtonRequest _form = new();
@@ -167,4 +169,6 @@ else if (_group is not null)
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success) await Load();
     }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 }

@@ -17,9 +17,9 @@
         <div class="sc-btn-group">
             @foreach (var btn in Block.Buttons.OrderBy(b => b.Order))
             {
-                <a href="@btn.Href" class="sc-btn sc-btn--filled">
+                <ActionButton Action="@btn.Action" FormDefinitionId="@btn.FormDefinitionId" Href="@btn.Href" CssClass="sc-btn sc-btn--filled">
                     @StyleHelper.Lang(btn.Label, Lang)
-                </a>
+                </ActionButton>
             }
         </div>
     }

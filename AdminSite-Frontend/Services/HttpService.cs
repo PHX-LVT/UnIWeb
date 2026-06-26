@@ -16,7 +16,8 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> GetAsync<T>(string uri);
         Task<ApiResponse<T>> PostAsync<T>(string uri, object body);
         Task<ApiResponse<T>> PutAsync<T>(string uri, object body);
-                Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024);
+        Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
+        Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         void Toast(string? message, int statusCode);
     }
@@ -62,12 +63,45 @@ namespace AdminSite.Services
                 Content = Json(body)
             });
 
-        public async Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024)
+        public async Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null)
         {
             var content = new MultipartFormDataContent();
             var fileContent = new StreamContent(file.OpenReadStream(maxBytes));
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
             content.Add(fileContent, fieldName, file.Name);
+            if (formFields is not null)
+            {
+                foreach (var field in formFields)
+                {
+                    if (!string.IsNullOrWhiteSpace(field.Key))
+                        content.Add(new StringContent(field.Value ?? string.Empty), field.Key);
+                }
+            }
+
+            return await SendAsync<T>(new HttpRequestMessage(HttpMethod.Post, uri)
+            {
+                Content = content
+            });
+        }
+
+        public async Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null)
+        {
+            var content = new MultipartFormDataContent();
+            foreach (var file in files)
+            {
+                var fileContent = new StreamContent(file.OpenReadStream(maxBytes));
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+                content.Add(fileContent, fieldName, file.Name);
+            }
+
+            if (formFields is not null)
+            {
+                foreach (var field in formFields)
+                {
+                    if (!string.IsNullOrWhiteSpace(field.Key))
+                        content.Add(new StringContent(field.Value ?? string.Empty), field.Key);
+                }
+            }
 
             return await SendAsync<T>(new HttpRequestMessage(HttpMethod.Post, uri)
             {
@@ -82,26 +116,28 @@ namespace AdminSite.Services
             try
             {
                 var session = await _storage.GetItemAsync<AdminSession>("admin_session");
-                if (session?.Token is not null)
+                var hasSessionToken = !string.IsNullOrWhiteSpace(session?.Token);
+                if (hasSessionToken && !IsLoginRequest(request))
                     request.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", session.Token);
+                        new AuthenticationHeaderValue("Bearer", session!.Token);
 
                 using var response = await _http.SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
-                    await _storage.RemoveItemAsync("admin_session");
-                    _nav.NavigateTo("/login");
-                    return ApiResponse<T>.Fail("Session expired.", 401);
+                    if (ShouldExpireSession(request, response, hasSessionToken))
+                    {
+                        await _storage.RemoveItemAsync("admin_session");
+                        _nav.NavigateTo("/login");
+                        return ApiResponse<T>.Fail("Session expired.", 401);
+                    }
+
+                    return await ReadApiResponse<T>(response)
+                           ?? ApiResponse<T>.Fail("Unauthorized.", 401);
                 }
 
-                var result = await response.Content
-                    .ReadFromJsonAsync<ApiResponse<T>>(_json);
-
-                if (result is { Success: false, Errors.Count: > 0 })
-                    result.Message = string.Join(" ", result.Errors);
-
-                return result ?? ApiResponse<T>.Fail("Empty response.", 500);
+                return await ReadApiResponse<T>(response)
+                       ?? ApiResponse<T>.Fail("Empty response.", 500);
             }
             catch (Exception ex)
             {
@@ -123,6 +159,44 @@ namespace AdminSite.Services
 
         private static StringContent Json(object body) =>
             new(JsonSerializer.Serialize(body, body.GetType(), _json), Encoding.UTF8, "application/json");
+
+        private static async Task<ApiResponse<T>?> ReadApiResponse<T>(HttpResponseMessage response)
+        {
+            ApiResponse<T>? result;
+            try
+            {
+                result = await response.Content
+                    .ReadFromJsonAsync<ApiResponse<T>>(_json);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+
+            if (result is { Success: false, Errors.Count: > 0 })
+                result.Message = string.Join(" ", result.Errors);
+
+            return result;
+        }
+
+        private static bool ShouldExpireSession(
+            HttpRequestMessage request,
+            HttpResponseMessage response,
+            bool hasSessionToken)
+        {
+            var sessionInvalid = response.Headers.TryGetValues("X-Admin-Session-Invalid", out var values) &&
+                                 values.Any(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
+            if (sessionInvalid) return true;
+            if (!hasSessionToken) return false;
+
+            return !IsLoginRequest(request);
+        }
+
+        private static bool IsLoginRequest(HttpRequestMessage request)
+        {
+            var uri = request.RequestUri?.OriginalString ?? string.Empty;
+            return uri.Contains("api/auth/login", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }
 

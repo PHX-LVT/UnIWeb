@@ -10,10 +10,6 @@
         <CtaSectionEditor Section="@Section" PageId="@PageId"
                           Languages="@Languages" OnSaved="@OnSaved" />
         break;
-    case "gallery":
-        <GallerySectionEditor Section="@Section" PageId="@PageId"
-                              OnSaved="@OnSaved" />
-        break;
     case "list":
         <ListSectionEditor Section="@Section" PageId="@PageId"
                            Languages="@Languages" OnSaved="@OnSaved" />
@@ -57,13 +53,17 @@
                              OnSectionsChanged="@OnSaved" />
         break;
     default:
-        <p class="text-muted">Unknown section type: @Section.Type</p>
+        <p class="text-muted">@T("UnknownSectionType"): @Section.Type</p>
         break;
 }
 
 @code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
     [Parameter] public SectionModel Section { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 }

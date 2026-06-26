@@ -1,0 +1,23 @@
+@using Contracts.Public
+
+@if (ShouldRenderVideo)
+{
+    <video class="sc-section-bg-video"
+           src="@BackgroundVideoUrl"
+           autoplay
+           muted
+           loop
+           playsinline
+           preload="metadata"
+           aria-hidden="true"></video>
+}
+
+@code {
+    [Parameter] public PublicSectionStyleDto? Style { get; set; }
+
+    private string? BackgroundVideoUrl => Style?.BackgroundVideoUrl;
+
+    private bool ShouldRenderVideo =>
+        string.Equals(Style?.BackgroundType, "video", StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(BackgroundVideoUrl);
+}

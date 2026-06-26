@@ -1,5 +1,6 @@
-﻿@inject AdminSectionService SectionService
+@inject AdminSectionService SectionService
 @inject IHttpService Http
+@inject AdminFormSubmissionService FormService
 
 <div class="form-group">
     <label class="form-label">@T("Layout")</label>
@@ -45,40 +46,59 @@
             </button>
         </div>
     }
-    <InputFile OnChange="OnImageSelected" accept="image/*" />
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <InputFile id="hero-section-image-upload"
+                   OnChange="OnImageSelected"
+                   accept="image/*"
+                   style="display:none" />
+        <label class="btn-admin btn-ghost" for="hero-section-image-upload">
+            <i class="fas fa-image"></i> @T("UploadNew")
+        </label>
+        <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
+            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+        </button>
+    </div>
 </div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectResourceImage"
+                     Closed="CloseResourcePicker" />
 
 <div class="form-group">
     <label class="form-label">@T("Buttons")</label>
     @foreach (var (btn, i) in _buttons.Select((b, i) => (b, i)))
     {
         <div class="section-button-editor">
-            <div class="section-button-cell">
+            <div class="section-button-cell section-button-cell--label">
+                <span class="section-button-cell__label">@T("Label")</span>
                 <LangField Value="@(btn.Label ?? new())"
                            ValueChanged="@(v => btn.Label = v)"
                            Languages="Languages"
                            NullText="@T("ButtonLabel")" />
             </div>
-            <div class="section-button-cell">
-                <span class="section-button-cell__label">@T("Url")</span>
-                <DxTextBox @bind-Text="btn.Href" CssClass="w-100"
-                           NullText="@T("Url")" />
+            <ButtonActionFields @bind-Action="btn.Action"
+                                @bind-Href="btn.Href"
+                                @bind-FormDefinitionId="btn.FormDefinitionId"
+                                FormDefinitions="_formDefinitions"
+                                AdminLanguage="AdminLanguage" />
+            <div class="section-button-editor__footer">
+                <div class="section-button-cell">
+                    <span class="section-button-cell__label">@T("Style")</span>
+                    <DxComboBox Data="_btnStyles" @bind-Value="btn.Style"
+                                CssClass="w-100" />
+                </div>
+                <button class="btn-admin btn-danger"
+                        @onclick="() => _buttons.RemoveAt(i)">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
-            <div class="section-button-cell">
-                <span class="section-button-cell__label">@T("Style")</span>
-                <DxComboBox Data="_btnStyles" @bind-Value="btn.Style"
-                            CssClass="w-100" />
-            </div>
-            <button class="btn-admin btn-danger"
-                    @onclick="() => _buttons.RemoveAt(i)">
-                <i class="fas fa-trash"></i>
-            </button>
         </div>
     }
     @if (_buttons.Count < 4)
     {
         <button class="btn-admin btn-outline"
-                @onclick="() => _buttons.Add(new SectionButtonModel { Visible = true })">
+                @onclick="AddButton">
             <i class="fas fa-plus"></i> @T("AddButton")
         </button>
     }
@@ -93,13 +113,21 @@
 <style>
     .section-button-editor {
         display: grid;
-        grid-template-columns: minmax(220px, 1.6fr) minmax(150px, 1fr) minmax(120px, .75fr) 42px;
+        grid-template-columns: 1fr;
+        gap: .55rem;
+        align-items: stretch;
+        margin-bottom: .6rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: .6rem;
+    }
+
+    .section-button-editor__footer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 42px;
         gap: .5rem;
         align-items: end;
-        margin-bottom: .5rem;
-        background: var(--bg);
-        border-radius: 6px;
-        padding: .5rem;
     }
 
     .section-button-cell {
@@ -127,6 +155,10 @@
             grid-template-columns: 1fr;
         }
 
+        .section-button-editor__footer {
+            grid-template-columns: 1fr;
+        }
+
         .section-button-editor .btn-danger {
             width: 100%;
         }
@@ -150,12 +182,20 @@
     private List<SectionButtonModel>   _buttons    = new();
     private bool _saving;
     private string? _loadedSectionId;
+    private bool _resourcePickerOpen;
+    private List<FormDefinitionModel> _formDefinitions = new();
 
     private List<string> _layouts = new() { "centered", "split-left", "split-right" };
     private List<string> _sizes = new() { "small", "medium", "large", "xl" };
     private List<string> _alignments = new() { "left","center","right" };
     private List<string> _btnStyles = new() { "filled", "outline", "ghost" };
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var forms = await FormService.GetDefinitionsAsync();
+        _formDefinitions = forms.Data ?? new();
+    }
 
     protected override void OnParametersSet()
     {
@@ -171,10 +211,19 @@
         _subheading   = new(Section.Subheading ?? new());
         _buttons      = Section.Buttons?.Select(b => new SectionButtonModel
         {
-            Id = b.Id, Label = b.Label, Href = b.Href,
-            Style = b.Style, Visible = b.Visible, Order = b.Order
+            Id = b.Id, Label = b.Label, Action = NormalizeButtonAction(b.Action), Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId, Style = b.Style, Visible = b.Visible, Order = b.Order
         }).ToList() ?? new();
     }
+
+    private void AddButton() => _buttons.Add(new SectionButtonModel
+    {
+        Label = new() { ["en"] = "Learn More" },
+        Action = "linkToPage",
+        Style = "filled",
+        Visible = true,
+        Order = _buttons.Count
+    });
 
     private async Task OnImageSelected(InputFileChangeEventArgs e)
     {
@@ -196,6 +245,21 @@
     private void RemoveImage()
     {
         _imageUrl = string.Empty;
+    }
+
+    private void OpenResourcePicker()
+    {
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+    }
+
+    private void SelectResourceImage(ManagedResourceModel resource)
+    {
+        _imageUrl = resource.Url;
     }
 
     private async Task Save()
@@ -225,11 +289,19 @@
         }
     }
 
+    private static string NormalizeButtonAction(string? action) => IsOpenFormAction(action) ? "openForm" : "linkToPage";
+
+    private static bool IsOpenFormAction(string? action) =>
+        string.Equals(action, "openForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenModal", StringComparison.OrdinalIgnoreCase);
+
     private static SectionButtonDto MapButton(SectionButtonModel button) => new()
     {
         Label = button.Label ?? new(),
-        Action = button.Action ?? "link",
-        Href = button.Href,
+        Action = NormalizeButtonAction(button.Action),
+        Href = IsOpenFormAction(button.Action) ? null : button.Href,
+        FormDefinitionId = IsOpenFormAction(button.Action) ? button.FormDefinitionId : null,
         Style = button.Style ?? "filled",
         Visible = button.Visible,
         Order = button.Order

@@ -58,6 +58,7 @@ public static class BlockUpdateDtoMapper
             },
             "form" => new FormBlockUpdateDto
             {
+                FormDefinitionId = block.FormDefinitionId,
                 SubmitButtonLabel = block.SubmitButtonLabel ?? new(),
                 Fields = block.Fields?.Select(f => new FormFieldDto
                 {
@@ -79,6 +80,8 @@ public static class BlockUpdateDtoMapper
                 ImageUrl = block.ImageUrl,
                 ButtonLabel = block.ButtonLabel ?? new(),
                 Href = block.Href,
+                Action = block.Action ?? "linkToPage",
+                FormDefinitionId = block.FormDefinitionId,
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -86,6 +89,8 @@ public static class BlockUpdateDtoMapper
             {
                 Label = block.Label ?? new(),
                 Href = block.Href,
+                Action = block.Action ?? "linkToPage",
+                FormDefinitionId = block.FormDefinitionId,
                 Style = block.Style ?? "filled",
                 Visible = block.Visible,
                 Layout = layout
@@ -138,6 +143,11 @@ public static class BlockUpdateDtoMapper
                 LayoutMode = block.LayoutMode ?? "stack",
                 Columns = Math.Clamp(block.Columns ?? 2, 1, 6),
                 Gap = block.Gap ?? "medium",
+                OrbitRadius = Math.Clamp(block.OrbitRadius ?? 180, 80, 480),
+                OrbitStartAngle = Math.Clamp(block.OrbitStartAngle ?? -90, -360, 360),
+                SemicircleRadius = Math.Clamp(block.SemicircleRadius ?? 180, 80, 480),
+                SemicircleStartAngle = Math.Clamp(block.SemicircleStartAngle ?? 180, -360, 360),
+                SemicircleEndAngle = Math.Clamp(block.SemicircleEndAngle ?? 360, -360, 360),
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -153,12 +163,16 @@ public static class BlockUpdateDtoMapper
         dto.Visible = block.Visible;
         dto.Layout = layout;
         dto.BlockZone = NormalizeBlockZone(block.BlockZone);
+        dto.PositionMode = NormalizePositionMode(block.PositionMode);
         dto.ParentBlockId = block.ParentBlockId;
         return dto;
     }
 
     private static string NormalizeBlockZone(string? zone) =>
         string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();
+
+    private static string NormalizePositionMode(string? mode) =>
+        string.Equals(mode, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
 
     private static BlockLayoutDto ToLayoutDto(BlockLayoutModel? layout) => new()
     {
@@ -170,10 +184,22 @@ public static class BlockUpdateDtoMapper
         Margin = layout?.Margin ?? "none",
         BackgroundColor = layout?.BackgroundColor,
         BorderRadius = layout?.BorderRadius ?? "none",
-        ZIndex = Math.Clamp(layout?.ZIndex ?? 1, 0, 20),
+        ZIndex = Math.Clamp(layout?.ZIndex ?? 1, 0, 1000),
         X = Math.Clamp(layout?.X ?? 0, 0, 11),
         Y = Math.Clamp(layout?.Y ?? 0, 0, 60),
         W = Math.Clamp(layout?.W ?? 4, 1, 12),
-        H = Math.Clamp(layout?.H ?? 2, 1, 40)
+        H = Math.Clamp(layout?.H ?? 2, 1, 40),
+        LeftPercent = ClampDouble(layout?.LeftPercent, 0, 100),
+        TopPx = ClampDouble(layout?.TopPx, 0, 10000),
+        WidthPercent = ClampDouble(layout?.WidthPercent, 1, 100),
+        HeightPx = ClampDouble(layout?.HeightPx, 24, 10000)
     };
+
+    private static double? ClampDouble(double? value, double min, double max)
+    {
+        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+            return null;
+
+        return Math.Clamp(value.Value, min, max);
+    }
 }

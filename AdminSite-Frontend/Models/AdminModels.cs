@@ -10,6 +10,10 @@ namespace AdminSite.Models
     {
         public string AdminId { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public AdminRole Role { get; set; } = AdminRole.Viewer;
+        public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
+        public List<string> Permissions { get; set; } = new();
         public string Token { get; set; } = string.Empty;
     }
 
@@ -53,6 +57,7 @@ namespace AdminSite.Models
         public Dictionary<string, string> LabelText { get; set; } = new();
         public string? Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Position { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -61,6 +66,7 @@ namespace AdminSite.Models
     {
         public Dictionary<string, string>? LabelText { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Action { get; set; }
         public string? Position { get; set; }
         // public string? Style { get; set; }
@@ -216,11 +222,8 @@ namespace AdminSite.Models
         public Dictionary<string, string>? Subtext { get; set; }
         public SectionButtonModel? Button { get; set; }
 
-        // Gallery
         public int? Columns { get; set; }
         public string? Gap { get; set; }
-        public bool? ShowCaptions { get; set; }
-        public List<GalleryImageModel>? Images { get; set; }
 
         // Shared section heading fields
         public Dictionary<string, string>? Eyebrow { get; set; }
@@ -299,6 +302,8 @@ namespace AdminSite.Models
         public string? BackgroundColor { get; set; }
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string? BackgroundImageFit { get; set; }
+        public string? BackgroundImagePosition { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string? GradientDirection { get; set; }
@@ -330,6 +335,10 @@ namespace AdminSite.Models
         public int? Y { get; set; }
         public int? W { get; set; }
         public int? H { get; set; }
+        public double? LeftPercent { get; set; }
+        public double? TopPx { get; set; }
+        public double? WidthPercent { get; set; }
+        public double? HeightPx { get; set; }
     }
 
     public class ShowcaseItemOverrideModel
@@ -356,24 +365,8 @@ namespace AdminSite.Models
 
         public string? Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
-        public bool Visible { get; set; }
-        public int Order { get; set; }
-    }
-
-    public class GalleryImageModel
-    {
-        public string Id { get; set; } = string.Empty;
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string>? Caption { get; set; }
-
-        [JsonIgnore]
-        public string CaptionText
-        {
-            get => Caption is not null && Caption.TryGetValue("en", out var value) ? value : string.Empty;
-            set => Caption = new Dictionary<string, string> { ["en"] = value };
-        }
-
         public bool Visible { get; set; }
         public int Order { get; set; }
     }
@@ -446,6 +439,17 @@ namespace AdminSite.Models
     }
 
     // -- Blocks ------------------------------------------------
+    public class BlockButtonModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
+        public string? Action { get; set; }
+        public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
     public class BlockModel
     {
         public string Id { get; set; } = string.Empty;
@@ -456,8 +460,10 @@ namespace AdminSite.Models
         public int Order { get; set; }
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutModel? Layout { get; set; }
+        public List<BlockButtonModel> Buttons { get; set; } = new();
 
 
         // Text
@@ -472,10 +478,17 @@ namespace AdminSite.Models
         public string? Prefix { get; set; }
         public string? Suffix { get; set; }
         public string? Href { get; set; }
+        public string? Action { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }
         public string? Gap { get; set; }
+        public int? OrbitRadius { get; set; }
+        public int? OrbitStartAngle { get; set; }
+        public int? SemicircleRadius { get; set; }
+        public int? SemicircleStartAngle { get; set; }
+        public int? SemicircleEndAngle { get; set; }
 
         // Image
         public string? ImageUrl { get; set; }
@@ -585,6 +598,16 @@ namespace AdminSite.Models
         public string Preset { get; set; } = "navy-gold";
     }
 
+    public class ResourceLibrarySettingsModel
+    {
+        public int MaxImageMb { get; set; } = 20;
+        public int MaxFileMb { get; set; } = 100;
+        public int MaxVideoMb { get; set; } = 250;
+        public List<string> AllowedImageFormats { get; set; } = new() { "jpg", "jpeg", "png", "webp", "gif" };
+        public List<string> AllowedFileFormats { get; set; } = new() { "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt" };
+        public List<string> AllowedVideoFormats { get; set; } = new() { "mp4", "webm", "mov" };
+    }
+
     public class AdminAppearancePresetModel
     {
         public string Key { get; set; } = string.Empty;
@@ -616,14 +639,108 @@ namespace AdminSite.Models
     }
 
     // -- Form Submissions --------------------------------------
+    public enum FormLayoutModel
+    {
+        Stacked,
+        TwoColumns
+    }
+
+    public enum FormSubmissionStatusModel
+    {
+        New,
+        InProgress,
+        Resolved,
+        Spam,
+        Archived
+    }
+
+    public enum FormDisplayModeModel
+    {
+        Modal,
+        Embedded
+    }
+
+    public class FormDefinitionUsageItemModel
+    {
+        public string Area { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string Location { get; set; } = string.Empty;
+        public string PageName { get; set; } = string.Empty;
+        public string PageSlug { get; set; } = string.Empty;
+        public string SectionType { get; set; } = string.Empty;
+        public string SectionTitle { get; set; } = string.Empty;
+        public string ElementLabel { get; set; } = string.Empty;
+    }
+
+    public class FormDefinitionUsageModel
+    {
+        public string FormDefinitionId { get; set; } = string.Empty;
+        public int TotalCount { get; set; }
+        public List<FormDefinitionUsageItemModel> Items { get; set; } = new();
+    }
+    public class FormSubmissionFieldModel
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public string Value { get; set; } = string.Empty;
+        public int Order { get; set; }
+    }
+
     public class FormSubmissionModel
     {
         public string Id { get; set; } = string.Empty;
-        public string? PageId { get; set; }
-        public string? SectionId { get; set; }
-        public string? BlockId { get; set; }
-        public Dictionary<string, string> Data { get; set; } = new();
+        public string FormId { get; set; } = string.Empty;
+        public string FormKey { get; set; } = string.Empty;
+        public string FormName { get; set; } = string.Empty;
+        public string Language { get; set; } = "en";
+        public string SourcePage { get; set; } = string.Empty;
+        public FormSubmissionStatusModel Status { get; set; }
+        public List<FormSubmissionFieldModel> Fields { get; set; } = new();
+        public string? InternalNotes { get; set; }
         public DateTime SubmittedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class FormSubmissionUpdateRequest
+    {
+        public FormSubmissionStatusModel Status { get; set; }
+        public string? InternalNotes { get; set; }
+    }
+
+    public class FormFieldOptionModel
+    {
+        public string Value { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    public class FormFieldDefinitionModel
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Label { get; set; } = new();
+        public Dictionary<string, string> Placeholder { get; set; } = new();
+        public bool Required { get; set; }
+        public int MinLength { get; set; }
+        public int MaxLength { get; set; } = 500;
+        public List<FormFieldOptionModel> Options { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    public class FormDefinitionModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Introduction { get; set; } = new();
+        public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
+        public FormDisplayModeModel DisplayMode { get; set; }
+        public FormLayoutModel Layout { get; set; } = FormLayoutModel.Stacked;
+        public bool Active { get; set; }
+        public List<FormFieldDefinitionModel> Fields { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 
     // -- Content Management -----------------------------------
@@ -633,6 +750,7 @@ namespace AdminSite.Models
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; } = true;
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -650,6 +768,7 @@ namespace AdminSite.Models
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; } = true;
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -665,8 +784,43 @@ namespace AdminSite.Models
         public string Id { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
+    }
+
+    public class ContentBodyItemModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Content { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public string? Url { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long SizeBytes { get; set; }
+        public string? Style { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
+    public class ContentGalleryItemModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "image";
+        public string? Url { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
     }
 
     public class ContentItemModel
@@ -678,10 +832,21 @@ namespace AdminSite.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemModel> BodyItems { get; set; } = new();
+        public List<ContentGalleryItemModel> GalleryItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string HeroImageResourceSource { get; set; } = "DirectUpload";
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string ThumbnailResourceSource { get; set; } = "DirectUpload";
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string VideoResourceSource { get; set; } = "DirectUpload";
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string> Tags { get; set; } = new();
@@ -704,10 +869,21 @@ namespace AdminSite.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemModel> BodyItems { get; set; } = new();
+        public List<ContentGalleryItemModel> GalleryItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string HeroImageResourceSource { get; set; } = "DirectUpload";
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string ThumbnailResourceSource { get; set; } = "DirectUpload";
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string VideoResourceSource { get; set; } = "DirectUpload";
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string> Tags { get; set; } = new();
@@ -731,11 +907,118 @@ namespace AdminSite.Models
         public DateTime CreatedAt { get; set; }
     }
 
+    public class ResourceAlbumModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+        public int ResourceCount { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ResourceAlbumRequest
+    {
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class ResourceAlbumAssignResourcesRequest
+    {
+        public List<string> ResourceIds { get; set; } = new();
+    }
+
+    public class ResourceAlbumAssignResourcesResult
+    {
+        public string AlbumId { get; set; } = string.Empty;
+        public int RequestedCount { get; set; }
+        public int UpdatedCount { get; set; }
+    }
+
+    public class ManagedResourceModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string Source { get; set; } = "managed-upload";
+        public List<string> Tags { get; set; } = new();
+        public string? AlbumId { get; set; }
+        public bool Active { get; set; } = true;
+        public int UsageCount { get; set; }
+        public bool IsInUse { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ManagedResourceUploadBatchModel
+    {
+        public List<ManagedResourceUploadResultModel> Results { get; set; } = new();
+        public int SuccessCount { get; set; }
+        public int FailedCount { get; set; }
+    }
+
+    public class ManagedResourceUploadResultModel
+    {
+        public int Index { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string? Error { get; set; }
+        public ManagedResourceModel? Resource { get; set; }
+    }
+
+    public class ManagedResourceUsageModel
+    {
+        public string ResourceId { get; set; } = string.Empty;
+        public int UsageCount { get; set; }
+        public List<ManagedResourceUsageReferenceModel> References { get; set; } = new();
+    }
+
+    public class ManagedResourceUsageReferenceModel
+    {
+        public string ResourceId { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string ItemId { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Field { get; set; } = string.Empty;
+        public string Detail { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    public class ManagedResourceRequest
+    {
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? SizeBytes { get; set; }
+        public string? Source { get; set; } = "managed-upload";
+        public List<string>? Tags { get; set; }
+        public string? AlbumId { get; set; }
+        public bool Active { get; set; } = true;
+    }
     public class CanvasSectionPresetModel
     {
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public int BlockCount { get; set; }
+        public int SchemaVersion { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -760,6 +1043,7 @@ namespace AdminSite.Models
     public class AssetUploadModel
     {
         public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public long Size { get; set; }

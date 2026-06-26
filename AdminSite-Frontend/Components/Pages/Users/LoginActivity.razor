@@ -1,0 +1,224 @@
+@page "/users/sessions"
+@inject AdminUserService Users
+@inject AdminAuthService Auth
+@inject IHttpService Http
+
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-clock"></i> @T("LoginActivity")</h1>
+    @if (Auth.IsAdminAdmin && _activity.Any())
+    {
+        <button class="btn-admin btn-danger"
+                disabled="@(!_selectedActivityIds.Any() || _deleting)"
+                @onclick="DeleteSelectedActivity">
+            <i class="fas fa-trash"></i> @T("DeleteSelectedLogs")
+        </button>
+    }
+</div>
+
+<div class="admin-card">
+    @if (!Auth.CanViewLogs)
+    {
+        <p class="text-muted">@T("NoPermission")</p>
+    }
+    else if (_loading)
+    {
+        <p class="text-muted">@T("Loading")</p>
+    }
+    else if (!_activity.Any())
+    {
+        <p class="text-muted">@T("NoSessions")</p>
+    }
+    else
+    {
+        <div style="overflow:auto">
+            <table class="table" style="width:100%">
+                <thead>
+                    <tr>
+                        @if (Auth.IsAdminAdmin)
+                        {
+                            <th style="width:42px">
+                                <input type="checkbox" checked="@AllActivitySelected" @onchange="ToggleAllActivity" />
+                            </th>
+                        }
+                        <th>@T("Email")</th>
+                        <th>@T("LoginTime")</th>
+                        <th>@T("Action")</th>
+                        <th>@T("IpAddress")</th>
+                        <th>@T("Device")</th>
+                        <th>@T("Status")</th>
+                        <th>@T("Message")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _activity)
+                    {
+                        <tr>
+                            @if (Auth.IsAdminAdmin)
+                            {
+                                <td>
+                                    <input type="checkbox"
+                                           checked="@_selectedActivityIds.Contains(item.Id)"
+                                           @onchange="e => ToggleActivity(item.Id, e)" />
+                                </td>
+                            }
+                            <td>@item.Email</td>
+                            <td>@FormatDate(item.OccurredAt)</td>
+                            <td>@item.EventType</td>
+                            <td>@item.IpAddress</td>
+                            <td>@DisplayDevice(item)</td>
+                            <td>
+                                @if (item.Success)
+                                {
+                                    <span class="content-status-pill is-published">@T("Success")</span>
+                                }
+                                else
+                                {
+                                    <span class="content-status-pill is-rejected">@T("Denied")</span>
+                                }
+                            </td>
+                            <td>@item.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="admin-pagination">
+            <span class="text-muted">@ShowingText</span>
+            <div class="admin-pagination__buttons">
+                <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="() => SetPage(_page - 1)" aria-label="Previous page">&lsaquo;</button>
+                @foreach (var page in VisiblePages)
+                {
+                    var pageNumber = page;
+                    <button class="btn-admin @(_page == pageNumber ? "btn-primary" : "btn-ghost")" @onclick="() => SetPage(pageNumber)">@pageNumber</button>
+                }
+                <button class="btn-admin btn-ghost" disabled="@(_page >= _totalPages)" @onclick="() => SetPage(_page + 1)" aria-label="Next page">&rsaquo;</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private readonly List<AdminLoginActivityResponse> _activity = new();
+    private readonly HashSet<string> _selectedActivityIds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _loading = true;
+    private bool _deleting;
+    private const int PageSize = 20;
+    private int _page = 1;
+    private int _totalPages = 1;
+    private long _totalCount;
+
+    private bool AllActivitySelected =>
+        _activity.Any() && _activity.All(item => _selectedActivityIds.Contains(item.Id));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+
+        if (Auth.CanViewLogs)
+        {
+            await LoadAsync();
+        }
+
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var res = await Users.GetLoginActivityAsync(_page, PageSize);
+        if (res.Success && res.Data is not null)
+        {
+            _activity.Clear();
+            _activity.AddRange(res.Data.Items);
+            _page = res.Data.Page;
+            _totalPages = res.Data.TotalPages;
+            _totalCount = res.Data.TotalCount;
+            _selectedActivityIds.RemoveWhere(id => _activity.All(item => item.Id != id));
+        }
+        else
+        {
+            Http.Toast(res.Message, res.StatusCode);
+        }
+        _loading = false;
+    }
+
+    private IEnumerable<int> VisiblePages
+    {
+        get
+        {
+            var start = Math.Max(1, _page - 2);
+            var end = Math.Min(_totalPages, start + 4);
+            start = Math.Max(1, end - 4);
+            return Enumerable.Range(start, end - start + 1);
+        }
+    }
+
+    private string ShowingText
+    {
+        get
+        {
+            if (_totalCount == 0) return string.Format(T("ShowingRange"), 0, 0, 0);
+            var start = ((_page - 1) * PageSize) + 1;
+            var end = Math.Min(start + _activity.Count - 1, _totalCount);
+            return string.Format(T("ShowingRange"), start, end, _totalCount);
+        }
+    }
+
+    private async Task SetPage(int page)
+    {
+        var next = Math.Clamp(page, 1, _totalPages);
+        if (next == _page) return;
+        _page = next;
+        _selectedActivityIds.Clear();
+        await LoadAsync();
+    }
+
+    private void ToggleActivity(string id, ChangeEventArgs e)
+    {
+        var selected = e.Value is bool value && value;
+        if (selected)
+            _selectedActivityIds.Add(id);
+        else
+            _selectedActivityIds.Remove(id);
+    }
+
+    private void ToggleAllActivity(ChangeEventArgs e)
+    {
+        var selected = e.Value is bool value && value;
+        _selectedActivityIds.Clear();
+        if (selected)
+        {
+            foreach (var item in _activity)
+                _selectedActivityIds.Add(item.Id);
+        }
+    }
+
+    private async Task DeleteSelectedActivity()
+    {
+        if (!_selectedActivityIds.Any()) return;
+
+        _deleting = true;
+        var res = await Users.DeleteLoginActivityAsync(_selectedActivityIds);
+        Http.Toast(res.Message, res.StatusCode);
+        _deleting = false;
+        if (!res.Success) return;
+
+        _selectedActivityIds.Clear();
+        await LoadAsync();
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private static string FormatDate(DateTime? value) =>
+        value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
+
+    private static string DisplayDevice(AdminLoginActivityResponse item)
+    {
+        var browser = string.IsNullOrWhiteSpace(item.BrowserName) ? "Browser" : item.BrowserName;
+        var os = string.IsNullOrWhiteSpace(item.OperatingSystem) ? "Unknown OS" : item.OperatingSystem;
+        return $"{browser} / {os}";
+    }
+}

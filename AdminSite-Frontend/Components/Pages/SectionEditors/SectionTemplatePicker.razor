@@ -1,17 +1,17 @@
 <div class="ez-modal-overlay" @onclick="OnCancel">
-    <div class="ez-modal" @onclick:stopPropagation="true">
+    <div class="ez-modal ez-modal--section-picker" @onclick:stopPropagation="true">
         <div class="ez-modal__header">
-            <h2>Add Section</h2>
+            <h2>@T("AddSection")</h2>
             <button class="ez-icon-btn" @onclick="OnCancel">
                 <i class="fas fa-times"></i>
             </button>
         </div>
 
-        <div class="ez-modal__body">
+        <div class="ez-modal__body ez-section-picker">
             @foreach (var group in _templates)
             {
                 <div class="ez-picker-group">
-                    <h4 class="ez-picker-group__label">@group.Key</h4>
+                    <h4 class="ez-picker-group__label">@T(group.Key)</h4>
                     <div class="ez-picker-grid">
                         @foreach (var template in group.Value)
                         {
@@ -20,7 +20,10 @@
                                 <div class="ez-picker-card__icon">
                                     <i class="fas @template.Icon"></i>
                                 </div>
-                                <span>@template.Name</span>
+                                <div class="ez-picker-card__text">
+                                    <span>@T(template.NameKey)</span>
+                                    <small>@T(template.DescriptionKey)</small>
+                                </div>
                             </button>
                         }
                     </div>
@@ -33,35 +36,40 @@
 @code {
     [Parameter] public EventCallback<string> OnPicked { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private Dictionary<string, List<SectionTemplate>> _templates = new()
     {
-        ["Hero & CTA"] = new()
+        ["SectionGroupPageStructure"] = new()
         {
-            new("hero",    "Hero Banner",    "fa-image"),
-            new("cta",     "Call to Action", "fa-bullhorn")
+            new("hero",    "SectionTemplateHeroName", "fa-image", "SectionTemplateHeroDesc"),
+            new("cta",     "SectionTemplateCtaName",  "fa-bullhorn", "SectionTemplateCtaDesc"),
+            new("html",    "SectionTemplateHtmlName", "fa-code", "SectionTemplateHtmlDesc")
         },
-        ["Content"] = new()
+        ["SectionGroupStructuredContent"] = new()
         {
-            new("list",    "List / Cards",   "fa-th-large"),
-            new("gallery", "Gallery",        "fa-images"),
-            new("columns", "Columns",        "fa-columns"),
-            new("html",    "HTML Block",     "fa-code"),
-            new("stats", "Stats Counters", "fa-chart-line"),
-            new("carousel", "Carousel", "fa-window-restore"),
-            new("network-map", "Network Map", "fa-map-location-dot"),
-            new("testimonial", "Testimonial", "fa-comments")
+            new("columns", "SectionTemplateColumnsName", "fa-columns", "SectionTemplateColumnsDesc"),
+            new("list",    "SectionTemplateListName",    "fa-th-large", "SectionTemplateListDesc"),
+            new("stats",   "SectionTemplateStatsName",   "fa-chart-line", "SectionTemplateStatsDesc")
         },
-        ["Dynamic"] = new()
+        ["SectionGroupRepeaters"] = new()
         {
-            new("showcase", "Showcase",   "fa-sitemap"),
-            new("library", "Library", "fa-newspaper")
+            new("testimonial", "SectionTemplateTestimonialName", "fa-comments", "SectionTemplateTestimonialDesc"),
+            new("carousel",    "SectionTemplateCarouselName",    "fa-window-restore", "SectionTemplateCarouselDesc")
         },
-        ["Composition"] = new()
+        ["SectionGroupConnectedData"] = new()
         {
-            new("canvas", "Canvas Section", "fa-object-group")
+            new("showcase",    "SectionTemplateShowcaseName", "fa-sitemap", "SectionTemplateShowcaseDesc"),
+            new("library",     "SectionTemplateLibraryName",  "fa-newspaper", "SectionTemplateLibraryDesc"),
+            new("network-map", "SectionTemplateMapName",      "fa-map-location-dot", "SectionTemplateMapDesc")
+        },
+        ["SectionGroupComposition"] = new()
+        {
+            new("canvas", "SectionTemplateCanvasName", "fa-object-group", "SectionTemplateCanvasDesc")
         }
     };
 
-    private record SectionTemplate(string Type, string Name, string Icon);
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private record SectionTemplate(string Type, string NameKey, string Icon, string DescriptionKey);
 }

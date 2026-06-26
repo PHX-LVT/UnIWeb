@@ -6,6 +6,8 @@ namespace Contracts.Public
         public string BackgroundColor { get; set; } = "#ffffff";
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string BackgroundImageFit { get; set; } = "cover";
+        public string BackgroundImagePosition { get; set; } = "center";
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";
@@ -33,10 +35,15 @@ namespace Contracts.Public
         public string? BackgroundColor { get; set; }
         public string BorderRadius { get; set; } = "none";
         public int ZIndex { get; set; } = 1;
+        public int ZOrder { get; set; } = 1;
         public int X { get; set; } = 0;
         public int Y { get; set; } = 0;
         public int W { get; set; } = 4;
         public int H { get; set; } = 2;
+        public double? LeftPercent { get; set; }
+        public double? TopPx { get; set; }
+        public double? WidthPercent { get; set; }
+        public double? HeightPx { get; set; }
     }
 
     public class PublicSectionButtonDto
@@ -45,6 +52,7 @@ namespace Contracts.Public
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
@@ -54,17 +62,11 @@ namespace Contracts.Public
     {
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
+        public string Action { get; set; } = "linkToPage";
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
         public bool Visible { get; set; } = true;
-        public int Order { get; set; }
-    }
-
-    public class PublicGalleryImageDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string> Caption { get; set; } = new();
         public int Order { get; set; }
     }
 
@@ -155,11 +157,22 @@ namespace Contracts.Public
         public long SizeBytes { get; set; }
     }
 
+    public class PublicLibraryGalleryItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "image";
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public int Order { get; set; }
+    }
+
     public class PublicLibraryItemDto
     {
         public string Id { get; set; } = string.Empty;
         public string StableId { get; set; } = string.Empty;
         public string ContentTypeKey { get; set; } = string.Empty;
+        public string ContentBehavior { get; set; } = "page";
         public string Slug { get; set; } = string.Empty;
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
@@ -170,6 +183,7 @@ namespace Contracts.Public
         public string ClickBehavior { get; set; } = "detail";
         public List<string> Tags { get; set; } = new();
         public List<PublicLibraryAttachmentDto> Attachments { get; set; } = new();
+        public List<PublicLibraryGalleryItemDto> GalleryItems { get; set; } = new();
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public DateTime? PublishedAt { get; set; }
@@ -190,8 +204,16 @@ namespace Contracts.Public
         public string Name { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
+        public Dictionary<string, string> Placeholder { get; set; } = new();
         public bool Required { get; set; }
-        public List<string>? Options { get; set; }
+        public List<PublicFormFieldOptionDto> Options { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    public class PublicFormFieldOptionDto
+    {
+        public string Value { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
         public int Order { get; set; }
     }
 

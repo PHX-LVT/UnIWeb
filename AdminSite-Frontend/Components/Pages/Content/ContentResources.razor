@@ -1,0 +1,2523 @@
+@page "/content/resources"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@inject AdminContentService ContentService
+@inject AdminUserService Users
+@inject AdminLanguageService AdminLanguageState
+@inject AdminAuthService Auth
+@inject IHttpService Http
+
+<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+    <h1 class="page-title"><i class="fas fa-photo-film"></i> @T("ResourceLibrary")</h1>
+    @if (CanManageResources || CanUploadResources)
+    {
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            @if (CanManageResources)
+            {
+                <button class="btn-admin btn-ghost" @onclick="() => OpenAlbumEditor(null)">
+                    <i class="fas fa-folder-plus"></i> @T("AddAlbum")
+                </button>
+            }
+            @if (CanUploadResources)
+            {
+                <button class="btn-admin btn-primary" @onclick="NewResource">
+                    <i class="fas fa-upload"></i> @T("UploadResources")
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@if (!CanViewResourceLibrary)
+{
+    <div class="admin-card">
+        <p class="text-muted">@T("NoPermission")</p>
+    </div>
+}
+else
+{
+    <div class="admin-card" style="margin-bottom:1rem">
+        <div style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px">
+                <input class="form-control" placeholder="@T("SearchResources")" value="@_search" @oninput="OnSearchChanged" />
+            </div>
+
+            <div>
+                <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                    <button type="button" class="@KindButtonClass(string.Empty)" @onclick='() => SetKindFilter(string.Empty)'>@T("All")</button>
+                    <button type="button" class="@KindButtonClass("image")" @onclick='() => SetKindFilter("image")'>@T("ImageResource")</button>
+                    <button type="button" class="@KindButtonClass("video")" @onclick='() => SetKindFilter("video")'>@T("VideoResource")</button>
+                    <button type="button" class="@KindButtonClass("file")" @onclick='() => SetKindFilter("file")'>@T("FileResource")</button>
+                </div>
+            </div>
+
+            <div>
+                <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                    <button type="button" class="@ModeButtonClass("resources")" @onclick='() => SetLibraryMode("resources")'>@T("ResourceView")</button>
+                    <button type="button" class="@ModeButtonClass("albums")" @onclick='() => SetLibraryMode("albums")'>@T("AlbumView")</button>
+                </div>
+            </div>
+
+            <div>
+                <div style="display:flex;gap:.35rem">
+                    <button type="button" class="@ViewButtonClass("grid")" title="@T("GridView")" @onclick='() => SetViewMode("grid")'>
+                        <i class="fas fa-grid-2"></i>
+                    </button>
+                    <button type="button" class="@ViewButtonClass("list")" title="@T("ListView")" @onclick='() => SetViewMode("list")'>
+                        <i class="fas fa-list"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:minmax(260px,320px) minmax(0,1fr);gap:1rem;align-items:start">
+        <aside class="admin-card" style="position:sticky;top:1rem">
+            @if (_selectedResource is null)
+            {
+                <div style="min-height:260px;display:grid;place-items:center;text-align:center">
+                    <p class="text-muted">@T("NoResourceSelected")</p>
+                </div>
+            }
+            else
+            {
+                <div style="display:flex;flex-direction:column;gap:.75rem">
+                    <button type="button"
+                            style="width:100%;height:132px;border:1px solid #d8e0ea;border-radius:8px;background:#f8fafc;overflow:hidden;display:grid;place-items:center;padding:0;cursor:pointer"
+                            title="@T("PreviewResource")"
+                            @onclick="() => PreviewResource(_selectedResource)">
+                        @ResourceVisual(_selectedResource, "width:100%;height:100%;object-fit:cover", large: true)
+                    </button>
+
+                    <div>
+                        <h2 style="font-size:1.02rem;margin:0 0 .25rem;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">@ResourceName(_selectedResource)</h2>
+                        @if (!string.IsNullOrWhiteSpace(ResourceDescription(_selectedResource)))
+                        {
+                            <p class="text-muted" style="margin:.25rem 0 0;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">@ResourceDescription(_selectedResource)</p>
+                        }
+                    </div>
+
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <button class="btn-admin btn-primary" @onclick="() => PreviewResource(_selectedResource)">
+                            <i class="fas fa-eye"></i> @T("Preview")
+                        </button>
+                        @if (CanManageResources)
+                        {
+                            <button class="btn-admin btn-ghost content-icon-btn" title="@T("Edit")" @onclick="() => EditResource(_selectedResource)">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn-admin btn-danger content-icon-btn"
+                                    disabled="@_selectedResource.IsInUse"
+                                    title="@DeleteTitle(_selectedResource)"
+                                    @onclick="() => AskDeleteResource(_selectedResource)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        }
+                    </div>
+
+                    <dl style="display:grid;gap:.45rem;margin:0">
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("Usage")</dt>
+                            <dd style="margin:0"><span style="@UsageStyle(_selectedResource)">@UsageText(_selectedResource)</span></dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("FileSize")</dt>
+                            <dd style="margin:0">@FormatBytes(_selectedResource.SizeBytes)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("MimeType")</dt>
+                            <dd style="margin:0;word-break:break-word">@EmptyDash(_selectedResource.ContentType)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("UploadedBy")</dt>
+                            <dd style="margin:0;word-break:break-word">@UploadedByLabel(_selectedResource)</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("Created")</dt>
+                            <dd style="margin:0">@_selectedResource.CreatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</dd>
+                        </div>
+                        <div>
+                            <dt style="font-size:.75rem;text-transform:uppercase;color:#64748b">@T("Updated")</dt>
+                            <dd style="margin:0">@_selectedResource.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</dd>
+                        </div>
+                    </dl>
+
+                    <div style="border-top:1px solid #e5e7eb;padding-top:1rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.65rem">
+                            <strong>@T("UsageDetails")</strong>
+                            @if (_selectedResource.UsageCount > 0)
+                            {
+                                <button type="button"
+                                        class="btn-admin btn-ghost content-icon-btn"
+                                        title="@T("RefreshUsage")"
+                                        disabled="@IsUsageLoading(_selectedResource)"
+                                        @onclick="() => LoadUsageDetails(_selectedResource, force: true)">
+                                    <i class="fas fa-rotate"></i>
+                                </button>
+                            }
+                        </div>
+
+                        @if (_selectedResource.UsageCount <= 0)
+                        {
+                            <p class="text-muted" style="margin:0">@T("NotUsedAnywhereSafeToDelete")</p>
+                        }
+                        else if (IsUsageLoading(_selectedResource))
+                        {
+                            <p class="text-muted" style="margin:0">@T("UsageLoading")</p>
+                        }
+                        else if (SelectedUsage is { References.Count: > 0 } usage)
+                        {
+                            <ul style="display:grid;gap:.5rem;margin:.5rem 0 0;padding:0;list-style:none;max-height:260px;overflow:auto">
+                                @foreach (var reference in usage.References)
+                                {
+                                    <li style="padding:.55rem;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc">
+                                        <div style="font-weight:600">@UsageReferenceTitle(reference)</div>
+                                        <div class="text-muted" style="font-size:.82rem">@UsageReferenceMeta(reference)</div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn-admin btn-ghost" @onclick="() => LoadUsageDetails(_selectedResource, force: true)">
+                                <i class="fas fa-list-check"></i> @T("LoadUsageDetails")
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </aside>
+
+        <section class="admin-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+                <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                    @if (SelectedAlbum is not null)
+                    {
+                        <button type="button" class="btn-admin btn-ghost" @onclick="BackToAlbums">
+                            <i class="fas fa-arrow-left"></i> @T("BackToAlbums")
+                        </button>
+                    }
+                    <strong>@MainPanelTitle</strong>
+                </div>
+                @if (CanUploadResources && SelectedAlbum is not null)
+                {
+                    <button class="btn-admin btn-primary" @onclick="NewResource">
+                        <i class="fas fa-upload"></i> @T("UploadToAlbum")
+                    </button>
+                }
+            </div>
+
+            @if (_loading || _albumLoading)
+            {
+                <p class="text-muted">@T("Loading")</p>
+            }
+            else if (VisibleItemCount == 0)
+            {
+                <div style="min-height:280px;display:grid;place-items:center;text-align:center">
+                    <div>
+                        <p class="text-muted">@T(ShowingAlbumRoot ? "NoAlbumsYet" : "NoResourcesYet")</p>
+                        @if (CanUploadResources && SelectedAlbum is not null)
+                        {
+                            <button class="btn-admin btn-primary" @onclick="NewResource">
+                                <i class="fas fa-upload"></i> @T("UploadToAlbum")
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            else if (!ShowingAlbumRoot && CanManageResources && _selectedResourceIds.Any())
+            {
+                <div class="alert alert-info" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+                    <span>
+                        @string.Format(T("SelectedCount"), _selectedResourceIds.Count)
+                        @if (SelectedBlockedCount > 0)
+                        {
+                            <span> - @string.Format(T("BulkDeleteResourcesBlocked"), SelectedBlockedCount)</span>
+                        }
+                    </span>
+                    <span style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <button class="btn-admin btn-ghost" type="button" @onclick="ClearSelection">@T("ClearSelection")</button>
+                        <button class="btn-admin btn-danger"
+                                type="button"
+                                disabled="@(!BulkDeleteResources.Any())"
+                                @onclick="AskBulkDeleteResources">
+                            <i class="fas fa-trash"></i> @T("BulkDeleteResources")
+                        </button>
+                    </span>
+                </div>
+            }
+
+            @if (!_loading && !_albumLoading && ShowingAlbumRoot && VisibleItemCount > 0 && _viewMode == "list")
+            {
+                <div style="overflow:auto">
+                    <table class="table content-table" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th>@T("Album")</th>
+                                <th>@T("Type")</th>
+                                <th>@T("Resources")</th>
+                                @if (CanManageResources)
+                                {
+                                    <th></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var album in PagedAlbums)
+                            {
+                                <tr style="cursor:pointer" @onclick="() => OpenAlbum(album)">
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:.75rem;min-width:260px">
+                                            <span style="display:inline-flex;width:56px;height:42px;align-items:center;justify-content:center;border-radius:8px;background:#eef2ff;color:#0f2742">
+                                                <i class="fas fa-folder"></i>
+                                            </span>
+                                            <strong>@album.Name</strong>
+                                        </div>
+                                    </td>
+                                    <td>@AlbumScopeLabel(album.Scope)</td>
+                                    <td>@album.ResourceCount</td>
+                                    @if (CanManageResources)
+                                    {
+                                        <td style="width:96px">
+                                            <div style="display:flex;gap:.35rem;justify-content:flex-end">
+                                                <button class="btn-admin btn-ghost content-icon-btn"
+                                                        title="@T("Edit")"
+                                                        @onclick="() => OpenAlbumEditor(album)"
+                                                        @onclick:stopPropagation="true">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn-admin btn-danger content-icon-btn"
+                                                        title="@DeleteAlbumTitle(album)"
+                                                        @onclick="() => AskDeleteAlbum(album)"
+                                                        @onclick:stopPropagation="true">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else if (!_loading && !_albumLoading && ShowingAlbumRoot && VisibleItemCount > 0)
+            {
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.85rem">
+                    @foreach (var album in PagedAlbums)
+                    {
+                        <div class="admin-card" style="position:relative;padding:.6rem;text-align:left;border-color:#d8e0ea;box-shadow:none">
+                            @if (CanManageResources)
+                            {
+                                <div style="position:absolute;top:.5rem;right:.5rem;display:flex;gap:.25rem;z-index:1">
+                                    <button class="btn-admin btn-ghost content-icon-btn"
+                                            title="@T("Edit")"
+                                            @onclick="() => OpenAlbumEditor(album)">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn-admin btn-danger content-icon-btn"
+                                            title="@DeleteAlbumTitle(album)"
+                                            @onclick="() => AskDeleteAlbum(album)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                            <button type="button"
+                                    style="width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer"
+                                    @onclick="() => OpenAlbum(album)">
+                                <span style="display:flex;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:#eef2ff;border:1px solid #e5e7eb;margin-bottom:.55rem;align-items:center;justify-content:center;color:#0f2742;font-size:2rem">
+                                    <i class="fas fa-folder"></i>
+                                </span>
+                                <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@album.Name</strong>
+                                <small class="text-muted" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                    @AlbumScopeLabel(album.Scope) &middot; @string.Format(T("ResourceCount"), album.ResourceCount)
+                                </small>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+            else if (!_loading && FilteredResourceCount > 0 && _viewMode == "list")
+            {
+                <div style="overflow:auto">
+                    <table class="table content-table" style="width:100%">
+                        <thead>
+                            <tr>
+                                @if (CanManageResources)
+                                {
+                                    <th style="width:38px">
+                                        <input type="checkbox"
+                                               checked="@AllPagedBulkSelected"
+                                               title="@T("SelectPage")"
+                                               @onchange="ToggleAllPagedBulk" />
+                                    </th>
+                                }
+                                <th colspan="2">@T("Name")</th>
+                                <th>@T("Type")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var resource in PagedResources)
+                            {
+                                <tr class="@(IsSelected(resource) ? "is-selected" : string.Empty)"
+                                    style="cursor:pointer"
+                                    @onclick="() => SelectResource(resource)">
+                                    @if (CanManageResources)
+                                    {
+                                        <td>
+                                            <input type="checkbox"
+                                                   checked="@IsBulkSelected(resource)"
+                                                   disabled="@resource.IsInUse"
+                                                   title="@BulkSelectTitle(resource)"
+                                                   @onclick:stopPropagation="true"
+                                                   @onchange="e => ToggleBulkSelected(resource, e)" />
+                                        </td>
+                                    }
+                                    <td colspan="2">
+                                        <div style="display:flex;align-items:center;gap:.75rem;min-width:260px">
+                                            @ResourceVisual(resource, "width:56px;height:42px;object-fit:cover;border-radius:6px")
+                                            <div style="min-width:0">
+                                                <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ResourceName(resource)</strong>
+                                                <div class="text-muted" style="font-size:.8rem;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@ResourceHint(resource)</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>@DisplayKind(resource.Kind)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else if (!_loading && FilteredResourceCount > 0)
+            {
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.85rem">
+                    @foreach (var resource in PagedResources)
+                    {
+                        <div class="admin-card @(IsSelected(resource) ? "is-selected" : string.Empty)"
+                             style="position:relative;padding:.6rem;text-align:left;border-color:@(IsSelected(resource) ? "#0f2742" : "#d8e0ea");box-shadow:none">
+                            @if (CanManageResources)
+                            {
+                                <input type="checkbox"
+                                       checked="@IsBulkSelected(resource)"
+                                       disabled="@resource.IsInUse"
+                                       title="@BulkSelectTitle(resource)"
+                                       style="position:absolute;top:.55rem;right:.55rem;z-index:1"
+                                       @onchange="e => ToggleBulkSelected(resource, e)" />
+                            }
+                            <button type="button"
+                                    style="width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer"
+                                    @onclick="() => SelectResource(resource)">
+                                <span style="display:block;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:#f8fafc;border:1px solid #e5e7eb;margin-bottom:.55rem">
+                                    @ResourceVisual(resource, "width:100%;height:100%;object-fit:cover")
+                                </span>
+                                <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ResourceName(resource)</strong>
+                                <small class="text-muted" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                    @ResourceHint(resource)
+                                </small>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!_loading && !_albumLoading && VisibleItemCount > 0)
+            {
+                <div class="admin-pagination" style="margin-top:1rem;display:flex;align-items:center;justify-content:flex-end;gap:1rem;flex-wrap:wrap">
+                    <span class="text-muted">@string.Format(T("ShowingRange"), PageStart, PageEnd, VisibleItemCount)</span>
+                    @if (TotalPages > 1)
+                    {
+                        <div class="admin-pagination__buttons">
+                            <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="PreviousPage">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <span class="btn-admin btn-ghost">@_page / @TotalPages</span>
+                            <button class="btn-admin btn-ghost" disabled="@(_page >= TotalPages)" @onclick="NextPage">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@if (CanUploadResources && _showUploadModal)
+{
+    <div class="modal-backdrop" @onclick="CloseUploadModal">
+        <div class="modal-box" style="max-width:min(960px,96vw);width:96vw" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@T("UploadResources")</span>
+                <button class="btn-admin btn-ghost content-icon-btn" @onclick="CloseUploadModal" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.85rem;margin-bottom:1rem">
+                    <div>
+                        <label>@T("UploadType")</label>
+                        <select class="form-control"
+                                value="@_uploadKind"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadKindLocked)"
+                                @onchange="OnUploadKindChanged">
+                            @foreach (var kind in AvailableUploadKinds)
+                            {
+                                <option value="@kind">@DisplayKind(kind)</option>
+                            }
+                        </select>
+                        <div class="form-hint">@UploadLimitHint</div>
+                    </div>
+                    <div>
+                        <label>@T("Album")</label>
+                        <select class="form-control"
+                                value="@_uploadAlbumId"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadAlbumLocked)"
+                                @onchange="OnUploadAlbumChanged">
+                            <option value="">@T("NoAlbum")</option>
+                            @foreach (var album in AlbumsForKind(_uploadKind))
+                            {
+                                <option value="@album.Id">@album.Name</option>
+                            }
+                        </select>
+                        @if (SelectedAlbum is not null)
+                        {
+                            <div class="form-hint">@T("UploadAlbumPreselectedHint")</div>
+                        }
+                    </div>
+                </div>
+
+                @if (_uploadKind == "video")
+                {
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem">
+                        <button type="button"
+                                class="@VideoSourceModeButtonClass(VideoUploadModes.File)"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any())"
+                                @onclick="() => SetVideoUploadMode(VideoUploadModes.File)">
+                            <i class="fas fa-upload"></i> @T("UploadVideoFile")
+                        </button>
+                        <button type="button"
+                                class="@VideoSourceModeButtonClass(VideoUploadModes.YouTube)"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any())"
+                                @onclick="() => SetVideoUploadMode(VideoUploadModes.YouTube)">
+                            <i class="fab fa-youtube"></i> @T("YouTubeLink")
+                        </button>
+                    </div>
+                }
+
+                @if (IsYoutubeLinkMode)
+                {
+                    <div style="border:1px solid #d8e0ea;border-radius:10px;background:#fff;padding:1rem;margin-bottom:1rem">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem">
+                            <div>
+                                <label>@T("VideoName")</label>
+                                <input class="form-control"
+                                       value="@_youtubeName"
+                                       disabled="@_savingYoutubeResource"
+                                       placeholder="@T("VideoNamePlaceholder")"
+                                       @oninput="e => _youtubeName = e.Value?.ToString() ?? string.Empty" />
+                            </div>
+                            <div>
+                                <label>@T("YouTubeLink")</label>
+                                <input class="form-control"
+                                       value="@_youtubeUrl"
+                                       disabled="@_savingYoutubeResource"
+                                       placeholder="https://www.youtube.com/watch?v=..."
+                                       @oninput="e => _youtubeUrl = e.Value?.ToString() ?? string.Empty" />
+                                <div class="form-hint">@T("YouTubeLinkHint")</div>
+                            </div>
+                        </div>
+                        <label style="margin-top:.85rem">@T("Description")</label>
+                        <textarea class="form-control"
+                                  rows="2"
+                                  value="@_youtubeDescription"
+                                  disabled="@_savingYoutubeResource"
+                                  @oninput="e => _youtubeDescription = e.Value?.ToString() ?? string.Empty"></textarea>
+                    </div>
+                }
+                else
+                {
+                    <div style="border:1px solid #d8e0ea;border-radius:10px;background:#fff;padding:1rem;margin-bottom:1rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+                            <div>
+                                <strong>@T("UploadQueue")</strong>
+                                <div class="form-hint">@string.Format(T("UploadQueueTypeHint"), DisplayKind(_uploadKind))</div>
+                            </div>
+                            <span class="text-muted">@string.Format(T("QueuedFileCount"), _uploadQueue.Count)</span>
+                        </div>
+
+                        @if (!_uploadQueue.Any())
+                        {
+                            <div style="position:relative;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;padding:1.4rem;min-height:140px;display:grid;place-items:center;text-align:center">
+                                <InputFile OnChange="QueueUploadFiles"
+                                           multiple
+                                           accept="@UploadAcceptForKind(_uploadKind)"
+                                           disabled="@_uploadingQueue"
+                                           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
+                                <div style="pointer-events:none">
+                                    <i class="fas fa-cloud-arrow-up" style="font-size:2rem;color:#0f2742"></i>
+                                    <strong style="display:block;margin-top:.5rem">@T("DragDropOrSelectFiles")</strong>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="position:relative;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;padding:.75rem;margin-bottom:.75rem;display:flex;align-items:center;justify-content:center;gap:.5rem;text-align:center">
+                                <InputFile OnChange="QueueUploadFiles"
+                                           multiple
+                                           accept="@UploadAcceptForKind(_uploadKind)"
+                                           disabled="@_uploadingQueue"
+                                           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
+                                <div style="pointer-events:none;display:flex;align-items:center;gap:.5rem;color:#475569">
+                                    <i class="fas fa-cloud-arrow-up"></i>
+                                    <span>@T("DragDropOrSelectFiles")</span>
+                                </div>
+                            </div>
+
+                            <div style="display:grid;gap:.55rem;max-height:36vh;overflow:auto;padding-right:.15rem">
+                                @foreach (var item in _uploadQueue)
+                                {
+                                    <div @key="item.Id" style="display:grid;grid-template-columns:48px minmax(150px,1.2fr) minmax(160px,1fr) minmax(110px,.65fr) auto;gap:.65rem;align-items:center;border:1px solid #e5e7eb;border-radius:8px;background:#fff;padding:.55rem">
+                                        <span style="width:48px;height:42px;border-radius:7px;background:#fff7e6;color:#0f2742;display:inline-flex;align-items:center;justify-content:center">
+                                            <i class="fas @UploadQueueIconClass(item)"></i>
+                                        </span>
+                                        <div style="min-width:0">
+                                            <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@item.OriginalFileName">@item.OriginalFileName</div>
+                                            <small class="text-muted">@FormatBytes(item.File.Size)</small>
+                                        </div>
+                                        <input class="form-control"
+                                               value="@item.ResourceName"
+                                               disabled="@(_uploadingQueue || item.IsComplete)"
+                                               @oninput="e => item.ResourceName = e.Value?.ToString() ?? string.Empty" />
+                                        <div>
+                                            <span style="@UploadQueueStatusStyle(item)">@UploadQueueStatusText(item)</span>
+                                            @if (!string.IsNullOrWhiteSpace(item.Error))
+                                            {
+                                                <small style="display:block;color:#b91c1c;margin-top:.25rem">@item.Error</small>
+                                            }
+                                        </div>
+                                        <div style="display:flex;gap:.35rem;justify-content:flex-end">
+                                            @if (item.IsFailed)
+                                            {
+                                                <button type="button"
+                                                        class="btn-admin btn-ghost content-icon-btn"
+                                                        title="@T("Retry")"
+                                                        disabled="@_uploadingQueue"
+                                                        @onclick="() => RetryUpload(item)">
+                                                    <i class="fas fa-rotate"></i>
+                                                </button>
+                                            }
+                                            <button type="button"
+                                                    class="btn-admin btn-ghost content-icon-btn"
+                                                    title="@T("Remove")"
+                                                    disabled="@_uploadingQueue"
+                                                    @onclick="() => RemoveUploadQueueItem(item)">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (SelectedAlbum is not null)
+                {
+                    <div style="border:1px solid #d8e0ea;border-radius:10px;background:#fff;padding:1rem;margin-bottom:1rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
+                            <div>
+                                <strong>@T("ChooseExistingResources")</strong>
+                                <div class="form-hint">@T("ChooseExistingResourcesHint")</div>
+                            </div>
+                            <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                                <button type="button"
+                                        class="btn-admin btn-ghost"
+                                        disabled="@(_albumExistingLoading || !AlbumExistingCandidates.Any())"
+                                        @onclick="SelectAllAlbumExistingCandidates">
+                                    @T("SelectAllShown")
+                                </button>
+                                <button type="button"
+                                        class="btn-admin btn-ghost"
+                                        disabled="@(!_albumExistingSelectedIds.Any())"
+                                        @onclick="ClearAlbumExistingSelection">
+                                    @T("ClearSelection")
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.75rem">
+                            <input class="form-control"
+                                   style="flex:1;min-width:220px"
+                                   placeholder="@T("SearchResources")"
+                                   value="@_albumExistingSearch"
+                                   @oninput="OnAlbumExistingSearchChanged" />
+                            <button type="button"
+                                    class="btn-admin btn-primary"
+                                    disabled="@(_albumExistingAssigning || !_albumExistingSelectedIds.Any())"
+                                    @onclick="AssignExistingResourcesToAlbum">
+                                <i class="fas fa-folder-plus"></i>
+                                @(_albumExistingAssigning ? T("Saving") : string.Format(T("AddSelectedToAlbum"), AlbumExistingSelectedCount))
+                            </button>
+                        </div>
+
+                        @if (_albumExistingLoading)
+                        {
+                            <p class="text-muted" style="margin:.5rem 0">@T("Loading")</p>
+                        }
+                        else if (!AlbumExistingCandidates.Any())
+                        {
+                            <div style="padding:.85rem;border:1px dashed #d8e0ea;border-radius:8px;background:#f8fafc;text-align:center">
+                                <span class="text-muted">@T("NoExistingResourcesForAlbum")</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.55rem;max-height:260px;overflow:auto;padding-right:.15rem">
+                                @foreach (var resource in AlbumExistingCandidates.Take(80))
+                                {
+                                    <label @key="resource.Id" style="display:grid;grid-template-columns:auto 42px minmax(0,1fr);gap:.55rem;align-items:center;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;padding:.5rem;cursor:pointer">
+                                        <input type="checkbox"
+                                               checked="@_albumExistingSelectedIds.Contains(resource.Id)"
+                                               @onchange="e => ToggleAlbumExistingResource(resource, e)" />
+                                        @ResourceVisual(resource, "width:42px;height:38px;object-fit:cover")
+                                        <span style="min-width:0">
+                                            <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ResourceName(resource)</strong>
+                                            <small class="text-muted" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ResourceFileName(resource)</small>
+                                        </span>
+                                    </label>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" disabled="@(_uploadingQueue || _savingYoutubeResource)" @onclick="CloseUploadModal">@T("Close")</button>
+                @if (IsYoutubeLinkMode)
+                {
+                    <button class="btn-admin btn-primary"
+                            disabled="@(_savingYoutubeResource || string.IsNullOrWhiteSpace(_youtubeUrl))"
+                            @onclick="CreateYouTubeVideoResource">
+                        <i class="fab fa-youtube"></i> @(_savingYoutubeResource ? T("Saving") : T("AddYouTubeVideo"))
+                    </button>
+                }
+                else
+                {
+                    <button class="btn-admin btn-ghost" disabled="@(_uploadingQueue || !_uploadQueue.Any(i => i.IsComplete))" @onclick="ClearCompletedUploads">
+                        @T("ClearCompleted")
+                    </button>
+                    <button class="btn-admin btn-primary" disabled="@(_uploadingQueue || !UploadableQueueItems.Any())" @onclick="UploadQueuedResources">
+                        <i class="fas fa-upload"></i> @(_uploadingQueue ? T("Uploading") : T("UploadSelectedFiles"))
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _showEditor)
+{
+    <div class="modal-backdrop" @onclick="CloseEditor">
+        <div class="modal-box" style="max-width:720px" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@T(_editingId is null ? "NewResource" : "EditResource")</span>
+                <button class="btn-admin btn-ghost content-icon-btn" @onclick="CloseEditor" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+                    <div>
+                        <label>@T("Type")</label>
+                        <div style="margin-top:.35rem">
+                            <span class="content-behavior-pill">@DisplayKind(_edit.Kind)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="border-top:1px solid #e5e7eb;padding-top:1rem;margin-top:1rem">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.75rem">
+                        <h3 style="font-size:.95rem;margin:0">@T("Content")</h3>
+                        <span class="text-muted" style="font-size:.85rem">@T("EditingLanguage"): @CurrentLang.ToUpperInvariant()</span>
+                    </div>
+                    <label>@T("Name")</label>
+                    <input class="form-control" value="@GetValue(_edit.Name, CurrentLang)" @oninput="e => SetValue(_edit.Name, CurrentLang, e.Value?.ToString())" />
+                    <label style="margin-top:.75rem">@T("Description")</label>
+                    <textarea class="form-control" rows="3" value="@GetValue(_edit.Description, CurrentLang)" @oninput="e => SetValue(_edit.Description, CurrentLang, e.Value?.ToString())"></textarea>
+                </div>
+
+                @if (_editingId is not null)
+                {
+                    <div style="margin-top:1rem;padding:1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fffdf8">
+                        <label>@T("ReplaceResourceFile")</label>
+                        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.5rem">
+                            <InputFile id="managed-resource-replace-upload"
+                                       OnChange="ReplaceResourceFile"
+                                       accept="@UploadAccept"
+                                       disabled="@_replaceUploading"
+                                       style="display:none" />
+                            <label class="btn-admin btn-ghost" for="managed-resource-replace-upload">
+                                <i class="fas fa-rotate"></i> @(_replaceUploading ? T("Replacing") : T("ReplaceResourceFile"))
+                            </label>
+                        </div>
+                        <div class="form-hint">@T("ReplaceResourceFileHint")</div>
+                    </div>
+                }
+
+                @if (_edit.Kind == "video")
+                {
+                    <div class="alert alert-info" style="margin-top:.75rem">
+                        @T("ResourceLibraryVideoRule")
+                    </div>
+                }
+
+                <label style="margin-top:.75rem">@T("FileName")</label>
+                <input class="form-control" value="@_edit.FileName" disabled="@(_editingId is not null)" @oninput="e => _edit.FileName = e.Value?.ToString()" />
+
+                <label style="margin-top:.75rem">@T("Album")</label>
+                <select class="form-control" value="@(_edit.AlbumId ?? string.Empty)" @onchange="e => _edit.AlbumId = e.Value?.ToString() ?? string.Empty">
+                    <option value="">@T("NoAlbum")</option>
+                    @foreach (var album in AlbumsForKind(_edit.Kind))
+                    {
+                        <option value="@album.Id">@album.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseEditor">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" disabled="@IsSaveDisabled" @onclick="SaveResource">
+                    <i class="fas fa-save"></i> @T("Save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _showAlbumEditor)
+{
+    <div class="modal-backdrop" @onclick="CloseAlbumEditor">
+        <div class="modal-card" style="max-width:520px" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@T(_editingAlbum is null ? "NewAlbum" : "EditAlbum")</span>
+                <button class="btn-admin btn-ghost content-icon-btn" @onclick="CloseAlbumEditor" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div style="padding:1rem">
+                <label>@T("AlbumName")</label>
+                <input class="form-control" value="@_albumEdit.Name" @oninput="e => _albumEdit.Name = e.Value?.ToString() ?? string.Empty" />
+
+                <label style="margin-top:.75rem">@T("AlbumType")</label>
+                <select class="form-control" value="@_albumEdit.Scope" disabled="@(_editingAlbum is not null)" @onchange="OnAlbumScopeChanged">
+                    <option value="media">@T("MediaAlbum")</option>
+                    <option value="file">@T("FileAlbum")</option>
+                </select>
+                @if (_editingAlbum is not null)
+                {
+                    <div class="form-hint">@T("AlbumTypeChangeBlockedHint")</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseAlbumEditor">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" disabled="@string.IsNullOrWhiteSpace(_albumEdit.Name)" @onclick="SaveAlbum">
+                    <i class="fas fa-save"></i> @T("Save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _deleteAlbum is not null)
+{
+    <div class="modal-backdrop" @onclick="CancelDeleteAlbum">
+        <div class="modal-card" style="max-width:560px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("DeleteAlbum")</div>
+            <div style="padding:1rem">
+                <p style="margin-top:0">
+                    @string.Format(T("DeleteAlbumPrompt"), _deleteAlbum.Name)
+                </p>
+                @if (_deleteAlbumLoading)
+                {
+                    <p class="text-muted">@T("Loading")</p>
+                }
+                else if (_deleteAlbum.ResourceCount > 0)
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("DeleteAlbumBlocked"), _deleteAlbum.ResourceCount)
+                    </div>
+                    @if (_deleteAlbumResourceNames.Any())
+                    {
+                        <ul style="margin:.5rem 0 0;padding-left:1.2rem">
+                            @foreach (var name in _deleteAlbumResourceNames.Take(5))
+                            {
+                                <li>@name</li>
+                            }
+                        </ul>
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CancelDeleteAlbum">@T("Cancel")</button>
+                <button class="btn-admin btn-danger"
+                        disabled="@(_deleteAlbumLoading || _deleteAlbum.ResourceCount > 0)"
+                        @onclick="ConfirmDeleteAlbum">
+                    @T("Delete")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _deleteResource is not null)
+{
+    <div class="modal-backdrop" @onclick="CancelDeleteResource">
+        <div class="modal-card" style="max-width:560px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("DeleteResource")</div>
+            <div style="padding:1rem">
+                <p style="margin-top:0">
+                    @string.Format(T("DeleteResourcePrompt"), GetValue(_deleteResource.Name, CurrentLang, fallback: true))
+                </p>
+                @if (_deleteLoading)
+                {
+                    <p class="text-muted">@T("UsageLoading")</p>
+                }
+                else if ((_deleteUsage?.UsageCount ?? 0) > 0)
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("UsageUsedInPlaces"), _deleteUsage!.UsageCount, _deleteUsage.UsageCount == 1 ? string.Empty : "s")
+                    </div>
+                    <ul style="margin:.5rem 0 0;padding-left:1.2rem">
+                        @foreach (var reference in _deleteUsage!.References.Take(6))
+                        {
+                            <li>@UsageReferenceText(reference)</li>
+                        }
+                    </ul>
+                    @if (_deleteUsage.References.Count > 6)
+                    {
+                        <div class="text-muted" style="font-size:.85rem;margin-top:.5rem">
+                            @string.Format(T("MoreCount"), _deleteUsage.References.Count - 6)
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="text-muted">@T("NotUsedAnywhereSafeToDelete")</p>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CancelDeleteResource">@T("Cancel")</button>
+                <button class="btn-admin btn-danger"
+                        disabled="@(_deleteLoading || (_deleteUsage?.UsageCount ?? 0) > 0)"
+                        @onclick="ConfirmDeleteResource">
+                    @T("Delete")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (CanManageResources && _showBulkDelete)
+{
+    <div class="modal-backdrop" @onclick="CancelBulkDeleteResources">
+        <div class="modal-card" style="max-width:620px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("BulkDeleteResources")</div>
+            <div style="padding:1rem">
+                <p style="margin-top:0">
+                    @string.Format(T("BulkDeleteResourcesPrompt"), BulkDeleteResources.Count)
+                </p>
+                @if (SelectedBlockedCount > 0)
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("BulkDeleteResourcesBlocked"), SelectedBlockedCount)
+                    </div>
+                }
+                <ul style="margin:.5rem 0 0;padding-left:1.2rem;max-height:240px;overflow:auto">
+                    @foreach (var resource in BulkDeleteResources.Take(10))
+                    {
+                        <li>@ResourceName(resource)</li>
+                    }
+                </ul>
+                @if (BulkDeleteResources.Count > 10)
+                {
+                    <div class="text-muted" style="font-size:.85rem;margin-top:.5rem">
+                        @string.Format(T("MoreCount"), BulkDeleteResources.Count - 10)
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" disabled="@_bulkDeleteLoading" @onclick="CancelBulkDeleteResources">@T("Cancel")</button>
+                <button class="btn-admin btn-danger"
+                        disabled="@(_bulkDeleteLoading || !BulkDeleteResources.Any())"
+                        @onclick="ConfirmBulkDeleteResources">
+                    @if (_bulkDeleteLoading)
+                    {
+                        <span>@T("Loading")</span>
+                    }
+                    else
+                    {
+                        <span>@T("Delete")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_previewResource is not null)
+{
+    <div class="modal-backdrop" @onclick="ClosePreview">
+        <div class="modal-box" style="max-width:min(1000px,95vw);width:95vw" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <span>@ResourceName(_previewResource)</span>
+                <button class="btn-admin btn-ghost content-icon-btn" @onclick="ClosePreview" title="@T("Close")">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                @if (NormalizeKind(_previewResource.Kind) == "image")
+                {
+                    <div style="display:grid;place-items:center;background:#0f172a;border-radius:8px;min-height:320px;overflow:hidden">
+                        <img src="@_previewResource.Url" alt="@ResourceName(_previewResource)" style="max-width:100%;max-height:72vh;object-fit:contain" />
+                    </div>
+                }
+                else if (NormalizeKind(_previewResource.Kind) == "video")
+                {
+                    @if (IsExternalVideoResource(_previewResource))
+                    {
+                        <iframe src="@_previewResource.Url"
+                                title="@ResourceName(_previewResource)"
+                                style="width:100%;height:72vh;border:1px solid #d8e0ea;border-radius:8px;background:#0f172a"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowfullscreen></iframe>
+                    }
+                    else
+                    {
+                        <video src="@_previewResource.Url"
+                               controls
+                               preload="metadata"
+                               style="width:100%;max-height:72vh;border-radius:8px;background:#0f172a">
+                        </video>
+                    }
+                }
+                else if (IsPdf(_previewResource))
+                {
+                    <iframe src="@_previewResource.Url" title="@ResourceName(_previewResource)" style="width:100%;height:72vh;border:1px solid #d8e0ea;border-radius:8px"></iframe>
+                }
+                else
+                {
+                    <div style="min-height:280px;display:grid;place-items:center;text-align:center;border:1px solid #d8e0ea;border-radius:8px;background:#f8fafc;padding:2rem">
+                        <div>
+                            <i class="fas fa-file-lines" style="font-size:3rem;color:#0f2742"></i>
+                            <h3 style="margin:.75rem 0 .25rem">@ResourceFileName(_previewResource)</h3>
+                            <p class="text-muted" style="margin:0">@T("PreviewUnavailable")</p>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="ClosePreview">@T("Close")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private const int PageSize = 30;
+    private const int MaxQueuedFiles = 200;
+    private const long MaxImageUploadBytes = 20L * 1024 * 1024;
+    private const long MaxFileUploadBytes = 100L * 1024 * 1024;
+    private const long MaxVideoUploadBytes = 250L * 1024 * 1024;
+
+    private List<string> _languages = new() { "en" };
+    private List<ManagedResourceModel> _resources = new();
+    private List<ResourceAlbumModel> _albums = new();
+    private ManagedResourceModel? _selectedResource;
+    private ManagedResourceRequest _edit = new();
+    private string? _editingId;
+    private string _search = string.Empty;
+    private string _kindFilter = string.Empty;
+    private string _libraryMode = "resources";
+    private string? _selectedAlbumId;
+    private string _viewMode = "grid";
+    private int _page = 1;
+    private bool _loading = true;
+    private bool _albumLoading;
+    private bool _showUploadModal;
+    private bool _showEditor;
+    private bool _showAlbumEditor;
+    private bool _showBulkDelete;
+    private string _uploadKind = "image";
+    private string _uploadAlbumId = string.Empty;
+    private string _videoUploadMode = VideoUploadModes.File;
+    private string _youtubeUrl = string.Empty;
+    private string _youtubeName = string.Empty;
+    private string _youtubeDescription = string.Empty;
+    private bool _uploadingQueue;
+    private bool _savingYoutubeResource;
+    private readonly List<ResourceUploadQueueItem> _uploadQueue = new();
+    private readonly List<ManagedResourceModel> _albumExistingResources = new();
+    private readonly HashSet<string> _albumExistingSelectedIds = new(StringComparer.OrdinalIgnoreCase);
+    private string _albumExistingSearch = string.Empty;
+    private bool _albumExistingLoading;
+    private bool _albumExistingAssigning;
+    private ManagedResourceModel? _previewResource;
+    private ManagedResourceModel? _deleteResource;
+    private ResourceAlbumModel? _deleteAlbum;
+    private ResourceAlbumModel? _editingAlbum;
+    private ResourceAlbumRequest _albumEdit = new();
+    private List<string> _deleteAlbumResourceNames = new();
+    private ManagedResourceUsageModel? _deleteUsage;
+    private bool _deleteLoading;
+    private bool _deleteAlbumLoading;
+    private bool _bulkDeleteLoading;
+    private bool _replaceUploading;
+    private readonly List<AdminUserResponse> _adminUsers = new();
+    private readonly HashSet<string> _selectedResourceIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ManagedResourceUsageModel> _usageByResourceId = new(StringComparer.OrdinalIgnoreCase);
+    private string? _usageLoadingResourceId;
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string CurrentLang => NormalizeLang(AdminLanguage);
+    private bool CanViewResourceLibrary => Auth.CanManageAllContent || Auth.IsWriter;
+    private bool CanUploadResources => Auth.CanManageAllContent || Auth.IsWriter;
+    private bool CanManageResources => Auth.CanManageAllContent;
+
+    private bool IsAlbumMode => string.Equals(_libraryMode, "albums", StringComparison.OrdinalIgnoreCase);
+    private bool ShowingAlbumRoot => IsAlbumMode && string.IsNullOrWhiteSpace(_selectedAlbumId);
+    private ResourceAlbumModel? SelectedAlbum =>
+        string.IsNullOrWhiteSpace(_selectedAlbumId)
+            ? null
+            : _albums.FirstOrDefault(a => string.Equals(a.Id, _selectedAlbumId, StringComparison.OrdinalIgnoreCase));
+    private string? ActiveAlbumId => IsAlbumMode ? _selectedAlbumId : null;
+    private IEnumerable<ManagedResourceModel> FilteredResources => _resources;
+    private IEnumerable<ResourceAlbumModel> FilteredAlbums => _albums.Where(MatchesAlbumFilters);
+    private int FilteredResourceCount => FilteredResources.Count();
+    private int FilteredAlbumCount => FilteredAlbums.Count();
+    private int VisibleItemCount => ShowingAlbumRoot ? FilteredAlbumCount : FilteredResourceCount;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(VisibleItemCount / (double)PageSize));
+    private int PageStart => VisibleItemCount == 0 ? 0 : ((_page - 1) * PageSize) + 1;
+    private int PageEnd => Math.Min(VisibleItemCount, _page * PageSize);
+    private IEnumerable<ManagedResourceModel> PagedResources => FilteredResources.Skip((_page - 1) * PageSize).Take(PageSize);
+    private IEnumerable<ResourceAlbumModel> PagedAlbums => FilteredAlbums.Skip((_page - 1) * PageSize).Take(PageSize);
+    private IEnumerable<ManagedResourceModel> DeletablePagedResources => PagedResources.Where(r => !r.IsInUse);
+    private List<ManagedResourceModel> BulkDeleteResources =>
+        CanManageResources
+            ? _resources.Where(r => _selectedResourceIds.Contains(r.Id) && !r.IsInUse).ToList()
+            : new();
+    private int SelectedBlockedCount =>
+        CanManageResources
+            ? _resources.Count(r => _selectedResourceIds.Contains(r.Id) && r.IsInUse)
+            : 0;
+    private bool AllPagedBulkSelected =>
+        CanManageResources &&
+        DeletablePagedResources.Any() &&
+        DeletablePagedResources.All(r => _selectedResourceIds.Contains(r.Id));
+    private ManagedResourceUsageModel? SelectedUsage =>
+        _selectedResource is null ? null : _usageByResourceId.GetValueOrDefault(_selectedResource.Id);
+    private string UploadAccept => NormalizeKind(_edit.Kind) switch
+    {
+        "image" => "image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif",
+        "video" => "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov",
+        _ => ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    };
+    private List<ResourceUploadQueueItem> UploadableQueueItems =>
+        _uploadQueue.Where(item => item.CanUpload).ToList();
+    private IEnumerable<ManagedResourceModel> AlbumExistingCandidates =>
+        _albumExistingResources
+            .Where(CanAssignExistingResourceToSelectedAlbum)
+            .Where(MatchesAlbumExistingSearch)
+            .OrderBy(ResourceName, StringComparer.OrdinalIgnoreCase);
+    private int AlbumExistingSelectedCount =>
+        AlbumExistingCandidates.Count(resource => _albumExistingSelectedIds.Contains(resource.Id));
+    private ResourceAlbumModel? UploadAlbum =>
+        string.IsNullOrWhiteSpace(_uploadAlbumId)
+            ? null
+            : _albums.FirstOrDefault(a => string.Equals(a.Id, _uploadAlbumId, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<string> AvailableUploadKinds
+    {
+        get
+        {
+            var album = SelectedAlbum ?? UploadAlbum;
+            if (album is not null)
+                return NormalizeAlbumScope(album.Scope) == "file"
+                    ? ["file"]
+                    : ["image", "video"];
+
+            return ["image", "video", "file"];
+        }
+    }
+    private bool IsUploadKindLocked => AvailableUploadKinds.Count() == 1;
+    private bool IsUploadAlbumLocked => SelectedAlbum is not null;
+    private string UploadLimitHint =>
+        IsYoutubeLinkMode
+            ? T("YouTubeNoFileUploadHint")
+            : _uploadKind switch
+            {
+                "image" => string.Format(T("UploadMaxHint"), FormatBytes(MaxImageUploadBytes)),
+                "video" => string.Format(T("UploadMaxHint"), FormatBytes(MaxVideoUploadBytes)),
+                _ => string.Format(T("UploadMaxHint"), FormatBytes(MaxFileUploadBytes))
+            };
+    private bool IsYoutubeLinkMode =>
+        string.Equals(_uploadKind, "video", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(_videoUploadMode, VideoUploadModes.YouTube, StringComparison.OrdinalIgnoreCase);
+    private bool IsSaveDisabled =>
+        _editingId is null &&
+        string.IsNullOrWhiteSpace(_edit.StorageKey);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        await AdminLanguageState.LoadSettingsAsync();
+        _languages = AdminLanguageState.SupportedLanguages.ToList();
+        _edit = NewRequest();
+        if (!CanViewResourceLibrary)
+        {
+            _loading = false;
+            return;
+        }
+
+        await LoadAdminUsers();
+        await LoadAlbums();
+        await LoadResources();
+    }
+
+    private async Task LoadAdminUsers()
+    {
+        _adminUsers.Clear();
+        if (!Auth.CanManageUsers) return;
+
+        var res = await Users.GetUsersAsync();
+        if (res.Success && res.Data is not null)
+            _adminUsers.AddRange(res.Data);
+    }
+
+    private async Task LoadResources()
+    {
+        if (!CanViewResourceLibrary)
+        {
+            _resources = new();
+            _selectedResource = null;
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        var previousSelectedId = _selectedResource?.Id;
+        var res = await ContentService.GetResourcesAsync(_kindFilter, _search, includeInactive: true, albumId: ActiveAlbumId);
+        _resources = res.Data ?? new();
+        PruneSelection();
+        ClampPage();
+        _selectedResource = FilteredResources.FirstOrDefault(r => r.Id == previousSelectedId)
+            ?? PagedResources.FirstOrDefault()
+            ?? FilteredResources.FirstOrDefault();
+        await LoadUsageDetails(_selectedResource);
+        _loading = false;
+    }
+
+    private async Task LoadAlbums()
+    {
+        _albumLoading = true;
+        var res = await ContentService.GetResourceAlbumsAsync();
+        _albums = res.Data ?? new();
+        if (SelectedAlbum is null)
+            _selectedAlbumId = null;
+        _albumLoading = false;
+    }
+
+    private async Task OnSearchChanged(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+        if (ShowingAlbumRoot)
+        {
+            ClampPage();
+            return;
+        }
+
+        await LoadResources();
+    }
+
+    private async Task SetKindFilter(string kind)
+    {
+        _kindFilter = kind;
+        _page = 1;
+        EnsureSelectedAlbumMatchesKind();
+        if (ShowingAlbumRoot)
+        {
+            ClampPage();
+            return;
+        }
+
+        await LoadResources();
+    }
+
+    private async Task SetLibraryMode(string mode)
+    {
+        _libraryMode = string.Equals(mode, "albums", StringComparison.OrdinalIgnoreCase) ? "albums" : "resources";
+        _selectedAlbumId = null;
+        _selectedResource = null;
+        _selectedResourceIds.Clear();
+        _page = 1;
+        await LoadAlbums();
+        if (!ShowingAlbumRoot)
+            await LoadResources();
+        else
+            ClampPage();
+    }
+
+    private async Task OpenAlbum(ResourceAlbumModel album)
+    {
+        _libraryMode = "albums";
+        _selectedAlbumId = album.Id;
+        _selectedResource = null;
+        _selectedResourceIds.Clear();
+        _page = 1;
+        await LoadResources();
+    }
+
+    private void BackToAlbums()
+    {
+        _selectedAlbumId = null;
+        _selectedResource = null;
+        _selectedResourceIds.Clear();
+        _page = 1;
+        ClampPage();
+    }
+
+    private void SetViewMode(string mode)
+    {
+        _viewMode = mode == "list" ? "list" : "grid";
+    }
+
+    private async Task SelectResource(ManagedResourceModel resource)
+    {
+        _selectedResource = resource;
+        await LoadUsageDetails(resource);
+    }
+
+    private bool IsSelected(ManagedResourceModel resource) =>
+        string.Equals(resource.Id, _selectedResource?.Id, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsBulkSelected(ManagedResourceModel resource) =>
+        _selectedResourceIds.Contains(resource.Id);
+
+    private string BulkSelectTitle(ManagedResourceModel resource) =>
+        resource.IsInUse ? T("ResourceInUseCannotSelect") : T("Select");
+
+    private void ToggleBulkSelected(ManagedResourceModel resource, ChangeEventArgs e)
+    {
+        if (!CanManageResources) return;
+
+        if (resource.IsInUse)
+        {
+            _selectedResourceIds.Remove(resource.Id);
+            return;
+        }
+
+        var selected = e.Value is bool value && value;
+        if (selected)
+            _selectedResourceIds.Add(resource.Id);
+        else
+            _selectedResourceIds.Remove(resource.Id);
+    }
+
+    private void ToggleAllPagedBulk(ChangeEventArgs e)
+    {
+        if (!CanManageResources) return;
+
+        var selected = e.Value is bool value && value;
+        foreach (var resource in DeletablePagedResources)
+        {
+            if (selected)
+                _selectedResourceIds.Add(resource.Id);
+            else
+                _selectedResourceIds.Remove(resource.Id);
+        }
+    }
+
+    private void ClearSelection()
+    {
+        _selectedResourceIds.Clear();
+    }
+
+    private void PruneSelection()
+    {
+        if (!CanManageResources)
+        {
+            _selectedResourceIds.Clear();
+            return;
+        }
+
+        var ids = _resources.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _selectedResourceIds.RemoveWhere(id => !ids.Contains(id));
+    }
+
+    private async Task PreviousPage()
+    {
+        if (_page <= 1) return;
+        _page--;
+        _selectedResource = PagedResources.FirstOrDefault() ?? _selectedResource;
+        await LoadUsageDetails(_selectedResource);
+    }
+
+    private async Task NextPage()
+    {
+        if (_page >= TotalPages) return;
+        _page++;
+        _selectedResource = PagedResources.FirstOrDefault() ?? _selectedResource;
+        await LoadUsageDetails(_selectedResource);
+    }
+
+    private void ClampPage()
+    {
+        if (_page < 1) _page = 1;
+        if (_page > TotalPages) _page = TotalPages;
+    }
+
+    private async Task NewResource()
+    {
+        if (!EnsureCanUploadResources()) return;
+
+        _uploadKind = DefaultUploadKind();
+        _uploadAlbumId = SelectedAlbum?.Id ?? string.Empty;
+        ApplyUploadAlbumConstraints();
+        _uploadQueue.Clear();
+        _videoUploadMode = VideoUploadModes.File;
+        ResetYouTubeDraft();
+        _albumExistingSearch = string.Empty;
+        _albumExistingResources.Clear();
+        _albumExistingSelectedIds.Clear();
+        _showUploadModal = true;
+        _showEditor = false;
+        _editingId = null;
+
+        if (SelectedAlbum is not null)
+            await LoadAlbumExistingResources();
+    }
+
+    private void CloseUploadModal()
+    {
+        if (_uploadingQueue || _savingYoutubeResource) return;
+
+        _showUploadModal = false;
+        _uploadQueue.Clear();
+        _albumExistingResources.Clear();
+        _albumExistingSelectedIds.Clear();
+        _albumExistingSearch = string.Empty;
+        ResetYouTubeDraft();
+    }
+
+    private void OnUploadKindChanged(ChangeEventArgs e)
+    {
+        if (_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any()) return;
+
+        var nextKind = NormalizeKind(e.Value?.ToString());
+        if (!AvailableUploadKinds.Contains(nextKind, StringComparer.OrdinalIgnoreCase))
+            nextKind = AvailableUploadKinds.FirstOrDefault() ?? "image";
+
+        _uploadKind = nextKind;
+        if (UploadAlbum is null ||
+            !string.Equals(UploadAlbum.Scope, AlbumScopeForKind(_uploadKind), StringComparison.OrdinalIgnoreCase))
+        {
+            _uploadAlbumId = string.Empty;
+        }
+
+        ApplyUploadAlbumConstraints();
+        if (_uploadKind != "video")
+            _videoUploadMode = VideoUploadModes.File;
+        ResetYouTubeDraft();
+    }
+
+    private void OnUploadAlbumChanged(ChangeEventArgs e)
+    {
+        if (_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadAlbumLocked) return;
+
+        _uploadAlbumId = e.Value?.ToString() ?? string.Empty;
+        ApplyUploadAlbumConstraints();
+    }
+
+    private void SetVideoUploadMode(string mode)
+    {
+        if (_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any()) return;
+
+        _videoUploadMode = string.Equals(mode, VideoUploadModes.YouTube, StringComparison.OrdinalIgnoreCase)
+            ? VideoUploadModes.YouTube
+            : VideoUploadModes.File;
+        if (!IsYoutubeLinkMode)
+            ResetYouTubeDraft();
+    }
+
+    private Task QueueUploadFiles(InputFileChangeEventArgs e)
+    {
+        if (!EnsureCanUploadResources()) return Task.CompletedTask;
+
+        IReadOnlyList<IBrowserFile> files;
+        try
+        {
+            files = e.GetMultipleFiles(MaxQueuedFiles);
+        }
+        catch (InvalidOperationException)
+        {
+            Http.Toast(string.Format(T("TooManyQueuedFiles"), MaxQueuedFiles), 422);
+            return Task.CompletedTask;
+        }
+
+        foreach (var file in files)
+        {
+            var item = new ResourceUploadQueueItem
+            {
+                File = file,
+                OriginalFileName = file.Name,
+                ResourceName = DefaultResourceName(file.Name)
+            };
+
+            var validationError = ValidateQueuedFile(file, _uploadKind);
+            if (!string.IsNullOrWhiteSpace(validationError))
+            {
+                item.Status = UploadQueueStatus.Blocked;
+                item.Error = validationError;
+            }
+
+            _uploadQueue.Add(item);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task UploadQueuedResources()
+    {
+        if (!EnsureCanUploadResources()) return;
+
+        var items = UploadableQueueItems;
+        if (items.Count == 0)
+        {
+            Http.Toast(T("NoQueuedFiles"), 422);
+            return;
+        }
+
+        await UploadQueueItemsAsync(items);
+    }
+
+    private async Task RetryUpload(ResourceUploadQueueItem item)
+    {
+        if (_uploadingQueue || item.IsComplete) return;
+
+        item.Status = UploadQueueStatus.Queued;
+        item.Error = ValidateQueuedFile(item.File, _uploadKind);
+        if (!string.IsNullOrWhiteSpace(item.Error))
+        {
+            item.Status = UploadQueueStatus.Blocked;
+            return;
+        }
+
+        await UploadQueueItemsAsync([item]);
+    }
+
+    private async Task UploadQueueItemsAsync(List<ResourceUploadQueueItem> items)
+    {
+        if (items.Count == 0) return;
+
+        _uploadingQueue = true;
+        foreach (var item in items)
+        {
+            item.Status = UploadQueueStatus.Uploading;
+            item.Error = null;
+        }
+
+        try
+        {
+            var files = items.Select(item => item.File).ToList();
+            var names = items.Select(CleanQueueResourceName).ToList();
+            var res = await ContentService.UploadResourcesAsync(files, _uploadKind, EmptyToNull(_uploadAlbumId), names);
+            Http.Toast(res.Message, res.StatusCode);
+
+            if (!res.Success || res.Data is null)
+            {
+                foreach (var item in items)
+                {
+                    item.Status = UploadQueueStatus.Failed;
+                    item.Error = string.IsNullOrWhiteSpace(res.Message) ? T("UploadFailed") : res.Message;
+                }
+                return;
+            }
+
+            foreach (var result in res.Data.Results)
+            {
+                var item = items.ElementAtOrDefault(result.Index);
+                if (item is null) continue;
+
+                if (result.Success && result.Resource is not null)
+                {
+                    item.Status = UploadQueueStatus.Done;
+                    item.Error = null;
+                    item.Resource = result.Resource;
+                    continue;
+                }
+
+                item.Status = UploadQueueStatus.Failed;
+                item.Error = string.IsNullOrWhiteSpace(result.Error) ? T("UploadFailed") : result.Error;
+            }
+
+            await LoadAlbums();
+            await LoadResources();
+
+            var lastUploadedId = res.Data.Results
+                .LastOrDefault(result => result.Success && result.Resource is not null)
+                ?.Resource
+                ?.Id;
+            if (!string.IsNullOrWhiteSpace(lastUploadedId))
+                _selectedResource = _resources.FirstOrDefault(r => r.Id == lastUploadedId) ?? _selectedResource;
+        }
+        finally
+        {
+            _uploadingQueue = false;
+        }
+    }
+
+    private async Task CreateYouTubeVideoResource()
+    {
+        if (!EnsureCanUploadResources()) return;
+
+        if (string.IsNullOrWhiteSpace(_youtubeUrl))
+        {
+            Http.Toast(T("YouTubeLinkRequired"), 422);
+            return;
+        }
+
+        _savingYoutubeResource = true;
+        try
+        {
+            var cleanName = string.IsNullOrWhiteSpace(_youtubeName)
+                ? T("DefaultYouTubeVideoName")
+                : _youtubeName.Trim();
+
+            var request = new ManagedResourceRequest
+            {
+                Kind = "video",
+                Name = LocalizedResourceValue(cleanName),
+                Description = LocalizedResourceValue(_youtubeDescription.Trim()),
+                Url = _youtubeUrl.Trim(),
+                Source = "external-url",
+                AlbumId = EmptyToNull(_uploadAlbumId),
+                Active = true
+            };
+
+            var res = await ContentService.CreateResourceAsync(request);
+            Http.Toast(res.Message, res.StatusCode);
+            if (!res.Success) return;
+
+            ResetYouTubeDraft();
+            await LoadAlbums();
+            await LoadResources();
+            if (!string.IsNullOrWhiteSpace(res.Data?.Id))
+                _selectedResource = _resources.FirstOrDefault(r => r.Id == res.Data.Id) ?? _selectedResource;
+        }
+        finally
+        {
+            _savingYoutubeResource = false;
+        }
+    }
+
+    private void ResetYouTubeDraft()
+    {
+        _youtubeUrl = string.Empty;
+        _youtubeName = string.Empty;
+        _youtubeDescription = string.Empty;
+    }
+
+    private void RemoveUploadQueueItem(ResourceUploadQueueItem item)
+    {
+        if (_uploadingQueue) return;
+        _uploadQueue.Remove(item);
+    }
+
+    private void ClearCompletedUploads()
+    {
+        if (_uploadingQueue) return;
+        _uploadQueue.RemoveAll(item => item.IsComplete);
+    }
+
+    private async Task LoadAlbumExistingResources()
+    {
+        _albumExistingResources.Clear();
+        _albumExistingSelectedIds.Clear();
+        if (SelectedAlbum is null) return;
+
+        _albumExistingLoading = true;
+        try
+        {
+            var res = await ContentService.GetResourcesAsync(includeInactive: true);
+            if (res.Success && res.Data is not null)
+            {
+                _albumExistingResources.AddRange(res.Data.Where(CanAssignExistingResourceToSelectedAlbum));
+            }
+            else
+            {
+                Http.Toast(res.Message, res.StatusCode);
+            }
+        }
+        finally
+        {
+            _albumExistingLoading = false;
+        }
+    }
+
+    private void OnAlbumExistingSearchChanged(ChangeEventArgs e)
+    {
+        _albumExistingSearch = e.Value?.ToString() ?? string.Empty;
+        _albumExistingSelectedIds.RemoveWhere(id => !AlbumExistingCandidates.Any(resource => string.Equals(resource.Id, id, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private void ToggleAlbumExistingResource(ManagedResourceModel resource, ChangeEventArgs e)
+    {
+        var selected = e.Value is bool value && value;
+        if (selected)
+            _albumExistingSelectedIds.Add(resource.Id);
+        else
+            _albumExistingSelectedIds.Remove(resource.Id);
+    }
+
+    private void SelectAllAlbumExistingCandidates()
+    {
+        foreach (var resource in AlbumExistingCandidates.Take(80))
+            _albumExistingSelectedIds.Add(resource.Id);
+    }
+
+    private void ClearAlbumExistingSelection()
+    {
+        _albumExistingSelectedIds.Clear();
+    }
+
+    private async Task AssignExistingResourcesToAlbum()
+    {
+        if (SelectedAlbum is null) return;
+        if (!_albumExistingSelectedIds.Any())
+        {
+            Http.Toast(T("NoExistingResourcesSelected"), 422);
+            return;
+        }
+
+        _albumExistingAssigning = true;
+        try
+        {
+            var selectedIds = _albumExistingSelectedIds.ToList();
+            var res = await ContentService.AssignResourcesToAlbumAsync(SelectedAlbum.Id, selectedIds);
+            Http.Toast(res.Message, res.StatusCode);
+            if (!res.Success) return;
+
+            _albumExistingSelectedIds.Clear();
+            await LoadAlbums();
+            await LoadResources();
+            await LoadAlbumExistingResources();
+        }
+        finally
+        {
+            _albumExistingAssigning = false;
+        }
+    }
+
+    private void EditResource(ManagedResourceModel resource)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        _selectedResource = resource;
+        _showUploadModal = false;
+        _editingId = resource.Id;
+        _edit = new ManagedResourceRequest
+        {
+            Kind = NormalizeKind(resource.Kind),
+            Name = EnsureLangs(resource.Name),
+            Description = EnsureLangs(resource.Description),
+            Url = resource.Url,
+            StorageKey = resource.StorageKey,
+            ThumbnailUrl = resource.ThumbnailUrl,
+            FileName = resource.FileName,
+            ContentType = resource.ContentType,
+            SizeBytes = resource.SizeBytes,
+            Source = resource.Source,
+            AlbumId = resource.AlbumId,
+            Active = resource.Active
+        };
+        _showEditor = true;
+    }
+
+    private void CloseEditor()
+    {
+        _showEditor = false;
+        _editingId = null;
+        _edit = NewRequest();
+    }
+
+    private async Task SaveResource()
+    {
+        if (!EnsureCanManageResources()) return;
+
+        if (_editingId is null)
+        {
+            Http.Toast(T("UploadResources"), 422);
+            return;
+        }
+
+        PrepareRequest();
+        var res = await ContentService.UpdateResourceAsync(_editingId, _edit);
+
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            var selectedId = res.Data?.Id;
+            _showEditor = false;
+            _editingId = null;
+            _edit = NewRequest();
+            await LoadAlbums();
+            await LoadResources();
+            if (!string.IsNullOrWhiteSpace(selectedId))
+                _selectedResource = _resources.FirstOrDefault(r => r.Id == selectedId) ?? _selectedResource;
+        }
+    }
+
+    private async Task ReplaceResourceFile(InputFileChangeEventArgs e)
+    {
+        if (!EnsureCanManageResources()) return;
+        if (string.IsNullOrWhiteSpace(_editingId)) return;
+
+        _replaceUploading = true;
+        try
+        {
+            var res = await ContentService.ReplaceResourceFileAsync(_editingId, e.File, NormalizeKind(_edit.Kind));
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success && res.Data is not null)
+            {
+                await LoadResources();
+                EditResource(res.Data);
+            }
+        }
+        finally
+        {
+            _replaceUploading = false;
+        }
+    }
+
+    private async Task AskDeleteResource(ManagedResourceModel resource)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        if (resource.IsInUse)
+        {
+            Http.Toast(string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s"), 422);
+            return;
+        }
+
+        _deleteResource = resource;
+        _deleteUsage = null;
+        _deleteLoading = true;
+
+        var usage = await ContentService.GetResourceUsageAsync(resource.Id);
+        if (usage.Success)
+            _deleteUsage = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
+        else
+            Http.Toast(usage.Message, usage.StatusCode);
+
+        _deleteLoading = false;
+    }
+
+    private void CancelDeleteResource()
+    {
+        _deleteResource = null;
+        _deleteUsage = null;
+        _deleteLoading = false;
+    }
+
+    private async Task ConfirmDeleteResource()
+    {
+        if (!EnsureCanManageResources()) return;
+        if (_deleteResource is null) return;
+
+        var deletedId = _deleteResource.Id;
+        var res = await ContentService.DeleteResourceAsync(deletedId);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            _usageByResourceId.Remove(deletedId);
+            if (string.Equals(_editingId, deletedId, StringComparison.OrdinalIgnoreCase))
+                CloseEditor();
+
+            CancelDeleteResource();
+            await LoadAlbums();
+            await LoadResources();
+            if (string.Equals(_selectedResource?.Id, deletedId, StringComparison.OrdinalIgnoreCase))
+                _selectedResource = PagedResources.FirstOrDefault() ?? FilteredResources.FirstOrDefault();
+            return;
+        }
+
+        var usage = await ContentService.GetResourceUsageAsync(deletedId);
+        if (usage.Success)
+            _deleteUsage = usage.Data;
+        await LoadResources();
+    }
+
+    private void AskBulkDeleteResources()
+    {
+        if (!EnsureCanManageResources()) return;
+
+        if (!BulkDeleteResources.Any())
+        {
+            Http.Toast(T("NoResourcesSelectedForDelete"), 422);
+            return;
+        }
+
+        _showBulkDelete = true;
+    }
+
+    private void CancelBulkDeleteResources()
+    {
+        if (_bulkDeleteLoading) return;
+        _showBulkDelete = false;
+    }
+
+    private async Task ConfirmBulkDeleteResources()
+    {
+        if (!EnsureCanManageResources()) return;
+
+        var resources = BulkDeleteResources;
+        if (resources.Count == 0) return;
+
+        _bulkDeleteLoading = true;
+        var deleted = 0;
+        var failed = 0;
+
+        foreach (var resource in resources)
+        {
+            var res = await ContentService.DeleteResourceAsync(resource.Id);
+            if (res.Success)
+            {
+                deleted++;
+                _selectedResourceIds.Remove(resource.Id);
+                _usageByResourceId.Remove(resource.Id);
+            }
+            else
+            {
+                failed++;
+            }
+        }
+
+        _bulkDeleteLoading = false;
+        _showBulkDelete = false;
+        await LoadAlbums();
+        await LoadResources();
+
+        if (deleted > 0)
+            Http.Toast(string.Format(T("DeleteResourcesSucceeded"), deleted), 200);
+        if (failed > 0)
+            Http.Toast(string.Format(T("DeleteResourcesPartial"), failed), 422);
+    }
+
+    private async Task LoadUsageDetails(ManagedResourceModel? resource, bool force = false)
+    {
+        if (resource is null) return;
+
+        if (resource.UsageCount <= 0)
+        {
+            _usageByResourceId[resource.Id] = new ManagedResourceUsageModel { ResourceId = resource.Id };
+            return;
+        }
+
+        if (!force && _usageByResourceId.ContainsKey(resource.Id))
+            return;
+
+        _usageLoadingResourceId = resource.Id;
+        var usage = await ContentService.GetResourceUsageAsync(resource.Id);
+        if (usage.Success)
+            _usageByResourceId[resource.Id] = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
+        else
+            Http.Toast(usage.Message, usage.StatusCode);
+
+        if (string.Equals(_usageLoadingResourceId, resource.Id, StringComparison.OrdinalIgnoreCase))
+            _usageLoadingResourceId = null;
+    }
+
+    private bool IsUsageLoading(ManagedResourceModel? resource) =>
+        resource is not null &&
+        string.Equals(_usageLoadingResourceId, resource.Id, StringComparison.OrdinalIgnoreCase);
+
+    private void PreviewResource(ManagedResourceModel? resource)
+    {
+        if (resource is null || string.IsNullOrWhiteSpace(resource.Url)) return;
+        _previewResource = resource;
+    }
+
+    private void ClosePreview()
+    {
+        _previewResource = null;
+    }
+
+    private void OpenAlbumEditor(ResourceAlbumModel? album)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        _editingAlbum = album;
+        _albumEdit = album is null
+            ? new ResourceAlbumRequest
+            {
+                Scope = DefaultAlbumScope(),
+                Name = string.Empty
+            }
+            : new ResourceAlbumRequest
+            {
+                Scope = NormalizeAlbumScope(album.Scope),
+                Name = album.Name
+            };
+        _showAlbumEditor = true;
+    }
+
+    private void CloseAlbumEditor()
+    {
+        _showAlbumEditor = false;
+        _editingAlbum = null;
+        _albumEdit = new();
+    }
+
+    private void OnAlbumScopeChanged(ChangeEventArgs e)
+    {
+        _albumEdit.Scope = NormalizeAlbumScope(e.Value?.ToString());
+    }
+
+    private async Task SaveAlbum()
+    {
+        if (!EnsureCanManageResources()) return;
+        _albumEdit.Scope = NormalizeAlbumScope(_albumEdit.Scope);
+        _albumEdit.Name = (_albumEdit.Name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(_albumEdit.Name))
+        {
+            Http.Toast(T("AlbumNameRequired"), 422);
+            return;
+        }
+
+        var res = _editingAlbum is null
+            ? await ContentService.CreateResourceAlbumAsync(_albumEdit)
+            : await ContentService.UpdateResourceAlbumAsync(_editingAlbum.Id, _albumEdit);
+
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success) return;
+
+        var selectedAlbumId = res.Data?.Id ?? _selectedAlbumId;
+        CloseAlbumEditor();
+        await LoadAlbums();
+        if (!string.IsNullOrWhiteSpace(selectedAlbumId) &&
+            IsAlbumMode &&
+            _albums.Any(a => string.Equals(a.Id, selectedAlbumId, StringComparison.OrdinalIgnoreCase)))
+        {
+            _selectedAlbumId = selectedAlbumId;
+        }
+        ClampPage();
+    }
+
+    private async Task AskDeleteAlbum(ResourceAlbumModel album)
+    {
+        if (!EnsureCanManageResources()) return;
+
+        _deleteAlbum = album;
+        _deleteAlbumResourceNames = new();
+        _deleteAlbumLoading = true;
+
+        if (album.ResourceCount > 0)
+        {
+            var res = await ContentService.GetResourcesAsync(albumId: album.Id, includeInactive: true);
+            if (res.Success && res.Data is not null)
+            {
+                _deleteAlbumResourceNames = res.Data
+                    .Take(5)
+                    .Select(ResourceName)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .ToList();
+            }
+        }
+
+        _deleteAlbumLoading = false;
+    }
+
+    private void CancelDeleteAlbum()
+    {
+        _deleteAlbum = null;
+        _deleteAlbumResourceNames = new();
+        _deleteAlbumLoading = false;
+    }
+
+    private async Task ConfirmDeleteAlbum()
+    {
+        if (!EnsureCanManageResources()) return;
+        if (_deleteAlbum is null) return;
+
+        var deletedId = _deleteAlbum.Id;
+        var res = await ContentService.DeleteResourceAlbumAsync(deletedId);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success) return;
+
+        if (string.Equals(_selectedAlbumId, deletedId, StringComparison.OrdinalIgnoreCase))
+            BackToAlbums();
+        CancelDeleteAlbum();
+        await LoadAlbums();
+        ClampPage();
+    }
+
+    private void PrepareRequest()
+    {
+        _edit.Kind = NormalizeKind(_edit.Kind);
+        _edit.Name = EnsureLangs(_edit.Name);
+        _edit.Description = EnsureLangs(_edit.Description);
+        _edit.AlbumId = string.IsNullOrWhiteSpace(_edit.AlbumId) ? string.Empty : _edit.AlbumId.Trim();
+        _edit.Source = string.Equals(_edit.Source, "managed-upload", StringComparison.OrdinalIgnoreCase)
+            ? "managed-upload"
+            : "external-url";
+    }
+
+    private bool EnsureCanManageResources()
+    {
+        if (CanManageResources) return true;
+
+        Http.Toast(T("NoPermission"), 403);
+        return false;
+    }
+
+    private bool EnsureCanUploadResources()
+    {
+        if (CanUploadResources) return true;
+
+        Http.Toast(T("NoPermission"), 403);
+        return false;
+    }
+
+    private MarkupString ResourceVisual(ManagedResourceModel resource, string style, bool large = false)
+    {
+        var kind = NormalizeKind(resource.Kind);
+        if (kind == "image" && !string.IsNullOrWhiteSpace(resource.Url))
+        {
+            var url = HtmlAttr(resource.Url);
+            return (MarkupString)$"<img src='{url}' alt='' style='{HtmlAttr(style)}' />";
+        }
+
+        var icon = ResourceIconClass(resource);
+        var frameStyle = large ? "width:100%;height:100%;font-size:2rem;" : HtmlAttr(style);
+        return (MarkupString)$"<span style='display:inline-flex;{frameStyle};align-items:center;justify-content:center;border-radius:8px;background:#fff7e6;color:#0f2742'><i class='fas {icon}'></i></span>";
+    }
+
+    private static string ResourceIconClass(ManagedResourceModel resource)
+    {
+        var kind = NormalizeKind(resource.Kind);
+        if (kind == "video") return "fa-play";
+        if (kind == "image") return "fa-image";
+
+        var fileName = resource.FileName ?? string.Empty;
+        var contentType = resource.ContentType ?? string.Empty;
+        var extension = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
+        if (extension == ".pdf" || contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase)) return "fa-file-pdf";
+        if (extension is ".doc" or ".docx" || contentType.Contains("word", StringComparison.OrdinalIgnoreCase)) return "fa-file-word";
+        if (extension is ".xls" or ".xlsx" || contentType.Contains("excel", StringComparison.OrdinalIgnoreCase) || contentType.Contains("spreadsheet", StringComparison.OrdinalIgnoreCase)) return "fa-file-excel";
+        if (extension is ".ppt" or ".pptx" || contentType.Contains("powerpoint", StringComparison.OrdinalIgnoreCase) || contentType.Contains("presentation", StringComparison.OrdinalIgnoreCase)) return "fa-file-powerpoint";
+        if (extension is ".txt" or ".csv") return "fa-file-lines";
+        if (extension is ".zip" or ".rar" or ".7z") return "fa-file-zipper";
+        return "fa-file";
+    }
+
+    private static string HtmlAttr(string? value) => System.Net.WebUtility.HtmlEncode(value ?? string.Empty);
+
+    private string DisplayKind(string kind) => NormalizeKind(kind) switch
+    {
+        "image" => T("ImageResource"),
+        "video" => T("VideoResource"),
+        _ => T("FileResource")
+    };
+
+    private string ResourceName(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceName(resource, CurrentLang);
+
+    private string ResourceDescription(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceDescription(resource, CurrentLang);
+
+    private static string ResourceFileName(ManagedResourceModel resource) =>
+        ResourceLibraryUiHelper.ResourceFileName(resource);
+
+    private string ResourceHint(ManagedResourceModel resource)
+    {
+        var kind = NormalizeKind(resource.Kind);
+        if (kind == "file") return ResourceFileName(resource);
+        return DisplayKind(resource.Kind);
+    }
+
+    private string UploadedByLabel(ManagedResourceModel resource)
+    {
+        if (string.IsNullOrWhiteSpace(resource.CreatedById)) return "-";
+
+        if (Auth.CurrentUser is not null &&
+            string.Equals(resource.CreatedById, Auth.CurrentUser.AdminId, StringComparison.OrdinalIgnoreCase))
+        {
+            return AdminDisplayName(Auth.CurrentUser.FullName, Auth.CurrentUser.Email);
+        }
+
+        var user = _adminUsers.FirstOrDefault(u => string.Equals(u.Id, resource.CreatedById, StringComparison.OrdinalIgnoreCase));
+        return user is null
+            ? resource.CreatedById
+            : AdminDisplayName(user.FullName, user.Email);
+    }
+
+    private static string AdminDisplayName(string? fullName, string? email)
+    {
+        var cleanName = (fullName ?? string.Empty).Trim();
+        var cleanEmail = (email ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(cleanName)) return EmptyDash(cleanEmail);
+        if (string.IsNullOrWhiteSpace(cleanEmail) || string.Equals(cleanName, cleanEmail, StringComparison.OrdinalIgnoreCase))
+            return cleanName;
+
+        return $"{cleanName} ({cleanEmail})";
+    }
+
+    private string UsageText(ManagedResourceModel resource) =>
+        resource.UsageCount <= 0
+            ? T("UsageNotUsed")
+            : string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s");
+
+    private static string UsageStyle(ManagedResourceModel resource) =>
+        resource.UsageCount <= 0
+            ? "display:inline-flex;padding:.2rem .45rem;border-radius:999px;background:#ecfdf5;color:#166534;font-size:.8rem"
+            : "display:inline-flex;padding:.2rem .45rem;border-radius:999px;background:#fff7ed;color:#9a3412;font-size:.8rem";
+
+    private string DeleteTitle(ManagedResourceModel resource) =>
+        resource.IsInUse ? T("DeleteResourceInUseBlocked") : T("Delete");
+
+    private static string UsageReferenceText(ManagedResourceUsageReferenceModel reference)
+    {
+        var title = string.IsNullOrWhiteSpace(reference.Title) ? reference.ItemId : reference.Title;
+        var detail = string.IsNullOrWhiteSpace(reference.Detail) ? string.Empty : $" - {reference.Detail}";
+        return $"{reference.Source}: {title} / {reference.Field}{detail}";
+    }
+
+    private static string UsageReferenceTitle(ManagedResourceUsageReferenceModel reference) =>
+        string.IsNullOrWhiteSpace(reference.Title) ? reference.ItemId : reference.Title;
+
+    private static string UsageReferenceMeta(ManagedResourceUsageReferenceModel reference)
+    {
+        var parts = new[]
+        {
+            reference.Source,
+            reference.Field,
+            reference.Status,
+            reference.Detail
+        }.Where(part => !string.IsNullOrWhiteSpace(part));
+
+        return string.Join(" / ", parts);
+    }
+
+    private static string FormatBytes(long bytes) =>
+        ResourceLibraryUiHelper.FormatBytes(bytes);
+
+    private static string EmptyDash(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private string MainPanelTitle =>
+        SelectedAlbum is not null
+            ? SelectedAlbum.Name
+            : ShowingAlbumRoot
+                ? T("Albums")
+                : T("Resources");
+
+    private bool MatchesAlbumFilters(ResourceAlbumModel album)
+    {
+        var expectedScope = AlbumScopeForKindFilter();
+        if (!string.IsNullOrWhiteSpace(expectedScope) &&
+            !string.Equals(album.Scope, expectedScope, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return album.Name.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool CanAssignExistingResourceToSelectedAlbum(ManagedResourceModel resource)
+    {
+        var album = SelectedAlbum;
+        if (album is null) return false;
+        if (string.Equals(resource.AlbumId, album.Id, StringComparison.OrdinalIgnoreCase)) return false;
+        return string.Equals(AlbumScopeForKind(resource.Kind), NormalizeAlbumScope(album.Scope), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool MatchesAlbumExistingSearch(ManagedResourceModel resource)
+    {
+        if (string.IsNullOrWhiteSpace(_albumExistingSearch)) return true;
+        var term = _albumExistingSearch.Trim();
+        return ResourceName(resource).Contains(term, StringComparison.OrdinalIgnoreCase) ||
+               ResourceFileName(resource).Contains(term, StringComparison.OrdinalIgnoreCase) ||
+               resource.ContentType.Contains(term, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private IEnumerable<ResourceAlbumModel> AlbumsForKind(string? kind)
+    {
+        var scope = AlbumScopeForKind(kind);
+        return _albums
+            .Where(a => string.Equals(a.Scope, scope, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void EnsureSelectedAlbumMatchesKind()
+    {
+        if (SelectedAlbum is null) return;
+        var expectedScope = AlbumScopeForKindFilter();
+        if (string.IsNullOrWhiteSpace(expectedScope)) return;
+        if (!string.Equals(SelectedAlbum.Scope, expectedScope, StringComparison.OrdinalIgnoreCase))
+        {
+            _selectedAlbumId = null;
+            _selectedResource = null;
+            _selectedResourceIds.Clear();
+        }
+    }
+
+    private string AlbumScopeForKindFilter() => NormalizeKind(_kindFilter) switch
+    {
+        "file" when !string.IsNullOrWhiteSpace(_kindFilter) => "file",
+        "image" or "video" => "media",
+        _ => string.Empty
+    };
+
+    private static string AlbumScopeForKind(string? kind) =>
+        NormalizeKind(kind) == "file" ? "file" : "media";
+
+    private string DefaultAlbumScope() =>
+        AlbumScopeForKindFilter() is { Length: > 0 } scope ? scope : "media";
+
+    private static string NormalizeAlbumScope(string? scope) =>
+        string.Equals(scope, "file", StringComparison.OrdinalIgnoreCase) ? "file" : "media";
+
+    private string AlbumScopeLabel(string scope) =>
+        NormalizeAlbumScope(scope) == "file" ? T("FileAlbum") : T("MediaAlbum");
+
+    private string DeleteAlbumTitle(ResourceAlbumModel album) =>
+        album.ResourceCount > 0 ? T("DeleteAlbumInUseBlocked") : T("Delete");
+
+    private static string? EmptyToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private string DefaultUploadKind()
+    {
+        if (SelectedAlbum is not null)
+            return NormalizeAlbumScope(SelectedAlbum.Scope) == "file"
+                ? "file"
+                : NormalizeKind(_kindFilter) == "video" ? "video" : "image";
+
+        var filteredKind = NormalizeKind(_kindFilter);
+        return string.IsNullOrWhiteSpace(_kindFilter) ? "image" : filteredKind;
+    }
+
+    private void ApplyUploadAlbumConstraints()
+    {
+        if (SelectedAlbum is not null)
+            _uploadAlbumId = SelectedAlbum.Id;
+
+        var album = UploadAlbum;
+        if (album is null) return;
+
+        var expectedScope = NormalizeAlbumScope(album.Scope);
+        if (expectedScope == "file")
+        {
+            _uploadKind = "file";
+            return;
+        }
+
+        if (_uploadKind == "file")
+            _uploadKind = "image";
+    }
+
+    private static string UploadAcceptForKind(string kind) => NormalizeKind(kind) switch
+    {
+        "image" => "image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif",
+        "video" => "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov",
+        _ => ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    };
+
+    private string ValidateQueuedFile(IBrowserFile file, string kind)
+    {
+        var normalizedKind = NormalizeKind(kind);
+        var album = UploadAlbum;
+        if (album is not null &&
+            !string.Equals(album.Scope, AlbumScopeForKind(normalizedKind), StringComparison.OrdinalIgnoreCase))
+        {
+            return T("UploadAlbumKindMismatch");
+        }
+
+        var maxBytes = MaxUploadBytesForKind(normalizedKind);
+        if (file.Size > maxBytes)
+            return string.Format(T("FileTooLarge"), FormatBytes(maxBytes));
+
+        if (!UploadFileMatchesKind(file, normalizedKind))
+            return T("InvalidFileTypeForResource");
+
+        return string.Empty;
+    }
+
+    private static long MaxUploadBytesForKind(string kind) => NormalizeKind(kind) switch
+    {
+        "image" => MaxImageUploadBytes,
+        "video" => MaxVideoUploadBytes,
+        _ => MaxFileUploadBytes
+    };
+
+    private static bool UploadFileMatchesKind(IBrowserFile file, string kind)
+    {
+        var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+        var contentType = (file.ContentType ?? string.Empty).Trim().ToLowerInvariant();
+        return NormalizeKind(kind) switch
+        {
+            "image" => contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
+                       ext is ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif",
+            "video" => contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
+                       ext is ".mp4" or ".webm" or ".mov",
+            _ => ext is ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".txt"
+        };
+    }
+
+    private static string DefaultResourceName(string fileName)
+    {
+        var name = System.IO.Path.GetFileNameWithoutExtension(fileName);
+        return string.IsNullOrWhiteSpace(name) ? fileName : name;
+    }
+
+    private static string CleanQueueResourceName(ResourceUploadQueueItem item)
+    {
+        var clean = (item.ResourceName ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(clean) ? DefaultResourceName(item.OriginalFileName) : clean;
+    }
+
+    private string UploadQueueIconClass(ResourceUploadQueueItem item)
+    {
+        var kind = NormalizeKind(_uploadKind);
+        if (kind == "image") return "fa-image";
+        if (kind == "video") return "fa-play";
+
+        var extension = System.IO.Path.GetExtension(item.OriginalFileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".pdf" => "fa-file-pdf",
+            ".doc" or ".docx" => "fa-file-word",
+            ".xls" or ".xlsx" => "fa-file-excel",
+            ".ppt" or ".pptx" => "fa-file-powerpoint",
+            ".txt" => "fa-file-lines",
+            _ => "fa-file"
+        };
+    }
+
+    private string UploadQueueStatusText(ResourceUploadQueueItem item) => item.Status switch
+    {
+        UploadQueueStatus.Uploading => T("Uploading"),
+        UploadQueueStatus.Done => T("Done"),
+        UploadQueueStatus.Failed => T("Failed"),
+        UploadQueueStatus.Blocked => T("Blocked"),
+        _ => T("Queued")
+    };
+
+    private static string UploadQueueStatusStyle(ResourceUploadQueueItem item) => item.Status switch
+    {
+        UploadQueueStatus.Done => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#ecfdf5;color:#166534;font-size:.78rem",
+        UploadQueueStatus.Failed or UploadQueueStatus.Blocked => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#fef2f2;color:#b91c1c;font-size:.78rem",
+        UploadQueueStatus.Uploading => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:.78rem",
+        _ => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.78rem"
+    };
+
+    private static bool IsPdf(ManagedResourceModel resource) =>
+        string.Equals(resource.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase) ||
+        resource.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ||
+        resource.Url.Contains(".pdf", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsExternalVideoResource(ManagedResourceModel resource) =>
+        NormalizeKind(resource.Kind) == "video" &&
+        string.Equals(resource.Source, "external-url", StringComparison.OrdinalIgnoreCase);
+
+    private string KindButtonClass(string kind) =>
+        $"btn-admin {(string.Equals(_kindFilter, kind, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
+
+    private string ViewButtonClass(string mode) =>
+        $"btn-admin {(string.Equals(_viewMode, mode, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
+
+    private string ModeButtonClass(string mode) =>
+        $"btn-admin {(string.Equals(_libraryMode, mode, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
+
+    private string VideoSourceModeButtonClass(string mode) =>
+        $"btn-admin {(string.Equals(_videoUploadMode, mode, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-ghost")}";
+
+    private string GetValue(Dictionary<string, string> values, string lang, bool fallback = false) =>
+        ResourceLibraryUiHelper.GetValue(values, lang, fallback);
+
+    private static void SetValue(Dictionary<string, string> values, string lang, string? value)
+    {
+        values[lang] = value ?? string.Empty;
+    }
+
+    private Dictionary<string, string> LocalizedResourceValue(string? value)
+    {
+        var clean = value?.Trim() ?? string.Empty;
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lang in _languages)
+            result[lang] = clean;
+
+        result.TryAdd("en", clean);
+        result.TryAdd("vi", clean);
+        result.TryAdd("cn", clean);
+        return result;
+    }
+
+    private Dictionary<string, string> EnsureLangs(Dictionary<string, string>? source)
+    {
+        var result = source is null ? new() : new Dictionary<string, string>(source, StringComparer.OrdinalIgnoreCase);
+        foreach (var lang in _languages)
+            result.TryAdd(lang, string.Empty);
+        return result;
+    }
+
+    private static string NormalizeKind(string? value) =>
+        ResourceLibraryUiHelper.NormalizeKind(value);
+
+    private static string NormalizeLang(string? lang) =>
+        ResourceLibraryUiHelper.NormalizeLang(lang);
+
+    private ManagedResourceRequest NewRequest(string kind = "file") => new()
+    {
+        Kind = NormalizeKind(kind),
+        Name = EnsureLangs(null),
+        Description = EnsureLangs(null),
+        Source = "managed-upload",
+        Active = true
+    };
+
+    private static class UploadQueueStatus
+    {
+        public const string Queued = "Queued";
+        public const string Uploading = "Uploading";
+        public const string Done = "Done";
+        public const string Failed = "Failed";
+        public const string Blocked = "Blocked";
+    }
+
+    private static class VideoUploadModes
+    {
+        public const string File = "file";
+        public const string YouTube = "youtube";
+    }
+
+    private sealed class ResourceUploadQueueItem
+    {
+        public string Id { get; } = Guid.NewGuid().ToString("N");
+        public IBrowserFile File { get; set; } = default!;
+        public string OriginalFileName { get; set; } = string.Empty;
+        public string ResourceName { get; set; } = string.Empty;
+        public string Status { get; set; } = UploadQueueStatus.Queued;
+        public string? Error { get; set; }
+        public ManagedResourceModel? Resource { get; set; }
+        public bool IsComplete => string.Equals(Status, UploadQueueStatus.Done, StringComparison.OrdinalIgnoreCase);
+        public bool IsFailed => string.Equals(Status, UploadQueueStatus.Failed, StringComparison.OrdinalIgnoreCase);
+        public bool CanUpload =>
+            string.Equals(Status, UploadQueueStatus.Queued, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Status, UploadQueueStatus.Failed, StringComparison.OrdinalIgnoreCase);
+    }
+}

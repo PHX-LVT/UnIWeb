@@ -23,6 +23,8 @@ namespace Contracts.Admin
         public string? BackgroundColor { get; set; }
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string? BackgroundImageFit { get; set; }
+        public string? BackgroundImagePosition { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string? GradientDirection { get; set; }
@@ -45,6 +47,8 @@ namespace Contracts.Admin
         public string BackgroundColor { get; set; } = "#ffffff";
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string BackgroundImageFit { get; set; } = "cover";
+        public string BackgroundImagePosition { get; set; } = "center";
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";
@@ -72,10 +76,15 @@ namespace Contracts.Admin
         public string? BackgroundColor { get; set; }
         public string? BorderRadius { get; set; }
         public int? ZIndex { get; set; }
+        public int? ZOrder { get; set; }
         public int? X { get; set; }
         public int? Y { get; set; }
         public int? W { get; set; }
         public int? H { get; set; }
+        public double? LeftPercent { get; set; }
+        public double? TopPx { get; set; }
+        public double? WidthPercent { get; set; }
+        public double? HeightPx { get; set; }
     }
 
     public class BlockLayoutResponseDto
@@ -89,10 +98,15 @@ namespace Contracts.Admin
         public string? BackgroundColor { get; set; }
         public string BorderRadius { get; set; } = "none";
         public int ZIndex { get; set; } = 1;
+        public int ZOrder { get; set; } = 1;
         public int X { get; set; } = 0;
         public int Y { get; set; } = 0;
         public int W { get; set; } = 4;
         public int H { get; set; } = 2;
+        public double? LeftPercent { get; set; }
+        public double? TopPx { get; set; }
+        public double? WidthPercent { get; set; }
+        public double? HeightPx { get; set; }
     }
 
     public class SectionButtonDto
@@ -100,6 +114,7 @@ namespace Contracts.Admin
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -111,24 +126,8 @@ namespace Contracts.Admin
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
-        public bool Visible { get; set; }
-        public int Order { get; set; }
-    }
-
-    public class GalleryImageDto
-    {
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string> Caption { get; set; } = new();
-        public bool Visible { get; set; } = true;
-        public int Order { get; set; } = 0;
-    }
-
-    public class GalleryImageResponseDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string> Caption { get; set; } = new();
         public bool Visible { get; set; }
         public int Order { get; set; }
     }
@@ -257,15 +256,6 @@ namespace Contracts.Admin
         public Dictionary<string, string> Subtext { get; set; } = new();
         public SectionButtonDto? Button { get; set; }
         public List<SectionButtonDto> Buttons { get; set; } = new();
-    }
-
-    public class GallerySectionCreateDto : SectionCreateDto
-    {
-        public string Layout { get; set; } = "grid";
-        public int Columns { get; set; } = 3;
-        public string Gap { get; set; } = "small";
-        public bool ShowCaptions { get; set; } = false;
-        public List<GalleryImageDto> Images { get; set; } = new();
     }
 
     public class ListSectionCreateDto : SectionCreateDto
@@ -423,16 +413,6 @@ namespace Contracts.Admin
         public List<SectionButtonDto>? Buttons { get; set; }
     }
 
-    public class GallerySectionUpdateDto : SectionUpdateDto
-    {
-        public string? Layout { get; set; }
-        public int? Columns { get; set; }
-        public string? Gap { get; set; }
-        public bool? ShowCaptions { get; set; }
-        // Null = don't touch images; empty list = clear all images
-        public List<GalleryImageDto>? Images { get; set; }
-    }
-
     public class ListSectionUpdateDto : SectionUpdateDto
     {
         public string? Layout { get; set; }
@@ -563,7 +543,6 @@ namespace Contracts.Admin
             {
                 "hero" => document.RootElement.Deserialize<HeroSectionCreateDto>(options),
                 "cta" => document.RootElement.Deserialize<CtaSectionCreateDto>(options),
-                "gallery" => document.RootElement.Deserialize<GallerySectionCreateDto>(options),
                 "list" => document.RootElement.Deserialize<ListSectionCreateDto>(options),
                 "html" => document.RootElement.Deserialize<HtmlSectionCreateDto>(options),
                 "columns" => document.RootElement.Deserialize<ColumnsSectionCreateDto>(options),
@@ -592,7 +571,6 @@ namespace Contracts.Admin
             {
                 "hero" => document.RootElement.Deserialize<HeroSectionUpdateDto>(options),
                 "cta" => document.RootElement.Deserialize<CtaSectionUpdateDto>(options),
-                "gallery" => document.RootElement.Deserialize<GallerySectionUpdateDto>(options),
                 "list" => document.RootElement.Deserialize<ListSectionUpdateDto>(options),
                 "html" => document.RootElement.Deserialize<HtmlSectionUpdateDto>(options),
                 "columns" => document.RootElement.Deserialize<ColumnsSectionUpdateDto>(options),
@@ -617,7 +595,6 @@ namespace Contracts.Admin
         {
             nameof(HeroSectionCreateDto) or nameof(HeroSectionUpdateDto) => "hero",
             nameof(CtaSectionCreateDto) or nameof(CtaSectionUpdateDto) => "cta",
-            nameof(GallerySectionCreateDto) or nameof(GallerySectionUpdateDto) => "gallery",
             nameof(ListSectionCreateDto) or nameof(ListSectionUpdateDto) => "list",
             nameof(HtmlSectionCreateDto) or nameof(HtmlSectionUpdateDto) => "html",
             nameof(ColumnsSectionCreateDto) or nameof(ColumnsSectionUpdateDto) => "columns",
@@ -670,11 +647,8 @@ namespace Contracts.Admin
         public Dictionary<string, string>? Subtext { get; set; }
         public SectionButtonResponseDto? Button { get; set; }
 
-        // Gallery
         public int? Columns { get; set; }
         public string? Gap { get; set; }
-        public bool? ShowCaptions { get; set; }
-        public List<GalleryImageResponseDto>? Images { get; set; }
 
         // List
         public Dictionary<string, string>? Eyebrow { get; set; }
@@ -780,6 +754,7 @@ public class ColumnSlotResponseDto
     public class AssetUploadResponseDto
     {
         public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public long Size { get; set; }
@@ -802,6 +777,7 @@ public class ColumnSlotResponseDto
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public int BlockCount { get; set; }
+        public int SchemaVersion { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -815,6 +791,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Label { get; set; } = new();
         public BlockButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
 
@@ -826,6 +803,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Label { get; set; } = new();
         public BlockButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
     }
@@ -863,6 +841,8 @@ public class ColumnSlotResponseDto
         public List<BlockButtonDto> Buttons { get; set; } = new();
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
+        public string? ZoneId { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutDto? Layout { get; set; }
 
@@ -903,6 +883,7 @@ public class ColumnSlotResponseDto
 
     public class FormBlockCreateDto : BlockCreateDto
     {
+        public string? FormDefinitionId { get; set; }
         public List<FormFieldDto> Fields { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
     }
@@ -924,12 +905,16 @@ public class ColumnSlotResponseDto
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class ButtonBlockCreateDto : BlockCreateDto
     {
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
     }
 
@@ -970,6 +955,11 @@ public class ColumnSlotResponseDto
         public string LayoutMode { get; set; } = "stack";
         public int Columns { get; set; } = 2;
         public string Gap { get; set; } = "medium";
+        public int OrbitRadius { get; set; } = 180;
+        public int OrbitStartAngle { get; set; } = -90;
+        public int SemicircleRadius { get; set; } = 180;
+        public int SemicircleStartAngle { get; set; } = 180;
+        public int SemicircleEndAngle { get; set; } = 360;
     }
 
     // -- Block Update DTOs -------------------------------------
@@ -983,6 +973,8 @@ public class ColumnSlotResponseDto
         public bool? Visible { get; set; }
         public List<BlockButtonDto>? Buttons { get; set; }
         public string? BlockZone { get; set; }
+        public string? ZoneId { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutDto? Layout { get; set; }
     }
@@ -1022,6 +1014,7 @@ public class ColumnSlotResponseDto
 
     public class FormBlockUpdateDto : BlockUpdateDto
     {
+        public string? FormDefinitionId { get; set; }
         public List<FormFieldDto> Fields { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
     }
@@ -1034,12 +1027,16 @@ public class ColumnSlotResponseDto
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class ButtonBlockUpdateDto : BlockUpdateDto
     {
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
     }
 
@@ -1080,6 +1077,11 @@ public class ColumnSlotResponseDto
         public string LayoutMode { get; set; } = "stack";
         public int Columns { get; set; } = 2;
         public string Gap { get; set; } = "medium";
+        public int OrbitRadius { get; set; } = 180;
+        public int OrbitStartAngle { get; set; } = -90;
+        public int SemicircleRadius { get; set; } = 180;
+        public int SemicircleStartAngle { get; set; } = 180;
+        public int SemicircleEndAngle { get; set; } = 360;
     }
 
     public sealed class BlockCreateDtoJsonConverter : JsonConverter<BlockCreateDto>
@@ -1184,6 +1186,8 @@ public class ColumnSlotResponseDto
         public int Order { get; set; }
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
+        public string? ZoneId { get; set; }
+        public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutResponseDto Layout { get; set; } = new();
         public List<BlockButtonResponseDto> Buttons { get; set; } = new();
@@ -1202,10 +1206,17 @@ public class ColumnSlotResponseDto
         public string? Prefix { get; set; }
         public string? Suffix { get; set; }
         public string? Href { get; set; }
+        public string? Action { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }
         public string? Gap { get; set; }
+        public int? OrbitRadius { get; set; }
+        public int? OrbitStartAngle { get; set; }
+        public int? SemicircleRadius { get; set; }
+        public int? SemicircleStartAngle { get; set; }
+        public int? SemicircleEndAngle { get; set; }
 
         // Image
         public string? ImageUrl { get; set; }

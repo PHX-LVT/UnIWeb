@@ -1,17 +1,19 @@
 using FullProject.Models;
-using FullProject.SectionServices;
 using FullProject.Services;
+using FullProject.Security;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
+using Contracts.Auth;
+using FullProject.Services.SectionServices;
 
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/sections")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
     public class SectionsController : ControllerBase
     {
         private readonly SectionService _service;
@@ -47,6 +49,7 @@ namespace FullProject.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(string pageId, [FromBody] SectionCreateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var page = await _pageService.GetByIdAsync(pageId);
             if (page is null) return NotFound(ApiResult.NotFound("Page not found."));
 
@@ -61,6 +64,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Update(string pageId, string sectionId,
             [FromBody] SectionUpdateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateAsync(pageId, sectionId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
 
@@ -72,6 +76,7 @@ namespace FullProject.Controllers
         [HttpDelete("{sectionId}")]
         public async Task<IActionResult> Delete(string pageId, string sectionId)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.DeleteAsync(pageId, sectionId);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
             return Ok(ApiResult.Ok("Section deleted."));
@@ -82,6 +87,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> SetVisibility(string pageId, string sectionId,
             [FromBody] VisibilityDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
             return Ok(ApiResult.Ok($"Section {(dto.Visible ? "shown" : "hidden")}."));
@@ -92,6 +98,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> UpdateStyle(string pageId, string sectionId,
         [FromBody] SectionStyleDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateStyleAsync(pageId, sectionId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
             return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Style updated."));
@@ -101,12 +108,15 @@ namespace FullProject.Controllers
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder(string pageId, [FromBody] ReorderDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.ReorderAsync(pageId, dto.OrderedIds);
             if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
             return Ok(ApiResult.Ok("Sections reordered."));
         }
 
         // -- Mapping -------------------------------------------
+
+        private bool CanUsePageBuilder => AdminAuthorization.CanUsePageBuilder(User);
 
         private static SectionResponseDto MapToDto(string pageId, Section s)
         {
@@ -118,7 +128,6 @@ namespace FullProject.Controllers
                 {
                     HeroSection => "hero",
                     CtaSection => "cta",
-                    GallerySection => "gallery",
                     ListSection => "list",
                     DynamicSection => "dynamic",
                     HtmlSection => "html",
@@ -142,6 +151,8 @@ namespace FullProject.Controllers
                     BackgroundColor = s.Style.BackgroundColor,
                     BackgroundImageUrl = s.Style.BackgroundImageUrl,
                     BackgroundVideoUrl = s.Style.BackgroundVideoUrl,
+                    BackgroundImageFit = s.Style.BackgroundImageFit,
+                    BackgroundImagePosition = s.Style.BackgroundImagePosition,
                     GradientFrom = s.Style.GradientFrom,
                     GradientTo = s.Style.GradientTo,
                     GradientDirection = s.Style.GradientDirection,
@@ -178,21 +189,6 @@ namespace FullProject.Controllers
                     dto.Subtext = c.Subtext;
                     dto.Button = c.Button != null ? MapButtonToDto(c.Button) : null;
                     dto.Buttons = c.Buttons.Select(MapButtonToDto).ToList();
-                    break;
-
-                case GallerySection g:
-                    dto.Layout = g.Layout;
-                    dto.Columns = g.Columns;
-                    dto.Gap = g.Gap;
-                    dto.ShowCaptions = g.ShowCaptions;
-                    dto.Images = g.Images.Select(i => new GalleryImageResponseDto
-                    {
-                        Id = i.Id,
-                        ImageUrl = i.ImageUrl,
-                        Caption = i.Caption,
-                        Visible = i.Visible,
-                        Order = i.Order
-                    }).ToList();
                     break;
 
                 case ListSection l:
@@ -380,14 +376,10 @@ namespace FullProject.Controllers
             Label = b.Label,
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Style = b.Style,
             Visible = b.Visible,
             Order = b.Order
         };
     }
 }
-
-
-
-
-

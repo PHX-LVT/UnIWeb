@@ -124,10 +124,20 @@ else
                         else
                         {
                             <div class="block-layout-panel">
-                                <div class="block-layout-panel__title">@T("BlockLayout")</div>
+                                <div class="block-layout-panel__title">@T("PlacementLayout")</div>
                                 <div class="block-layout-panel__grid">
+                                    @if (SupportsFreeformPositioning)
+                                    {
+                                        <label>
+                                            <span>@T("Positioning")</span>
+                                            <select @bind="_positionMode">
+                                                <option value="flow">@T("Flow")</option>
+                                                <option value="freeform">@T("Freeform")</option>
+                                            </select>
+                                        </label>
+                                    }
                                     <label>
-                                        <span>Zone</span>
+                                        <span>@T("Zone")</span>
                                         <select @bind="_blockZone">
                                             @foreach (var option in ZoneOptions)
                                             {
@@ -138,9 +148,9 @@ else
                                     @if (ContainerOptions.Any() && _fullBlock.Type != "container")
                                     {
                                         <label>
-                                            <span>Parent Container</span>
+                                            <span>@T("ParentContainer")</span>
                                             <select @bind="_parentBlockId">
-                                                <option value="">None</option>
+                                                <option value="">@T("None")</option>
                                                 @foreach (var container in ContainerOptions)
                                                 {
                                                     <option value="@container.Id">@BlockDisplayName(container)</option>
@@ -179,59 +189,66 @@ else
                                             }
                                         </select>
                                     </label>
-                                    <label>
-                                        <span>@T("Padding")</span>
-                                        <select @bind="_layoutPadding">
-                                            @foreach (var option in _spaceOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    <label>
-                                        <span>@T("Margin")</span>
-                                        <select @bind="_layoutMargin">
-                                            @foreach (var option in _spaceOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    <label>
-                                        <span>@T("BackgroundColor")</span>
-                                        <input type="text" placeholder="#ffffff" @bind="_layoutBackgroundColor" />
-                                    </label>
-                                    <label>
-                                        <span>@T("BorderRadius")</span>
-                                        <select @bind="_layoutBorderRadius">
-                                            @foreach (var option in _radiusOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    <label>
-                                        <span>@T("ZIndex")</span>
-                                        <input type="number" min="0" max="20" @bind="_layoutZIndex" />
-                                    </label>
-                                    <label>
-                                        <span>@T("FreeformX")</span>
-                                        <input type="number" min="0" max="11" @bind="_layoutX" />
-                                    </label>
-                                    <label>
-                                        <span>@T("FreeformY")</span>
-                                        <input type="number" min="0" max="60" @bind="_layoutY" />
-                                    </label>
-                                    <label>
-                                        <span>@T("FreeformW")</span>
-                                        <input type="number" min="1" max="12" @bind="_layoutW" />
-                                    </label>
-                                    <label>
-                                        <span>@T("FreeformH")</span>
-                                        <input type="number" min="1" max="40" @bind="_layoutH" />
-                                    </label>
                                 </div>
-                                <p class="block-layout-panel__hint">@T("FreeformHint")</p>
+                                <p class="block-layout-panel__hint">
+                                    @(_positionMode == "freeform" ? T("ArrangeModeHint") : T("FlowModeHint"))
+                                </p>
+                                <details class="block-layout-panel__advanced">
+                                    <summary>@T("AdvancedLayout")</summary>
+                                    <div class="block-layout-panel__grid">
+                                        <label>
+                                            <span>@T("Padding")</span>
+                                            <select @bind="_layoutPadding">
+                                                @foreach (var option in _spaceOptions)
+                                                {
+                                                    <option value="@option">@option</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <label>
+                                            <span>@T("Margin")</span>
+                                            <select @bind="_layoutMargin">
+                                                @foreach (var option in _spaceOptions)
+                                                {
+                                                    <option value="@option">@option</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <label>
+                                            <span>@T("BackgroundColor")</span>
+                                            <input type="text" placeholder="#ffffff" @bind="_layoutBackgroundColor" />
+                                        </label>
+                                        <label>
+                                            <span>@T("BorderRadius")</span>
+                                            <select @bind="_layoutBorderRadius">
+                                                @foreach (var option in _radiusOptions)
+                                                {
+                                                    <option value="@option">@option</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <div class="block-layout-panel__layer">
+                                            <label>
+                                                <span>@T("LayerOrder")</span>
+                                                <input type="number" min="0" max="1000" @bind="_layoutZIndex" />
+                                            </label>
+                                            <div class="block-layout-panel__layer-actions" aria-label="@T("LayerControls")">
+                                                <button type="button" title="@T("SendBackward")" @onclick="SendLayerBackward">
+                                                    <i class="fas fa-arrow-down"></i>
+                                                </button>
+                                                <button type="button" title="@T("BringForward")" @onclick="BringLayerForward">
+                                                    <i class="fas fa-arrow-up"></i>
+                                                </button>
+                                                <button type="button" title="@T("SendToBack")" @onclick="SendLayerToBack">
+                                                    <i class="fas fa-angle-double-down"></i>
+                                                </button>
+                                                <button type="button" title="@T("BringToFront")" @onclick="BringLayerToFront">
+                                                    <i class="fas fa-angle-double-up"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
                                 <div class="block-layout-panel__actions">
                                     <button type="button"
                                             class="btn-admin btn-primary"
@@ -374,11 +391,45 @@ else
         color: var(--text);
         background: #fff;
     }
+    .block-layout-panel__layer {
+        display: flex;
+        flex-direction: column;
+        gap: .4rem;
+    }
+    .block-layout-panel__layer-actions {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: .3rem;
+    }
+    .block-layout-panel__layer-actions button {
+        min-height: 30px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--primary);
+        cursor: pointer;
+    }
+    .block-layout-panel__layer-actions button:hover {
+        border-color: var(--primary-light);
+        background: #f0f4ff;
+    }
     .block-layout-panel__hint {
         margin: .65rem 0 0;
         font-size: .72rem;
         color: var(--text-muted);
         line-height: 1.45;
+    }
+    .block-layout-panel__advanced {
+        margin-top: .75rem;
+        border-top: 1px solid var(--border);
+        padding-top: .65rem;
+    }
+    .block-layout-panel__advanced summary {
+        cursor: pointer;
+        color: var(--primary);
+        font-size: .76rem;
+        font-weight: 700;
+        margin-bottom: .65rem;
     }
     .block-layout-panel__actions {
         display: flex;
@@ -562,8 +613,10 @@ else
     private List<string> _justifyOptions = new() { "start", "center", "end" };
     private List<string> _spaceOptions = new() { "none", "small", "medium", "large" };
     private List<string> _radiusOptions = new() { "none", "small", "medium", "large" };
+    private bool SupportsFreeformPositioning => SectionType is "canvas" or "columns";
     private List<string> ZoneOptions => SectionType switch
     {
+        "canvas" => new() { "canvas" },
         "cta" => new() { "default", "right", "below" },
         "list" => new() { "default", "header", "below" },
         "testimonial" => new() { "default", "header", "below" },
@@ -577,6 +630,15 @@ else
         {
             if (_fullBlock is not null)
                 _fullBlock.BlockZone = NormalizeBlockZone(value);
+        }
+    }
+    private string _positionMode
+    {
+        get => NormalizePositionMode(_fullBlock?.PositionMode);
+        set
+        {
+            if (_fullBlock is not null)
+                _fullBlock.PositionMode = NormalizePositionMode(value);
         }
     }
     private string _parentBlockId
@@ -635,30 +697,9 @@ else
     }
     private int _layoutZIndex
     {
-        get => Math.Clamp(EnsureLayout().ZIndex ?? 1, 0, 20);
-        set => EnsureLayout().ZIndex = Math.Clamp(value, 0, 20);
+        get => Math.Clamp(EnsureLayout().ZIndex ?? 1, 0, 1000);
+        set => EnsureLayout().ZIndex = Math.Clamp(value, 0, 1000);
     }
-    private int _layoutX
-    {
-        get => Math.Clamp(EnsureLayout().X ?? 0, 0, 11);
-        set => EnsureLayout().X = Math.Clamp(value, 0, 11);
-    }
-    private int _layoutY
-    {
-        get => Math.Clamp(EnsureLayout().Y ?? 0, 0, 60);
-        set => EnsureLayout().Y = Math.Clamp(value, 0, 60);
-    }
-    private int _layoutW
-    {
-        get => Math.Clamp(EnsureLayout().W ?? 4, 1, 12);
-        set => EnsureLayout().W = Math.Clamp(value, 1, 12);
-    }
-    private int _layoutH
-    {
-        get => Math.Clamp(EnsureLayout().H ?? 2, 1, 40);
-        set => EnsureLayout().H = Math.Clamp(value, 1, 40);
-    }
-
     private List<BlockTypeGroup> _blockGroups = new()
     {
         new("Content Blocks", new()
@@ -907,6 +948,29 @@ public void Dispose()
         return _fullBlock.Layout;
     }
 
+    private void BringLayerForward() => _layoutZIndex = Math.Min(1000, _layoutZIndex + 1);
+
+    private void SendLayerBackward() => _layoutZIndex = Math.Max(0, _layoutZIndex - 1);
+
+    private void BringLayerToFront() => _layoutZIndex = Math.Min(1000, HighestPeerLayer() + 1);
+
+    private void SendLayerToBack() => _layoutZIndex = 0;
+
+    private int HighestPeerLayer()
+    {
+        if (_fullBlock is null)
+            return _layoutZIndex;
+
+        var parent = NormalizeParent(_fullBlock.ParentBlockId);
+        var zone = NormalizeBlockZone(_fullBlock.BlockZone);
+        return _blocks
+            .Where(b => NormalizeParent(b.ParentBlockId) == parent)
+            .Where(b => NormalizeBlockZone(b.BlockZone) == zone)
+            .Select(b => Math.Clamp(b.Layout?.ZIndex ?? 1, 0, 1000))
+            .DefaultIfEmpty(_layoutZIndex)
+            .Max();
+    }
+
     private async Task SaveBlockLayout()
     {
         if (_fullBlock is null || _savingLayout)
@@ -931,6 +995,9 @@ public void Dispose()
 
     private static string NormalizeBlockZone(string? zone) =>
         string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();
+
+    private static string NormalizePositionMode(string? mode) =>
+        string.Equals(mode, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
 
     private static string NormalizeParent(string? parentBlockId) =>
         string.IsNullOrWhiteSpace(parentBlockId) ? string.Empty : parentBlockId;

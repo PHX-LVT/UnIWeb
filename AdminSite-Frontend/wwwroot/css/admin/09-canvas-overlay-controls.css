@@ -95,15 +95,103 @@
 
 .ez-freeform-block-overlay {
     box-sizing: border-box;
-    border: 1px dashed rgba(229, 192, 118, .95);
+    border: 1px solid #111;
     background: rgba(229, 192, 118, .08);
     color: #001a33;
     pointer-events: auto;
+    touch-action: none;
 }
 
 .ez-freeform-block-overlay--editing {
     border-style: solid;
     box-shadow: 0 0 0 2px rgba(229, 192, 118, .22);
+}
+
+body.ez-arranging-block {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.ez-canvas__preview-shell--arrange {
+    background: #eef3f7;
+}
+
+.ez-canvas-arrange-overlay--active .ez-section-overlay {
+    border-color: rgba(15, 52, 96, .24);
+    background: rgba(15, 52, 96, .025);
+}
+
+.ez-arrange-section {
+    box-sizing: border-box;
+    border: 1px dashed #111;
+    background:
+        linear-gradient(rgba(229, 192, 118, .035), rgba(229, 192, 118, .035)),
+        repeating-linear-gradient(
+            90deg,
+            transparent 0,
+            transparent calc(8.3333% - 1px),
+            rgba(15, 52, 96, .06) calc(8.3333% - 1px),
+            rgba(15, 52, 96, .06) 8.3333%
+        );
+}
+
+.ez-arrange-section__label {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(15, 52, 96, .9);
+    color: #fff;
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    pointer-events: none;
+}
+
+.ez-arrange-zone-overlay {
+    box-sizing: border-box;
+    border: 2px dashed #111;
+    background: rgba(229, 192, 118, .055);
+}
+
+.ez-arrange-zone-overlay__label {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    padding: 3px 7px;
+    border-radius: 4px;
+    background: rgba(229, 192, 118, .95);
+    color: #001a33;
+    font-size: .64rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.ez-arrange-guide {
+    position: absolute;
+    display: none;
+    z-index: 9;
+    pointer-events: none;
+    background: #e64a67;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .72);
+}
+
+.ez-arrange-guide--vertical {
+    width: 1px;
+}
+
+.ez-arrange-guide--horizontal {
+    height: 1px;
+}
+
+.ez-freeform-block-overlay--readonly {
+    border-style: solid;
+    background: rgba(229, 192, 118, .12);
+}
+
+.ez-freeform-block-overlay--readonly .ez-freeform-block-label {
+    left: 0;
 }
 
 .ez-freeform-block-handle {
@@ -120,6 +208,7 @@
     align-items: center;
     justify-content: center;
     cursor: grab;
+    touch-action: none;
     font-size: .75rem;
 }
 
@@ -151,4 +240,5 @@
     background: var(--gold);
     box-shadow: 0 0 0 1px rgba(0, 26, 51, .28);
     cursor: nwse-resize;
+    touch-action: none;
 }

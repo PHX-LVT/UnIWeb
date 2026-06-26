@@ -17,6 +17,7 @@
         const sections = document.querySelectorAll('[data-section-id]');
         const positions = [];
         const blockPositions = [];
+        const zonePositions = [];
 
         sections.forEach(function (el) {
             const rect = el.getBoundingClientRect();
@@ -29,22 +30,45 @@
                 height: rect.height
             });
 
-            const freeformContainers = el.querySelectorAll('.sc-section-blocks--freeform');
-            freeformContainers.forEach(function (container) {
-                const blocks = container.querySelectorAll('[data-block-id]');
+            const zones = el.querySelectorAll('.sc-block-zone[data-block-zone]');
+            zones.forEach(function (zone) {
+                const zoneRect = zone.getBoundingClientRect();
+                zonePositions.push({
+                    id: zone.getAttribute('data-block-zone') || 'default',
+                    sectionId: sectionId,
+                    kind: zone.getAttribute('data-block-zone-kind') || 'freeform',
+                    top: zoneRect.top + window.scrollY,
+                    left: zoneRect.left + window.scrollX,
+                    width: zoneRect.width,
+                    height: zoneRect.height
+                });
+            });
+
+            const measuredBlockIds = new Set();
+            const blockContainers = el.querySelectorAll('.sc-block-zone[data-block-zone]');
+            blockContainers.forEach(function (container) {
+                const containerRect = container.getBoundingClientRect();
+                const blocks = container.querySelectorAll(':scope > [data-block-id]');
                 blocks.forEach(function (block) {
+                    const blockId = block.getAttribute('data-block-id');
+                    if (!blockId || measuredBlockIds.has(blockId)) return;
+                    measuredBlockIds.add(blockId);
+
                     const blockRect = block.getBoundingClientRect();
+                    const zIndex = Number.parseInt(window.getComputedStyle(block).zIndex, 10);
                     blockPositions.push({
-                        id: block.getAttribute('data-block-id'),
+                        id: blockId,
                         sectionId: block.getAttribute('data-block-section-id') || sectionId,
+                        positionMode: block.getAttribute('data-block-position-mode') || 'flow',
                         top: blockRect.top + window.scrollY,
                         left: blockRect.left + window.scrollX,
                         width: blockRect.width,
                         height: blockRect.height,
-                        sectionTop: rect.top + window.scrollY,
-                        sectionLeft: rect.left + window.scrollX,
-                        sectionWidth: rect.width,
-                        sectionHeight: rect.height
+                        sectionTop: containerRect.top + window.scrollY,
+                        sectionLeft: containerRect.left + window.scrollX,
+                        sectionWidth: containerRect.width,
+                        sectionHeight: containerRect.height,
+                        zIndex: Number.isFinite(zIndex) ? zIndex : 1
                     });
                 });
             });
@@ -56,6 +80,7 @@
             type: 'ez-section-positions',
             positions: positions,
             blockPositions: blockPositions,
+            zonePositions: zonePositions,
             documentHeight: Math.max(
                 document.body.scrollHeight,
                 document.documentElement.scrollHeight)

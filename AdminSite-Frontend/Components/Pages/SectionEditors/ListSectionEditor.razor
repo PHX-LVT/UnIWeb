@@ -3,36 +3,37 @@
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
     <div class="form-group">
-        <label class="form-label">Layout</label>
+        <label class="form-label">@T("Layout")</label>
         <DxComboBox Data="_layouts" @bind-Value="_layout" CssClass="w-100" />
     </div>
     <div class="form-group">
-        <label class="form-label">Columns</label>
+        <label class="form-label">@T("Columns")</label>
         <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="4" CssClass="w-100" />
     </div>
 </div>
 
 <div class="form-group">
-    <label class="form-label">Section Title</label>
+    <label class="form-label">@T("SectionTitle")</label>
     <LangField @bind-Value="_title" Languages="Languages" />
 </div>
 
 <div class="form-group">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_showIcon" /> Show Icons
+        <DxCheckBox @bind-Checked="_showIcon" /> @T("ShowIcons")
     </label>
 </div>
 
 <div class="form-group">
-    <label class="form-label">Items</label>
+    <label class="form-label">@T("Items")</label>
 
     @foreach (var (item, i) in _items.Select((x, i) => (x, i)))
     {
+        var uploadId = $"list-item-image-upload-{i}";
         <div style="border:1px solid var(--border);border-radius:8px;
             padding:.75rem;margin-bottom:.5rem;background:var(--bg)">
             <div style="display:flex;align-items:center;justify-content:space-between;
                 margin-bottom:.5rem">
-                <span style="font-weight:500;font-size:.85rem">Item @(i + 1)</span>
+                <span style="font-weight:500;font-size:.85rem">@T("Item") @(i + 1)</span>
                 <button class="btn-admin btn-danger"
                         @onclick="() => _items.RemoveAt(i)">
                     <i class="fas fa-trash"></i>
@@ -41,25 +42,25 @@
             @if (_showIcon)
             {
                 <div class="form-group">
-                    <label class="form-label">Icon class</label>
+                    <label class="form-label">@T("IconClass")</label>
                     <DxTextBox @bind-Text="item.Icon" CssClass="w-100"
                                NullText="fas fa-star" />
                 </div>
             }
             <div class="form-group">
-                <label class="form-label">Title</label>
+                <label class="form-label">@T("Title")</label>
                 <LangField Value="@(item.Title ?? new())"
                            ValueChanged="@(v => item.Title = v)"
                            Languages="Languages" />
             </div>
             <div class="form-group">
-                <label class="form-label">Description</label>
+                <label class="form-label">@T("Description")</label>
                 <LangField Value="@(item.Description ?? new())"
                            ValueChanged="@(v => item.Description = v)"
                            Languages="Languages" Multiline="true" />
             </div>
             <div class="form-group" style="margin:0">
-                <label class="form-label">Image</label>
+                <label class="form-label">@T("Image")</label>
                 @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
                 {
                     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
@@ -67,23 +68,39 @@
                              style="width:96px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />
                         <button type="button" class="btn-admin btn-ghost"
                                 @onclick="() => ClearItemImage(item)">
-                            <i class="fas fa-times"></i> Remove
+                            <i class="fas fa-times"></i> @T("Remove")
                         </button>
                     </div>
                 }
-                <InputFile OnChange="@(e => OnItemImageSelected(e, item))" accept="image/*" />
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                    <InputFile id="@uploadId"
+                               OnChange="@(e => OnItemImageSelected(e, item))"
+                               accept="image/*"
+                               style="display:none" />
+                    <label class="btn-admin btn-ghost" for="@uploadId">
+                        <i class="fas fa-image"></i> @T("UploadNew")
+                    </label>
+                    <button type="button" class="btn-admin btn-ghost" @onclick="() => OpenResourcePicker(item)">
+                        <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                    </button>
+                </div>
             </div>
         </div>
     }
 
     <button class="btn-admin btn-outline" @onclick="AddItem">
-        <i class="fas fa-plus"></i> Add Item
+        <i class="fas fa-plus"></i> @T("AddItem")
     </button>
 </div>
 
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="image"
+                     ResourceSelected="SelectResourceImage"
+                     Closed="CloseResourcePicker" />
+
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
 </div>
 
@@ -93,6 +110,8 @@
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
 
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
     private string _layout = "cards";
     private int _columns = 3;
     private bool _showIcon = true;
@@ -100,8 +119,12 @@
     private List<ListItemModel> _items = new();
     private bool _saving;
     private string? _loadedSectionId;
+    private bool _resourcePickerOpen;
+    private ListItemModel? _resourcePickerItem;
 
     private List<string> _layouts = new() { "cards", "rows", "numbered" };
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override void OnParametersSet()
     {
@@ -153,6 +176,24 @@
     private static void ClearItemImage(ListItemModel item)
     {
         item.ImageUrl = string.Empty;
+    }
+
+    private void OpenResourcePicker(ListItemModel item)
+    {
+        _resourcePickerItem = item;
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+        _resourcePickerItem = null;
+    }
+
+    private void SelectResourceImage(ManagedResourceModel resource)
+    {
+        if (_resourcePickerItem is not null)
+            _resourcePickerItem.ImageUrl = resource.Url;
     }
 
     private async Task Save()

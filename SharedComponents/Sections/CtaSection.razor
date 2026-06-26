@@ -6,6 +6,8 @@
          class="@StyleHelper.GetSectionClass(Section.Style)"
          style="@StyleHelper.GetSectionStyle(Section.Style)">
 
+    <SectionBackgroundMedia Style="Section.Style" />
+
     <div class="sc-section-overlay"
          style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
 
@@ -27,9 +29,9 @@
             <div class="sc-cta__actions">
                 @foreach (var btn in CtaButtons)
                 {
-                    <a href="@btn.Href" class="sc-btn sc-btn--@btn.Style">
+                    <ActionButton Action="@btn.Action" FormDefinitionId="@btn.FormDefinitionId" Href="@btn.Href" CssClass="@($"sc-btn sc-btn--{btn.Style}")">
                         @StyleHelper.Lang(btn.Label, Lang)
-                    </a>
+                    </ActionButton>
                 }
             </div>
         }

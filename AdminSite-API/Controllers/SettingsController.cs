@@ -1,14 +1,17 @@
 using FullProject.DTOs;
+using FullProject.Models;
 using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/settings")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.ManageSettings)]
     public class SettingsController : ControllerBase
     {
         private readonly SettingsService _service;
@@ -67,6 +70,26 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(new AdminAppearanceResponseDto { Preset = preset }, "Admin appearance saved."));
         }
 
+        // GET api/admin/settings/resource-library
+        [HttpGet("resource-library")]
+        public async Task<IActionResult> GetResourceLibrarySettings()
+        {
+            if (!IsAdminAdmin) return Forbid();
+
+            var settings = await _service.GetResourceLibrarySettingsAsync();
+            return Ok(ApiResult.Ok(SettingsService.ToResourceLibrarySettingsDto(settings)));
+        }
+
+        // PUT api/admin/settings/resource-library
+        [HttpPut("resource-library")]
+        public async Task<IActionResult> UpdateResourceLibrarySettings([FromBody] ResourceLibrarySettingsUpdateDto dto)
+        {
+            if (!IsAdminAdmin) return Forbid();
+
+            var settings = await _service.UpdateResourceLibrarySettingsAsync(dto);
+            return Ok(ApiResult.Ok(SettingsService.ToResourceLibrarySettingsDto(settings), "Resource Library settings saved."));
+        }
+
         // GET api/admin/settings/glossary
         [HttpGet("glossary")]
         public async Task<IActionResult> GetGlossary()
@@ -114,5 +137,12 @@ namespace FullProject.Controllers
             if (!ok) return NotFound(ApiResult.NotFound("Term not found."));
             return Ok(ApiResult.Ok("Term deleted."));
         }
+
+        private AdminRole ActorRole =>
+            Enum.TryParse<AdminRole>(User.FindFirst(ClaimTypes.Role)?.Value, true, out var role)
+                ? role
+                : AdminRole.Viewer;
+
+        private bool IsAdminAdmin => ActorRole == AdminRole.AdminAdmin;
     }
 }

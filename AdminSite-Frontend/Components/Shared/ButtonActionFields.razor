@@ -1,0 +1,147 @@
+@using AdminSite.Models
+@using SharedComponents.Helpers
+
+<div class="button-action-fields @GridClass">
+    <div class="button-action-fields__cell">
+        <span class="section-button-cell__label">@T("Action")</span>
+        <DxComboBox Data="ActionOptions"
+                    TextFieldName="Label"
+                    ValueFieldName="Value"
+                    Value="@NormalizedAction"
+                    ValueChanged="@(async (string? value) => await SetAction(value))"
+                    CssClass="w-100" />
+    </div>
+
+    @if (IsOpenForm)
+    {
+        <div class="button-action-fields__cell">
+            <span class="section-button-cell__label">@T("Form")</span>
+            <DxComboBox Data="FormOptions"
+                        TextFieldName="Label"
+                        ValueFieldName="Id"
+                        Value="@FormDefinitionId"
+                        ValueChanged="@(async (string? value) => await FormDefinitionIdChanged.InvokeAsync(value))"
+                        CssClass="w-100"
+                        NullText="Select form..." />
+        </div>
+
+        @if (ShowModalHrefFallback)
+        {
+            <div class="button-action-fields__cell">
+                <span class="section-button-cell__label">Fallback Href</span>
+                <DxTextBox Text="@Href"
+                           TextChanged="@(async (string? value) => await HrefChanged.InvokeAsync(value))"
+                           CssClass="w-100"
+                           NullText="modal:sync" />
+            </div>
+        }
+    }
+    else
+    {
+        <div class="button-action-fields__cell">
+            <span class="section-button-cell__label">@T("Url")</span>
+            <DxTextBox Text="@Href"
+                       TextChanged="@(async (string? value) => await HrefChanged.InvokeAsync(value))"
+                       CssClass="w-100"
+                       NullText="/contact" />
+        </div>
+    }
+</div>
+
+
+<style>
+    .button-action-fields {
+        display: grid;
+        grid-template-columns: minmax(120px, .65fr) minmax(190px, 1fr);
+        gap: .5rem;
+        align-items: end;
+        min-width: 0;
+    }
+
+    .button-action-fields__cell {
+        min-width: 0;
+        display: grid;
+        gap: 6px;
+    }
+
+    .button-action-fields--fallback {
+        grid-template-columns: minmax(110px, .55fr) minmax(170px, .85fr) minmax(150px, .8fr);
+    }
+
+    @@media (max-width: 720px) {
+        .button-action-fields,
+        .button-action-fields--fallback {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+@code {
+    [Parameter] public string? Action { get; set; }
+    [Parameter] public EventCallback<string?> ActionChanged { get; set; }
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public EventCallback<string?> HrefChanged { get; set; }
+    [Parameter] public string? FormDefinitionId { get; set; }
+    [Parameter] public EventCallback<string?> FormDefinitionIdChanged { get; set; }
+    [Parameter] public IReadOnlyList<FormDefinitionModel> FormDefinitions { get; set; } = Array.Empty<FormDefinitionModel>();
+    [Parameter] public string AdminLanguage { get; set; } = "en";
+    [Parameter] public string LinkActionValue { get; set; } = "linkToPage";
+    [Parameter] public string OpenFormActionValue { get; set; } = "openForm";
+    [Parameter] public string? ExternalActionValue { get; set; }
+    [Parameter] public bool ShowModalHrefFallback { get; set; }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private string GridClass => IsOpenForm && ShowModalHrefFallback ? "button-action-fields--fallback" : string.Empty;
+
+    private string NormalizedAction => string.IsNullOrWhiteSpace(Action) ? LinkActionValue : Action!;
+
+    private bool IsOpenForm =>
+        string.Equals(NormalizedAction, OpenFormActionValue, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(NormalizedAction, "openForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(NormalizedAction, "OpenForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(NormalizedAction, "OpenModal", StringComparison.OrdinalIgnoreCase);
+
+    private List<ActionOption> ActionOptions
+    {
+        get
+        {
+            var options = new List<ActionOption>
+            {
+                new(LinkActionValue, "Link"),
+                new(OpenFormActionValue, "Open Form")
+            };
+            if (!string.IsNullOrWhiteSpace(ExternalActionValue))
+                options.Add(new(ExternalActionValue!, "External Link"));
+            return options;
+        }
+    }
+
+    private List<FormOption> FormOptions => FormDefinitions
+        .Where(form => form.Active)
+        .OrderBy(form => LabelFor(form))
+        .Select(form => new FormOption(form.Id, LabelFor(form)))
+        .ToList();
+
+    private async Task SetAction(string? value)
+    {
+        var next = string.IsNullOrWhiteSpace(value) ? LinkActionValue : value;
+        await ActionChanged.InvokeAsync(next);
+        if (!IsOpenFormAction(next))
+            await FormDefinitionIdChanged.InvokeAsync(null);
+    }
+
+    private bool IsOpenFormAction(string? action) =>
+        string.Equals(action, OpenFormActionValue, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "openForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenModal", StringComparison.OrdinalIgnoreCase);
+
+    private string LabelFor(FormDefinitionModel form)
+    {
+        var label = StyleHelper.Lang(form.Name, AdminLanguage);
+        return string.IsNullOrWhiteSpace(label) ? form.Key : $"{label} ({form.Key})";
+    }
+
+    private sealed record ActionOption(string Value, string Label);
+    private sealed record FormOption(string Id, string Label);
+}

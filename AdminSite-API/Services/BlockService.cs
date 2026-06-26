@@ -4,19 +4,21 @@ using FullProject.Models;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
+using FullProject.Services.AssetService;
+using SharedComponents.Helpers;
 
 namespace FullProject.Services
 {
     public class BlockService
     {
         private readonly MongoDbContext _context;
-        private readonly R2AssetService _r2Assets;
+        private readonly AssetCleanupService _assetCleanup;
         private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
 
-        public BlockService(MongoDbContext context, R2AssetService r2Assets)
+        public BlockService(MongoDbContext context, AssetCleanupService assetCleanup)
         {
             _context = context;
-            _r2Assets = r2Assets;
+            _assetCleanup = assetCleanup;
         }
 
         private static Dictionary<string, string> SanitizeDictionary(Dictionary<string, string>? input)
@@ -89,7 +91,7 @@ namespace FullProject.Services
             {
                 TextBlockCreateDto t => new TextBlock
                 {
-                    Title = t.Title,
+                    Title = SanitizeDictionary(t.Title),
                     Content = SanitizeDictionary(t.Content)
                 },
                 ImageBlockCreateDto img => new ImageBlock
@@ -125,6 +127,7 @@ namespace FullProject.Services
                 },
                 FormBlockCreateDto form => new FormBlock
                 {
+                    FormDefinitionId = string.IsNullOrWhiteSpace(form.FormDefinitionId) ? null : form.FormDefinitionId,
                     Fields = form.Fields.Select(f => new FormField
                     {
                         Name = f.Name,
@@ -143,12 +146,16 @@ namespace FullProject.Services
                     Description = SanitizeDictionary(card.Description),
                     ImageUrl = card.ImageUrl,
                     ButtonLabel = card.ButtonLabel,
-                    Href = CleanUrl(card.Href)
+                    Href = CleanUrl(card.Href),
+                    Action = card.Action,
+                    FormDefinitionId = card.FormDefinitionId
                 },
                 ButtonBlockCreateDto button => new ButtonBlock
                 {
                     Label = button.Label,
                     Href = CleanUrl(button.Href),
+                    Action = button.Action,
+                    FormDefinitionId = button.FormDefinitionId,
                     Style = NormalizeButtonStyle(button.Style)
                 },
                 MetricBlockCreateDto metric => new MetricBlock
@@ -183,20 +190,28 @@ namespace FullProject.Services
                     Title = SanitizeDictionary(container.Title),
                     LayoutMode = NormalizeContainerLayout(container.LayoutMode),
                     Columns = Math.Clamp(container.Columns, 1, 6),
-                    Gap = NormalizeBlockGap(container.Gap)
+                    Gap = NormalizeBlockGap(container.Gap),
+                    OrbitRadius = Math.Clamp(container.OrbitRadius, 80, 480),
+                    OrbitStartAngle = Math.Clamp(container.OrbitStartAngle, -360, 360),
+                    SemicircleRadius = Math.Clamp(container.SemicircleRadius, 80, 480),
+                    SemicircleStartAngle = Math.Clamp(container.SemicircleStartAngle, -360, 360),
+                    SemicircleEndAngle = Math.Clamp(container.SemicircleEndAngle, -360, 360)
                 },
                 _ => throw new ArgumentException("Unknown block type")
             };
 
             block.StableId = Guid.NewGuid().ToString();
             block.ColumnSlotId = dto.ColumnSlotId;
-            block.BlockZone = NormalizeBlockZone(dto.BlockZone);
-            block.ParentBlockId = dto.ParentBlockId;
+            block.BlockZone = ResolveBlockZone(section, dto.BlockZone, dto.ZoneId);
+            block.PositionMode = ResolvePositionMode(section, dto.PositionMode);
+            block.ParentBlockId = string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId;
             block.PageStableId = page.StableId;       // â† GUID
             block.SectionStableId = section.StableId; // â† GUID
             block.Visible = dto.Visible;
             block.Order = (int)count;
             block.Layout = MapLayout(dto.Layout);
+            if (dto.Layout?.ZIndex is null && dto.Layout?.ZOrder is null)
+                block.Layout.ZIndex = Math.Clamp((int)count + 1, 1, 1000);
             block.Version = 1;
             block.CreatedAt = DateTime.UtcNow;
             block.UpdatedAt = DateTime.UtcNow;
@@ -223,8 +238,11 @@ namespace FullProject.Services
             if (dto.Buttons is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Buttons,
                     dto.Buttons.Select(MapButton).ToList()));
-            if (dto.BlockZone is not null)
-                baseUpdates.Add(Builders<Block>.Update.Set(b => b.BlockZone, NormalizeBlockZone(dto.BlockZone)));
+            var requestedZone = dto.ZoneId ?? dto.BlockZone;
+            if (requestedZone is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.BlockZone, ResolveBlockZone(existing, requestedZone)));
+            if (dto.PositionMode is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.PositionMode, NormalizePositionMode(dto.PositionMode)));
             if (dto.ParentBlockId is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.ParentBlockId, string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId));
             if (dto.Layout is not null)
@@ -238,7 +256,7 @@ namespace FullProject.Services
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
-                                .Set(b => ((TextBlock)b).Title, tDto.Title)
+                                .Set(b => ((TextBlock)b).Title, SanitizeDictionary(tDto.Title))
                                 .Set(b => ((TextBlock)b).Content, SanitizeDictionary(tDto.Content))));
                     break;
 
@@ -291,6 +309,8 @@ namespace FullProject.Services
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
+                                .Set(b => ((FormBlock)b).FormDefinitionId,
+                                    string.IsNullOrWhiteSpace(formDto.FormDefinitionId) ? null : formDto.FormDefinitionId)
                                 .Set(b => ((FormBlock)b).Fields,
                                     formDto.Fields.Select(f => new FormField
                                     {
@@ -314,7 +334,9 @@ namespace FullProject.Services
                                 .Set(b => ((CardBlock)b).Description, SanitizeDictionary(cardDto.Description))
                                 .Set(b => ((CardBlock)b).ImageUrl, cardDto.ImageUrl)
                                 .Set(b => ((CardBlock)b).ButtonLabel, cardDto.ButtonLabel)
-                                .Set(b => ((CardBlock)b).Href, CleanUrl(cardDto.Href))));
+                                .Set(b => ((CardBlock)b).Href, CleanUrl(cardDto.Href))
+                                .Set(b => ((CardBlock)b).Action, cardDto.Action)
+                                .Set(b => ((CardBlock)b).FormDefinitionId, cardDto.FormDefinitionId)));
                     break;
 
                 case (ButtonBlock _, ButtonBlockUpdateDto buttonDto):
@@ -323,6 +345,8 @@ namespace FullProject.Services
                             Builders<Block>.Update
                                 .Set(b => ((ButtonBlock)b).Label, buttonDto.Label)
                                 .Set(b => ((ButtonBlock)b).Href, CleanUrl(buttonDto.Href))
+                                .Set(b => ((ButtonBlock)b).Action, buttonDto.Action)
+                                .Set(b => ((ButtonBlock)b).FormDefinitionId, buttonDto.FormDefinitionId)
                                 .Set(b => ((ButtonBlock)b).Style, NormalizeButtonStyle(buttonDto.Style))));
                     break;
 
@@ -372,7 +396,12 @@ namespace FullProject.Services
                                 .Set(b => ((ContainerBlock)b).Title, SanitizeDictionary(containerDto.Title))
                                 .Set(b => ((ContainerBlock)b).LayoutMode, NormalizeContainerLayout(containerDto.LayoutMode))
                                 .Set(b => ((ContainerBlock)b).Columns, Math.Clamp(containerDto.Columns, 1, 6))
-                                .Set(b => ((ContainerBlock)b).Gap, NormalizeBlockGap(containerDto.Gap))));
+                                .Set(b => ((ContainerBlock)b).Gap, NormalizeBlockGap(containerDto.Gap))
+                                .Set(b => ((ContainerBlock)b).OrbitRadius, Math.Clamp(containerDto.OrbitRadius, 80, 480))
+                                .Set(b => ((ContainerBlock)b).OrbitStartAngle, Math.Clamp(containerDto.OrbitStartAngle, -360, 360))
+                                .Set(b => ((ContainerBlock)b).SemicircleRadius, Math.Clamp(containerDto.SemicircleRadius, 80, 480))
+                                .Set(b => ((ContainerBlock)b).SemicircleStartAngle, Math.Clamp(containerDto.SemicircleStartAngle, -360, 360))
+                                .Set(b => ((ContainerBlock)b).SemicircleEndAngle, Math.Clamp(containerDto.SemicircleEndAngle, -360, 360))));
                     break;
 
                 default:
@@ -407,13 +436,13 @@ namespace FullProject.Services
             switch (existing, dto)
             {
                 case (ImageBlock image, ImageBlockUpdateDto imageDto) when imageDto.ImageUrl != null:
-                    await _r2Assets.DeleteIfUnusedAsync(image.ImageUrl, imageDto.ImageUrl);
+                    await _assetCleanup.DeleteIfUnusedAsync(image.ImageUrl, imageDto.ImageUrl);
                     break;
                 case (FileBlock file, FileBlockUpdateDto fileDto) when fileDto.FileUrl != null:
-                    await _r2Assets.DeleteIfUnusedAsync(file.FileUrl, fileDto.FileUrl);
+                    await _assetCleanup.DeleteIfUnusedAsync(file.FileUrl, fileDto.FileUrl);
                     break;
                 case (CardBlock card, CardBlockUpdateDto cardDto) when cardDto.ImageUrl != null:
-                    await _r2Assets.DeleteIfUnusedAsync(card.ImageUrl, cardDto.ImageUrl);
+                    await _assetCleanup.DeleteIfUnusedAsync(card.ImageUrl, cardDto.ImageUrl);
                     break;
             }
         }
@@ -439,27 +468,56 @@ namespace FullProject.Services
             if (page is null) return false;
             var section = await _context.SectionsDraft.Find(s => s.Id == sectionId).FirstOrDefaultAsync();
             if (section is null) return false;
+            var block = await _context.BlocksDraft.Find(b =>
+                    b.PageStableId == page.StableId &&
+                    b.SectionStableId == section.StableId &&
+                    b.Id == blockId)
+                .FirstOrDefaultAsync();
+            if (block is null) return false;
+
+            var removedAssetUrls = _assetCleanup.BlockAssetUrls(block).ToList();
             var result = await _context.BlocksDraft.DeleteOneAsync(
                 b => b.PageStableId == page.StableId &&
                      b.SectionStableId == section.StableId &&
                      b.Id == blockId);
+            if (result.DeletedCount > 0)
+                await _assetCleanup.DeleteUnusedAsync(removedAssetUrls);
             return result.DeletedCount > 0;
         }
 
-        public async Task DeleteBySectionAsync(string pageStableId, string sectionStableId) =>
+        public async Task DeleteBySectionAsync(string pageStableId, string sectionStableId)
+        {
+            var blocks = await _context.BlocksDraft
+                .Find(b => b.PageStableId == pageStableId && b.SectionStableId == sectionStableId)
+                .ToListAsync();
+            var removedAssetUrls = blocks.SelectMany(_assetCleanup.BlockAssetUrls).ToList();
+
             await _context.BlocksDraft.DeleteManyAsync(
                 b => b.PageStableId == pageStableId && b.SectionStableId == sectionStableId);
+
+            await _assetCleanup.DeleteUnusedAsync(removedAssetUrls);
+        }
 
         public async Task DeleteByColumnSlotsAsync(string pageStableId, string sectionStableId, IEnumerable<string> slotIds)
         {
             var ids = slotIds.Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
             if (ids.Count == 0) return;
 
-            await _context.BlocksDraft.DeleteManyAsync(
+            var blocks = await _context.BlocksDraft
+                .Find(b => b.PageStableId == pageStableId &&
+                           b.SectionStableId == sectionStableId &&
+                           b.ColumnSlotId != null &&
+                           ids.Contains(b.ColumnSlotId))
+                .ToListAsync();
+            var removedAssetUrls = blocks.SelectMany(_assetCleanup.BlockAssetUrls).ToList();
+
+            var result = await _context.BlocksDraft.DeleteManyAsync(
                 b => b.PageStableId == pageStableId &&
                      b.SectionStableId == sectionStableId &&
                      b.ColumnSlotId != null &&
                      ids.Contains(b.ColumnSlotId));
+            if (result.DeletedCount > 0)
+                await _assetCleanup.DeleteUnusedAsync(removedAssetUrls);
         }
 
         private static BlockLayout MapLayout(BlockLayoutDto? dto)
@@ -476,11 +534,15 @@ namespace FullProject.Services
                 Margin = NormalizeChoice(dto.Margin, new[] { "none", "small", "medium", "large" }, "none"),
                 BackgroundColor = string.IsNullOrWhiteSpace(dto.BackgroundColor) ? null : dto.BackgroundColor,
                 BorderRadius = NormalizeChoice(dto.BorderRadius, new[] { "none", "small", "medium", "large" }, "none"),
-                ZIndex = Math.Clamp(dto.ZIndex ?? 1, 0, 20),
+                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? 1, 0, 1000),
                 X = Math.Clamp(dto.X ?? 0, 0, 11),
                 Y = Math.Clamp(dto.Y ?? 0, 0, 60),
                 W = Math.Clamp(dto.W ?? 4, 1, 12),
-                H = Math.Clamp(dto.H ?? 2, 1, 40)
+                H = Math.Clamp(dto.H ?? 2, 1, 40),
+                LeftPercent = ClampDouble(dto.LeftPercent, 0, 100),
+                TopPx = ClampDouble(dto.TopPx, 0, 10000),
+                WidthPercent = ClampDouble(dto.WidthPercent, 1, 100),
+                HeightPx = ClampDouble(dto.HeightPx, 24, 10000)
             };
         }
 
@@ -510,12 +572,24 @@ namespace FullProject.Services
                 BorderRadius = dto.BorderRadius is null
                     ? current.BorderRadius
                     : NormalizeChoice(dto.BorderRadius, new[] { "none", "small", "medium", "large" }, "none"),
-                ZIndex = Math.Clamp(dto.ZIndex ?? current.ZIndex, 0, 20),
+                ZIndex = Math.Clamp(dto.ZOrder ?? dto.ZIndex ?? current.ZIndex, 0, 1000),
                 X = Math.Clamp(dto.X ?? current.X, 0, 11),
                 Y = Math.Clamp(dto.Y ?? current.Y, 0, 60),
                 W = Math.Clamp(dto.W ?? current.W, 1, 12),
-                H = Math.Clamp(dto.H ?? current.H, 1, 40)
+                H = Math.Clamp(dto.H ?? current.H, 1, 40),
+                LeftPercent = dto.LeftPercent.HasValue ? ClampDouble(dto.LeftPercent, 0, 100) : current.LeftPercent,
+                TopPx = dto.TopPx.HasValue ? ClampDouble(dto.TopPx, 0, 10000) : current.TopPx,
+                WidthPercent = dto.WidthPercent.HasValue ? ClampDouble(dto.WidthPercent, 1, 100) : current.WidthPercent,
+                HeightPx = dto.HeightPx.HasValue ? ClampDouble(dto.HeightPx, 24, 10000) : current.HeightPx
             };
+        }
+
+        private static double? ClampDouble(double? value, double min, double max)
+        {
+            if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+                return null;
+
+            return Math.Clamp(value.Value, min, max);
         }
 
         private static string NormalizeChoice(string? value, IReadOnlyCollection<string> allowed, string fallback)
@@ -527,10 +601,43 @@ namespace FullProject.Services
         private static string NormalizeBlockZone(string? value) =>
             string.IsNullOrWhiteSpace(value) ? "default" : value.Trim().ToLowerInvariant();
 
+        private static string NormalizePositionMode(string? value) =>
+            string.Equals(value, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
+
+        private static string ResolvePositionMode(Section section, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return NormalizePositionMode(value);
+
+            return section is CanvasSection ? "freeform" : "flow";
+        }
+
+        private static string ResolveBlockZone(Section section, string? blockZone, string? zoneId) =>
+            ResolveBlockZone(section, zoneId ?? blockZone);
+
+        private static string ResolveBlockZone(Section section, string? zone)
+        {
+            if (string.IsNullOrWhiteSpace(zone) && section is CanvasSection)
+                return "canvas";
+
+            return NormalizeBlockZone(zone);
+        }
+
+        private static string ResolveBlockZone(Block block, string? zone)
+        {
+            if (string.IsNullOrWhiteSpace(zone) && block.BlockZone == "canvas")
+                return "canvas";
+
+            return NormalizeBlockZone(zone);
+        }
+
         private static string NormalizeContainerLayout(string? value) => value switch
         {
-            "grid" => "grid",
-            "split" => "split",
+            "row" => "row",
+            "orbit" => "orbit",
+            "semicircle" => "semicircle",
+            "freeform" => "freeform",
+            "grid" or "split" => "row",
             _ => "stack"
         };
 
@@ -616,6 +723,7 @@ namespace FullProject.Services
             Label = dto.Label,
             Action = dto.Action,
             Href = CleanUrl(dto.Href),
+            FormDefinitionId = dto.FormDefinitionId,
             Visible = dto.Visible,
             Order = dto.Order
         };
@@ -635,50 +743,7 @@ namespace FullProject.Services
         {
             var cleaned = CleanUrl(url);
             if (string.IsNullOrWhiteSpace(cleaned)) return cleaned;
-            if (!Uri.TryCreate(cleaned, UriKind.Absolute, out var uri)) return cleaned;
-            if (uri.Scheme is not ("http" or "https")) return null;
-
-            var host = uri.Host.ToLowerInvariant();
-            string? videoId = null;
-
-            if (host is "youtu.be")
-            {
-                videoId = uri.AbsolutePath.Trim('/').Split('/').FirstOrDefault();
-            }
-            else if (host.EndsWith("youtube.com", StringComparison.Ordinal))
-            {
-                if (uri.AbsolutePath.StartsWith("/embed/", StringComparison.OrdinalIgnoreCase))
-                {
-                    videoId = uri.AbsolutePath["/embed/".Length..].Split('/').FirstOrDefault();
-                }
-                else if (uri.AbsolutePath.StartsWith("/shorts/", StringComparison.OrdinalIgnoreCase))
-                {
-                    videoId = uri.AbsolutePath["/shorts/".Length..].Split('/').FirstOrDefault();
-                }
-                else
-                {
-                    videoId = ReadQueryValue(uri.Query, "v");
-                }
-            }
-
-            return string.IsNullOrWhiteSpace(videoId)
-                ? cleaned
-                : $"https://www.youtube.com/embed/{videoId}";
-        }
-
-        private static string? ReadQueryValue(string query, string key)
-        {
-            foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var pair = part.Split('=', 2);
-                if (pair.Length == 2 &&
-                    Uri.UnescapeDataString(pair[0]).Equals(key, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Uri.UnescapeDataString(pair[1]);
-                }
-            }
-
-            return null;
+            return VideoUrlHelper.ToEmbedUrl(cleaned) ?? cleaned;
         }
     }
 }

@@ -1,5 +1,6 @@
-﻿@inject AdminSectionService SectionService
+@inject AdminSectionService SectionService
 @inject IHttpService Http
+@inject AdminFormSubmissionService FormService
 
 <div class="form-group">
     <label class="form-label">@T("Layout")</label>
@@ -21,21 +22,25 @@
     @foreach (var (button, i) in _buttons.Select((x, i) => (x, i)))
     {
         <div class="section-button-editor">
-            <div class="section-button-cell">
+            <div class="section-button-cell section-button-cell--label">
+                <span class="section-button-cell__label">@T("Label")</span>
                 <LangField Value="@(button.Label ?? new())"
                            ValueChanged="@(v => button.Label = v)"
                            Languages="Languages"
                            NullText="@T("ButtonLabel")" />
             </div>
-            <div class="section-button-cell">
-                <span class="section-button-cell__label">@T("Url")</span>
-                <DxTextBox @bind-Text="button.Href" CssClass="w-100" NullText="@T("Url")" />
+            <ButtonActionFields @bind-Action="button.Action"
+                                @bind-Href="button.Href"
+                                @bind-FormDefinitionId="button.FormDefinitionId"
+                                FormDefinitions="_formDefinitions"
+                                AdminLanguage="AdminLanguage" />
+            <div class="section-button-editor__footer">
+                <div class="section-button-cell">
+                    <span class="section-button-cell__label">@T("Style")</span>
+                    <DxComboBox Data="_btnStyles" @bind-Value="button.Style" CssClass="w-100" />
+                </div>
+                <button class="btn-admin btn-danger" @onclick="() => RemoveButton(i)"><i class="fas fa-trash"></i></button>
             </div>
-            <div class="section-button-cell">
-                <span class="section-button-cell__label">@T("Style")</span>
-                <DxComboBox Data="_btnStyles" @bind-Value="button.Style" CssClass="w-100" />
-            </div>
-            <button class="btn-admin btn-danger" @onclick="() => RemoveButton(i)"><i class="fas fa-trash"></i></button>
         </div>
     }
     <button class="btn-admin btn-outline" @onclick="AddButton"><i class="fas fa-plus"></i> @T("AddButton")</button>
@@ -44,13 +49,21 @@
 <style>
     .section-button-editor {
         display: grid;
-        grid-template-columns: minmax(220px, 1.6fr) minmax(150px, 1fr) minmax(120px, .75fr) 42px;
+        grid-template-columns: 1fr;
+        gap: .55rem;
+        align-items: stretch;
+        margin-bottom: .6rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: .65rem;
+    }
+
+    .section-button-editor__footer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 42px;
         gap: .5rem;
         align-items: end;
-        margin-bottom: .5rem;
-        background: var(--bg);
-        border-radius: 6px;
-        padding: .75rem;
     }
 
     .section-button-cell {
@@ -75,6 +88,10 @@
 
     @@media (max-width: 720px) {
         .section-button-editor {
+            grid-template-columns: 1fr;
+        }
+
+        .section-button-editor__footer {
             grid-template-columns: 1fr;
         }
 
@@ -103,10 +120,17 @@
     private List<SectionButtonModel> _buttons = new();
     private bool _saving;
     private string? _loadedSectionId;
+    private List<FormDefinitionModel> _formDefinitions = new();
 
     private List<string> _layouts = new() { "center", "left", "right", "final-card" };
     private List<string> _btnStyles = new() { "filled", "outline", "ghost" };
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var forms = await FormService.GetDefinitionsAsync();
+        _formDefinitions = forms.Data ?? new();
+    }
 
     protected override void OnParametersSet()
     {
@@ -125,8 +149,9 @@
         {
             Id = button.Id,
             Label = button.Label is null ? new() : new(button.Label),
-            Action = string.IsNullOrWhiteSpace(button.Action) ? "link" : button.Action,
+            Action = NormalizeButtonAction(button.Action),
             Href = button.Href,
+            FormDefinitionId = button.FormDefinitionId,
             Style = NormalizeButtonStyle(button.Style),
             Visible = button.Visible,
             Order = i
@@ -136,7 +161,7 @@
     private void AddButton() => _buttons.Add(new SectionButtonModel
     {
         Label = new() { ["en"] = "Learn More" },
-        Action = "link",
+        Action = "linkToPage",
         Style = "filled",
         Visible = true,
         Order = _buttons.Count
@@ -176,12 +201,20 @@
     private static SectionButtonDto MapButton(SectionButtonModel button, int order) => new()
     {
         Label = button.Label ?? new(),
-        Action = button.Action ?? "link",
-        Href = button.Href,
+        Action = NormalizeButtonAction(button.Action),
+        Href = IsOpenFormAction(button.Action) ? null : button.Href,
+        FormDefinitionId = IsOpenFormAction(button.Action) ? button.FormDefinitionId : null,
         Style = NormalizeButtonStyle(button.Style),
         Visible = button.Visible,
         Order = order
     };
+
+    private static string NormalizeButtonAction(string? action) => IsOpenFormAction(action) ? "openForm" : "linkToPage";
+
+    private static bool IsOpenFormAction(string? action) =>
+        string.Equals(action, "openForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenForm", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "OpenModal", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeButtonStyle(string? style) => style switch
     {

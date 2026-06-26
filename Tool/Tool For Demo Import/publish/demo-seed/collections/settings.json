@@ -1,0 +1,62 @@
+[
+  {
+    "_id": {
+      "$oid": "6a0433a0716219ce93e7ec88"
+    },
+    "Languages": [
+      {
+        "Slug": "en",
+        "Label": "English",
+        "NativeName": "English",
+        "Active": true,
+        "AdminEnabled": true,
+        "UserEnabled": true,
+        "Direction": "ltr",
+        "Order": {
+          "$numberInt": "1"
+        }
+      },
+      {
+        "Slug": "vi",
+        "Label": "Tiếng Việt",
+        "NativeName": "Tiếng Việt",
+        "Active": true,
+        "AdminEnabled": true,
+        "UserEnabled": true,
+        "Direction": "ltr",
+        "Order": {
+          "$numberInt": "2"
+        }
+      },
+      {
+        "Slug": "jp",
+        "Label": "Japan",
+        "NativeName": "日本語",
+        "Active": true,
+        "AdminEnabled": true,
+        "UserEnabled": true,
+        "Direction": "ltr",
+        "Order": {
+          "$numberInt": "3"
+        }
+      },
+      {
+        "Slug": "cn",
+        "Label": "中文",
+        "NativeName": "中文",
+        "Active": true,
+        "AdminEnabled": true,
+        "UserEnabled": true,
+        "Direction": "ltr",
+        "Order": {
+          "$numberInt": "4"
+        }
+      }
+    ],
+    "DefaultLanguage": "en",
+    "LanguageRegistryVersion": {
+      "$numberInt": "1"
+    },
+    "AdminAppearancePreset": "navy-gold"
+  }
+]

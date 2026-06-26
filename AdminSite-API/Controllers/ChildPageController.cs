@@ -4,12 +4,13 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/children")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
     public class ChildPagesController : ControllerBase
     {
         private readonly PageService _pageService;

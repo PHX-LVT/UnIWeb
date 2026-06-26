@@ -1,14 +1,15 @@
 using Contracts.Admin;
+using Contracts.Auth;
 using FullProject.Models;
-using FullProject.Services;
 using FullProject.Utils;
+using FullProject.Services.SectionServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FullProject.Controllers
 {
     [ApiController]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
     [Route("api/admin/canvas-section-presets")]
     public class CanvasSectionPresetsController : ControllerBase
     {
@@ -61,6 +62,7 @@ namespace FullProject.Controllers
             Id = preset.Id,
             Name = preset.Name,
             BlockCount = preset.Blocks.Count,
+            SchemaVersion = preset.SchemaVersion,
             CreatedAt = preset.CreatedAt,
             UpdatedAt = preset.UpdatedAt
         };

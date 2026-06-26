@@ -3,6 +3,8 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace FullProject.Controllers
 {
@@ -17,35 +19,31 @@ namespace FullProject.Controllers
             _service = service;
         }
 
-        // POST api/auth/login
         [AllowAnonymous]
+        [EnableRateLimiting("admin-login")]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Email) ||
                 string.IsNullOrWhiteSpace(dto.Password))
-                return BadRequest(ApiResult.BadRequest(
-                    "Email and password are required."));
+                return BadRequest(ApiResult.BadRequest("Email and password are required."));
 
-            var result = await _service.LoginAsync(dto.Email, dto.Password);
+            var result = await _service.LoginAsync(dto.Email, dto.Password, ClientIp, UserAgent);
             if (result is null)
-                return Unauthorized(ApiResult.Unauthorized<LoginResponseDto>(
-                    "Invalid email or password."));
+                return Unauthorized(ApiResult.Unauthorized<LoginResponseDto>("Invalid email or password."));
 
             return Ok(ApiResult.Ok(result, "Login successful."));
         }
-     
+
         [Authorize]
+        [HttpPut("password")]
         [HttpPut("PasswordUpdate")]
         public async Task<IActionResult> UpdatePassword([FromBody] PasswordUpdateDto dto)
         {
-            var adminId = User.FindFirst("adminId")?.Value;
-            if (string.IsNullOrWhiteSpace(adminId))
+            var admin = await CurrentAdminAsync();
+            if (admin is null)
                 return Unauthorized(ApiResult.Unauthorized<string>("Invalid session."));
 
-            var admin = await _service.GetByIdAsync(adminId);
-            if (admin is null)
-                return Unauthorized(ApiResult.Unauthorized<string>("Admin not found."));
             if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
                 return BadRequest(ApiResult.BadRequest("Current password is required."));
             if (string.IsNullOrWhiteSpace(dto.NewPassword) || dto.NewPassword.Length < 8)
@@ -55,41 +53,58 @@ namespace FullProject.Controllers
             if (!isValid)
                 return BadRequest(ApiResult.BadRequest("Current password is incorrect."));
 
-            var newHash = _service.HashPassword(dto.NewPassword);
-            await _service.UpdatePasswordAsync(admin.Id, newHash);
-           
-            return Ok(ApiResult.Ok("Password updated successfully."));
+            await _service.UpdateOwnPasswordAsync(admin, _service.HashPassword(dto.NewPassword), ClientIp, UserAgent);
+            return Ok(ApiResult.Ok("Password updated successfully. Please sign in again."));
         }
 
-        // POST api/auth/logout
         [HttpPost("logout")]
         [Authorize]
-        public IActionResult Logout()
+        public async Task<IActionResult> Logout()
         {
-            // JWT is stateless — client discards the token
-            // Future: add token to a blocklist if needed
+            var adminId = User.FindFirst("adminId")?.Value ?? string.Empty;
+            var tokenId = User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value ??
+                          User.FindFirst("jti")?.Value ??
+                          string.Empty;
+
+            await _service.LogoutAsync(adminId, tokenId, ClientIp, UserAgent);
             return Ok(ApiResult.Ok("Logged out successfully."));
         }
 
-        // GET api/auth/session
         [HttpGet("session")]
         [Authorize]
         public async Task<IActionResult> Session()
         {
-            var adminId = User.FindFirst("adminId")?.Value;
-            if (string.IsNullOrEmpty(adminId))
-                return Unauthorized(ApiResult.Unauthorized<SessionResponseDto>());
-
-            var admin = await _service.GetByIdAsync(adminId);
+            var admin = await CurrentAdminAsync();
             if (admin is null)
                 return Unauthorized(ApiResult.Unauthorized<SessionResponseDto>());
 
+            AuthService.NormalizeUserDefaults(admin);
             return Ok(ApiResult.Ok(new SessionResponseDto
             {
                 Valid = true,
                 AdminId = admin.Id,
-                Email = admin.Email
+                Email = admin.Email,
+                FullName = string.IsNullOrWhiteSpace(admin.FullName) ? admin.Email : admin.FullName,
+                Role = admin.Role,
+                Status = admin.Status,
+                Permissions = AuthService.GetEffectivePermissions(admin)
             }));
         }
+
+        private async Task<FullProject.Models.AdminUser?> CurrentAdminAsync()
+        {
+            var adminId = User.FindFirst("adminId")?.Value;
+            return string.IsNullOrWhiteSpace(adminId)
+                ? null
+                : await _service.GetByIdAsync(adminId);
+        }
+
+        private string ClientIp =>
+            HttpContext.Connection.RemoteIpAddress?.ToString() is { Length: > 0 } ip && ip != "::1"
+                ? ip
+                : "127.0.0.1";
+
+        private string UserAgent =>
+            Request.Headers.UserAgent.FirstOrDefault() ?? string.Empty;
     }
 }

@@ -4,6 +4,7 @@
 @using DevExpress.Blazor
 @using Contracts.Admin
 @using System.Globalization
+@using AdminSite.Components.Pages.Content
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 
@@ -50,8 +51,35 @@
     @if (_style.BackgroundType == "video")
     {
         <div class="form-group">
-            <label class="form-label">@T("VideoUrl")</label>
-            <DxTextBox @bind-Text="_style.BackgroundVideoUrl" CssClass="w-100" />
+            <label class="form-label">@T("BackgroundVideo")</label>
+            @if (!string.IsNullOrEmpty(_style.BackgroundVideoUrl))
+            {
+                <div style="margin-bottom:.5rem;border-radius:8px;overflow:hidden;background:#000;aspect-ratio:16/9">
+                    <video src="@_style.BackgroundVideoUrl"
+                           style="width:100%;height:100%;object-fit:cover"
+                           muted
+                           loop
+                           playsinline
+                           controls></video>
+                </div>
+                <button type="button"
+                        class="btn-admin btn-ghost" style="margin-bottom:.5rem"
+                        @onclick="ClearBackgroundVideo">
+                    <i class="fas fa-times"></i> @T("Remove")
+                </button>
+            }
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                <InputFile id="section-background-video-upload"
+                           OnChange="OnBgVideoSelected"
+                           accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                           style="display:none" />
+                <label class="btn-admin btn-ghost" for="section-background-video-upload">
+                    <i class="fas fa-video"></i> @T("UploadNew")
+                </label>
+                <button type="button" class="btn-admin btn-ghost" @onclick='() => OpenResourcePicker("video")'>
+                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                </button>
+            </div>
         </div>
     }
 
@@ -72,7 +100,35 @@
                     </button>
                 </div>
             }
-            <InputFile OnChange="OnBgImageSelected" accept="image/*" />
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                <InputFile id="section-background-upload"
+                           OnChange="OnBgImageSelected"
+                           accept="image/*"
+                           style="display:none" />
+                <label class="btn-admin btn-ghost" for="section-background-upload">
+                    <i class="fas fa-image"></i> @T("UploadNew")
+                </label>
+                <button type="button" class="btn-admin btn-ghost" @onclick='() => OpenResourcePicker("image")'>
+                    <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+                </button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("BackgroundImageFit")</label>
+            <select class="form-control" @bind="_backgroundImageFit">
+                <option value="cover">@T("Cover")</option>
+                <option value="contain">@T("Contain")</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("BackgroundImagePosition")</label>
+            <select class="form-control" @bind="_backgroundImagePosition">
+                <option value="center">@T("Center")</option>
+                <option value="top">@T("Top")</option>
+                <option value="bottom">@T("Bottom")</option>
+                <option value="left">@T("Left")</option>
+                <option value="right">@T("Right")</option>
+            </select>
         </div>
     }
 
@@ -167,6 +223,11 @@
     </button>
 </div>
 
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="@_resourcePickerKind"
+                     ResourceSelected="SelectBackgroundResource"
+                     Closed="CloseResourcePicker" />
+
 @code {
     [Parameter] public string            PageId    { get; set; } = string.Empty;
     [Parameter] public string            SectionId { get; set; } = string.Empty;
@@ -181,6 +242,10 @@
     private string? _saveMessage;
     private string? _loadedSectionId;
     private SectionStyleModel? _loadedStyleRef;
+    private bool _resourcePickerOpen;
+    private string _resourcePickerKind = "image";
+    private const long MaxBackgroundImageBytes = 5L * 1024 * 1024;
+    private const long MaxBackgroundVideoBytes = 250L * 1024 * 1024;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     // Backing properties for all nullable string fields
@@ -226,6 +291,20 @@
         get => _style.Height ?? string.Empty;
         set => _style.Height = value;
     }
+    private string _backgroundImageFit
+    {
+        get => _style.BackgroundImageFit ?? "cover";
+        set => _style.BackgroundImageFit = value == "contain" ? "contain" : "cover";
+    }
+    private string _backgroundImagePosition
+    {
+        get => _style.BackgroundImagePosition ?? "center";
+        set => _style.BackgroundImagePosition = value switch
+        {
+            "top" or "bottom" or "left" or "right" => value,
+            _ => "center"
+        };
+    }
     private int _customMinHeightPx
     {
         get => Math.Clamp(_style.CustomMinHeightPx ?? 640, 120, 3000);
@@ -267,7 +346,7 @@
         set => _style.BlockGap = value;
     }
 
-    private List<string> _bgTypes       = new() { "none","color","image","gradient","video" };
+    private List<string> _bgTypes       = new() { "none","theme","color","image","gradient","video" };
     private List<string> _gradientDirs  = new() { "to right","to bottom","to bottom right","to bottom left" };
     private List<string> _heights       = new() { "auto","half","full","custom" };
     private List<string> _paddings      = new() { "small","medium","large" };
@@ -291,6 +370,8 @@
             BackgroundColor       = Style.BackgroundColor ?? "#ffffff",
             BackgroundImageUrl = Style.BackgroundImageUrl,
             BackgroundVideoUrl    = Style.BackgroundVideoUrl,
+            BackgroundImageFit = Style.BackgroundImageFit ?? "cover",
+            BackgroundImagePosition = Style.BackgroundImagePosition ?? "center",
             GradientFrom          = Style.GradientFrom ?? "#001a33",
             GradientTo            = Style.GradientTo ?? "#e5c076",
             GradientDirection     = NormalizeGradientDirection(Style.GradientDirection),
@@ -312,9 +393,9 @@
     private async Task OnBgImageSelected(InputFileChangeEventArgs e)
     {
         var file = e.File;
-        if (file.Size > 5 * 1024 * 1024) return;
+        if (file.Size > MaxBackgroundImageBytes) return;
 
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", file, maxBytes: 5 * 1024 * 1024);
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", file, maxBytes: MaxBackgroundImageBytes);
         if (res.Success && res.Data is not null)
         {
             _style.BackgroundImageUrl = res.Data.Url;
@@ -326,9 +407,50 @@
         }
     }
 
+    private async Task OnBgVideoSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > MaxBackgroundVideoBytes) return;
+
+        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", file, maxBytes: MaxBackgroundVideoBytes);
+        if (res.Success && res.Data is not null)
+        {
+            _style.BackgroundVideoUrl = res.Data.Url;
+            Http.Toast("Background video uploaded.", res.StatusCode);
+        }
+        else
+        {
+            Http.Toast(res.Message ?? "Background video upload failed.", res.StatusCode);
+        }
+    }
+
     private void ClearBackgroundImage()
     {
         _style.BackgroundImageUrl = string.Empty;
+    }
+
+    private void ClearBackgroundVideo()
+    {
+        _style.BackgroundVideoUrl = string.Empty;
+    }
+
+    private void OpenResourcePicker(string kind)
+    {
+        _resourcePickerKind = kind == "video" ? "video" : "image";
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+    }
+
+    private void SelectBackgroundResource(ManagedResourceModel resource)
+    {
+        if (string.Equals(_resourcePickerKind, "video", StringComparison.OrdinalIgnoreCase))
+            _style.BackgroundVideoUrl = resource.Url;
+        else
+            _style.BackgroundImageUrl = resource.Url;
     }
 
     private void SetOverlayOpacity(ChangeEventArgs e)
@@ -384,6 +506,8 @@
         BackgroundColor = _style.BackgroundColor,
         BackgroundImageUrl = _style.BackgroundImageUrl,
         BackgroundVideoUrl = _style.BackgroundVideoUrl,
+        BackgroundImageFit = _style.BackgroundImageFit,
+        BackgroundImagePosition = _style.BackgroundImagePosition,
         GradientFrom = _style.GradientFrom,
         GradientTo = _style.GradientTo,
         GradientDirection = _style.GradientDirection,

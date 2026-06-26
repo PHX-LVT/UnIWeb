@@ -5,10 +5,10 @@
 @implements IAsyncDisposable
 
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-grip-horizontal"></i> Footer</h1>
+    <h1 class="page-title"><i class="fas fa-grip-horizontal"></i> @T("Footer")</h1>
     <div class="page-actions">
         <button class="btn-admin btn-primary" @onclick="() => OpenGroupModal(null)">
-            <i class="fas fa-plus"></i> Add Group
+            <i class="fas fa-plus"></i> @T("AddGroup")
         </button>
     </div>
 </div>
@@ -22,14 +22,14 @@
 else if (_footer is not null)
 {
     <div class="admin-card">
-        <div class="admin-card-title">Footer Company Identity</div>
+        <div class="admin-card-title">@T("FooterCompanyIdentity")</div>
         <div style="display:flex;gap:1rem;align-items:flex-end">
             <div class="form-group" style="flex:1;margin:0">
                 <DxTextBox @bind-Text="_footer.CompanyName" CssClass="w-100"
                            NullText="U&I Logistics Corporation" />
             </div>
             <button class="btn-admin btn-primary" @onclick="SaveMeta">
-                <i class="fas fa-save"></i> Save
+                <i class="fas fa-save"></i> @T("Save")
             </button>
         </div>
     </div>
@@ -41,7 +41,7 @@ else if (_footer is not null)
             <div class="admin-card-title" style="display:flex;align-items:center;gap:.75rem">
                 <button type="button"
                         class="footer-group-drag"
-                        title="Drag to reorder group">
+                        title='@T("DragToReorderGroup")'>
                     <i class="fas fa-grip-vertical"></i>
                 </button>
                 <span style="flex:1">@group.Label</span>
@@ -56,7 +56,7 @@ else if (_footer is not null)
                     <i class="fas fa-trash"></i>
                 </button>
                 <button class="btn-admin btn-outline" @onclick="() => OpenLinkModal(group, null)">
-                    <i class="fas fa-plus"></i> Link
+                    <i class="fas fa-plus"></i> @T("Link")
                 </button>
             </div>
 
@@ -66,7 +66,7 @@ else if (_footer is not null)
                 <div @key="link.Id" class="footer-link-row" data-footer-link-id="@link.Id">
                     <button type="button"
                             class="footer-link-drag"
-                            title="Drag to reorder link">
+                            title='@T("DragToReorderLink")'>
                         <i class="fas fa-grip-vertical"></i>
                     </button>
                     <div style="flex:1">
@@ -100,23 +100,23 @@ else if (_footer is not null)
     <div class="modal-backdrop" @onclick="CloseModals">
         <div class="modal-box" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <span>@(_editingGroup is null ? "Add Group" : "Edit Group")</span>
+                <span>@(_editingGroup is null ? T("AddGroup") : T("EditGroup"))</span>
                 <button class="btn-admin btn-ghost" @onclick="CloseModals">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label required">Group Label</label>
+                    <label class="form-label required">@T("GroupLabel")</label>
                     <DxTextBox @bind-Text="_groupForm.Label" CssClass="w-100" />
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                    <DxCheckBox @bind-Checked="_groupForm.Visible" /> Visible
+                    <DxCheckBox @bind-Checked="_groupForm.Visible" /> @T("Visible")
                 </label>
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost" @onclick="CloseModals">Cancel</button>
-                <button class="btn-admin btn-primary" @onclick="SaveGroup">Save</button>
+                <button class="btn-admin btn-ghost" @onclick="CloseModals">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="SaveGroup">@T("Save")</button>
             </div>
         </div>
     </div>
@@ -127,27 +127,27 @@ else if (_footer is not null)
     <div class="modal-backdrop" @onclick="CloseModals">
         <div class="modal-box" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <span>@(_editingLink is null ? "Add Link" : "Edit Link")</span>
+                <span>@(_editingLink is null ? T("AddLink") : T("EditLink"))</span>
                 <button class="btn-admin btn-ghost" @onclick="CloseModals">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label required">Label</label>
+                    <label class="form-label required">@T("Label")</label>
                     <DxTextBox @bind-Text="_linkForm.Label" CssClass="w-100" />
                 </div>
                 <div class="form-group">
-                    <label class="form-label required">URL</label>
+                    <label class="form-label required">@T("Url")</label>
                     <DxTextBox @bind-Text="_linkForm.Href" CssClass="w-100" />
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                    <DxCheckBox @bind-Checked="_linkForm.Visible" /> Visible
+                    <DxCheckBox @bind-Checked="_linkForm.Visible" /> @T("Visible")
                 </label>
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost" @onclick="CloseModals">Cancel</button>
-                <button class="btn-admin btn-primary" @onclick="SaveLink">Save</button>
+                <button class="btn-admin btn-ghost" @onclick="CloseModals">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" @onclick="SaveLink">@T("Save")</button>
             </div>
         </div>
     </div>
@@ -215,6 +215,8 @@ else if (_footer is not null)
 </style>
 
 @code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
     private FooterModel? _footer;
     private bool _loading = true;
     private bool _sortableInitialized;
@@ -249,7 +251,7 @@ else if (_footer is not null)
             }
             catch (Exception ex)
             {
-                Http.Toast($"Footer link sorting failed to initialize: {ex.Message}", 500);
+                Http.Toast($"{T("FooterLinkSortingInitFailed")}: {ex.Message}", 500);
             }
 
             try
@@ -265,7 +267,7 @@ else if (_footer is not null)
             }
             catch
             {
-                Http.Toast("Footer drag sorting failed to initialize.", 500);
+                Http.Toast(T("FooterGroupSortingInitFailed"), 500);
             }
 
             _sortableInitialized = true;
@@ -387,7 +389,7 @@ else if (_footer is not null)
         var res = await FooterService.UpdateMetaAsync(
             new FooterMetaRequest { CompanyName = _footer!.CompanyName }); 
         if (res.Data is not null) _footer = res.Data;
-        Http.Toast(res.Message ?? "Footer identity saved.", res.StatusCode);
+        Http.Toast(res.Message ?? T("FooterIdentitySaved"), res.StatusCode);
     }
 
     // Groups
@@ -407,7 +409,7 @@ else if (_footer is not null)
             res = await FooterService.UpdateGroupAsync(_editingGroup.Id, _groupForm);
 
         if (res.Data is not null) _footer = res.Data;  
-        Http.Toast(res.Message ?? (_editingGroup is null ? "Footer group created." : "Footer group saved."), res.StatusCode);
+        Http.Toast(res.Message ?? (_editingGroup is null ? T("FooterGroupCreated") : T("FooterGroupSaved")), res.StatusCode);
         if (res.Success) CloseModals();
     }
 
@@ -415,14 +417,14 @@ else if (_footer is not null)
     {
         var res = await FooterService.SetGroupVisibilityAsync(g.Id, !g.Visible);
         if (res.Data is not null) _footer = res.Data;  
-        Http.Toast(res.Message ?? $"Footer group {(res.Success ? "updated" : "could not be updated")}.", res.StatusCode);
+        Http.Toast(res.Message ?? (res.Success ? T("FooterGroupUpdated") : T("FooterGroupUpdateFailed")), res.StatusCode);
     }
 
     private async Task DeleteGroup(string id)
     {
         var res = await FooterService.DeleteGroupAsync(id);
         if (res.Data is not null) _footer = res.Data; 
-        Http.Toast(res.Message ?? "Footer group deleted.", res.StatusCode);
+        Http.Toast(res.Message ?? T("FooterGroupDeleted"), res.StatusCode);
     }
     // Links
     private void OpenLinkModal(FooterGroupModel group, FooterLinkModel? link)
@@ -442,7 +444,7 @@ else if (_footer is not null)
             res = await FooterService.UpdateLinkAsync(_activeGroup!.Id, _editingLink.Id, _linkForm);
 
         if (res.Data is not null) _footer = res.Data;  
-        Http.Toast(res.Message ?? (_editingLink is null ? "Footer link created." : "Footer link saved."), res.StatusCode);
+        Http.Toast(res.Message ?? (_editingLink is null ? T("FooterLinkCreated") : T("FooterLinkSaved")), res.StatusCode);
         if (res.Success) CloseModals();
     }
 
@@ -450,14 +452,14 @@ else if (_footer is not null)
     {
         var res = await FooterService.SetLinkVisibilityAsync(groupId, link.Id, !link.Visible);
         if (res.Data is not null) _footer = res.Data; 
-        Http.Toast(res.Message ?? $"Footer link {(res.Success ? "updated" : "could not be updated")}.", res.StatusCode);
+        Http.Toast(res.Message ?? (res.Success ? T("FooterLinkUpdated") : T("FooterLinkUpdateFailed")), res.StatusCode);
     }
 
     private async Task DeleteLink(string groupId, string linkId)
     {
         var res = await FooterService.DeleteLinkAsync(groupId, linkId);
         if (res.Data is not null) _footer = res.Data;  // ← replace Load()
-        Http.Toast(res.Message ?? "Footer link deleted.", res.StatusCode);
+        Http.Toast(res.Message ?? T("FooterLinkDeleted"), res.StatusCode);
     }
 
     private void CloseModals()
@@ -482,4 +484,6 @@ else if (_footer is not null)
 
         _dotNetRef?.Dispose();
     }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 }

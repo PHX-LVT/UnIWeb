@@ -9,17 +9,133 @@
 .ez-dashboard__header {
     padding: 1rem 1.5rem 0;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.ez-dashboard__page-nav {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px auto;
+    align-items: center;
+    gap: 8px;
+    padding: .65rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+}
+
+.ez-dashboard__page-scroll {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) var(--bg);
+}
+
+.ez-dashboard__page-scroll::-webkit-scrollbar {
+    height: 7px;
+}
+
+.ez-dashboard__page-scroll::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-radius: 999px;
+}
+
+.ez-dashboard__page-scroll::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 999px;
 }
 
 .ez-dashboard__tabs {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: .75rem 1.5rem;
-    border-bottom: 1px solid var(--border);
+    width: max-content;
+    min-width: 100%;
+    padding: 0 0 6px;
     flex-shrink: 0;
-    overflow-x: auto;
+}
+
+.ez-page-scroll-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     background: var(--surface);
+    color: var(--primary);
+    cursor: pointer;
+}
+
+.ez-page-scroll-btn:hover {
+    border-color: var(--primary);
+    background: var(--bg);
+}
+
+.btn-admin.ez-dashboard__mode-toggle {
+    box-sizing: border-box;
+    flex: 0 0 140px;
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    padding: 0 12px;
+    align-self: center;
+    justify-content: center;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 1;
+    color: #fff;
+}
+
+.ez-dashboard__mode-toggle span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.ez-dashboard__mode-toggle i {
+    flex: 0 0 14px;
+    width: 14px;
+    line-height: 1;
+}
+
+.ez-dashboard__mode-toggle--preview {
+    background: #1261a0;
+    border-color: #1261a0;
+}
+
+.ez-dashboard__mode-toggle--preview:hover {
+    background: #0d4f84;
+    border-color: #0d4f84;
+}
+
+.ez-dashboard__mode-toggle--edit {
+    background: #16755a;
+    border-color: #16755a;
+}
+
+.ez-dashboard__mode-toggle--edit:hover {
+    background: #105f49;
+    border-color: #105f49;
+}
+
+.ez-dashboard__mode-toggle--arrange {
+    background: #9a6e14;
+    border-color: #9a6e14;
+}
+
+.ez-dashboard__mode-toggle--arrange:hover {
+    background: #7d590f;
+    border-color: #7d590f;
 }
 
 .ez-dashboard__canvas {

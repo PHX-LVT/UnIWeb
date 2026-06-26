@@ -6,6 +6,8 @@
          class="@SectionClass"
          style="@StyleHelper.GetSectionStyle(Section.Style)">
 
+    <SectionBackgroundMedia Style="Section.Style" />
+
     <div class="sc-section-overlay"
          style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
     <div style="position: relative; z-index: 1" class="sc-showcase sc-showcase--@LayoutClass">
@@ -28,10 +30,10 @@
                 </div>
                 @if (ShowTopAction)
                 {
-                    <a href="@ButtonHref(Section.ActionButton)"
-                       class="@SectionButtonClass(Section.ActionButton)">
+                    <ActionButton Action="@Section.ActionButton.Action" FormDefinitionId="@Section.ActionButton.FormDefinitionId" Href="@ButtonHref(Section.ActionButton)"
+                                  CssClass="@SectionButtonClass(Section.ActionButton)">
                         @ButtonLabel(Section.ActionButton)
-                    </a>
+                    </ActionButton>
                 }
             </div>
         }
@@ -97,10 +99,10 @@
         @if (ShowBottomAction)
         {
             <div class="@FooterActionClass">
-                <a href="@ButtonHref(Section.ActionButton)"
-                   class="@SectionButtonClass(Section.ActionButton)">
+                <ActionButton Action="@Section.ActionButton.Action" FormDefinitionId="@Section.ActionButton.FormDefinitionId" Href="@ButtonHref(Section.ActionButton)"
+                              CssClass="@SectionButtonClass(Section.ActionButton)">
                     @ButtonLabel(Section.ActionButton)
-                </a>
+                </ActionButton>
             </div>
         }
     </div>
@@ -212,6 +214,20 @@
 
     private string CardTitle(PublicChildCardDto child)
     {
+        if (LayoutClass == "link-bar")
+        {
+            if (child.Card?.CardTitle is not null &&
+                child.Card.CardTitle.TryGetValue(Lang, out var localizedCardTitle) &&
+                !string.IsNullOrWhiteSpace(localizedCardTitle))
+            {
+                return localizedCardTitle;
+            }
+
+            var childPageTitle = StyleHelper.Lang(child.Name, Lang);
+            if (!string.IsNullOrWhiteSpace(childPageTitle))
+                return childPageTitle;
+        }
+
         var title = StyleHelper.Lang(child.Card?.CardTitle, Lang);
         return string.IsNullOrWhiteSpace(title)
             ? StyleHelper.Lang(child.Name, Lang)

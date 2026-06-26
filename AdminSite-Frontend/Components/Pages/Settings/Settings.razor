@@ -1,12 +1,13 @@
-﻿@page "/settings"
+@page "/settings"
 @inject AdminSettingsService SettingsService
+@inject AdminAuthService Auth
 @inject AdminLanguageService AdminLanguageState
 @inject IHttpService Http
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-cog"></i> Settings</h1>
+    <h1 class="page-title"><i class="fas fa-cog"></i> @T("Settings")</h1>
 </div>
 
 <DxTabs>
@@ -185,13 +186,98 @@
         </div>
     </DxTabPage>
 
-    <DxTabPage Text="Glossary" CssClass="fas fa-book">
+    @if (Auth.IsAdminAdmin)
+    {
+        <DxTabPage Text='@T("ResourceLibrarySettings")' CssClass="fas fa-photo-film">
+            <div class="admin-card" style="margin-top:1rem">
+                <div class="admin-card-title" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+                    <span style="flex:1">@T("ResourceLibrarySettings")</span>
+                    <button class="btn-admin btn-primary"
+                            @onclick="SaveResourceLibrarySettings"
+                            disabled="@_resourceSettingsSaving">
+                        <i class="fas fa-save"></i>
+                        @(_resourceSettingsSaving ? T("Saving") : T("SaveSettings"))
+                    </button>
+                </div>
+
+                @if (_resourceSettingsLoading)
+                {
+                    <div class="spinner" style="margin:1rem auto"></div>
+                }
+                else
+                {
+                    <p class="text-muted" style="margin:.25rem 0 1rem">
+                        @T("ResourceLibrarySettingsHint")
+                    </p>
+
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
+                        <div>
+                            <label>@T("ImageMaxMb")</label>
+                            <input class="form-control"
+                                   type="number"
+                                   min="1"
+                                   max="100"
+                                   value="@_resourceSettings.MaxImageMb"
+                                   @oninput="e => _resourceSettings.MaxImageMb = ReadInt(e, _resourceSettings.MaxImageMb)" />
+                            <div class="form-hint">@T("ImageFormatHint")</div>
+                        </div>
+                        <div>
+                            <label>@T("FileMaxMb")</label>
+                            <input class="form-control"
+                                   type="number"
+                                   min="1"
+                                   max="500"
+                                   value="@_resourceSettings.MaxFileMb"
+                                   @oninput="e => _resourceSettings.MaxFileMb = ReadInt(e, _resourceSettings.MaxFileMb)" />
+                            <div class="form-hint">@T("FileFormatHint")</div>
+                        </div>
+                        <div>
+                            <label>@T("VideoMaxMb")</label>
+                            <input class="form-control"
+                                   type="number"
+                                   min="1"
+                                   max="2048"
+                                   value="@_resourceSettings.MaxVideoMb"
+                                   @oninput="e => _resourceSettings.MaxVideoMb = ReadInt(e, _resourceSettings.MaxVideoMb)" />
+                            <div class="form-hint">@T("VideoFormatHint")</div>
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-top:1rem">
+                        <div>
+                            <label>@T("AllowedImageFormats")</label>
+                            <input class="form-control"
+                                   value="@_imageFormatsText"
+                                   @oninput="e => _imageFormatsText = e.Value?.ToString() ?? string.Empty" />
+                        </div>
+                        <div>
+                            <label>@T("AllowedFileFormats")</label>
+                            <input class="form-control"
+                                   value="@_fileFormatsText"
+                                   @oninput="e => _fileFormatsText = e.Value?.ToString() ?? string.Empty" />
+                        </div>
+                        <div>
+                            <label>@T("AllowedVideoFormats")</label>
+                            <input class="form-control"
+                                   value="@_videoFormatsText"
+                                   @oninput="e => _videoFormatsText = e.Value?.ToString() ?? string.Empty" />
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info" style="margin-top:1rem">
+                        @T("ResourceLibraryVideoRule")
+                    </div>
+                }
+            </div>
+        </DxTabPage>
+    }
+    <DxTabPage Text='@T("Glossary")' CssClass="fas fa-book">
         <div class="admin-card" style="margin-top:1rem">
             <div class="admin-card-title" style="display:flex;align-items:center">
-                <span style="flex:1">Glossary Terms</span>
+                <span style="flex:1">@T("GlossaryTerms")</span>
                 <button class="btn-admin btn-primary"
                         @onclick="() => OpenTermModal(null)">
-                    <i class="fas fa-plus"></i> Add Term
+                    <i class="fas fa-plus"></i> @T("AddTerm")
                 </button>
             </div>
 
@@ -201,7 +287,7 @@
             }
             else if (!_glossary.Any())
             {
-                <p class="text-muted" style="margin-top:.75rem">No terms yet.</p>
+                <p class="text-muted" style="margin-top:.75rem">@T("NoTermsYet")</p>
             }
             else
             {
@@ -212,7 +298,7 @@
                         <div style="flex:1">
                             <div style="font-weight:500">@term.Term</div>
                             <div class="text-muted" style="font-size:.8rem">
-                                @string.Join(" · ", term.Translations?
+                                @string.Join(" � ", term.Translations?
                                     .Select(kv => $"{kv.Key}: {kv.Value}") ?? new List<string>())
                             </div>
                         </div>
@@ -328,14 +414,14 @@
     <div class="modal-backdrop" @onclick="CloseTermModal">
         <div class="modal-box" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <span>@(_editingTerm is null ? "Add Term" : "Edit Term")</span>
+                <span>@(_editingTerm is null ? T("AddTerm") : T("EditTerm"))</span>
                 <button class="btn-admin btn-ghost" @onclick="CloseTermModal">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label required">Term (key)</label>
+                    <label class="form-label required">@T("TermKey")</label>
                     <DxTextBox @bind-Text="_termForm.Term" CssClass="w-100"
                                NullText="e.g. hero_title" />
                 </div>
@@ -350,10 +436,10 @@
                 }
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost" @onclick="CloseTermModal">Cancel</button>
+                <button class="btn-admin btn-ghost" @onclick="CloseTermModal">@T("Cancel")</button>
                 <button class="btn-admin btn-primary"
                         @onclick="SaveTerm" disabled="@_termSaving">
-                    @(_termSaving ? "Saving..." : "Save")
+                    @(_termSaving ? T("Saving") : T("Save"))
                 </button>
             </div>
         </div>
@@ -382,6 +468,14 @@
     private bool _appearanceSaving;
     private string _appearancePreset = "navy-gold";
 
+    // Resource Library settings
+    private bool _resourceSettingsLoading = true;
+    private bool _resourceSettingsSaving;
+    private ResourceLibrarySettingsModel _resourceSettings = new();
+    private string _imageFormatsText = string.Empty;
+    private string _fileFormatsText = string.Empty;
+    private string _videoFormatsText = string.Empty;
+
     // Glossary
     private List<GlossaryTermModel> _glossary = new();
     private bool _glossaryLoading = true;
@@ -394,6 +488,9 @@
     {
         try
         {
+            await Auth.InitializeAsync();
+            await Auth.RefreshSessionAsync();
+
             var langRes = await SettingsService.GetLanguagesAsync();
             if (_cts.IsCancellationRequested) return;
             _languages = langRes.Data?.Languages ?? new();
@@ -405,6 +502,22 @@
             if (_cts.IsCancellationRequested) return;
             _appearancePreset = appearanceRes.Data?.Preset ?? "navy-gold";
             _appearanceLoading = false;
+
+            if (Auth.IsAdminAdmin)
+            {
+                var resourceRes = await SettingsService.GetResourceLibrarySettingsAsync();
+                if (_cts.IsCancellationRequested) return;
+                if (resourceRes.Success && resourceRes.Data is not null)
+                {
+                    _resourceSettings = resourceRes.Data;
+                    SyncResourceFormatText();
+                }
+                else
+                {
+                    Http.Toast(resourceRes.Message, resourceRes.StatusCode);
+                }
+                _resourceSettingsLoading = false;
+            }
 
             var glossaryRes = await SettingsService.GetGlossaryAsync();
             if (_cts.IsCancellationRequested) return;
@@ -434,7 +547,8 @@
             }
             catch
             {
-                Http.Toast("Language sorting failed to initialize.", 500);
+                _languageSortableInitialized = true;
+                Http.Toast("Language reorder drag failed to initialize.", 500);
             }
         }
     }
@@ -563,6 +677,28 @@
         }
     }
 
+    private async Task SaveResourceLibrarySettings()
+    {
+        _resourceSettingsSaving = true;
+        try
+        {
+            _resourceSettings.AllowedImageFormats = ResourceLibrarySettingsUiHelper.ParseFormats(_imageFormatsText);
+            _resourceSettings.AllowedFileFormats = ResourceLibrarySettingsUiHelper.ParseFormats(_fileFormatsText);
+            _resourceSettings.AllowedVideoFormats = ResourceLibrarySettingsUiHelper.ParseFormats(_videoFormatsText);
+
+            var res = await SettingsService.UpdateResourceLibrarySettingsAsync(_resourceSettings);
+            Http.Toast(res.Message, res.StatusCode);
+            if (res.Success && res.Data is not null)
+            {
+                _resourceSettings = res.Data;
+                SyncResourceFormatText();
+            }
+        }
+        finally
+        {
+            _resourceSettingsSaving = false;
+        }
+    }
     private void OpenLanguageModal()
     {
         _languageForm = NewLanguageForm();
@@ -686,6 +822,16 @@
 
     private static bool ReadChecked(ChangeEventArgs e, bool fallback) =>
         e.Value is bool value ? value : fallback;
+
+    private static int ReadInt(ChangeEventArgs e, int fallback) =>
+        int.TryParse(e.Value?.ToString(), out var value) ? value : fallback;
+
+    private void SyncResourceFormatText()
+    {
+        _imageFormatsText = ResourceLibrarySettingsUiHelper.JoinFormats(_resourceSettings.AllowedImageFormats);
+        _fileFormatsText = ResourceLibrarySettingsUiHelper.JoinFormats(_resourceSettings.AllowedFileFormats);
+        _videoFormatsText = ResourceLibrarySettingsUiHelper.JoinFormats(_resourceSettings.AllowedVideoFormats);
+    }
 
     private static string NormalizeCode(string? code)
     {

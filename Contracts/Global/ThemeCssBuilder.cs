@@ -25,6 +25,7 @@ namespace Contracts.Global
             var buttonText = Size(theme.ButtonTextSize, "15px");
             var spacingScale = Number(theme.SpacingScale, "1");
             var motionDuration = Motion(theme.AnimationsEnabled, theme.AnimationSpeed);
+            var headerText = ContrastText(primary);
 
             var sectionPad = $"calc(120px * {spacingScale})";
             var padSmall = $"calc(48px * {spacingScale})";
@@ -63,6 +64,9 @@ namespace Contracts.Global
             css.AppendLine("    --theme-card-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);");
             css.AppendLine("    --theme-card-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.12);");
             css.AppendLine("    --theme-gold-gradient: linear-gradient(90deg, #9a7a3b 0%, var(--theme-color-accent) 100%);");
+            css.AppendLine($"    --theme-header-background: {primary};");
+            css.AppendLine($"    --theme-header-text: {headerText};");
+            css.AppendLine($"    --theme-header-link-hover: {accent};");
 
             // Temporary compatibility aliases. SharedComponents will be migrated away from
             // these legacy names over time, but keeping equal defaults makes this pass visual-neutral.
@@ -155,5 +159,60 @@ namespace Contracts.Global
 
         private static bool IsNumeric(string value) =>
             double.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out _);
+
+        private static string ContrastText(string color)
+        {
+            if (!TryParseHexColor(color, out var r, out var g, out var b))
+            {
+                return "#ffffff";
+            }
+
+            var luminance = RelativeLuminance(r, g, b);
+            return luminance > 0.179 ? "#111827" : "#ffffff";
+        }
+
+        private static bool TryParseHexColor(string color, out int r, out int g, out int b)
+        {
+            r = g = b = 0;
+            var hex = color.Trim();
+            if (!hex.StartsWith('#'))
+            {
+                return false;
+            }
+
+            hex = hex[1..];
+            if (hex.Length == 3)
+            {
+                hex = string.Concat(hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]);
+            }
+
+            if (hex.Length != 6)
+            {
+                return false;
+            }
+
+            try
+            {
+                r = Convert.ToInt32(hex[0..2], 16);
+                g = Convert.ToInt32(hex[2..4], 16);
+                b = Convert.ToInt32(hex[4..6], 16);
+                return true;
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
+        private static double RelativeLuminance(int r, int g, int b)
+        {
+            static double Channel(int value)
+            {
+                var c = value / 255.0;
+                return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+            }
+
+            return 0.2126 * Channel(r) + 0.7152 * Channel(g) + 0.0722 * Channel(b);
+        }
     }
 }

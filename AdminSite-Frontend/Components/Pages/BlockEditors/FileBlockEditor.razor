@@ -3,7 +3,7 @@
 @using Contracts.Admin
 
 <div class="form-group">
-    <label class="form-label">File</label>
+    <label class="form-label">@T("File")</label>
     @if (!string.IsNullOrEmpty(_fileUrl))
     {
         <div style="display:flex;align-items:center;gap:.75rem;
@@ -17,23 +17,39 @@
             </div>
             <button class="btn-admin btn-ghost"
                     @onclick="() => { _fileUrl = null; _fileName = null; }">
-                <i class="fas fa-times"></i> Remove
+                <i class="fas fa-times"></i> @T("Remove")
             </button>
         </div>
     }
-    <InputFile OnChange="OnFileSelected" accept=".pdf,.doc,.docx,.xls,.xlsx" />
-    <div class="form-hint">Max 10MB. PDF, Word, Excel.</div>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <InputFile id="file-block-upload"
+                   OnChange="OnFileSelected"
+                   accept=".pdf,.doc,.docx,.xls,.xlsx"
+                   style="display:none" />
+        <label class="btn-admin btn-ghost" for="file-block-upload">
+            <i class="fas fa-file"></i> @T("UploadNew")
+        </label>
+        <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
+            <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
+        </button>
+    </div>
+    <div class="form-hint">@T("FileUploadHint")</div>
 </div>
 
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="file"
+                     ResourceSelected="SelectResourceFile"
+                     Closed="CloseResourcePicker" />
+
 <div class="form-group">
-    <label class="form-label">Display Name</label>
+    <label class="form-label">@T("DisplayName")</label>
     <DxTextBox @bind-Text="_fileName" CssClass="w-100"
-               NullText="e.g. Annual Report 2025.pdf" />
+               NullText="@T("DisplayNamePlaceholder")" />
 </div>
 
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? "Saving..." : "Save")
+        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
 </div>
 
@@ -47,6 +63,11 @@
     private string? _fileName;
     private string? _mimeType;
     private bool _saving;
+    private bool _resourcePickerOpen;
+
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override void OnParametersSet()
     {
@@ -67,12 +88,38 @@
             _mimeType = res.Data.ContentType;
             if (string.IsNullOrEmpty(_fileName))
                 _fileName = res.Data.FileName;
-            Http.Toast("File uploaded.", res.StatusCode);
+            Http.Toast(T("FileUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? "File upload failed.", res.StatusCode);
+            Http.Toast(res.Message ?? T("FileUploadFailed"), res.StatusCode);
         }
+    }
+
+    private void OpenResourcePicker()
+    {
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+    }
+
+    private void SelectResourceFile(ManagedResourceModel resource)
+    {
+        _fileUrl = resource.Url;
+        _fileName = string.IsNullOrWhiteSpace(resource.FileName)
+            ? ResourceName(resource)
+            : resource.FileName;
+        _mimeType = resource.ContentType;
+    }
+
+    private static string ResourceName(ManagedResourceModel resource)
+    {
+        var name = resource.Name.GetValueOrDefault("en");
+        if (!string.IsNullOrWhiteSpace(name)) return name;
+        return resource.Url.Split('/').LastOrDefault() ?? string.Empty;
     }
 
     private async Task Save()

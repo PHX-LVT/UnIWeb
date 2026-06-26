@@ -4,12 +4,13 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/social")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.ManageSettings)]
     public class SocialController : ControllerBase
     {
         private readonly SocialButtonsService _service;

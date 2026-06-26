@@ -56,7 +56,7 @@ else if (_notFound)
         Dictionary<string, string> data)
     {
         return _page is not null &&
-               await Api.SubmitFormAsync(_page.FullSlug ?? _page.Slug, sectionId, blockId, data);
+               await Api.SubmitFormAsync(_page.FullSlug ?? _page.Slug, sectionId, blockId, data, _lang);
     }
 
     private void HandleLanguageChanged(string lang)

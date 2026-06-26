@@ -1,10 +1,14 @@
 @using Contracts.Public
 @using SharedComponents.Helpers
 @using SharedComponents.Blocks
+@inject NavigationManager Navigation
 
 <section data-section-id="@Section.Id"
+         data-sc-video-playlist="@Section.Id"
          class="@StyleHelper.GetSectionClass(Section.Style)"
          style="@StyleHelper.GetSectionStyle(Section.Style)">
+    <SectionBackgroundMedia Style="Section.Style" />
+
     <div class="sc-section-overlay"
          style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
 
@@ -85,6 +89,8 @@
         <div class="@ItemsClass(pageItems.Count)">
             @foreach (var item in pageItems)
             {
+                var galleryItems = GalleryMediaItems(item).ToList();
+                var primaryGalleryItem = galleryItems.FirstOrDefault();
                 if (LayoutClass == "lists")
                 {
                     <article @key="item.Id" class="sc-library__item">
@@ -99,13 +105,61 @@
                         </div>
                         @if (Section.ShowButton != false)
                         {
-                            <a class="@ButtonClass"
-                               href="@ItemHref(item)"
-                               target="@Target(item)"
-                               rel="@Rel(item)"
-                               download="@DownloadName(item)">
-                                @ButtonText(item)
-                            </a>
+                            @if (IsGallery(item) && primaryGalleryItem is not null)
+                            {
+                                @if (GalleryItemIsVideo(primaryGalleryItem))
+                                {
+                                    <button type="button"
+                                            class="@ButtonClass"
+                                            data-sc-library-video
+                                            data-video-url="@GalleryItemUrl(primaryGalleryItem)"
+                                            data-video-title="@GalleryItemTitle(primaryGalleryItem, item)"
+                                            data-video-thumb="@GalleryItemThumbnailUrl(primaryGalleryItem)">
+                                        @ButtonText(item)
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button"
+                                            class="@ButtonClass"
+                                            data-sc-library-image
+                                            data-image-url="@GalleryItemUrl(primaryGalleryItem)"
+                                            data-image-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                        @ButtonText(item)
+                                    </button>
+                                }
+                            }
+                            else if (IsVideo(item))
+                            {
+                                <button type="button"
+                                        class="@ButtonClass"
+                                        data-sc-library-video
+                                        data-video-url="@ItemHref(item)"
+                                        data-video-title="@ItemTitle(item)"
+                                        data-video-thumb="@ImageUrl(item)">
+                                    @ButtonText(item)
+                                </button>
+                            }
+                            else if (CanOpenImageLightbox(item))
+                            {
+                                <button type="button"
+                                        class="@ButtonClass"
+                                        data-sc-library-image
+                                        data-image-url="@ImageUrl(item)"
+                                        data-image-title="@ItemTitle(item)">
+                                    @ButtonText(item)
+                                </button>
+                            }
+                            else
+                            {
+                                <a class="@ButtonClass"
+                                   href="@ItemHref(item)"
+                                   target="@Target(item)"
+                                   rel="@Rel(item)"
+                                   data-sc-download="@DownloadMetricFlag(item)">
+                                    @ButtonText(item)
+                                </a>
+                            }
                         }
                     </article>
                 }
@@ -113,25 +167,96 @@
                 {
                     var tag = ItemTag(item);
                     var isVideo = IsVideo(item);
+                    var isGallery = IsGallery(item);
+                    var imageUrl = ImageUrl(item);
+                    var canOpenImage = CanOpenImageLightbox(item);
                     var summary = StyleHelper.Lang(item.Summary, Lang);
                     <article @key="item.Id" class="sc-library__item">
                         @if (ShowTag && !string.IsNullOrWhiteSpace(tag))
                         {
                             <span class="sc-library__tag">@tag</span>
                         }
-                        @if (CanShowImage && !string.IsNullOrWhiteSpace(ImageUrl(item)))
+                        @if (CanShowImage && ((isGallery && galleryItems.Count > 0) || !string.IsNullOrWhiteSpace(imageUrl)))
                         {
-                            if (isVideo)
+                            if (isGallery && galleryItems.Count > 0)
                             {
-                                <div class="sc-library__media sc-library__media--video">
-                                    <img src="@ImageUrl(item)" alt="@ItemTitle(item)" />
-                                    <span class="sc-library__play" aria-hidden="true"></span>
+                                <div class="sc-library__media sc-library__media--gallery-strip" aria-label="@($"{ItemTitle(item)} gallery")">
+                                    <div class="sc-library__gallery-strip">
+                                        @foreach (var galleryItem in galleryItems)
+                                        {
+                                            var mediaUrl = GalleryItemUrl(galleryItem);
+                                            var mediaTitle = GalleryItemTitle(galleryItem, item);
+                                            var thumbUrl = GalleryItemThumbnailUrl(galleryItem);
+
+                                            @if (GalleryItemIsVideo(galleryItem))
+                                            {
+                                                <button type="button"
+                                                        class="sc-library__gallery-tile sc-library__gallery-tile--video"
+                                                        data-sc-library-video
+                                                        data-video-url="@mediaUrl"
+                                                        data-video-title="@mediaTitle"
+                                                        data-video-thumb="@thumbUrl"
+                                                        aria-label="Watch @mediaTitle">
+                                                    @if (!string.IsNullOrWhiteSpace(thumbUrl))
+                                                    {
+                                                        <img src="@thumbUrl" alt="@mediaTitle" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="sc-library__gallery-placeholder">Video</span>
+                                                    }
+                                                    <span class="sc-library__play" aria-hidden="true"></span>
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button"
+                                                        class="sc-library__gallery-tile"
+                                                        data-sc-library-image
+                                                        data-image-url="@mediaUrl"
+                                                        data-image-title="@mediaTitle"
+                                                        aria-label="View @mediaTitle">
+                                                    @if (!string.IsNullOrWhiteSpace(thumbUrl))
+                                                    {
+                                                        <img src="@thumbUrl" alt="@mediaTitle" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="sc-library__gallery-placeholder">Image</span>
+                                                    }
+                                                </button>
+                                            }
+                                        }
+                                    </div>
                                 </div>
+                            }
+                            else if (isVideo)
+                            {
+                                <button type="button"
+                                        class="sc-library__media sc-library__media--video"
+                                        data-sc-library-video
+                                        data-video-url="@ItemHref(item)"
+                                        data-video-title="@ItemTitle(item)"
+                                        data-video-thumb="@imageUrl"
+                                        aria-label="Watch @ItemTitle(item)">
+                                    <img src="@imageUrl" alt="@ItemTitle(item)" />
+                                    <span class="sc-library__play" aria-hidden="true"></span>
+                                </button>
+                            }
+                            else if (canOpenImage)
+                            {
+                                <button type="button"
+                                        class="sc-library__media sc-library__media--image"
+                                        data-sc-library-image
+                                        data-image-url="@imageUrl"
+                                        data-image-title="@ItemTitle(item)">
+                                    <img src="@imageUrl" alt="@ItemTitle(item)" />
+                                </button>
                             }
                             else
                             {
                                 <div class="sc-library__media">
-                                    <img src="@ImageUrl(item)" alt="@ItemTitle(item)" />
+                                    <img src="@imageUrl" alt="@ItemTitle(item)" />
                                 </div>
                             }
                         }
@@ -139,10 +264,16 @@
                         {
                             if (isVideo)
                             {
-                                <div class="sc-library__media sc-library__media--placeholder sc-library__media--video">
+                                <button type="button"
+                                        class="sc-library__media sc-library__media--placeholder sc-library__media--video"
+                                        data-sc-library-video
+                                        data-video-url="@ItemHref(item)"
+                                        data-video-title="@ItemTitle(item)"
+                                        data-video-thumb="@ImageUrl(item)"
+                                        aria-label="Watch @ItemTitle(item)">
                                     <span>@PlaceholderLabel(item)</span>
                                     <span class="sc-library__play" aria-hidden="true"></span>
-                                </div>
+                                </button>
                             }
                             else
                             {
@@ -171,26 +302,61 @@
                             }
                             @if (Section.ShowButton != false)
                             {
-                                @if (isVideo)
+                                @if (isGallery && primaryGalleryItem is not null)
+                                {
+                                    @if (GalleryItemIsVideo(primaryGalleryItem))
+                                    {
+                                        <button type="button"
+                                                class="sc-library__link sc-btn sc-btn--filled"
+                                                data-sc-library-video
+                                                data-video-url="@GalleryItemUrl(primaryGalleryItem)"
+                                                data-video-title="@GalleryItemTitle(primaryGalleryItem, item)"
+                                                data-video-thumb="@GalleryItemThumbnailUrl(primaryGalleryItem)">
+                                            @ButtonText(item)
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button"
+                                                class="@ButtonClass"
+                                                data-sc-library-image
+                                                data-image-url="@GalleryItemUrl(primaryGalleryItem)"
+                                                data-image-title="@GalleryItemTitle(primaryGalleryItem, item)">
+                                            @ButtonText(item)
+                                        </button>
+                                    }
+                                }
+                                else if (isVideo)
                                 {
                                     <button type="button"
                                             class="sc-library__link sc-btn sc-btn--filled"
                                             data-sc-library-video
                                             data-video-url="@ItemHref(item)"
-                                            data-video-title="@ItemTitle(item)">
+                                            data-video-title="@ItemTitle(item)"
+                                            data-video-thumb="@imageUrl">
                                         @ButtonText(item)
                                     </button>
                                 }
-                                else
-                                {
-                                    <a class="@ButtonClass"
-                                       href="@ItemHref(item)"
-                                       target="@Target(item)"
-                                       rel="@Rel(item)"
-                                       download="@DownloadName(item)">
-                                        @ButtonText(item)
-                                    </a>
-                                }
+                                else if (CanOpenImageLightbox(item))
+                            {
+                                <button type="button"
+                                        class="@ButtonClass"
+                                        data-sc-library-image
+                                        data-image-url="@ImageUrl(item)"
+                                        data-image-title="@ItemTitle(item)">
+                                    @ButtonText(item)
+                                </button>
+                            }
+                            else
+                            {
+                                <a class="@ButtonClass"
+                                   href="@ItemHref(item)"
+                                   target="@Target(item)"
+                                   rel="@Rel(item)"
+                                   data-sc-download="@DownloadMetricFlag(item)">
+                                    @ButtonText(item)
+                                </a>
+                            }
                             }
                         </div>
                     </article>
@@ -229,8 +395,15 @@
 
     protected override void OnParametersSet()
     {
+        var requestedType = RequestedContentType();
+
         if (TabsEnabled && !SourceTypes.Contains(_activeTab, StringComparer.OrdinalIgnoreCase))
-            _activeTab = SourceTypes.FirstOrDefault() ?? string.Empty;
+            _activeTab = SourceTypes.Contains(requestedType, StringComparer.OrdinalIgnoreCase)
+                ? requestedType
+                : SourceTypes.FirstOrDefault() ?? string.Empty;
+
+        if (TabsEnabled && SourceTypes.Contains(requestedType, StringComparer.OrdinalIgnoreCase))
+            _activeTab = requestedType;
 
         if (!TabsEnabled)
             _activeTab = string.Empty;
@@ -248,7 +421,7 @@
     private bool PaginationEnabled => Section.EnablePagination == true;
     private bool ShowTime => Section.ShowTime != false;
     private int ItemsPerPage => Math.Clamp(Columns * Rows, 1, 48);
-    private bool CanShowImage => Section.ShowImage != false && LayoutClass is "card" or "grid";
+    private bool CanShowImage => Section.ShowImage != false && LayoutClass is "card" or "grid" or "gallery";
     private bool ShowTag => LayoutClass == "card";
     private bool ShowTagInBody => LayoutClass == "grid";
     private string ButtonClass => $"sc-library__link sc-btn sc-btn--{ButtonStyle}";
@@ -268,6 +441,7 @@
         "lists" => "sc-library__items sc-library__disclosure-list",
         "rows" => $"sc-library__items sc-library__rows sc-library__grid--{EffectiveColumns(itemCount)}",
         "grid" => $"sc-library__items sc-library__grid sc-library__resource-grid sc-library__grid--{EffectiveColumns(itemCount)}",
+        "gallery" => "sc-library__items sc-library__gallery",
         _ => $"sc-library__items sc-library__grid sc-library__grid--{EffectiveColumns(itemCount)}"
     };
 
@@ -379,19 +553,29 @@
         "grid" or "resource-grid" => "grid",
         "rows" => "rows",
         "lists" or "compact-list" or "resource-list" => "lists",
+        "gallery" or "media-gallery" => "gallery",
         _ => "card"
     };
 
-    private static string ImageUrl(PublicLibraryItemDto item) =>
-        !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? item.ThumbnailUrl! : item.HeroImageUrl ?? string.Empty;
+    private static string ImageUrl(PublicLibraryItemDto item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.ThumbnailUrl)) return item.ThumbnailUrl!;
+        if (!string.IsNullOrWhiteSpace(item.HeroImageUrl)) return item.HeroImageUrl!;
+
+        var galleryImage = GalleryMediaItems(item).FirstOrDefault(i => !GalleryItemIsVideo(i));
+        return galleryImage is null ? string.Empty : GalleryItemThumbnailUrl(galleryImage);
+    }
 
     private static string PlaceholderLabel(PublicLibraryItemDto item) =>
-        item.ClickBehavior switch
-        {
-            "download" => "PDF",
-            "video" => "Video",
-            _ => "Report"
-        };
+        IsGallery(item)
+            ? "Gallery"
+            : item.ClickBehavior switch
+            {
+                "download" => "PDF",
+                "video" => "Video",
+                "image" => "Image",
+                _ => "Report"
+            };
 
     private string ItemTitle(PublicLibraryItemDto item) =>
         StyleHelper.Lang(item.Title, Lang) is { Length: > 0 } text ? text : item.Slug;
@@ -405,6 +589,15 @@
     private string ButtonText(PublicLibraryItemDto item)
     {
         var configured = StyleHelper.Lang(Section.ButtonLabel, Lang);
+        if (IsGallery(item) && IsGenericDetailLabel(configured))
+            return "View Gallery";
+
+        if (IsVideo(item) && IsGenericDetailLabel(configured))
+            return "Watch";
+
+        if (CanOpenImageLightbox(item) && IsGenericDetailLabel(configured))
+            return "View";
+
         if (!string.IsNullOrWhiteSpace(configured))
             return configured;
 
@@ -412,33 +605,105 @@
         {
             "download" => "Download",
             "video" => "Watch",
+            "image" => "View",
             _ => "Read More"
         };
     }
 
-    private static string ItemHref(PublicLibraryItemDto item) =>
-        item.ClickBehavior switch
+    private static string ItemHref(PublicLibraryItemDto item)
+    {
+        if (IsGallery(item))
+            return GalleryMediaItems(item).FirstOrDefault() is { } galleryItem
+                ? GalleryItemUrl(galleryItem)
+                : "#";
+
+        if (IsVideo(item))
+            return item.VideoUrl ?? "#";
+
+        if (IsImage(item))
+            return ImageUrl(item);
+
+        return item.ClickBehavior switch
         {
             "download" => item.Attachments.FirstOrDefault()?.Url ?? "#",
-            "video" => item.VideoUrl ?? "#",
             "external" => item.ExternalUrl ?? "#",
             _ => $"/insights/{ContentTypeRoute(item.ContentTypeKey)}/{item.Slug}"
         };
+    }
 
     private static string Target(PublicLibraryItemDto item) =>
-        item.ClickBehavior is "download" or "video" or "external" ? "_blank" : "_self";
+        item.ClickBehavior is "download" or "external" ? "_blank" : "_self";
 
     private static string? Rel(PublicLibraryItemDto item) =>
-        item.ClickBehavior is "download" or "video" or "external" ? "noopener" : null;
+        item.ClickBehavior is "download" or "external" ? "noopener" : null;
 
-    private static string? DownloadName(PublicLibraryItemDto item) =>
-        string.Equals(item.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase)
-            ? item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url))?.FileName
-            : null;
+    private static string? DownloadMetricFlag(PublicLibraryItemDto item) =>
+        string.Equals(item.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase) ? "true" : null;
 
     private static bool IsVideo(PublicLibraryItemDto item) =>
         string.Equals(item.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(item.ContentBehavior, "video-resource", StringComparison.OrdinalIgnoreCase)
+        || IsVideoLibraryType(item.ContentTypeKey);
+
+    private bool CanOpenImageLightbox(PublicLibraryItemDto item) =>
+        !IsGallery(item) && !string.IsNullOrWhiteSpace(ImageUrl(item)) && (LayoutClass == "gallery" || IsImage(item));
+
+    private static bool IsGallery(PublicLibraryItemDto item) =>
+        string.Equals(item.ContentBehavior, "gallery", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsImage(PublicLibraryItemDto item)
+    {
+        if (IsGallery(item)) return false;
+
+        return string.Equals(item.ClickBehavior, "image", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(item.ContentBehavior, "image-resource", StringComparison.OrdinalIgnoreCase)
+            || IsImageLibraryType(item.ContentTypeKey);
+    }
+
+    private static IEnumerable<PublicLibraryGalleryItemDto> GalleryMediaItems(PublicLibraryItemDto item) =>
+        (item.GalleryItems ?? new())
+            .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+            .OrderBy(i => i.Order);
+
+    private static bool GalleryItemIsVideo(PublicLibraryGalleryItemDto item) =>
+        string.Equals(item.Kind, "video", StringComparison.OrdinalIgnoreCase);
+
+    private static string GalleryItemUrl(PublicLibraryGalleryItemDto item) => item.Url;
+
+    private static string GalleryItemThumbnailUrl(PublicLibraryGalleryItemDto item) =>
+        !string.IsNullOrWhiteSpace(item.ThumbnailUrl)
+            ? item.ThumbnailUrl!
+            : GalleryItemIsVideo(item) ? string.Empty : item.Url;
+
+    private string GalleryItemTitle(PublicLibraryGalleryItemDto galleryItem, PublicLibraryItemDto parent)
+    {
+        var caption = StyleHelper.Lang(galleryItem.Caption, Lang);
+        return !string.IsNullOrWhiteSpace(caption) ? caption : ItemTitle(parent);
+    }
+
+    private static bool IsVideoLibraryType(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var normalized = key.Trim().ToLowerInvariant();
+        return normalized.Contains("video", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("webinar", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsImageLibraryType(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var normalized = key.Trim().ToLowerInvariant();
+        return normalized.Contains("image", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("gallery", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("photo", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGenericDetailLabel(string? label)
+    {
+        if (string.IsNullOrWhiteSpace(label)) return true;
+        var normalized = label.Trim().ToLowerInvariant();
+        return normalized is "view details" or "read more" or "learn more";
+    }
 
     private static string TypeLabel(string type)
     {
@@ -457,8 +722,47 @@
         "case-study" => "case-studies",
         "whitepaper" => "whitepapers",
         "video" => "videos",
+        "webinar" => "webinars",
+        "webinars" => "webinars",
+        "video-webinar" => "webinars",
+        "videos-webinars" => "webinars",
         "tool" => "tools",
         "technology" => "technology",
-        _ => $"{type}s"
+        _ => type
     };
+
+    private string RequestedContentType()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var query = uri.Query.TrimStart('?');
+        if (string.IsNullOrWhiteSpace(query))
+            return string.Empty;
+
+        foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (pair.Length != 2 || !string.Equals(Uri.UnescapeDataString(pair[0]), "type", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return NormalizeContentTypeQuery(Uri.UnescapeDataString(pair[1]));
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizeContentTypeQuery(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "articles" => "article",
+            "case-studies" => "case-study",
+            "whitepapers" => "whitepaper",
+            "reports" => "whitepaper",
+            "videos" => "video",
+            "webinars" => "video",
+            "tools" => "tool",
+            _ => normalized
+        };
+    }
 }

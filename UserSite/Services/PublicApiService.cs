@@ -130,26 +130,32 @@ namespace UserSite.Services
 
         public async Task<bool> SubmitFormAsync(
             string slug, string sectionId, string blockId,
-            Dictionary<string, string> data)
+            Dictionary<string, string> data,
+            string language = "en")
         {
             try
             {
+                var honeypot = data.GetValueOrDefault("__website") ?? string.Empty;
+                data.Remove("__website");
                 var res = await _http.PostAsJsonAsync(
                     $"api/public/pages/{slug}/sections/{sectionId}/blocks/{blockId}/form/submit",
-                    new { Data = data });
+                    new { Data = data, Language = language, SourcePage = slug, Honeypot = honeypot });
                 return res.IsSuccessStatusCode;
             }
             catch { return false; }
         }
         public async Task<bool> SubmitChildFormAsync(
              string parentSlug, string childSlug, string sectionId, string blockId,
-            Dictionary<string, string> data)
+            Dictionary<string, string> data,
+            string language = "en")
         {
             try
             {
+                var honeypot = data.GetValueOrDefault("__website") ?? string.Empty;
+                data.Remove("__website");
                 var res = await _http.PostAsJsonAsync(
                     $"api/public/pages/{parentSlug}/{childSlug}/sections/{sectionId}/blocks/{blockId}/form/submit",
-                    new { Data = data });
+                    new { Data = data, Language = language, SourcePage = $"{parentSlug}/{childSlug}", Honeypot = honeypot });
                 return res.IsSuccessStatusCode;
             }
             catch { return false; }
@@ -203,7 +209,6 @@ namespace UserSite.Services
                         "hero" => DeserializeSectionShell<PublicHeroSectionDto>(section),
                         "cta" => DeserializeSectionShell<PublicCtaSectionDto>(section),
                         "list" => DeserializeSectionShell<PublicListSectionDto>(section),
-                        "gallery" => DeserializeSectionShell<PublicGallerySectionDto>(section),
                         "html" => DeserializeSectionShell<PublicHtmlSectionDto>(section),
                         "columns" => DeserializeSectionShell<PublicColumnsSectionDto>(section),
                         "showcase" => DeserializeSectionShell<PublicShowcaseSectionDto>(section),

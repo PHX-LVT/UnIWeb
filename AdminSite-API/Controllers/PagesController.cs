@@ -1,15 +1,19 @@
-﻿using FullProject.DTOs;
+using FullProject.DTOs;
 using FullProject.Models;
 using FullProject.Services;
+using FullProject.Security;
 using FullProject.Utils;
+using FullProject.Services.PublishAndResetService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
     public class PagesController : ControllerBase
     {
         private readonly PageService _service;
@@ -44,6 +48,7 @@ namespace FullProject.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] PageCreateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var enName = dto.Name.GetValueOrDefault("en", string.Empty);
             if (string.IsNullOrWhiteSpace(enName))
                 return BadRequest(ApiResult.BadRequest("English name is required."));
@@ -84,10 +89,11 @@ namespace FullProject.Controllers
         [HttpPut("{pageId}")]
         public async Task<IActionResult> Update(string pageId, [FromBody] PageUpdateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var existing = await _service.GetByIdAsync(pageId);
             if (existing is null) return NotFound(ApiResult.NotFound("Page not found."));
 
-            var updated = await _service.UpdateAsync(pageId, dto);
+            var updated = await _service.UpdateAsync(pageId, dto, ActorId);
             return Ok(ApiResult.Ok(MapToDto(updated!), "Page updated."));
         }
 
@@ -95,6 +101,7 @@ namespace FullProject.Controllers
         [HttpDelete("{pageId}")]
         public async Task<IActionResult> Delete(string pageId)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.DeleteAsync(pageId);
             if (!ok) return NotFound(ApiResult.NotFound("Page not found."));
             return Ok(ApiResult.Ok("Page deleted."));
@@ -104,7 +111,8 @@ namespace FullProject.Controllers
         [HttpPut("{pageId}/visibility")]
         public async Task<IActionResult> SetVisibility(string pageId, [FromBody] VisibilityDto dto)
         {
-            var ok = await _service.SetVisibilityAsync(pageId, dto.Visible);
+            if (!CanUsePageBuilder) return Forbid();
+            var ok = await _service.SetVisibilityAsync(pageId, dto.Visible, ActorId);
             if (!ok) return NotFound(ApiResult.NotFound("Page not found."));
             return Ok(ApiResult.Ok($"Page {(dto.Visible ? "shown" : "hidden")} in navigation."));
         }
@@ -113,7 +121,8 @@ namespace FullProject.Controllers
         [HttpPut("{pageId}/access")]
         public async Task<IActionResult> SetAccess(string pageId, [FromBody] VisibilityDto dto)
         {
-            var ok = await _service.SetAccessAsync(pageId, dto.Visible);
+            if (!CanUsePageBuilder) return Forbid();
+            var ok = await _service.SetAccessAsync(pageId, dto.Visible, ActorId);
             if (!ok) return NotFound(ApiResult.NotFound("Page not found."));
             return Ok(ApiResult.Ok($"Page access {(dto.Visible ? "enabled" : "disabled")}."));
         }
@@ -122,15 +131,40 @@ namespace FullProject.Controllers
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder([FromBody] ReorderDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.ReorderAsync(dto.OrderedIds);
             if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
             return Ok(ApiResult.Ok("Pages reordered."));
         }
 
+
+        [HttpGet("{pageId}/revisions")]
+        public async Task<IActionResult> GetRevisions(string pageId)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+
+            var existing = await _service.GetByIdAsync(pageId);
+            if (existing is null) return NotFound(ApiResult.NotFound("Page not found."));
+
+            var revisions = await _service.GetRevisionsAsync(pageId);
+            return Ok(ApiResult.Ok(revisions));
+        }
+
+        [HttpPost("{pageId}/revisions/{revisionId}/restore")]
+        public async Task<IActionResult> RestoreRevision(string pageId, string revisionId)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+
+            var restored = await _service.RestoreRevisionAsync(pageId, revisionId, ActorId);
+            if (restored is null) return NotFound(ApiResult.NotFound("Page revision not found."));
+
+            return Ok(ApiResult.Ok(MapToDto(restored), "Page revision restored."));
+        }
         // POST api/admin/pages/:pageId/publish
         [HttpPost("{pageId}/publish")]
         public async Task<IActionResult> Publish(string pageId)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var result = await _publishService.PublishPageAsync(pageId);
             if (!result.Success)
                 return BadRequest(ApiResult.BadRequest(result.Message ?? "Publish failed."));
@@ -140,12 +174,21 @@ namespace FullProject.Controllers
         [HttpPost("{pageId}/reset")]
         public async Task<IActionResult> Reset(string pageId)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var result = await _resetService.ResetPageAsync(pageId);
             if (!result.Success)
                 return BadRequest(ApiResult.BadRequest(result.Message ?? "Reset failed."));
             return Ok(ApiResult.Ok(result.Message));
         }
         // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+        private bool CanUsePageBuilder => AdminAuthorization.CanUsePageBuilder(User);
+
+        private string ActorId =>
+            User.FindFirst("adminId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+            User.Identity?.Name ??
+            "unknown";
 
         private static Dictionary<string, string> AutoFillLanguage(
             Dictionary<string, string> dict)
@@ -188,4 +231,3 @@ namespace FullProject.Controllers
         };
     }
 }
-

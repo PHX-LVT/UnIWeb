@@ -1,13 +1,14 @@
-using MongoDB.Bson;
+﻿using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Text.Json.Serialization;
+using Contracts.Forms;
 
 namespace FullProject.Models
 {
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // BRANDING
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
     public class Branding
     {
@@ -20,9 +21,9 @@ namespace FullProject.Models
 
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // THEME
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
     public class SiteTheme
     {
@@ -60,9 +61,9 @@ namespace FullProject.Models
         public string SpacingScale { get; set; } = "1";
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // GLOBAL BUTTONS
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
     public enum GlobalButtonAction { OpenModal, LinkToPage, ExternalUrl }
     public enum GlobalButtonPosition { HeaderLeft, HeaderRight, Floating }
@@ -75,14 +76,15 @@ namespace FullProject.Models
         public Dictionary<string, string> LabelText { get; set; } = new();
         public GlobalButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition Position { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // FOOTER — renamed SubFooter → FooterLink
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
+    // FOOTER - renamed SubFooter -> FooterLink
+    // ----------------------------------------------------------------
 
     public class FooterLink
     {
@@ -115,9 +117,9 @@ namespace FullProject.Models
         public List<FooterGroup> Groups { get; set; } = new();
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // SOCIAL BUTTONS
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
     public class SocialButton
     {
@@ -140,23 +142,101 @@ namespace FullProject.Models
         public List<SocialButton> Buttons { get; set; } = new();
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // AUTH
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
+    [BsonIgnoreExtraElements]
     public class AdminUser
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string FullName { get; set; } = "Admin";
         public string PasswordHash { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.String)]
+        public AdminRole Role { get; set; } = AdminRole.AdminAdmin;
+        [BsonRepresentation(BsonType.String)]
+        public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
+        public List<string> Permissions { get; set; } = new();
+        public int TokenVersion { get; set; } = 1;
+        public int FailedLoginAttempts { get; set; }
+        public DateTime? LockedUntil { get; set; }
+        public DateTime? LastLoginAt { get; set; }
+        public string? LastLoginIp { get; set; }
+        public DateTime? DisabledAt { get; set; }
+        public string? DisabledById { get; set; }
+        public string? CreatedById { get; set; }
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    public class AdminSessionRecord
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string AdminId { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string TokenId { get; set; } = string.Empty;
+        public int TokenVersion { get; set; } = 1;
+        public DateTime LoginAt { get; set; } = DateTime.UtcNow;
+        public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiresAt { get; set; } = DateTime.UtcNow;
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
+        public string BrowserName { get; set; } = "Unknown";
+        public string OperatingSystem { get; set; } = "Unknown";
+        public bool IsRevoked { get; set; }
+        public DateTime? RevokedAt { get; set; }
+        public string? RevokedById { get; set; }
+        [BsonRepresentation(BsonType.String)]
+        public AdminSessionRevokeReason? RevokeReason { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    public class AdminLoginActivityRecord
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string? AdminId { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string EventType { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
+        public string BrowserName { get; set; } = "Unknown";
+        public string OperatingSystem { get; set; } = "Unknown";
+        public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    public class AdminAuditLog
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.String)]
+        public AdminAuditArea Area { get; set; } = AdminAuditArea.Auth;
+        public string Action { get; set; } = string.Empty;
+        public string ActorId { get; set; } = string.Empty;
+        public string ActorEmail { get; set; } = string.Empty;
+        public string? TargetId { get; set; }
+        public string? TargetEmail { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // PAGES
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
 
     public class PageSeo
@@ -195,12 +275,12 @@ namespace FullProject.Models
             public string Id { get; set; } = string.Empty;
 
 
-            // ════════METADATA TRACKING(for phase 3) ════════
+            // ---- METADATA TRACKING (for phase 3) ----
             public string StableId { get; set; } = Guid.NewGuid().ToString();
             public string? SourceId { get; set; }
             public int Version { get; set; } = 1;
             public DateTime? PublishedAt { get; set; }
-            //═══════════════════════════════════════════════════════════
+            //----------------------------------------------------------------
             public Dictionary<string, string> Name { get; set; } = new();
             public string Slug { get; set; } = string.Empty;
             public bool Access { get; set; } = true;
@@ -210,7 +290,7 @@ namespace FullProject.Models
             public PageSeo Seo { get; set; } = new();
             public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
             public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-           //═══════════════════════════════════════════════════════════
+           //----------------------------------------------------------------
             public string? ParentPageId { get; set; }
             public string? ParentSlug { get; set; }
             public string? FullSlug { get; set; }
@@ -218,9 +298,9 @@ namespace FullProject.Models
 
         }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // PAGE-LEVEL BUTTONS
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
     public enum PageButtonAction { LinkToPage, OpenForm, DownloadFile, ExternalUrl }
     public enum PageButtonPosition { Top, Bottom, Floating }
@@ -234,14 +314,15 @@ namespace FullProject.Models
         public Dictionary<string, string> Label { get; set; } = new();
         public PageButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public PageButtonPosition Position { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // SECTIONS — Page → Section → Block hierarchy
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
+    // SECTIONS - Page -> Section -> Block hierarchy
+    // ----------------------------------------------------------------
 
     [BsonIgnoreExtraElements]
     public class SectionStyle
@@ -250,6 +331,8 @@ namespace FullProject.Models
         public string BackgroundColor { get; set; } = "#ffffff";
         public string? BackgroundImageUrl { get; set; }
         public string? BackgroundVideoUrl { get; set; }
+        public string BackgroundImageFit { get; set; } = "cover";      // cover | contain
+        public string BackgroundImagePosition { get; set; } = "center"; // center | top | bottom | left | right
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";      // top | left | diagonal
@@ -283,6 +366,10 @@ namespace FullProject.Models
         public int Y { get; set; } = 0;                              // freeform row start
         public int W { get; set; } = 4;                              // freeform width in 12-column units
         public int H { get; set; } = 2;                              // freeform height in row units
+        public double? LeftPercent { get; set; }                     // precise freeform left, 0-100
+        public double? TopPx { get; set; }                           // precise freeform top in px
+        public double? WidthPercent { get; set; }                    // precise freeform width, 0-100
+        public double? HeightPx { get; set; }                        // precise freeform height in px
     }
 
     [BsonIgnoreExtraElements]
@@ -294,16 +381,16 @@ namespace FullProject.Models
         public Dictionary<string, string> Label { get; set; } = new();
         public string Action { get; set; } = string.Empty;          // linkToPage | openForm | externalUrl | download
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";               // filled | outline | ghost
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
     }
 
-    // ── Section base + derived types ──────────────────────────
+    // ----------------------------------------------------------------
 
     [SwaggerSubType(typeof(HeroSection))]
     [SwaggerSubType(typeof(CtaSection))]
-    [SwaggerSubType(typeof(GallerySection))]
     [SwaggerSubType(typeof(ListSection))]
     [SwaggerSubType(typeof(DynamicSection))]
     [SwaggerSubType(typeof(HtmlSection))]
@@ -320,7 +407,6 @@ namespace FullProject.Models
     [BsonKnownTypes(
         typeof(HeroSection),
         typeof(CtaSection),
-        typeof(GallerySection),
         typeof(ListSection),
         typeof(DynamicSection),
         typeof(HtmlSection),
@@ -335,7 +421,6 @@ namespace FullProject.Models
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
     [JsonDerivedType(typeof(HeroSection), "hero")]
     [JsonDerivedType(typeof(CtaSection), "cta")]
-    [JsonDerivedType(typeof(GallerySection), "gallery")]
     [JsonDerivedType(typeof(ListSection), "list")]
     [JsonDerivedType(typeof(DynamicSection), "dynamic")]
     [JsonDerivedType(typeof(HtmlSection), "html")]
@@ -352,13 +437,13 @@ namespace FullProject.Models
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
-        // ════════ PHASE 3 METADATA TRACKING ════════
+        // ----------------------------------------------------------------
         public string StableId { get; set; } = Guid.NewGuid().ToString();
         public string? SourceId { get; set; }
         public int Version { get; set; } = 1;
         public DateTime? PublishedAt { get; set; }
         public string PageStableId { get; set; } = string.Empty; // Fixed target parent alignment
-        // ════════════════════════════════════════════════════════════
+        // ----------------------------------------------------------------
         public string PageId => PageStableId;
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -388,28 +473,6 @@ namespace FullProject.Models
         public Dictionary<string, string> Subtext { get; set; } = new();
         public SectionButton? Button { get; set; }
         public List<SectionButton> Buttons { get; set; } = new();
-    }
-
-    [BsonIgnoreExtraElements]
-    [BsonNoId]
-    public class GalleryImage
-    {
-        [BsonElement("Id")]
-        public string Id { get; set; } = string.Empty;
-        public string? ImageUrl { get; set; }
-        public Dictionary<string, string> Caption { get; set; } = new();
-        public bool Visible { get; set; } = true;
-        public int Order { get; set; } = 0;
-    }
-
-    [BsonDiscriminator("gallery")]
-    public class GallerySection : Section
-    {
-        public string Layout { get; set; } = "grid";               // grid | masonry | carousel
-        public int Columns { get; set; } = 3;
-        public string Gap { get; set; } = "small";                 // none | small | medium
-        public bool ShowCaptions { get; set; } = false;
-        public List<GalleryImage> Images { get; set; } = new();
     }
 
     [BsonIgnoreExtraElements]
@@ -522,7 +585,7 @@ namespace FullProject.Models
     [BsonDiscriminator("html")]
     public class HtmlSection : Section
     {
-        // Sanitized on save — scripts and dangerous attributes stripped
+        // Sanitized on save - no separate endpoint needed
         public Dictionary<string, string> Content { get; set; } = new();
     }
 
@@ -533,7 +596,7 @@ namespace FullProject.Models
         [BsonElement("Id")]
         public string Id { get; set; } = string.Empty;
         public int Order { get; set; } = 0;
-        // Blocks inside this column slot — stored as embedded array
+        // Blocks inside this column slot - no separate column endpoints
         public List<Block> Blocks { get; set; } = new();
     }
 
@@ -650,12 +713,13 @@ namespace FullProject.Models
         public Dictionary<string, string> Name { get; set; } = new();
         public SectionStyle Style { get; set; } = new();
         public List<Block> Blocks { get; set; } = new();
+        public int SchemaVersion { get; set; } = 1;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
-    // ═══════════════════════════════════════════════════════════
-    // BLOCKS — live inside Sections
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
+    // BLOCKS - Page -> Section -> Block hierarchy
+    // ----------------------------------------------------------------
 
 
     [BsonIgnoreExtraElements]
@@ -667,6 +731,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Label { get; set; } = new();
         public  BlockButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
         public string? ColumnSlotId { get; set; }
@@ -743,14 +808,14 @@ namespace FullProject.Models
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
-        // ════════ PHASE 3 METADATA TRACKING ════════
+        // ----------------------------------------------------------------
         public string StableId { get; set; } = Guid.NewGuid().ToString();
         public string? SourceId { get; set; }
         public int Version { get; set; } = 1;
         public DateTime? PublishedAt { get; set; }
         public string PageStableId { get; set; } = string.Empty;    // Fixed target parent page alignment
         public string SectionStableId { get; set; } = string.Empty; // Fixed target parent section alignment
-        // ═══════════════════════════════════════════
+        // ----------------------------------------------------------------
 
         public string PageId => PageStableId;
         public string SectionId => SectionStableId;
@@ -761,8 +826,23 @@ namespace FullProject.Models
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public string? ColumnSlotId { get; set; }
         public string BlockZone { get; set; } = "default";
+        public string? PositionMode { get; set; }
+        [BsonIgnore]
+        [JsonIgnore]
+        public string ZoneId
+        {
+            get => BlockZone;
+            set => BlockZone = string.IsNullOrWhiteSpace(value) ? "default" : value.Trim().ToLowerInvariant();
+        }
         public string? ParentBlockId { get; set; }
         public BlockLayout Layout { get; set; } = new();
+        [BsonIgnore]
+        [JsonIgnore]
+        public int ZOrder
+        {
+            get => Layout.ZIndex;
+            set => Layout.ZIndex = Math.Clamp(value, 0, 1000);
+        }
 
     }
 
@@ -809,6 +889,7 @@ namespace FullProject.Models
     [BsonDiscriminator("form")]
     public class FormBlock : Block
     {
+        public string? FormDefinitionId { get; set; }
         public List<FormField> Fields { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
     }
@@ -834,6 +915,8 @@ namespace FullProject.Models
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     [BsonDiscriminator("button")]
@@ -841,6 +924,8 @@ namespace FullProject.Models
     {
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
         public string Style { get; set; } = "filled";
     }
 
@@ -886,12 +971,60 @@ namespace FullProject.Models
         public string LayoutMode { get; set; } = "stack";
         public int Columns { get; set; } = 2;
         public string Gap { get; set; } = "medium";
+        public int OrbitRadius { get; set; } = 180;
+        public int OrbitStartAngle { get; set; } = -90;
+        public int SemicircleRadius { get; set; } = 180;
+        public int SemicircleStartAngle { get; set; } = 180;
+        public int SemicircleEndAngle { get; set; } = 360;
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // FORM SUBMISSIONS
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
+    [BsonIgnoreExtraElements]
+    public class FormDefinition
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Introduction { get; set; } = new();
+        public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
+        public FormDisplayMode DisplayMode { get; set; } = FormDisplayMode.Embedded;
+        public FormLayout Layout { get; set; } = FormLayout.Stacked;
+        public bool Active { get; set; } = true;
+        public List<FormDefinitionField> Fields { get; set; } = new();
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormDefinitionField
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Label { get; set; } = new();
+        public Dictionary<string, string> Placeholder { get; set; } = new();
+        public bool Required { get; set; }
+        public int MinLength { get; set; }
+        public int MaxLength { get; set; } = 500;
+        public List<FormDefinitionFieldOption> Options { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormDefinitionFieldOption
+    {
+        public string Value { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
     public class FormSubmission
     {
         [BsonId]
@@ -901,13 +1034,82 @@ namespace FullProject.Models
         public string SectionId { get; set; } = string.Empty;
         public string BlockId { get; set; } = string.Empty;
         public Dictionary<string, string> Data { get; set; } = new();
+        public string FormId { get; set; } = string.Empty;
+        public string FormKey { get; set; } = string.Empty;
+        public string FormName { get; set; } = string.Empty;
+        public string Language { get; set; } = "en";
+        public string SourcePage { get; set; } = string.Empty;
+        public FormSubmissionStatus Status { get; set; } = FormSubmissionStatus.New;
+        public List<FormSubmissionFieldSnapshot> Fields { get; set; } = new();
+        public string? InternalNotes { get; set; }
+        public FormSubmissionSecurity Security { get; set; } = new();
         public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // SETTINGS
-    // ═══════════════════════════════════════════════════════════
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormSubmissionFieldSnapshot
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public string Value { get; set; } = string.Empty;
+        public int Order { get; set; }
+    }
 
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormSubmissionSecurity
+    {
+        public string IpAddress { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
+        public string Fingerprint { get; set; } = string.Empty;
+    }
+
+    // ----------------------------------------------------------------
+    // SETTINGS
+    // ----------------------------------------------------------------
+
+    [BsonIgnoreExtraElements]
+    public class ResourceAlbum
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string Scope { get; set; } = "media"; // media | file
+        public string Name { get; set; } = string.Empty;
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    public class ManagedResource
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "file"; // image | file | video
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string Source { get; set; } = "managed-upload";
+        public List<string> Tags { get; set; } = new();
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? AlbumId { get; set; }
+        public bool Active { get; set; } = true;
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
     public enum ContentStatus
     {
         Draft,
@@ -927,6 +1129,7 @@ namespace FullProject.Models
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; } = true;
         public bool RequiresHeroImage { get; set; } = false;
         public bool RequiresFile { get; set; } = false;
@@ -946,8 +1149,47 @@ namespace FullProject.Models
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string FileName { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class ContentBodyItem
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Content { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public string? Url { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long SizeBytes { get; set; }
+        public string? Style { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class ContentGalleryItem
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Kind { get; set; } = "image";
+        public string? Url { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
     }
 
     [BsonIgnoreExtraElements]
@@ -962,10 +1204,21 @@ namespace FullProject.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItem> BodyItems { get; set; } = new();
+        public List<ContentGalleryItem> GalleryItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string HeroImageResourceSource { get; set; } = "DirectUpload";
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string ThumbnailResourceSource { get; set; } = "DirectUpload";
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string VideoResourceSource { get; set; } = "DirectUpload";
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string> Tags { get; set; } = new();
@@ -993,7 +1246,52 @@ namespace FullProject.Models
         public string? Message { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
+    [BsonIgnoreExtraElements]
+    public class VisitorMetricCounter
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string MetricType { get; set; } = string.Empty;
+        public string TargetType { get; set; } = string.Empty;
+        public string TargetKey { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public DateTime Day { get; set; } = DateTime.UtcNow.Date;
+        public long Count { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
 
+
+
+    [BsonIgnoreExtraElements]
+    public class PageRevision
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string PageId { get; set; } = string.Empty;
+        public string PageStableId { get; set; } = string.Empty;
+        public int SourceVersion { get; set; }
+        public string ActorId { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public BsonDocument Snapshot { get; set; } = new();
+    }
+
+    [BsonIgnoreExtraElements]
+    public class ContentRevision
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string ContentId { get; set; } = string.Empty;
+        public string ContentStableId { get; set; } = string.Empty;
+        public DateTime SourceUpdatedAt { get; set; }
+        public string ActorId { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public BsonDocument Snapshot { get; set; } = new();
+    }
     [BsonIgnoreExtraElements]
     public class LanguageSetting
     {
@@ -1008,6 +1306,17 @@ namespace FullProject.Models
     }
 
     [BsonIgnoreExtraElements]
+    public class ResourceLibrarySettings
+    {
+        public long MaxImageBytes { get; set; } = 20L * 1024 * 1024;
+        public long MaxFileBytes { get; set; } = 100L * 1024 * 1024;
+        public long MaxVideoBytes { get; set; } = 250L * 1024 * 1024;
+        public List<string> AllowedImageFormats { get; set; } = new() { "jpg", "jpeg", "png", "webp", "gif" };
+        public List<string> AllowedFileFormats { get; set; } = new() { "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt" };
+        public List<string> AllowedVideoFormats { get; set; } = new() { "mp4", "webm", "mov" };
+    }
+
+    [BsonIgnoreExtraElements]
     public class SiteSettings
     {
         [BsonId]
@@ -1017,13 +1326,14 @@ namespace FullProject.Models
         public List<LanguageSetting> Languages { get; set; } = new()
         {
             new LanguageSetting { Slug = "en", Label = "English",      NativeName = "English",    Active = true, AdminEnabled = true, UserEnabled = true, Direction = "ltr", Order = 1 },
-            new LanguageSetting { Slug = "vi", Label = "Vietnamese",   NativeName = "Tiếng Việt", Active = true, AdminEnabled = true, UserEnabled = true, Direction = "ltr", Order = 2 },
-            new LanguageSetting { Slug = "cn", Label = "Chinese",      NativeName = "中文",        Active = true, AdminEnabled = true, UserEnabled = true, Direction = "ltr", Order = 3 }
+            new LanguageSetting { Slug = "vi", Label = "Vietnamese",   NativeName = "TiÃƒÂ¡Ã‚ÂºÃ‚Â¿ng ViÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡t", Active = true, AdminEnabled = true, UserEnabled = true, Direction = "ltr", Order = 2 },
+            new LanguageSetting { Slug = "cn", Label = "Chinese",      NativeName = "ÃƒÂ¤Ã‚Â¸Ã‚Â­ÃƒÂ¦Ã¢â‚¬â€œÃ¢â‚¬Â¡",        Active = true, AdminEnabled = true, UserEnabled = true, Direction = "ltr", Order = 3 }
         };
 
         public string DefaultLanguage { get; set; } = "en";
         public int LanguageRegistryVersion { get; set; } = 1;
         public string AdminAppearancePreset { get; set; } = "navy-gold";
+        public ResourceLibrarySettings ResourceLibrary { get; set; } = new();
     }
 
     public class GlossaryTerm
@@ -1035,9 +1345,9 @@ namespace FullProject.Models
         public string? Description { get; set; }
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
     // Publish/Reset
-    // ═══════════════════════════════════════════════════════════
+    // ----------------------------------------------------------------
 
     public class ResetResult
     {
@@ -1076,5 +1386,3 @@ namespace FullProject.Models
         };
     }
 }
-
-

@@ -70,14 +70,6 @@ namespace FullProject.Utils
                     Button = c.Button != null ? CloneSectionButton(c.Button) : null,
                     Buttons = c.Buttons.Select(CloneSectionButton).ToList()
                 },
-                GallerySection g => new GallerySection
-                {
-                    Layout = g.Layout,
-                    Columns = g.Columns,
-                    Gap = g.Gap,
-                    ShowCaptions = g.ShowCaptions,
-                    Images = g.Images.Select(CloneGalleryImage).ToList()
-                },
                 ListSection l => new ListSection
                 {
                     Layout = l.Layout,
@@ -85,6 +77,15 @@ namespace FullProject.Utils
                     SectionTitle = new Dictionary<string, string>(l.SectionTitle),
                     ShowIcon = l.ShowIcon,
                     Items = l.Items.Select(CloneListItem).ToList()
+                },
+                DynamicSection dynamicSection => new DynamicSection
+                {
+                    ScopeSectionIds = dynamicSection.ScopeSectionIds.ToList(),
+                    SearchBy = dynamicSection.SearchBy,
+                    Display = dynamicSection.Display,
+                    Placeholder = new Dictionary<string, string>(dynamicSection.Placeholder),
+                    DefaultSort = dynamicSection.DefaultSort,
+                    ShowSearchBar = dynamicSection.ShowSearchBar
                 },
                 HtmlSection html => new HtmlSection
                 {
@@ -247,6 +248,7 @@ namespace FullProject.Utils
                 },
                 FormBlock form => new FormBlock
                 {
+                    FormDefinitionId = form.FormDefinitionId,
                     SubmitButtonLabel = new Dictionary<string, string>(form.SubmitButtonLabel),
                     Fields = form.Fields.Select(f => new FormField
                     {
@@ -265,12 +267,16 @@ namespace FullProject.Utils
                     Description = new Dictionary<string, string>(card.Description),
                     ImageUrl = card.ImageUrl,
                     ButtonLabel = new Dictionary<string, string>(card.ButtonLabel),
-                    Href = card.Href
+                    Href = card.Href,
+                    Action = card.Action,
+                    FormDefinitionId = card.FormDefinitionId
                 },
                 ButtonBlock button => new ButtonBlock
                 {
                     Label = new Dictionary<string, string>(button.Label),
                     Href = button.Href,
+                    Action = button.Action,
+                    FormDefinitionId = button.FormDefinitionId,
                     Style = button.Style
                 },
                 MetricBlock metric => new MetricBlock
@@ -305,7 +311,12 @@ namespace FullProject.Utils
                     Title = new Dictionary<string, string>(container.Title),
                     LayoutMode = container.LayoutMode,
                     Columns = container.Columns,
-                    Gap = container.Gap
+                    Gap = container.Gap,
+                    OrbitRadius = container.OrbitRadius,
+                    OrbitStartAngle = container.OrbitStartAngle,
+                    SemicircleRadius = container.SemicircleRadius,
+                    SemicircleStartAngle = container.SemicircleStartAngle,
+                    SemicircleEndAngle = container.SemicircleEndAngle
                 },
                 _ => throw new ArgumentException($"Unknown block type: {source.GetType().Name}")
             };
@@ -321,6 +332,7 @@ namespace FullProject.Utils
             clone.Order = source.Order;
             clone.ColumnSlotId = source.ColumnSlotId;
             clone.BlockZone = source.BlockZone;
+            clone.PositionMode = source.PositionMode;
             clone.ParentBlockId = source.ParentBlockId;
             clone.Layout = CloneBlockLayout(source.Layout);
             clone.Buttons = source.Buttons.Select(b => new BlockButton
@@ -329,8 +341,10 @@ namespace FullProject.Utils
                 Label = new Dictionary<string, string>(b.Label),
                 Action = b.Action,
                 Href = b.Href,
+                FormDefinitionId = b.FormDefinitionId,
                 Visible = b.Visible,
-                Order = b.Order
+                Order = b.Order,
+                ColumnSlotId = b.ColumnSlotId
             }).ToList();
             clone.CreatedAt = source.CreatedAt;
             clone.UpdatedAt = DateTime.UtcNow;
@@ -359,6 +373,8 @@ namespace FullProject.Utils
             BackgroundColor = s.BackgroundColor,
             BackgroundImageUrl = s.BackgroundImageUrl,
             BackgroundVideoUrl = s.BackgroundVideoUrl,
+            BackgroundImageFit = s.BackgroundImageFit,
+            BackgroundImagePosition = s.BackgroundImagePosition,
             GradientFrom = s.GradientFrom,
             GradientTo = s.GradientTo,
             GradientDirection = s.GradientDirection,
@@ -393,7 +409,11 @@ namespace FullProject.Utils
                 X = layout.X,
                 Y = layout.Y,
                 W = layout.W,
-                H = layout.H
+                H = layout.H,
+                LeftPercent = layout.LeftPercent,
+                TopPx = layout.TopPx,
+                WidthPercent = layout.WidthPercent,
+                HeightPx = layout.HeightPx
             };
         }
 
@@ -412,18 +432,10 @@ namespace FullProject.Utils
             Label = new Dictionary<string, string>(b.Label),
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Style = b.Style,
             Visible = b.Visible,
             Order = b.Order
-        };
-
-        private static GalleryImage CloneGalleryImage(GalleryImage img) => new()
-        {
-            Id = ObjectId.GenerateNewId().ToString(),
-            ImageUrl = img.ImageUrl,
-            Caption = new Dictionary<string, string>(img.Caption),
-            Visible = img.Visible,
-            Order = img.Order
         };
 
         private static ShowcaseItemOverride CloneShowcaseItemOverride(ShowcaseItemOverride item) => new()

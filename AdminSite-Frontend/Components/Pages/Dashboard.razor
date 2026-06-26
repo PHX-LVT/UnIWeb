@@ -3,6 +3,7 @@
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 @inject IJSRuntime JS
+@inject AdminAuthService Auth
 @using Contracts.Admin
 @implements IAsyncDisposable
 
@@ -19,30 +20,62 @@
     }
     else
     {
-        <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
-            @foreach (var page in RootPages)
-            {
-                <button class="ez-tab @(_activeParentPage?.Id == page.Id ? "ez-tab--active" : "")"
-                        data-root-page-id="@(page.Id)"
-                        @onclick="() => SelectPage(page)">
-                    @PageTitle(page)
-                    @if (_activeParentPage?.Id == page.Id)
+        <div class="ez-dashboard__page-nav">
+            <button type="button"
+                    class="ez-page-scroll-btn"
+                    title='@T("PreviousPages")'
+                    aria-label='@T("PreviousPages")'
+                    @onclick="() => ScrollPageTabs(-1)">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+
+            <div class="ez-dashboard__page-scroll" @ref="_pageTabsScrollRef">
+                <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
+                    @foreach (var page in RootPages)
                     {
-                        <span class="ez-tab__action" title="Settings"
-                              @onclick:stopPropagation="true"
-                              @onclick="() => OpenSettings(page)">
-                            <i class="fas fa-cog"></i>
-                        </span>
-                        <span class="ez-tab__action ez-tab__action--danger" title="Delete"
-                              @onclick:stopPropagation="true"
-                              @onclick="() => _confirmDelete = page">
-                            <i class="fas fa-trash"></i>
-                        </span>
+                        <button class="ez-tab @(_activeParentPage?.Id == page.Id ? "ez-tab--active" : "")"
+                                data-root-page-id="@(page.Id)"
+                                @onclick="() => SelectPage(page)">
+                            @PageTitle(page)
+                            @if (CanEditDashboard && IsEditMode && _activeParentPage?.Id == page.Id)
+                            {
+                                <span class="ez-tab__action" title='@T("Settings")'
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => OpenSettings(page)">
+                                    <i class="fas fa-cog"></i>
+                                </span>
+                                <span class="ez-tab__action ez-tab__action--danger" title='@T("Delete")'
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => _confirmDelete = page">
+                                    <i class="fas fa-trash"></i>
+                                </span>
+                            }
+                        </button>
                     }
-                </button>
-            }
-            <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
-                <i class="fas fa-plus"></i>
+                    @if (CanEditDashboard && IsEditMode)
+                    {
+                        <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <button type="button"
+                    class="ez-page-scroll-btn"
+                    title='@T("NextPages")'
+                    aria-label='@T("NextPages")'
+                    @onclick="() => ScrollPageTabs(1)">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+
+            <button class="btn-admin ez-dashboard__mode-toggle ez-dashboard__mode-toggle--@_canvasMode"
+                    type="button"
+                    disabled="@(!CanEditDashboard)"
+                    title="@(!CanEditDashboard ? T("EditModeRequiresPermission") : ActiveModeLabel)"
+                    @onclick="ToggleMode">
+                <i class="fas @ActiveModeIcon"></i>
+                <span>@ActiveModeLabel</span>
             </button>
         </div>
 
@@ -60,7 +93,10 @@
                         OnManageChildPages="ShowChildPageManager"
                         OnOpenPageSettings="OpenSettings"
                         OnDeletePage="RequestDeletePage"
-                        OnPageStatusChanged="HandlePageStatusChanged" />
+                        OnPageStatusChanged="HandlePageStatusChanged"
+                        EditMode="@IsEditMode"
+                        ArrangeMode="@IsArrangeMode"
+                        CanEdit="@CanEditDashboard" />
             }
         </div>
     }
@@ -108,7 +144,7 @@
             <div class="ez-modal__footer">
                 <button class="btn-admin btn-ghost" @onclick="() => _showCreateChildForm = false">@T("Cancel")</button>
                 <button class="btn-admin btn-primary" @onclick="ConfirmCreateChild" disabled="@_saving">
-                    @(_saving ? T("Creating") : "Create Child Page")
+                    @(_saving ? T("Creating") : T("CreateChildPage"))
                 </button>
             </div>
         </div>
@@ -141,7 +177,7 @@
                             <div class="ez-child-page-manager__row"
                                  data-child-page-id="@child.Id"
                                  @key="child.Id">
-                                <span class="ez-child-page-manager__drag" title="Drag to reorder">
+                                <span class="ez-child-page-manager__drag" title='@T("DragToReorder")'>
                                     <i class="fas fa-grip-vertical"></i>
                                 </span>
                                 <div class="ez-child-page-manager__content">
@@ -297,9 +333,27 @@
     private bool _saving = false;
     private bool _pageSortableInitialized = false;
     private bool _childPageSortableInitialized = false;
+    private string _canvasMode = "edit";
     private ElementReference _pageTabsRef;
+    private ElementReference _pageTabsScrollRef;
     private ElementReference _childPageListRef;
     private DotNetObjectReference<Dashboard>? _dotNetRef;
+
+    private bool CanEditDashboard => Auth.CanUsePageBuilder;
+    private bool IsEditMode => _canvasMode == "edit";
+    private bool IsArrangeMode => _canvasMode == "arrange";
+    private string ActiveModeLabel => _canvasMode switch
+    {
+        "edit" => T("EditMode"),
+        "arrange" => T("ArrangeMode"),
+        _ => T("PreviewMode")
+    };
+    private string ActiveModeIcon => _canvasMode switch
+    {
+        "edit" => "fa-edit",
+        "arrange" => "fa-object-group",
+        _ => "fa-eye"
+    };
 
     // Create flow
     private bool _showPagePicker = false;
@@ -372,6 +426,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        _canvasMode = CanEditDashboard ? "edit" : "preview";
         await LoadPages();
         _loading = false;
     }
@@ -383,7 +440,7 @@
             _dotNetRef = DotNetObjectReference.Create(this);
         }
 
-        if (!_loading && !_pageSortableInitialized && _dotNetRef is not null)
+        if (!_loading && CanEditDashboard && IsEditMode && !_pageSortableInitialized && _dotNetRef is not null)
         {
             try
             {
@@ -407,6 +464,8 @@
 
         if (_showChildPageManager &&
             _childPages.Count > 0 &&
+            CanEditDashboard &&
+            IsEditMode &&
             !_childPageSortableInitialized &&
             _dotNetRef is not null)
         {
@@ -631,6 +690,37 @@
         }
     }
 
+    private async Task SetMode(string mode)
+    {
+        if (mode != "preview" && !CanEditDashboard)
+            return;
+
+        _canvasMode = mode is "edit" or "arrange" ? mode : "preview";
+        _pageSortableInitialized = false;
+        _childPageSortableInitialized = false;
+        if (!IsEditMode)
+        {
+            await JS.InvokeVoidAsync("disposeAdminSortable", "dashboard-root-pages");
+            await JS.InvokeVoidAsync("disposeAdminSortable", "dashboard-child-pages");
+        }
+        StateHasChanged();
+    }
+
+    private Task ToggleMode()
+    {
+        var next = _canvasMode switch
+        {
+            "preview" => "edit",
+            "edit" => "arrange",
+            _ => "preview"
+        };
+
+        return SetMode(next);
+    }
+
+    private ValueTask ScrollPageTabs(int direction) =>
+        JS.InvokeVoidAsync("scrollAdminPageTabs", _pageTabsScrollRef, direction);
+
     private void OnTemplatePicked(string template)
     {
         _showPagePicker = false;
@@ -832,7 +922,6 @@
         "list" => new ListSectionCreateDto(),
         "showcase" => new ShowcaseSectionCreateDto(),
         "library" => new LibrarySectionCreateDto(),
-        "gallery" => new GallerySectionCreateDto(),
         "columns" => new ColumnsSectionCreateDto(),
         "html" => new HtmlSectionCreateDto(),
         "stats" => new StatsSectionCreateDto(),

@@ -1,30 +1,40 @@
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 
-<div class="form-group"><label class="form-label">Section Title</label><LangField @bind-Value="_title" Languages="Languages" /></div>
+<div class="form-group"><label class="form-label">@T("SectionTitle")</label><LangField @bind-Value="_title" Languages="Languages" /></div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
-    <DxSpinEdit @bind-Value="_centerLat" CssClass="w-100" />
-    <DxSpinEdit @bind-Value="_centerLng" CssClass="w-100" />
-    <DxSpinEdit @bind-Value="_zoom" MinValue="1" MaxValue="18" CssClass="w-100" />
+    <div class="form-group">
+        <label class="form-label">@T("CenterLatitude")</label>
+        <DxSpinEdit @bind-Value="_centerLat" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">@T("CenterLongitude")</label>
+        <DxSpinEdit @bind-Value="_centerLng" CssClass="w-100" />
+    </div>
+    <div class="form-group">
+        <label class="form-label">@T("Zoom")</label>
+        <DxSpinEdit @bind-Value="_zoom" MinValue="1" MaxValue="18" CssClass="w-100" />
+    </div>
 </div>
 @foreach (var (pin, i) in _pins.Select((x, i) => (x, i)))
 {
     <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin:.5rem 0">
-        <div style="display:flex;justify-content:space-between"><strong>Pin @(i + 1)</strong><button class="btn-admin btn-danger" @onclick="() => _pins.RemoveAt(i)"><i class="fas fa-trash"></i></button></div>
-        <DxTextBox @bind-Text="pin.Label" NullText="Label" CssClass="w-100" />
+        <div style="display:flex;justify-content:space-between"><strong>@T("Pin") @(i + 1)</strong><button class="btn-admin btn-danger" @onclick="() => _pins.RemoveAt(i)"><i class="fas fa-trash"></i></button></div>
+        <DxTextBox @bind-Text="pin.Label" NullText="@T("Label")" CssClass="w-100" />
         <DxSpinEdit @bind-Value="pin.Lat" CssClass="w-100" />
         <DxSpinEdit @bind-Value="pin.Lng" CssClass="w-100" />
         <DxTextBox @bind-Text="pin.Href" NullText="/contact" CssClass="w-100" />
     </div>
 }
-<button class="btn-admin btn-outline" @onclick="AddPin"><i class="fas fa-plus"></i> Add Pin</button>
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem"><button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">Save</button></div>
+<button class="btn-admin btn-outline" @onclick="AddPin"><i class="fas fa-plus"></i> @T("AddPin")</button>
+<div style="display:flex;justify-content:flex-end;margin-top:.75rem"><button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">@T("Save")</button></div>
 
 @code {
     [Parameter] public SectionModel Section { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
     private Dictionary<string, string> _title = new();
     private double _centerLat = 15.87;
     private double _centerLng = 100.99;
@@ -32,6 +42,7 @@
     private List<NetworkMapPinModel> _pins = new();
     private bool _saving;
     private string? _loadedSectionId;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     protected override void OnParametersSet()
     {
         if (_saving || _loadedSectionId == Section.Id) return;

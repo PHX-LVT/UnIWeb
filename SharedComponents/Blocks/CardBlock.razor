@@ -18,9 +18,9 @@
         <p>@StyleHelper.Lang(Block.Description, Lang)</p>
         @if (!string.IsNullOrWhiteSpace(Block.Href))
         {
-            <a class="sc-btn sc-btn--outline" href="@Block.Href">
+            <ActionButton CssClass="sc-btn sc-btn--outline" Action="@Block.Action" FormDefinitionId="@Block.FormDefinitionId" Href="@Block.Href">
                 @StyleHelper.Lang(Block.ButtonLabel, Lang)
-            </a>
+            </ActionButton>
         }
     </div>
 </div>

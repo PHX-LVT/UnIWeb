@@ -4,12 +4,13 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/global/buttons")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.ManageSettings)]
     public class GlobalButtonsController : ControllerBase
     {
         private readonly GlobalButtonsService _service;
@@ -82,6 +83,7 @@ namespace FullProject.Controllers
             LabelText = b.LabelText,
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Position = b.Position,
             Visible = b.Visible,
             Order = b.Order

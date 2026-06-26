@@ -39,6 +39,7 @@ builder.Services.AddScoped<AdminSettingsService>();
 builder.Services.AddScoped<AdminFormSubmissionService>();
 builder.Services.AddScoped<AdminLanguageService>();
 builder.Services.AddScoped<AdminContentService>();
+builder.Services.AddScoped<AdminUserService>();
 
 var app = builder.Build();
 

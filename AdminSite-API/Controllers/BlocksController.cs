@@ -1,17 +1,19 @@
 using FullProject.DTOs;
 using FullProject.Models;
-using FullProject.SectionServices;
 using FullProject.Services;
+using FullProject.Security;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
+using Contracts.Auth;
+using FullProject.Services.SectionServices;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/sections/{sectionId}/blocks")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
     public class BlocksController : ControllerBase
     {
         private readonly BlockService _service;
@@ -71,6 +73,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Create(string pageId, string sectionId,
             [FromBody] BlockCreateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var section = await _sectionService.GetByIdAsync(pageId, sectionId);
             if (section is null) return NotFound(ApiResult.NotFound("Section not found."));
 
@@ -85,6 +88,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Update(string pageId, string sectionId, string blockId,
             [FromBody] BlockUpdateDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateAsync(pageId, sectionId, blockId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block updated."));
@@ -95,6 +99,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> UpdateLayout(string pageId, string sectionId, string blockId,
             [FromBody] BlockLayoutDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateLayoutAsync(pageId, sectionId, blockId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block layout updated."));
@@ -104,6 +109,7 @@ namespace FullProject.Controllers
         [HttpDelete("{blockId}")]
         public async Task<IActionResult> Delete(string pageId, string sectionId, string blockId)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.DeleteAsync(pageId, sectionId, blockId);
             if (!ok) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok("Block deleted."));
@@ -114,6 +120,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> SetVisibility(string pageId, string sectionId,
             string blockId, [FromBody] VisibilityDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, blockId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok($"Block {(dto.Visible ? "shown" : "hidden")}."));
@@ -124,6 +131,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Reorder(string pageId, string sectionId,
             [FromBody] ReorderDto dto)
         {
+            if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.ReorderAsync(pageId, sectionId, dto.OrderedIds);
             if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
             return Ok(ApiResult.Ok("Blocks reordered."));
@@ -131,7 +139,9 @@ namespace FullProject.Controllers
 
        
    
-        // ── Mapping ───────────────────────────────────────────
+        // â”€â”€ Mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+        private bool CanUsePageBuilder => AdminAuthorization.CanUsePageBuilder(User);
 
         private static BlockResponseDto MapToDto(string pageId, string sectionId, Block b)
         {
@@ -168,11 +178,14 @@ namespace FullProject.Controllers
                     Label = btn.Label,
                     Action = btn.Action,
                     Href = btn.Href,
+                    FormDefinitionId = btn.FormDefinitionId,
                     Visible = btn.Visible,
                     Order = btn.Order
                 }).ToList(),
                 ColumnSlotId = b.ColumnSlotId,
                 BlockZone = b.BlockZone,
+                ZoneId = b.BlockZone,
+                PositionMode = ResolvePositionMode(b),
                 ParentBlockId = b.ParentBlockId,
 
             };
@@ -200,7 +213,7 @@ namespace FullProject.Controllers
                     dto.FileUrl = f.FileUrl;
                     break;
 
-                // Map: pins returned as embedded array — no separate pin endpoints
+                // Map: pins returned as embedded array â€” no separate pin endpoints
                 case MapBlock m:
                     dto.CenterLat = m.CenterLat;
                     dto.CenterLng = m.CenterLng;
@@ -215,8 +228,9 @@ namespace FullProject.Controllers
                     }).ToList();
                     break;
 
-                // Form: fields returned as embedded array — no separate form endpoints
+                // Form: fields returned as embedded array â€” no separate form endpoints
                 case FormBlock form:
+                    dto.FormDefinitionId = form.FormDefinitionId;
                     dto.Fields = form.Fields.Select(f => new FormFieldDto
                     {
                         Name = f.Name,
@@ -236,11 +250,15 @@ namespace FullProject.Controllers
                     dto.ImageUrl = card.ImageUrl;
                     dto.ButtonLabel = card.ButtonLabel;
                     dto.Href = card.Href;
+                    dto.Action = card.Action;
+                    dto.FormDefinitionId = card.FormDefinitionId;
                     break;
 
                 case ButtonBlock button:
                     dto.Label = button.Label;
                     dto.Href = button.Href;
+                    dto.Action = button.Action;
+                    dto.FormDefinitionId = button.FormDefinitionId;
                     dto.Style = button.Style;
                     break;
 
@@ -282,6 +300,11 @@ namespace FullProject.Controllers
                     dto.LayoutMode = container.LayoutMode;
                     dto.Columns = container.Columns;
                     dto.Gap = container.Gap;
+                    dto.OrbitRadius = container.OrbitRadius;
+                    dto.OrbitStartAngle = container.OrbitStartAngle;
+                    dto.SemicircleRadius = container.SemicircleRadius;
+                    dto.SemicircleStartAngle = container.SemicircleStartAngle;
+                    dto.SemicircleEndAngle = container.SemicircleEndAngle;
                     break;
             }
 
@@ -303,11 +326,27 @@ namespace FullProject.Controllers
                 BackgroundColor = layout.BackgroundColor,
                 BorderRadius = layout.BorderRadius,
                 ZIndex = layout.ZIndex,
+                ZOrder = layout.ZIndex,
                 X = layout.X,
                 Y = layout.Y,
                 W = layout.W,
-                H = layout.H
+                H = layout.H,
+                LeftPercent = layout.LeftPercent,
+                TopPx = layout.TopPx,
+                WidthPercent = layout.WidthPercent,
+                HeightPx = layout.HeightPx
             };
+        }
+
+        private static string ResolvePositionMode(Block block)
+        {
+            if (!string.IsNullOrWhiteSpace(block.PositionMode))
+                return string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase)
+                    ? "freeform"
+                    : "flow";
+
+            return !string.IsNullOrWhiteSpace(block.ColumnSlotId) ? "flow" :
+                string.Equals(block.BlockZone, "canvas", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
         }
     }
 }

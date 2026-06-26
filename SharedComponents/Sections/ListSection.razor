@@ -6,6 +6,8 @@
          class="@StyleHelper.GetSectionClass(Section.Style)"
          style="@StyleHelper.GetSectionStyle(Section.Style)">
 
+    <SectionBackgroundMedia Style="Section.Style" />
+
     <div class="sc-section-overlay"
          style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
     <div style="position: relative; z-index: 1" class="sc-list sc-list--@NormalizeLayout(Section.Layout)">
@@ -49,9 +51,9 @@
                         </p>
                         @if (!string.IsNullOrEmpty(item.LinkHref))
                         {
-                            <a href="@item.LinkHref" class="sc-list__card-link">
+                            <ActionButton Href="@item.LinkHref" CssClass="sc-list__card-link">
                                 Learn more →
-                            </a>
+                            </ActionButton>
                         }
                     </div>
                 </div>

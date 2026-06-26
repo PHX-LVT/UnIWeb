@@ -42,3 +42,18 @@
     color: #1e40af;
     border: 1px solid #bfdbfe;
 }
+
+.blazored-toast .blazored-toast-close,
+.blazored-toast .blazored-toast-close-button,
+.blazored-toast button[aria-label="Close"],
+.blazored-toast button.close {
+    color: #dc2626 !important;
+    opacity: 1 !important;
+}
+
+.blazored-toast .blazored-toast-close:hover,
+.blazored-toast .blazored-toast-close-button:hover,
+.blazored-toast button[aria-label="Close"]:hover,
+.blazored-toast button.close:hover {
+    color: #991b1b !important;
+}

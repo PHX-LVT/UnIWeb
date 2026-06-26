@@ -3,12 +3,13 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/global/branding")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.ManageSettings)]
     public class BrandingController : ControllerBase
     {
         private readonly BrandingService _service;

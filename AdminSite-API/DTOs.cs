@@ -13,6 +13,10 @@ namespace FullProject.DTOs
         public bool Valid { get; set; }
         public string AdminId { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public AdminRole Role { get; set; } = AdminRole.Viewer;
+        public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
+        public List<string> Permissions { get; set; } = new();
     }
 
 
@@ -99,6 +103,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string>? LabelText { get; set; }
         public GlobalButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition Position { get; set; }
     }
 
@@ -107,6 +112,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string>? LabelText { get; set; }
         public GlobalButtonAction? Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition? Position { get; set; }
     }
 
@@ -116,6 +122,7 @@ namespace FullProject.DTOs
         public Dictionary<string, string> LabelText { get; set; } = new();
         public GlobalButtonAction Action { get; set; }
         public string? Href { get; set; }
+        public string? FormDefinitionId { get; set; }
         public GlobalButtonPosition Position { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -286,7 +293,22 @@ namespace FullProject.DTOs
         public string? FullSlug { get; set; }
         public PageCardResponseDto? Card { get; set; }
     }
-
+    public class PublicDownloadMetricDto
+    {
+        public string? Url { get; set; }
+        public string? SourcePage { get; set; }
+    }
+    public class RevisionResponseDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string TargetId { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
+        public int? SourceVersion { get; set; }
+        public DateTime? SourceUpdatedAt { get; set; }
+        public string ActorId { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+    }
     // ---------------------------------------------------------------------------------------------------------------------
     // PAGE-LEVEL BUTTONS
     // ---------------------------------------------------------------------------------------------------------------------
@@ -328,6 +350,7 @@ namespace FullProject.DTOs
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; } = true;
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -341,6 +364,7 @@ namespace FullProject.DTOs
     {
         public Dictionary<string, string>? Name { get; set; }
         public Dictionary<string, string>? Description { get; set; }
+        public string? Behavior { get; set; }
         public bool? RequiresBody { get; set; }
         public bool? RequiresHeroImage { get; set; }
         public bool? RequiresFile { get; set; }
@@ -357,6 +381,7 @@ namespace FullProject.DTOs
         public string Key { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public string Behavior { get; set; } = "page";
         public bool RequiresBody { get; set; }
         public bool RequiresHeroImage { get; set; }
         public bool RequiresFile { get; set; }
@@ -374,8 +399,43 @@ namespace FullProject.DTOs
         public string Id { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
+    }
+
+    public class ContentBodyItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Dictionary<string, string> Content { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public string? Url { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long SizeBytes { get; set; }
+        public string? Style { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
+    }
+
+    public class ContentGalleryItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "image";
+        public string? Url { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? ResourceId { get; set; }
+        public string ResourceSource { get; set; } = "DirectUpload";
+        public string? StorageKey { get; set; }
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
     }
 
     public class ContentCreateDto
@@ -385,10 +445,21 @@ namespace FullProject.DTOs
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemDto> BodyItems { get; set; } = new();
+        public List<ContentGalleryItemDto> GalleryItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string HeroImageResourceSource { get; set; } = "DirectUpload";
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string ThumbnailResourceSource { get; set; } = "DirectUpload";
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string VideoResourceSource { get; set; } = "DirectUpload";
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string> Tags { get; set; } = new();
@@ -403,10 +474,21 @@ namespace FullProject.DTOs
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Summary { get; set; }
         public Dictionary<string, string>? BodyHtml { get; set; }
+        public List<ContentBodyItemDto>? BodyItems { get; set; }
+        public List<ContentGalleryItemDto>? GalleryItems { get; set; }
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string? HeroImageResourceSource { get; set; }
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string? ThumbnailResourceSource { get; set; }
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string? VideoResourceSource { get; set; }
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string>? Tags { get; set; }
@@ -434,10 +516,21 @@ namespace FullProject.DTOs
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public Dictionary<string, string> BodyHtml { get; set; } = new();
+        public List<ContentBodyItemDto> BodyItems { get; set; } = new();
+        public List<ContentGalleryItemDto> GalleryItems { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public string? HeroImageResourceId { get; set; }
+        public string HeroImageResourceSource { get; set; } = "DirectUpload";
+        public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public string? ThumbnailResourceId { get; set; }
+        public string ThumbnailResourceSource { get; set; } = "DirectUpload";
+        public string? ThumbnailStorageKey { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoResourceId { get; set; }
+        public string VideoResourceSource { get; set; } = "DirectUpload";
+        public string? VideoStorageKey { get; set; }
         public string? ExternalUrl { get; set; }
         public string? TemplateKey { get; set; }
         public List<string> Tags { get; set; } = new();
@@ -464,6 +557,142 @@ namespace FullProject.DTOs
     }
 
 
+    public class ResourceAlbumCreateDto
+    {
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class ResourceAlbumUpdateDto
+    {
+        public string? Scope { get; set; }
+        public string? Name { get; set; }
+    }
+
+    public class ResourceAlbumResponseDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Scope { get; set; } = "media";
+        public string Name { get; set; } = string.Empty;
+        public int ResourceCount { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ResourceAlbumAssignResourcesDto
+    {
+        public List<string> ResourceIds { get; set; } = new();
+    }
+
+    public class ResourceAlbumAssignResourcesResponseDto
+    {
+        public string AlbumId { get; set; } = string.Empty;
+        public int RequestedCount { get; set; }
+        public int UpdatedCount { get; set; }
+    }
+
+    public class ManagedResourceCreateDto
+    {
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? SizeBytes { get; set; }
+        public string? Source { get; set; }
+        public List<string> Tags { get; set; } = new();
+        public string? AlbumId { get; set; }
+        public bool Active { get; set; } = true;
+    }
+
+    public class ManagedResourceUpdateDto
+    {
+        public string? Kind { get; set; }
+        public Dictionary<string, string>? Name { get; set; }
+        public Dictionary<string, string>? Description { get; set; }
+        public string? Url { get; set; }
+        public string? StorageKey { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? SizeBytes { get; set; }
+        public string? Source { get; set; }
+        public List<string>? Tags { get; set; }
+        public string? AlbumId { get; set; }
+        public bool? Active { get; set; }
+    }
+
+    public class ManagedResourceResponseDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = "file";
+        public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string Url { get; set; } = string.Empty;
+        public string? StorageKey { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string Source { get; set; } = "managed-upload";
+        public List<string> Tags { get; set; } = new();
+        public string? AlbumId { get; set; }
+        public bool Active { get; set; }
+        public int UsageCount { get; set; }
+        public bool IsInUse { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ManagedResourceUploadBatchResponseDto
+    {
+        public List<ManagedResourceUploadResultDto> Results { get; set; } = new();
+        public int SuccessCount { get; set; }
+        public int FailedCount { get; set; }
+    }
+
+    public class ManagedResourceUploadResultDto
+    {
+        public int Index { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string? Error { get; set; }
+        public ManagedResourceResponseDto? Resource { get; set; }
+    }
+
+    public class ManagedResourceDeleteResultDto
+    {
+        public bool Deleted { get; set; }
+        public int UsageCount { get; set; }
+        public ManagedResourceUsageDto? Usage { get; set; }
+    }
+
+    public class ManagedResourceUsageDto
+    {
+        public string ResourceId { get; set; } = string.Empty;
+        public int UsageCount { get; set; }
+        public List<ManagedResourceUsageReferenceDto> References { get; set; } = new();
+    }
+
+    public class ManagedResourceUsageReferenceDto
+    {
+        public string ResourceId { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string ItemId { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Field { get; set; } = string.Empty;
+        public string Detail { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? UpdatedAt { get; set; }
+    }
     // ---------------------------------------------------------------------------------------------------------------------
     // FORM SUBMISSIONS
     // ---------------------------------------------------------------------------------------------------------------------
@@ -471,16 +700,9 @@ namespace FullProject.DTOs
     public class FormSubmitDto
     {
         public Dictionary<string, string> Data { get; set; } = new();
-    }
-
-    public class FormSubmissionResponseDto
-    {
-        public string Id { get; set; } = string.Empty;
-        public string PageId { get; set; } = string.Empty;
-        public string SectionId { get; set; } = string.Empty;
-        public string BlockId { get; set; } = string.Empty;
-        public Dictionary<string, string> Data { get; set; } = new();
-        public DateTime SubmittedAt { get; set; }
+        public string Language { get; set; } = "en";
+        public string Honeypot { get; set; } = string.Empty;
+        public string? CaptchaToken { get; set; }
     }
 
     // ---------------------------------------------------------------------------------------------------------------------
@@ -535,6 +757,26 @@ namespace FullProject.DTOs
         public string Preset { get; set; } = "navy-gold";
     }
 
+    public class ResourceLibrarySettingsDto
+    {
+        public int MaxImageMb { get; set; } = 20;
+        public int MaxFileMb { get; set; } = 100;
+        public int MaxVideoMb { get; set; } = 250;
+        public List<string> AllowedImageFormats { get; set; } = new();
+        public List<string> AllowedFileFormats { get; set; } = new();
+        public List<string> AllowedVideoFormats { get; set; } = new();
+    }
+
+    public class ResourceLibrarySettingsUpdateDto
+    {
+        public int? MaxImageMb { get; set; }
+        public int? MaxFileMb { get; set; }
+        public int? MaxVideoMb { get; set; }
+        public List<string>? AllowedImageFormats { get; set; }
+        public List<string>? AllowedFileFormats { get; set; }
+        public List<string>? AllowedVideoFormats { get; set; }
+    }
+
     public class GlossaryTermResponseDto
     {
         public string Id { get; set; } = string.Empty;
@@ -554,5 +796,4 @@ namespace FullProject.DTOs
         public string? Description { get; set; }
     }
 }
-
 

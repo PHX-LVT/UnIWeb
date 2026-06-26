@@ -1,0 +1,22 @@
+[
+  {
+    "_id": {
+      "$oid": "6a12a10f2904705a0f659a0a"
+    },
+    "Action": {
+      "$numberInt": "0"
+    },
+    "Href": "modal:sync",
+    "Position": {
+      "$numberInt": "1"
+    },
+    "Visible": true,
+    "Order": {
+      "$numberInt": "0"
+    },
+    "LabelText": {
+      "en": "Login to SyncHub",
+      "vi": "Đăng Nhập SyncHub"
+    }
+  }
+]

@@ -1,9 +1,9 @@
 ﻿using FullProject.Filters;
 using FullProject.Models;
-using FullProject.SectionServices;
 using FullProject.Services;
 using FullProject.Settings;
 using FullProject.Data;
+using FullProject.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
@@ -13,10 +13,18 @@ using Swashbuckle.AspNetCore.Filters;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using FullProject.Services.SectionServices;
+using FullProject.Services.AssetService;
+using FullProject.Services.PublishAndResetService;
+using FullProject.Security.Forms;
+using FullProject.Services.FormServices;
+using FullProject.Services.Metrics;
+using Contracts.Auth;
+using FullProject.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Settings ---
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDb"));
 builder.Services.Configure<JwtSettings>(
@@ -27,8 +35,10 @@ builder.Services.Configure<CorsSettings>(
     builder.Configuration.GetSection("Cors"));
 builder.Services.Configure<R2StorageSettings>(
     builder.Configuration.GetSection("R2Storage"));
+builder.Services.Configure<FormSecuritySettings>(
+    builder.Configuration.GetSection("FormSecurity"));
 
-// â”€â”€ MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- MongoDB ---
 var mongoSettings = builder.Configuration
     .GetSection("MongoDb")
     .Get<MongoDbSettings>();
@@ -65,30 +75,62 @@ builder.Services.AddScoped<PublishService>();
 builder.Services.AddScoped<ResetService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<FormSubmissionService>();
+builder.Services.AddScoped<FormSubmissionSecurityService>();
+builder.Services.AddScoped<FormDefinitionService>();
+builder.Services.AddScoped<FormValidationService>();
+builder.Services.AddScoped<PublicFormSubmissionService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ContentAssetMetadataService>();
+builder.Services.AddScoped<ContentTypeService>();
+builder.Services.AddScoped<ContentValidationService>();
+builder.Services.AddScoped<ContentMappingService>();
+builder.Services.AddScoped<ContentRevisionService>();
+builder.Services.AddScoped<ContentWorkflowService>();
 builder.Services.AddScoped<ContentService>();
+builder.Services.AddScoped<ManagedResourceAlbumService>();
+builder.Services.AddScoped<ManagedResourceValidationService>();
+builder.Services.AddScoped<ManagedResourceUsageService>();
+builder.Services.AddScoped<ManagedResourceService>();
+builder.Services.AddScoped<VisitorMetricService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicPageAssemblyService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicMetadataService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicFormSubmissionHandler>();
 builder.Services.AddHttpClient<R2StorageService>();
+builder.Services.AddScoped<AssetReferenceService>();
+builder.Services.AddScoped<AssetCleanupService>();
 builder.Services.AddScoped<R2AssetService>();
 
-// â”€â”€ Memory Cache (Phase 1 â€” Maybe Redis in Phase 2 idk) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Memory Cache (Phase 1 - Maybe Redis in Phase 2) ---
 builder.Services.AddMemoryCache();
 
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("public-form", limiterOptions =>
-    {
-        limiterOptions.PermitLimit = 10;
-        limiterOptions.Window = TimeSpan.FromMinutes(1);
-        limiterOptions.QueueLimit = 0;
-        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiterOptions.AutoReplenishment = true;
-    });
-});
+    options.AddPolicy("public-form", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"{context.Connection.RemoteIpAddress}:{context.Request.Path}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
 
-// â”€â”€ JWT Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    options.AddPolicy("admin-login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"admin-login:{context.Connection.RemoteIpAddress}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+});
+// --- JWT Auth ---
 var jwtSettings = builder.Configuration
     .GetSection("Jwt")
     .Get<JwtSettings>();
@@ -109,6 +151,7 @@ if (string.IsNullOrWhiteSpace(jwtSettings.Secret) ||
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -121,18 +164,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 Encoding.UTF8.GetBytes(jwtSettings.Secret))
         };
     });
-// â”€â”€ set authorization as the default(for security) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Set authorization as the default (for security) ---
 
 builder.Services.AddAuthorization
     (options =>
 {
+    foreach (var permission in AdminPermissionKeys.All)
+    {
+        options.AddPolicy(permission, policy =>
+            policy.RequireAssertion(context =>
+                AdminAuthorization.HasPermission(context.User, permission)));
+    }
+
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
     .RequireAuthenticatedUser()
     .Build();
 }
     );
 
-// â”€â”€ Controllers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Controllers ---
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<GlobalExceptionFilter>();
@@ -145,9 +195,9 @@ builder.Services.AddControllers(options =>
         JsonIgnoreCondition.WhenWritingNull;
 });
 
-// â”€â”€ CORS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- CORS ---
 var corsSettings = builder.Configuration
-    .GetSection("Cors")                   // â† was "AllowedOrigins"
+    .GetSection("Cors")                   // was "AllowedOrigins"
     .Get<CorsSettings>();
 
 if (corsSettings is null ||
@@ -181,7 +231,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// â”€â”€ Swagger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(option =>
 {
@@ -219,24 +269,26 @@ builder.Services.AddSwaggerGen(option =>
         }
     });
 });
-// â”€â”€ Set Exmaples for Swagger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Set Examples for Swagger ---
 builder.Services.AddSwaggerExamplesFromAssemblyOf<PageCreateDtoExample>();
-// â”€â”€ Force to use local URL(may not needed anymore idk) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Force to use local URL (may not be needed anymore) ---
 //builder.WebHost.UseUrls("http://localhost:6969");
 
 
-// â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Build ---
 var app = builder.Build();
 
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
-// â”€â”€ MongoDB Indexes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// CreateOneAsync is idempotent â€” safe to run on every startup.
+// --- MongoDB Indexes ---
+// CreateOneAsync is idempotent - safe to run on every startup.
 // try-catch ensures a MongoDB issue at startup logs a warning
 // rather than crashing the entire app.
 try
 {
-    await app.Services.GetRequiredService<MongoIndexService>().EnsureIndexesAsync();
+    await app.Services.GetRequiredService<MongoIndexService>()
+        .EnsureIndexesAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
 }
 catch (Exception ex)
 {
@@ -245,7 +297,32 @@ catch (Exception ex)
         "some queries may be slower. Check MongoDB connectivity.");
 }
 
-// â”€â”€ Seed admin user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+try
+{
+    using var scope = app.Services.CreateScope();
+    var resourceAlbumCleanup = await scope.ServiceProvider.GetRequiredService<ManagedResourceAlbumService>()
+        .RemoveLegacyDefaultAlbumsAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    if (resourceAlbumCleanup.AlbumCount > 0 || resourceAlbumCleanup.ResourceCount > 0)
+    {
+        logger.LogInformation(
+            "Legacy default resource albums removed. Albums: {AlbumCount}, resources unfiled: {ResourceCount}.",
+            resourceAlbumCleanup.AlbumCount,
+            resourceAlbumCleanup.ResourceCount);
+    }
+
+    await scope.ServiceProvider.GetRequiredService<FormDefinitionService>()
+        .EnsureDefaultDefinitionsAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    logger.LogInformation("Default public form definitions checked.");
+}
+catch (Exception ex)
+{
+    logger.LogWarning(ex,
+        "Startup cleanup or form definition seed failed. Resource album cleanup or public modal forms may be unavailable until the next startup.");
+}
+
+// --- Seed admin user ---
 var seedSettings = builder.Configuration
     .GetSection("Seed")
     .Get<AdminSeedSettings>();
@@ -260,7 +337,8 @@ if (!string.IsNullOrEmpty(seedEmail) && !string.IsNullOrEmpty(seedPassword))
         using var scope = app.Services.CreateScope();
         var authService = scope.ServiceProvider
             .GetRequiredService<AuthService>();
-        await authService.SeedAdminAsync(seedEmail, seedPassword);
+        await authService.SeedAdminAsync(seedEmail, seedPassword)
+            .WaitAsync(TimeSpan.FromSeconds(10));
         logger.LogInformation(
             "Admin seed check complete for {Email}.", seedEmail);
     }
@@ -278,7 +356,7 @@ else
         "No admin user was seeded.");
 }
 
-// â”€â”€ Middleware pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Middleware pipeline ---
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -294,6 +372,7 @@ app.UseCors("AllowFrontends");
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<AdminSessionValidationMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 
@@ -302,7 +381,4 @@ logger.LogInformation(
     app.Environment.EnvironmentName);
 
 app.Run();
-
-
-
 

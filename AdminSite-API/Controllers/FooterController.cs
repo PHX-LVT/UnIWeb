@@ -4,12 +4,13 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/footer")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.ManageSettings)]
     public class FooterController : ControllerBase
     {
         private readonly FooterService _service;

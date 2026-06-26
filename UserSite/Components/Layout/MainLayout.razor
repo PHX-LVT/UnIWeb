@@ -4,6 +4,7 @@
 @inject IJSRuntime JS
 @inject PublicApiService Api
 @inject LanguageService LangService
+@inject NavigationManager Navigation
 @using SharedComponents.Helpers
 
 @if (_ready)
@@ -14,7 +15,7 @@
                 Lang="@_lang"
                 Languages="_langs"
                 OnLanguageChanged="SwitchLang"
-                Scrolled="_headerScrolled" />
+                Scrolled="@(_headerScrolled || IsSolidHeaderPath)" />
 
     <main>
         @Body
@@ -51,6 +52,16 @@ else
 
     private List<string> _langs = new() { "en", "vi", "cn" };
 
+    private bool IsSolidHeaderPath
+    {
+        get
+        {
+            var path = new Uri(Navigation.Uri).AbsolutePath.Trim('/');
+            return path.StartsWith("insights/", StringComparison.OrdinalIgnoreCase) &&
+                   path.Split('/', StringSplitOptions.RemoveEmptyEntries).Length >= 3;
+        }
+    }
+
     private async Task SwitchLang(string lang)
     {
         _lang = lang;
@@ -77,6 +88,7 @@ else
         }
 
         await LangService.LoadSettingsAsync();
+        Navigation.LocationChanged += HandleLocationChanged;
         StyleHelper.SetFallbackLanguage(LangService.FallbackLanguage);
         _langs = LangService.Languages.Select(l => l.Code).ToList();
         _lang = await LangService.GetAsync();
@@ -130,6 +142,11 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
@@ -145,6 +162,7 @@ else
             }
         }
 
+        Navigation.LocationChanged -= HandleLocationChanged;
         _dotNetRef?.Dispose();
     }
 }

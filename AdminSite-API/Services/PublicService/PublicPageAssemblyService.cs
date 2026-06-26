@@ -1,6 +1,9 @@
-﻿using Contracts.Public;
+using Contracts.Public;
 using FullProject.Models;
-using FullProject.SectionServices;
+using FullProject.Security;
+using FullProject.Services.FormServices;
+using FullProject.Services.SectionServices;
+using SharedComponents.Helpers;
 using System.Net;
 using System.Text.RegularExpressions;
 
@@ -8,21 +11,26 @@ namespace FullProject.Services.PublicService
 {
     public class PublicPageAssemblyService
     {
+        private static readonly ContentSanitizer BodyHtmlSanitizer = new();
+
         private readonly PageService _pageService;
         private readonly SectionService _sectionService;
         private readonly BlockService _blockService;
         private readonly ContentService _contentService;
+        private readonly FormDefinitionService _formDefinitionService;
 
         public PublicPageAssemblyService(
             PageService pageService,
             SectionService sectionService,
             BlockService blockService,
-            ContentService contentService)
+            ContentService contentService,
+            FormDefinitionService formDefinitionService)
         {
             _pageService = pageService;
             _sectionService = sectionService;
             _blockService = blockService;
             _contentService = contentService;
+            _formDefinitionService = formDefinitionService;
         }
 
         public async Task<object?> GetPageResponseAsync(string slug)
@@ -67,7 +75,13 @@ namespace FullProject.Services.PublicService
         public async Task<PublicPageDto?> GetContentPageAsync(string typeKey, string slug)
         {
             var item = await _contentService.GetPublishedBySlugAsync(typeKey, slug);
-            return item is null ? null : BuildContentDetailPage(item);
+            if (item is null)
+                return null;
+
+            var contentType = (await _contentService.GetTypesAsync())
+                .FirstOrDefault(t => string.Equals(t.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase));
+
+            return await BuildContentDetailPageAsync(item, contentType);
         }
 
         private async Task<List<object>> BuildVisibleSectionDtosAsync(Page page)
@@ -84,6 +98,12 @@ namespace FullProject.Services.PublicService
         public async Task<List<object>> BuildSectionDtosAsync(Page page, List<Section> visibleSections)
         {
             var allBlocks = await _blockService.GetPublicByPageAsync(page.StableId);
+            var formDefinitions = (await _formDefinitionService.GetActiveByIdsAsync(
+                    allBlocks.OfType<FormBlock>()
+                        .Select(block => block.FormDefinitionId)
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Select(id => id!)))
+                .ToDictionary(definition => definition.Id, StringComparer.Ordinal);
 
             // We filter for visible blocks here to keep the logic clean inside the loops
             var blocksBySection = allBlocks
@@ -149,6 +169,8 @@ namespace FullProject.Services.PublicService
                         ? 200
                         : Math.Clamp(library.Limit, 1, 24);
                     var items = await _contentService.GetPublishedLibraryItemsAsync(library.ContentTypes, itemLimit, library.SortMode);
+                    var typesByKey = (await _contentService.GetTypesAsync())
+                        .ToDictionary(t => t.Key, StringComparer.OrdinalIgnoreCase);
 
                     sectionDtos.Add(new PublicLibrarySectionDto
                     {
@@ -177,7 +199,8 @@ namespace FullProject.Services.PublicService
                         ShowFilters = library.ShowFilters,
                         SearchPlaceholder = library.SearchPlaceholder,
                         SortMode = library.SortMode,
-                        Items = items.Select(MapLibraryItem).ToList()
+                        Items = items.Select(item =>
+                            MapLibraryItem(item, typesByKey.TryGetValue(item.ContentTypeKey, out var type) ? type : null)).ToList()
                     });
                     continue;
                 }
@@ -212,14 +235,14 @@ namespace FullProject.Services.PublicService
                                 slot.Id,
                                 slot.Order,
                                 Blocks = blocksBySlot.TryGetValue(slot.Id, out var slotBlocks)
-                                    ? MapPublicBlocks(slotBlocks)
+                                    ? MapPublicBlocks(slotBlocks, formDefinitions)
                                     : new List<PublicBlockDto>()
                             }).ToList()
                     });
                     continue;
                 }
 
-                // 3. Catch-all for standard sections (Hero, CTA, Gallery, etc.)
+                // 3. Catch-all for standard sections (Hero, CTA, etc.)
                 var visibleBlocks = blocksBySection.TryGetValue(section.StableId, out var sBlocks)
                     ? sBlocks : new List<Block>();
 
@@ -231,7 +254,6 @@ namespace FullProject.Services.PublicService
                     {
                         HeroSection => "hero",
                         CtaSection => "cta",
-                        GallerySection => "gallery",
                         ListSection => "list",
                         DynamicSection => "dynamic",
                         HtmlSection => "html",
@@ -251,7 +273,6 @@ namespace FullProject.Services.PublicService
                     Subtext = (section as CtaSection)?.Subtext,
                     Layout = (section as HeroSection)?.Layout
                                 ?? (section as CtaSection)?.Layout
-                                ?? (section as GallerySection)?.Layout
                                 ?? (section as ListSection)?.Layout
                                 ?? (section as CarouselSection)?.Layout
                                 ?? (section as TestimonialSection)?.Layout,
@@ -264,7 +285,6 @@ namespace FullProject.Services.PublicService
                     },
                     Button = (section as CtaSection)?.Button,
                     ImageUrl = (section as HeroSection)?.ImageUrl,
-                    Images = (section as GallerySection)?.Images?.Where(i => i.Visible).OrderBy(i => i.Order).ToList(),
                     Items = section switch
                     {
                         ListSection list => list.Items
@@ -338,14 +358,17 @@ namespace FullProject.Services.PublicService
                     DefaultZoom = (section as NetworkMapSection)?.DefaultZoom,
                     AdminLabel = (section as CanvasSection)?.AdminLabel,
                     Blocks = MapPublicBlocks(visibleBlocks
-                        .Where(b => string.IsNullOrWhiteSpace(b.ColumnSlotId)))
+                        .Where(b => string.IsNullOrWhiteSpace(b.ColumnSlotId)), formDefinitions)
                 });
             }
 
             return sectionDtos;
         }
 
-        private static List<PublicBlockDto> MapPublicBlocks(IEnumerable<Block> blocks, string? parentBlockId = null)
+        private static List<PublicBlockDto> MapPublicBlocks(
+            IEnumerable<Block> blocks,
+            IReadOnlyDictionary<string, FormDefinition> formDefinitions,
+            string? parentBlockId = null)
         {
             var blockList = blocks.ToList();
             var mapped = blockList
@@ -353,49 +376,107 @@ namespace FullProject.Services.PublicService
                     ? string.IsNullOrWhiteSpace(b.ParentBlockId)
                     : string.Equals(b.ParentBlockId, parentBlockId, StringComparison.Ordinal))
                 .OrderBy(b => b.Order)
-                .Select(MapPublicBlock)
+                .Select(block => MapPublicBlock(block, formDefinitions))
                 .Where(b => b is not null)
                 .Select(b => b!)
                 .ToList();
 
             foreach (var container in mapped.OfType<PublicContainerBlockDto>())
             {
-                container.Children = MapPublicBlocks(blockList, container.Id);
+                container.Children = MapPublicBlocks(blockList, formDefinitions, container.Id);
             }
 
             return mapped;
         }
 
-        private static PublicLibraryItemDto MapLibraryItem(ContentItem item) => new()
+        private static PublicLibraryItemDto MapLibraryItem(ContentItem item, ContentType? type) => new()
         {
             Id = item.Id,
             StableId = item.StableId,
             ContentTypeKey = item.ContentTypeKey,
+            ContentBehavior = ResolveLibraryContentBehavior(type),
             Slug = item.Slug,
             Title = item.Title,
             Summary = item.Summary,
             HeroImageUrl = item.HeroImageUrl,
             ThumbnailUrl = item.ThumbnailUrl,
-            VideoUrl = item.VideoUrl,
+            VideoUrl = !string.IsNullOrWhiteSpace(item.VideoUrl)
+                ? item.VideoUrl
+                : item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url,
             ExternalUrl = item.ExternalUrl,
-            ClickBehavior = ResolveLibraryClickBehavior(item),
+            ClickBehavior = ResolveLibraryClickBehavior(item, type),
             Tags = item.Tags,
-            Attachments = item.Attachments.Select(a => new PublicLibraryAttachmentDto
-            {
-                Id = a.Id,
-                FileName = a.FileName,
-                Url = a.Url,
-                ContentType = a.ContentType,
-                SizeBytes = a.SizeBytes
-            }).ToList(),
+            Attachments = MapLibraryAttachments(item),
+            GalleryItems = MapLibraryGalleryItems(item),
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt,
             PublishedAt = item.PublishedAt
         };
 
-        public PublicPageDto BuildContentDetailPage(ContentItem item)
+        private static List<PublicLibraryAttachmentDto> MapLibraryAttachments(ContentItem item)
+        {
+            var attachments = item.Attachments
+                .Where(a => !string.IsNullOrWhiteSpace(a.Url))
+                .Select(a => new PublicLibraryAttachmentDto
+                {
+                    Id = a.Id,
+                    FileName = a.FileName,
+                    Url = a.Url,
+                    ContentType = a.ContentType,
+                    SizeBytes = a.SizeBytes
+                })
+                .ToList();
+
+            var existingUrls = attachments
+                .Select(a => a.Url)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var bodyFiles = item.BodyItems
+                .Where(i => i.Visible
+                    && string.Equals(i.Type, "file", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(i.Url)
+                    && existingUrls.Add(i.Url!))
+                .Select(i => new PublicLibraryAttachmentDto
+                {
+                    Id = i.Id,
+                    FileName = !string.IsNullOrWhiteSpace(i.FileName) ? i.FileName! : FileNameFromUrl(i.Url),
+                    Url = i.Url!,
+                    ContentType = i.ContentType ?? string.Empty,
+                    SizeBytes = i.SizeBytes
+                });
+
+            attachments.AddRange(bodyFiles);
+            return attachments;
+        }
+
+        private static List<PublicLibraryGalleryItemDto> MapLibraryGalleryItems(ContentItem item) =>
+            item.GalleryItems
+                .Where(i => i.Visible && !string.IsNullOrWhiteSpace(i.Url))
+                .OrderBy(i => i.Order)
+                .Select(i => new PublicLibraryGalleryItemDto
+                {
+                    Id = i.Id,
+                    Kind = NormalizeGalleryItemKind(i.Kind),
+                    Url = i.Url!,
+                    ThumbnailUrl = i.ThumbnailUrl,
+                    Caption = i.Caption,
+                    Order = i.Order
+                })
+                .ToList();
+
+        private static string NormalizeGalleryItemKind(string? kind) =>
+            string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase) ? "video" : "image";
+
+        private static string FileNameFromUrl(string? url)
+        {
+            var fileName = System.IO.Path.GetFileName(url);
+            return string.IsNullOrWhiteSpace(fileName) ? "File" : fileName;
+        }
+
+        public async Task<PublicPageDto> BuildContentDetailPageAsync(ContentItem item, ContentType? type = null)
         {
             var typeRoute = ContentTypeRoute(item.ContentTypeKey);
+            var expertForm = await _formDefinitionService.GetActiveByKeyAsync("expert");
             var fullSlug = $"insights/{typeRoute}/{item.Slug}";
             return new PublicPageDto
             {
@@ -421,7 +502,7 @@ namespace FullProject.Services.PublicService
                         Visible = true,
                         Order = 1,
                         Style = ContentBodyStyle(),
-                        HtmlContent = BuildContentDetailBodyHtml(item, typeRoute)
+                        HtmlContent = BuildContentDetailBodyHtml(item, typeRoute, type)
                     },
                     new PublicCtaSectionDto
                     {
@@ -430,7 +511,7 @@ namespace FullProject.Services.PublicService
                         Visible = true,
                         Order = 2,
                         Style = ContentCtaStyle(),
-                        Layout = "stacked",
+                        Layout = "final-card",
                         Heading = new Dictionary<string, string>
                         {
                             ["en"] = "Ready to move in sync?",
@@ -454,8 +535,9 @@ namespace FullProject.Services.PublicService
                                     ["vi"] = "Talk to Expert",
                                     ["cn"] = "Talk to Expert"
                                 },
-                                Action = "modal",
-                                Href = "#expert",
+                                Action = expertForm is null ? "linkToPage" : "openForm",
+                                Href = expertForm is null ? "/contact" : null,
+                                FormDefinitionId = expertForm?.Id,
                                 Style = "filled",
                                 Visible = true,
                                 Order = 0
@@ -531,18 +613,22 @@ namespace FullProject.Services.PublicService
                 """;
         }
 
-        private static Dictionary<string, string> BuildContentDetailBodyHtml(ContentItem item, string typeRoute)
+        private static Dictionary<string, string> BuildContentDetailBodyHtml(ContentItem item, string typeRoute, ContentType? type)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var lang in new[] { "en", "vi", "cn" })
-                result[lang] = BuildContentDetailBodyHtml(item, typeRoute, lang);
+                result[lang] = BuildContentDetailBodyHtml(item, typeRoute, lang, type);
 
             return result;
         }
 
-        private static string BuildContentDetailBodyHtml(ContentItem item, string typeRoute, string lang)
+        private static string BuildContentDetailBodyHtml(ContentItem item, string typeRoute, string lang, ContentType? type)
         {
-            var body = LangValue(item.BodyHtml, lang, string.Empty);
+            var body = type?.RequiresBody == false
+                ? BuildResourceContentHtml(item, type, lang)
+                : BuildContentBodyItemsHtml(item, lang);
+            if (string.IsNullOrWhiteSpace(body))
+                body = LangValue(item.BodyHtml, lang, string.Empty);
             if (string.IsNullOrWhiteSpace(body))
                 body = $"<p>{H(LangValue(item.Summary, lang, string.Empty))}</p>";
 
@@ -563,6 +649,139 @@ namespace FullProject.Services.PublicService
                 <p class="sc-insight-back"><a href="/insights">{H(backLabel)}</a></p>
                 """;
         }
+
+        private static string BuildResourceContentHtml(ContentItem item, ContentType type, string lang)
+        {
+            var title = H(LangValue(item.Title, lang, item.Slug));
+            var summary = H(LangValue(item.Summary, lang, string.Empty));
+            var behavior = ResolveLibraryClickBehavior(item, type);
+            var href = ResolveResourceHref(item, behavior);
+            var buttonLabel = behavior switch
+            {
+                "video" => "Watch Video",
+                "image" => "View Image",
+                "external" => "Open Link",
+                _ => "Open File"
+            };
+
+            var action = string.IsNullOrWhiteSpace(href)
+                ? "<p class=\"sc-insight-resource-note\">No file, video, image, or external URL is attached yet.</p>"
+                : $"<a class=\"sc-insight-download\" href=\"{H(href)}\" target=\"_blank\" rel=\"noopener\"><span><strong>{title}</strong>{ResourceMeta(item, behavior)}</span><b>{H(buttonLabel)}</b></a>";
+
+            return $"""
+                <div class="sc-insight-resource-card">
+                    <h2>{title}</h2>
+                    <p>{summary}</p>
+                    {action}
+                </div>
+                """;
+        }
+
+        private static string ResolveResourceHref(ContentItem item, string behavior) =>
+            behavior switch
+            {
+                "video" => item.VideoUrl
+                    ?? item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url
+                    ?? string.Empty,
+                "image" => !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? item.ThumbnailUrl! : item.HeroImageUrl ?? string.Empty,
+                "external" => item.ExternalUrl ?? string.Empty,
+                _ => item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url))?.Url
+                    ?? item.BodyItems.FirstOrDefault(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url))?.Url
+                    ?? string.Empty
+            };
+
+        private static string ResourceMeta(ContentItem item, string behavior)
+        {
+            if (behavior == "video")
+                return "<small>Video / Webinar</small>";
+            if (behavior == "image")
+                return "<small>Image resource</small>";
+            if (behavior == "external")
+                return "<small>External resource</small>";
+
+            var file = item.Attachments.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Url));
+            if (file is null)
+                return "<small>Downloadable resource</small>";
+
+            var meta = string.Join(" / ", new[] { FormatBytes(file.SizeBytes), file.ContentType }
+                .Where(v => !string.IsNullOrWhiteSpace(v)));
+            return string.IsNullOrWhiteSpace(meta) ? string.Empty : $"<small>{H(meta)}</small>";
+        }
+
+        private static string BuildContentBodyItemsHtml(ContentItem item, string lang)
+        {
+            if (item.BodyItems.Count == 0)
+                return string.Empty;
+
+            return string.Join(Environment.NewLine, item.BodyItems
+                .Where(i => i.Visible)
+                .OrderBy(i => i.Order)
+                .Select(i => RenderContentBodyItemHtml(i, lang))
+                .Where(html => !string.IsNullOrWhiteSpace(html)));
+        }
+
+        private static string RenderContentBodyItemHtml(ContentBodyItem item, string lang)
+        {
+            var content = LangValue(item.Content, lang, string.Empty);
+            var caption = LangValue(item.Caption, lang, string.Empty);
+            var url = item.Url ?? string.Empty;
+            var fileName = !string.IsNullOrWhiteSpace(item.FileName) ? item.FileName! : "Download";
+
+            return item.Type switch
+            {
+                "image" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<figure class=\"sc-content-body-item sc-content-body-image\"><img src=\"{H(url)}\" alt=\"{H(caption)}\" />{RenderContentCaption(caption)}</figure>",
+                "video" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<div class=\"sc-content-body-item sc-content-body-video\"><iframe src=\"{H(ToEmbedVideoUrl(url))}\" title=\"{H(caption)}\" loading=\"lazy\" allowfullscreen></iframe>{RenderContentCaption(caption)}</div>",
+                "file" when !string.IsNullOrWhiteSpace(url) =>
+                    $"<div class=\"sc-content-body-item\"><a class=\"sc-insight-download\" href=\"{H(url)}\" target=\"_blank\" rel=\"noopener\"><span><strong>{H(fileName)}</strong>{RenderContentFileMeta(item)}</span><b>Download</b></a></div>",
+                "quote" when !string.IsNullOrWhiteSpace(content) =>
+                    $"<blockquote class=\"sc-content-body-item sc-content-body-quote\">{H(content)}</blockquote>",
+                "cta" when !string.IsNullOrWhiteSpace(content) =>
+                    $"<div class=\"sc-content-body-item sc-content-body-cta\">{BodyHtmlSanitizer.SanitizeHtml(content)}</div>",
+                "divider" => "<hr class=\"sc-content-body-item sc-content-body-divider\" />",
+                _ when !string.IsNullOrWhiteSpace(content) => $"<div class=\"sc-content-body-item sc-content-body-text\">{PlainTextToParagraphHtml(content)}</div>",
+                _ => string.Empty
+            };
+        }
+
+        private static string RenderContentCaption(string caption) =>
+            string.IsNullOrWhiteSpace(caption) ? string.Empty : $"<figcaption>{H(caption)}</figcaption>";
+
+        private static string RenderContentFileMeta(ContentBodyItem item)
+        {
+            var parts = new[] { FormatBytes(item.SizeBytes), item.ContentType }
+                .Where(p => !string.IsNullOrWhiteSpace(p));
+            var meta = string.Join(" / ", parts);
+            return string.IsNullOrWhiteSpace(meta) ? string.Empty : $"<small>{H(meta)}</small>";
+        }
+
+        private static string ToEmbedVideoUrl(string url)
+        {
+            return VideoUrlHelper.ToEmbedUrl(url) ?? url;
+        }
+
+        private static string PlainTextToParagraphHtml(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            if (ContainsHtmlMarkup(value))
+                return value;
+
+            var paragraphs = Regex.Split(value.Trim(), @"(?:\r?\n){2,}")
+                .Select(p => p.Trim())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(p => $"<p>{H(p).Replace("\n", "<br />")}</p>");
+
+            return string.Join(Environment.NewLine, paragraphs);
+        }
+
+        private static bool ContainsHtmlMarkup(string value) =>
+            Regex.IsMatch(
+                value,
+                @"<\s*(p|h[1-6]|ul|ol|li|blockquote|div|figure|figcaption|table|thead|tbody|tr|td|th|br|span|strong|b|em|i|u|a)\b",
+                RegexOptions.IgnoreCase);
 
         private static string BuildContentDetailSidebarHtml(ContentItem item, string typeRoute, string lang)
         {
@@ -605,8 +824,8 @@ namespace FullProject.Services.PublicService
             {
                 var label = lang switch
                 {
-                    "vi" => "Quay láº¡i Insights",
-                    "cn" => "è¿”å›ž Insights",
+                    "vi" => "Quay lại Insights",
+                    "cn" => "返回 Insights",
                     _ => "Back to Insights"
                 };
 
@@ -671,7 +890,7 @@ namespace FullProject.Services.PublicService
             "video" => "videos",
             "tool" => "tools",
             "technology" => "technology",
-            _ => $"{typeKey}s"
+            _ => typeKey
         };
 
         private static string ContentTypeLabel(string typeKey) => typeKey switch
@@ -707,28 +926,96 @@ namespace FullProject.Services.PublicService
         private static PublicSectionStyleDto ContentCtaStyle() => new()
         {
             BackgroundType = "color",
-            BackgroundColor = "#0f3460",
+            BackgroundColor = "#ffffff",
             Height = "auto",
             Padding = "large",
             ContentWidth = "normal",
-            TextColor = "light",
+            TextColor = "dark",
             MobileLayout = "stack",
             BlockLayoutMode = "stack",
             BlockGridColumns = 12,
             BlockGap = "medium"
         };
 
-        private static string ResolveLibraryClickBehavior(ContentItem item)
+        private static string ResolveLibraryClickBehavior(ContentItem item, ContentType? type = null)
         {
-            if (string.Equals(item.ContentTypeKey, "video", StringComparison.OrdinalIgnoreCase))
+            var configured = type?.ClickBehavior?.Trim().ToLowerInvariant();
+            var behavior = ResolveLibraryContentBehavior(type);
+
+            if (configured == "video" || behavior == "video-resource" || IsVideoLibraryType(item.ContentTypeKey) || IsVideoLibraryType(type?.Key))
                 return "video";
+            if (configured == "image" || behavior is "image-resource" or "gallery" || IsImageLibraryType(item.ContentTypeKey) || IsImageLibraryType(type?.Key))
+                return "image";
+            if (type?.RequiresBody == true || behavior == "page")
+                return "detail";
+            if (configured is "download" or "external")
+                return configured;
+            if (behavior == "file-resource" || type?.RequiresBody == false)
+            {
+                if (!string.IsNullOrWhiteSpace(item.VideoUrl) ||
+                    item.BodyItems.Any(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url)))
+                    return "video";
+                if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
+                    return "external";
+                return "download";
+            }
+            if (string.Equals(item.ContentTypeKey, "article", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.ContentTypeKey, "case-study", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.ContentTypeKey, "technology", StringComparison.OrdinalIgnoreCase))
+                return "detail";
             if (item.Attachments.Any(a => !string.IsNullOrWhiteSpace(a.Url)) ||
+                item.BodyItems.Any(i => i.Type == "file" && !string.IsNullOrWhiteSpace(i.Url)) ||
                 string.Equals(item.ContentTypeKey, "whitepaper", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(item.ContentTypeKey, "tool", StringComparison.OrdinalIgnoreCase))
                 return "download";
             if (!string.IsNullOrWhiteSpace(item.ExternalUrl))
                 return "external";
             return "detail";
+        }
+
+        private static string ResolveLibraryContentBehavior(ContentType? type)
+        {
+            var behavior = NormalizeLibraryContentBehavior(type?.Behavior);
+            if (!string.IsNullOrWhiteSpace(behavior))
+                return behavior;
+            if (string.Equals(type?.ClickBehavior, "image", StringComparison.OrdinalIgnoreCase))
+                return "image-resource";
+            if (type?.RequiresVideoUrl == true || string.Equals(type?.ClickBehavior, "video", StringComparison.OrdinalIgnoreCase))
+                return "video-resource";
+            if (type?.RequiresFile == true || string.Equals(type?.ClickBehavior, "download", StringComparison.OrdinalIgnoreCase))
+                return "file-resource";
+            return type?.RequiresBody == false ? "file-resource" : "page";
+        }
+
+        private static string NormalizeLibraryContentBehavior(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace("_", "-").Replace(" ", "-");
+            return normalized switch
+            {
+                "page" or "detail" or "article" => "page",
+                "file" or "fileresource" or "file-resource" or "download" or "resource" => "file-resource",
+                "video" or "videoresource" or "video-resource" or "webinar" => "video-resource",
+                "image" or "imageresource" or "image-resource" or "photo" or "picture" => "image-resource",
+                "gallery" or "imagegallery" or "image-gallery" or "photogallery" or "photo-gallery" or "mediagallery" or "media-gallery" => "gallery",
+                _ => string.Empty
+            };
+        }
+
+        private static bool IsVideoLibraryType(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            var normalized = key.Trim().ToLowerInvariant();
+            return normalized.Contains("video", StringComparison.OrdinalIgnoreCase) ||
+                   normalized.Contains("webinar", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsImageLibraryType(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            var normalized = key.Trim().ToLowerInvariant();
+            return normalized.Contains("image", StringComparison.OrdinalIgnoreCase) ||
+                   normalized.Contains("gallery", StringComparison.OrdinalIgnoreCase) ||
+                   normalized.Contains("photo", StringComparison.OrdinalIgnoreCase);
         }
 
         private static ShowcaseItemOverride? FindShowcaseOverride(Page child, IReadOnlyDictionary<string, ShowcaseItemOverride> overrides)
@@ -768,6 +1055,7 @@ namespace FullProject.Services.PublicService
             Label = b.Label,
             Action = b.Action,
             Href = b.Href,
+            FormDefinitionId = b.FormDefinitionId,
             Style = b.Style,
             Visible = b.Visible,
             Order = b.Order
@@ -779,6 +1067,8 @@ namespace FullProject.Services.PublicService
             BackgroundColor = style.BackgroundColor,
             BackgroundImageUrl = style.BackgroundImageUrl,
             BackgroundVideoUrl = style.BackgroundVideoUrl,
+            BackgroundImageFit = style.BackgroundImageFit,
+            BackgroundImagePosition = style.BackgroundImagePosition,
             GradientFrom = style.GradientFrom,
             GradientTo = style.GradientTo,
             GradientDirection = style.GradientDirection,
@@ -795,7 +1085,9 @@ namespace FullProject.Services.PublicService
             BlockGap = style.BlockGap
         };
 
-        private static PublicBlockDto? MapPublicBlock(Block block)
+        private static PublicBlockDto? MapPublicBlock(
+            Block block,
+            IReadOnlyDictionary<string, FormDefinition> formDefinitions)
         {
             PublicBlockDto? mapped = block switch
             {
@@ -838,20 +1130,7 @@ namespace FullProject.Services.PublicService
                         Href = p.Href
                     }).ToList()
                 },
-                FormBlock form => new PublicFormBlockDto
-                {
-                    Type = "form",
-                    Fields = form.Fields.Select(f => new PublicFormFieldDto
-                    {
-                        Name = f.Name,
-                        Type = f.Type,
-                        Label = f.Label,
-                        Required = f.Required,
-                        Options = f.Options,
-                        Order = f.Order
-                    }).ToList(),
-                    SubmitButtonLabel = form.SubmitButtonLabel
-                },
+                FormBlock form => MapFormBlock(form, formDefinitions),
                 CardBlock card => new PublicCardBlockDto
                 {
                     Type = "card",
@@ -860,13 +1139,17 @@ namespace FullProject.Services.PublicService
                     Description = card.Description,
                     ImageUrl = card.ImageUrl,
                     ButtonLabel = card.ButtonLabel,
-                    Href = card.Href
+                    Href = card.Href,
+                    Action = card.Action,
+                    FormDefinitionId = card.FormDefinitionId
                 },
                 ButtonBlock button => new PublicButtonBlockDto
                 {
                     Type = "button",
                     Label = button.Label,
                     Href = button.Href,
+                    Action = button.Action,
+                    FormDefinitionId = button.FormDefinitionId,
                     Style = button.Style
                 },
                 MetricBlock metric => new PublicMetricBlockDto
@@ -913,7 +1196,12 @@ namespace FullProject.Services.PublicService
                     Title = container.Title,
                     LayoutMode = container.LayoutMode,
                     Columns = container.Columns,
-                    Gap = container.Gap
+                    Gap = container.Gap,
+                    OrbitRadius = container.OrbitRadius,
+                    OrbitStartAngle = container.OrbitStartAngle,
+                    SemicircleRadius = container.SemicircleRadius,
+                    SemicircleStartAngle = container.SemicircleStartAngle,
+                    SemicircleEndAngle = container.SemicircleEndAngle
                 },
                 _ => null
             };
@@ -924,6 +1212,8 @@ namespace FullProject.Services.PublicService
             mapped.Visible = block.Visible;
             mapped.Order = block.Order;
             mapped.BlockZone = block.BlockZone;
+            mapped.ZoneId = block.BlockZone;
+            mapped.PositionMode = ResolveBlockPositionMode(block);
             mapped.ParentBlockId = block.ParentBlockId;
             mapped.Layout = MapBlockLayout(block.Layout);
             mapped.Buttons = block.Buttons
@@ -933,13 +1223,75 @@ namespace FullProject.Services.PublicService
                 {
                     Id = b.Id,
                     Label = b.Label,
+                    Action = b.Action.ToString(),
                     Href = b.Href,
+                    FormDefinitionId = b.FormDefinitionId,
                     Visible = b.Visible,
                     Order = b.Order
                 })
                 .ToList();
 
             return mapped;
+        }
+
+        private static PublicFormBlockDto MapFormBlock(
+            FormBlock block,
+            IReadOnlyDictionary<string, FormDefinition> definitions)
+        {
+            if (!string.IsNullOrWhiteSpace(block.FormDefinitionId) &&
+                definitions.TryGetValue(block.FormDefinitionId, out var definition))
+            {
+                return new PublicFormBlockDto
+                {
+                    Type = "form",
+                    FormDefinitionId = definition.Id,
+                    Name = definition.Name,
+                    Introduction = definition.Introduction,
+                    FormLayoutMode = definition.Layout == Contracts.Forms.FormLayout.TwoColumns ? "two-columns" : "stacked",
+                    SubmitButtonLabel = definition.SubmitButtonLabel,
+                    Fields = definition.Fields
+                        .OrderBy(field => field.Order)
+                        .Select(field => new PublicFormFieldDto
+                        {
+                            Name = field.Key,
+                            Type = field.Type,
+                            Label = field.Label,
+                            Placeholder = field.Placeholder,
+                            Required = field.Required,
+                            Options = field.Options
+                                .OrderBy(option => option.Order)
+                                .Select(option => new PublicFormFieldOptionDto
+                                {
+                                    Value = option.Value,
+                                    Label = option.Label,
+                                    Order = option.Order
+                                }).ToList(),
+                            Order = field.Order
+                        }).ToList()
+                };
+            }
+
+            return new PublicFormBlockDto
+            {
+                Type = "form",
+                FormDefinitionId = block.FormDefinitionId,
+                SubmitButtonLabel = block.SubmitButtonLabel,
+                Fields = block.Fields.Select(field => new PublicFormFieldDto
+                {
+                    Name = field.Name,
+                    Type = field.Type,
+                    Label = field.Label,
+                    Required = field.Required,
+                    Options = (field.Options ?? new List<string>())
+                        .Select((option, index) => new PublicFormFieldOptionDto
+                        {
+                            Value = option,
+                            Label = new Dictionary<string, string> { ["en"] = option },
+                            Order = index
+                        }).ToList(),
+                    Order = field.Order
+                }).ToList()
+            };
         }
 
         private static PublicBlockLayoutDto MapBlockLayout(BlockLayout? layout)
@@ -957,11 +1309,27 @@ namespace FullProject.Services.PublicService
                 BackgroundColor = layout.BackgroundColor,
                 BorderRadius = layout.BorderRadius,
                 ZIndex = layout.ZIndex,
+                ZOrder = layout.ZIndex,
                 X = layout.X,
                 Y = layout.Y,
                 W = layout.W,
-                H = layout.H
+                H = layout.H,
+                LeftPercent = layout.LeftPercent,
+                TopPx = layout.TopPx,
+                WidthPercent = layout.WidthPercent,
+                HeightPx = layout.HeightPx
             };
+        }
+
+        private static string ResolveBlockPositionMode(Block block)
+        {
+            if (!string.IsNullOrWhiteSpace(block.PositionMode))
+                return string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase)
+                    ? "freeform"
+                    : "flow";
+
+            return !string.IsNullOrWhiteSpace(block.ColumnSlotId) ? "flow" :
+                string.Equals(block.BlockZone, "canvas", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
         }
 
     }
