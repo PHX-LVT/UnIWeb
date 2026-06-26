@@ -2,7 +2,7 @@ using System.Collections;
 using System.Reflection;
 using Contracts.Admin;
 using FullProject.Models;
-using FullProject.Utils;
+using FullProject.Services.CloneServices;
 using MongoDB.Bson;
 
 namespace CloneUtilityCoverage;
@@ -14,40 +14,33 @@ public static class Program
     private static readonly DateTime SourcePublishedAt = new(2025, 03, 04, 05, 06, 07, DateTimeKind.Utc);
     private static readonly DateTime ClonePublishedAt = new(2026, 04, 05, 06, 07, 08, DateTimeKind.Utc);
 
-    private static readonly HashSet<Type> GeneratedNestedIdTypes =
-    [
-        typeof(SectionButton),
-        typeof(ListItem),
-        typeof(StatItem),
-        typeof(CarouselItem),
-        typeof(CarouselMetric),
-        typeof(NetworkMapPin),
-        typeof(TestimonialItem),
-        typeof(BlockButton)
-    ];
-
+    private static readonly PageGraphCloneService CloneService = new(new MongoDocumentCloneService());
+    private static readonly PageGraphPublishDiffService DiffService = new();
     private static readonly List<string> Failures = [];
 
     public static int Main()
     {
-        TestPageClone();
-        TestSectionClones();
-        TestBlockClones();
+        TestPublishSnapshotPageClone();
+        TestPublishSnapshotSectionClones();
+        TestPublishSnapshotBlockClones();
+        TestDraftResetSnapshotClones();
+        TestPresetBlockProfiles();
+        TestPublishDiffService();
 
         if (Failures.Count == 0)
         {
-            Console.WriteLine("CloneUtility coverage passed.");
+            Console.WriteLine("Page graph clone/diff coverage passed.");
             return 0;
         }
 
-        Console.Error.WriteLine("CloneUtility coverage failed:");
+        Console.Error.WriteLine("Page graph clone/diff coverage failed:");
         foreach (var failure in Failures)
             Console.Error.WriteLine($"- {failure}");
 
         return 1;
     }
 
-    private static void TestPageClone()
+    private static void TestPublishSnapshotPageClone()
     {
         var source = new Page
         {
@@ -83,7 +76,7 @@ public static class Program
             UpdatedAt = SourceUpdatedAt
         };
 
-        var clone = CloneUtility.ClonePage(source, ClonePublishedAt);
+        var clone = CloneService.ClonePage(source, CloneProfile.PublishSnapshot, ClonePublishedAt);
 
         AssertDocumentMetadata(source, clone, "Page");
         Expect(clone.PublishedAt == ClonePublishedAt, "Page clone should use requested PublishedAt.");
@@ -91,11 +84,11 @@ public static class Program
         AssertEquivalent(source, clone, "Page");
     }
 
-    private static void TestSectionClones()
+    private static void TestPublishSnapshotSectionClones()
     {
         foreach (var source in SectionFixtures())
         {
-            var clone = CloneUtility.CloneSection(source, ClonePublishedAt);
+            var clone = CloneService.CloneSection(source, CloneProfile.PublishSnapshot, ClonePublishedAt);
             var label = source.GetType().Name;
 
             AssertDocumentMetadata(source, clone, label);
@@ -116,11 +109,11 @@ public static class Program
         }
     }
 
-    private static void TestBlockClones()
+    private static void TestPublishSnapshotBlockClones()
     {
         foreach (var source in BlockFixtures())
         {
-            var clone = CloneUtility.CloneBlock(source, ClonePublishedAt);
+            var clone = CloneService.CloneBlock(source, CloneProfile.PublishSnapshot, ClonePublishedAt);
             var label = source.GetType().Name;
 
             AssertDocumentMetadata(source, clone, label);
@@ -128,6 +121,183 @@ public static class Program
             Expect(clone.PublishedAt == ClonePublishedAt, $"{label} clone should use requested PublishedAt.");
             AssertEquivalent(source, clone, label);
         }
+    }
+
+    private static void TestDraftResetSnapshotClones()
+    {
+        foreach (var source in SectionFixtures())
+        {
+            var clone = CloneService.CloneSection(source, CloneProfile.DraftResetSnapshot, ClonePublishedAt);
+            var label = $"DraftReset {source.GetType().Name}";
+
+            AssertDocumentMetadata(source, clone, label);
+            Expect(clone.GetType() == source.GetType(), $"{label} clone should keep concrete type.");
+            Expect(clone.PublishedAt is null, $"{label} clone should clear PublishedAt.");
+            AssertEquivalent(source, clone, label);
+        }
+
+        foreach (var source in BlockFixtures())
+        {
+            var clone = CloneService.CloneBlock(source, CloneProfile.DraftResetSnapshot, ClonePublishedAt);
+            var label = $"DraftReset {source.GetType().Name}";
+
+            AssertDocumentMetadata(source, clone, label);
+            Expect(clone.GetType() == source.GetType(), $"{label} clone should keep concrete type.");
+            Expect(clone.PublishedAt is null, $"{label} clone should clear PublishedAt.");
+            AssertEquivalent(source, clone, label);
+        }
+    }
+
+    private static void TestPresetBlockProfiles()
+    {
+        var parent = WithBlockBase(new ContainerBlock
+        {
+            Title = Lang("Preset parent"),
+            LayoutMode = "grid",
+            Columns = 2,
+            Gap = "medium"
+        });
+        parent.ParentBlockId = null;
+
+        var child = WithBlockBase(new TextBlock
+        {
+            Title = Lang("Preset child"),
+            Content = Lang("Preset child content")
+        });
+        child.ParentBlockId = parent.Id;
+
+        var sourceBlocks = new List<Block> { parent, child };
+        var captured = CloneService.CloneBlocksForPresetCapture(sourceBlocks, ClonePublishedAt);
+
+        Expect(captured.Count == 2, "PresetCapture should clone all source blocks.");
+        AssertPresetCaptureBlock(parent, captured[0], "PresetCapture parent");
+        AssertPresetCaptureBlock(child, captured[1], "PresetCapture child");
+        Expect(captured[1].ParentBlockId == captured[0].Id, "PresetCapture should remap child ParentBlockId to captured parent Id.");
+
+        var applied = CloneService.CloneBlocksForPresetApply(
+            captured,
+            "target-page-stable",
+            "target-section-stable",
+            ClonePublishedAt);
+
+        Expect(applied.Count == 2, "PresetApply should clone all preset blocks.");
+        AssertPresetApplyBlock(captured[0], applied[0], "PresetApply parent");
+        AssertPresetApplyBlock(captured[1], applied[1], "PresetApply child");
+        Expect(applied[1].ParentBlockId == applied[0].Id, "PresetApply should remap child ParentBlockId to applied parent Id.");
+    }
+
+    private static void TestPublishDiffService()
+    {
+        var draftPage = PageFixture("diff-page");
+        var draftSections = SectionFixtures().Take(2).ToList();
+        foreach (var section in draftSections)
+        {
+            section.PageStableId = draftPage.StableId;
+        }
+
+        var draftBlocks = BlockFixtures().Take(2).ToList();
+        foreach (var block in draftBlocks)
+        {
+            block.PageStableId = draftPage.StableId;
+            block.SectionStableId = draftSections[0].StableId;
+        }
+
+        var publishedPage = CloneService.ClonePage(draftPage, CloneProfile.PublishSnapshot, ClonePublishedAt);
+        var publishedSections = draftSections
+            .Select(section => CloneService.CloneSection(section, CloneProfile.PublishSnapshot, ClonePublishedAt))
+            .ToList();
+        var publishedBlocks = draftBlocks
+            .Select(block => CloneService.CloneBlock(block, CloneProfile.PublishSnapshot, ClonePublishedAt))
+            .ToList();
+
+        var unchanged = DiffService.BuildDiff(
+            draftPage,
+            draftSections,
+            draftBlocks,
+            publishedPage,
+            publishedSections,
+            publishedBlocks);
+
+        Expect(!unchanged.HasChanges, "Publish diff should report no changes for equivalent draft/published graphs.");
+        Expect(!unchanged.HasIntegrityIssues, "Publish diff should not report integrity issues for valid graph.");
+        Expect(unchanged.UnchangedSectionStableIds.Count == draftSections.Count, "Publish diff should track unchanged sections.");
+        Expect(unchanged.UnchangedBlockStableIds.Count == draftBlocks.Count, "Publish diff should track unchanged blocks.");
+
+        var changedPage = PageFixture("diff-page");
+        changedPage.Name["en"] = "Changed page name";
+
+        var changedSections = new List<Section>
+        {
+            CloneService.CloneSection(draftSections[0], CloneProfile.DraftResetSnapshot, ClonePublishedAt),
+            WithSectionBase(new CanvasSection { AdminLabel = Lang("New section") })
+        };
+        changedSections[0].PageStableId = draftPage.StableId;
+        changedSections[1].PageStableId = draftPage.StableId;
+        if (changedSections[0] is HeroSection changedHero)
+            changedHero.Heading["en"] = "Changed hero heading";
+
+        var changedBlocks = new List<Block>
+        {
+            CloneService.CloneBlock(draftBlocks[0], CloneProfile.DraftResetSnapshot, ClonePublishedAt),
+            WithBlockBase(new IconBlock
+            {
+                Icon = "new-icon",
+                Label = Lang("New block"),
+                Description = Lang("New block description")
+            })
+        };
+        changedBlocks[0].PageStableId = draftPage.StableId;
+        changedBlocks[0].SectionStableId = draftSections[0].StableId;
+        changedBlocks[1].PageStableId = draftPage.StableId;
+        changedBlocks[1].SectionStableId = draftSections[0].StableId;
+        if (changedBlocks[0] is TextBlock changedText)
+            changedText.Title["en"] = "Changed block title";
+
+        var changed = DiffService.BuildDiff(
+            changedPage,
+            changedSections,
+            changedBlocks,
+            publishedPage,
+            publishedSections,
+            publishedBlocks);
+
+        Expect(changed.HasChanges, "Publish diff should report changes for changed graph.");
+        Expect(!changed.HasIntegrityIssues, "Publish diff should not report integrity issues for valid changed graph.");
+        Expect(changed.PageToUpdate is not null, "Publish diff should detect changed page data.");
+        Expect(changed.PageToUpdate?.Published.Id == publishedPage.Id, "Publish diff page update should keep published target document.");
+        Expect(changed.SectionsToInsert.Count == 1, "Publish diff should detect one inserted section.");
+        Expect(changed.SectionsToUpdate.Count == 1, "Publish diff should detect one updated section.");
+        Expect(changed.SectionsToDelete.Count == 1, "Publish diff should detect one deleted section.");
+        Expect(changed.SectionsToUpdate[0].Published.Id == publishedSections[0].Id, "Section update should keep published target document.");
+        Expect(changed.BlocksToInsert.Count == 1, "Publish diff should detect one inserted block.");
+        Expect(changed.BlocksToUpdate.Count == 1, "Publish diff should detect one updated block.");
+        Expect(changed.BlocksToDelete.Count == 1, "Publish diff should detect one deleted block.");
+        Expect(changed.BlocksToUpdate[0].Published.Id == publishedBlocks[0].Id, "Block update should keep published target document.");
+
+        var newPublish = DiffService.BuildDiff(
+            draftPage,
+            draftSections,
+            draftBlocks,
+            null,
+            [],
+            []);
+
+        Expect(newPublish.PageToInsert == draftPage, "Publish diff should insert page when no published page exists.");
+        Expect(newPublish.SectionsToInsert.Count == draftSections.Count, "Publish diff should insert all sections for first publish.");
+        Expect(newPublish.BlocksToInsert.Count == draftBlocks.Count, "Publish diff should insert all blocks for first publish.");
+
+        var duplicateDraftSections = draftSections
+            .Concat([CloneService.CloneSection(draftSections[0], CloneProfile.DraftResetSnapshot, ClonePublishedAt)])
+            .ToList();
+        var integrity = DiffService.BuildDiff(
+            draftPage,
+            duplicateDraftSections,
+            draftBlocks,
+            publishedPage,
+            publishedSections,
+            publishedBlocks);
+
+        Expect(integrity.HasIntegrityIssues, "Publish diff should flag duplicate stable ids.");
     }
 
     private static IEnumerable<Section> SectionFixtures()
@@ -366,6 +536,40 @@ public static class Program
         });
     }
 
+    private static Page PageFixture(string stableId) => new()
+    {
+        Id = NewId(),
+        StableId = stableId,
+        SourceId = "old-page-source",
+        Version = 4,
+        PublishedAt = SourcePublishedAt,
+        Name = Lang("Diff page"),
+        Slug = "diff-page",
+        FullSlug = "parent/diff-page",
+        ParentPageId = "parent-page-id",
+        ParentSlug = "parent",
+        Access = true,
+        Visible = true,
+        Order = 2,
+        Status = PageStatus.Draft,
+        Seo = new PageSeo
+        {
+            MetaTitle = Lang("Diff SEO title"),
+            MetaDescription = Lang("Diff SEO description")
+        },
+        Card = new PageCard
+        {
+            CardTitle = Lang("Diff card title"),
+            CardContent = Lang("Diff card content"),
+            CardBackgroundType = "image",
+            CardBackgroundColor = "#334455",
+            CardImageUrl = "/diff-card.jpg",
+            IsCustomized = true
+        },
+        CreatedAt = SourceCreatedAt,
+        UpdatedAt = SourceUpdatedAt
+    };
+
     private static IEnumerable<Block> BlockFixtures()
     {
         yield return WithBlockBase(new TextBlock { Title = Lang("Text title"), Content = Lang("Text content") });
@@ -557,7 +761,41 @@ public static class Program
         Expect(clone.UpdatedAt >= source.UpdatedAt, $"{label} clone should refresh UpdatedAt.");
     }
 
-    private static void AssertEquivalent(object? expected, object? actual, string path)
+    private static void AssertPresetCaptureBlock(Block source, Block clone, string label)
+    {
+        Expect(clone.Id != source.Id, $"{label} should regenerate Id.");
+        Expect(clone.StableId != source.StableId, $"{label} should regenerate StableId.");
+        Expect(clone.SourceId == source.Id, $"{label} should point SourceId to source Id.");
+        Expect(clone.Version == 1, $"{label} should reset Version to 1.");
+        Expect(clone.PublishedAt is null, $"{label} should clear PublishedAt.");
+        Expect(clone.PageStableId == string.Empty, $"{label} should detach PageStableId.");
+        Expect(clone.SectionStableId == string.Empty, $"{label} should detach SectionStableId.");
+        Expect(clone.ColumnSlotId is null, $"{label} should clear ColumnSlotId.");
+        Expect(clone.CreatedAt == ClonePublishedAt, $"{label} should refresh CreatedAt.");
+        Expect(clone.UpdatedAt == ClonePublishedAt, $"{label} should refresh UpdatedAt.");
+        AssertEquivalent(source, clone, label, CloneComparisonMode.PresetBlock);
+    }
+
+    private static void AssertPresetApplyBlock(Block source, Block clone, string label)
+    {
+        Expect(clone.Id != source.Id, $"{label} should regenerate Id.");
+        Expect(clone.StableId != source.StableId, $"{label} should regenerate StableId.");
+        Expect(clone.SourceId == source.Id, $"{label} should point SourceId to preset block Id.");
+        Expect(clone.Version == 1, $"{label} should reset Version to 1.");
+        Expect(clone.PublishedAt is null, $"{label} should clear PublishedAt.");
+        Expect(clone.PageStableId == "target-page-stable", $"{label} should attach target PageStableId.");
+        Expect(clone.SectionStableId == "target-section-stable", $"{label} should attach target SectionStableId.");
+        Expect(clone.ColumnSlotId is null, $"{label} should clear ColumnSlotId.");
+        Expect(clone.CreatedAt == ClonePublishedAt, $"{label} should refresh CreatedAt.");
+        Expect(clone.UpdatedAt == ClonePublishedAt, $"{label} should refresh UpdatedAt.");
+        AssertEquivalent(source, clone, label, CloneComparisonMode.PresetBlock);
+    }
+
+    private static void AssertEquivalent(
+        object? expected,
+        object? actual,
+        string path,
+        CloneComparisonMode mode = CloneComparisonMode.Snapshot)
     {
         if (expected is null || actual is null)
         {
@@ -581,7 +819,7 @@ public static class Program
             {
                 Expect(actualDictionary.Contains(entry.Key), $"{path}: dictionary key missing: {entry.Key}.");
                 if (actualDictionary.Contains(entry.Key))
-                    AssertEquivalent(entry.Value, actualDictionary[entry.Key], $"{path}[{entry.Key}]");
+                    AssertEquivalent(entry.Value, actualDictionary[entry.Key], $"{path}[{entry.Key}]", mode);
             }
             return;
         }
@@ -592,7 +830,7 @@ public static class Program
             var actualItems = actualEnumerable.Cast<object?>().ToList();
             Expect(expectedItems.Count == actualItems.Count, $"{path}: list count mismatch.");
             for (var i = 0; i < Math.Min(expectedItems.Count, actualItems.Count); i++)
-                AssertEquivalent(expectedItems[i], actualItems[i], $"{path}[{i}]");
+                AssertEquivalent(expectedItems[i], actualItems[i], $"{path}[{i}]", mode);
             return;
         }
 
@@ -600,17 +838,24 @@ public static class Program
                      .Where(p => p.GetMethod is not null && p.GetMethod.GetParameters().Length == 0)
                      .Where(p => p.SetMethod is not null))
         {
-            if (ShouldSkipProperty(type, property.Name))
+            if (ShouldSkipProperty(type, property.Name, mode))
                 continue;
 
             AssertEquivalent(
                 property.GetValue(expected),
                 property.GetValue(actual),
-                $"{path}.{property.Name}");
+                $"{path}.{property.Name}",
+                mode);
         }
     }
 
-    private static bool ShouldSkipProperty(Type ownerType, string propertyName)
+    private enum CloneComparisonMode
+    {
+        Snapshot,
+        PresetBlock
+    }
+
+    private static bool ShouldSkipProperty(Type ownerType, string propertyName, CloneComparisonMode mode)
     {
         if (typeof(Page).IsAssignableFrom(ownerType) &&
             propertyName is nameof(Page.Id) or nameof(Page.SourceId) or nameof(Page.Version) or nameof(Page.PublishedAt) or nameof(Page.UpdatedAt) or nameof(Page.Status))
@@ -624,10 +869,15 @@ public static class Program
             propertyName is nameof(Block.Id) or nameof(Block.SourceId) or nameof(Block.Version) or nameof(Block.PublishedAt) or nameof(Block.UpdatedAt))
             return true;
 
+        if (mode == CloneComparisonMode.PresetBlock &&
+            typeof(Block).IsAssignableFrom(ownerType) &&
+            propertyName is nameof(Block.StableId) or nameof(Block.PageStableId) or nameof(Block.SectionStableId) or nameof(Block.CreatedAt) or nameof(Block.ColumnSlotId) or nameof(Block.ParentBlockId))
+            return true;
+
         if (ownerType == typeof(ColumnSlot) && propertyName == nameof(ColumnSlot.Blocks))
             return true;
 
-        return propertyName == "Id" && GeneratedNestedIdTypes.Contains(ownerType);
+        return false;
     }
 
     private static bool IsLeaf(Type type)

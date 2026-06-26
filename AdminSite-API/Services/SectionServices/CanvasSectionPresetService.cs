@@ -1,7 +1,7 @@
 using Contracts.Admin;
 using FullProject.Data;
 using FullProject.Models;
-using FullProject.Utils;
+using FullProject.Services.CloneServices;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -10,10 +10,12 @@ namespace FullProject.Services.SectionServices
     public class CanvasSectionPresetService
     {
         private readonly MongoDbContext _context;
+        private readonly PageGraphCloneService _cloneService;
 
-        public CanvasSectionPresetService(MongoDbContext context)
+        public CanvasSectionPresetService(MongoDbContext context, PageGraphCloneService cloneService)
         {
             _context = context;
+            _cloneService = cloneService;
         }
 
         public async Task<List<CanvasSectionPreset>> GetAllAsync() =>
@@ -41,8 +43,8 @@ namespace FullProject.Services.SectionServices
             {
                 Id = ObjectId.GenerateNewId().ToString(),
                 Name = NormalizeName(dto.Name),
-                Style = CloneStyle(canvas.Style),
-                Blocks = blocks.Select(block => CloneUtility.CloneBlock(block)).ToList(),
+                Style = _cloneService.CloneSectionStyle(canvas.Style, forceFreeform: true),
+                Blocks = _cloneService.CloneBlocksForPresetCapture(blocks),
                 SchemaVersion = 2,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -69,7 +71,7 @@ namespace FullProject.Services.SectionServices
                 PageStableId = page.StableId,
                 Visible = true,
                 Order = (int)count,
-                Style = CloneStyle(preset.Style),
+                Style = _cloneService.CloneSectionStyle(preset.Style, forceFreeform: true),
                 AdminLabel = new Dictionary<string, string>(preset.Name),
                 CreatedAt = now,
                 UpdatedAt = now
@@ -77,37 +79,11 @@ namespace FullProject.Services.SectionServices
 
             await _context.SectionsDraft.InsertOneAsync(section);
 
-            var blocks = preset.Blocks
-                .OrderBy(b => b.Order)
-                .Select(b =>
-                {
-                    var clone = CloneUtility.CloneBlock(b);
-                    clone.Id = ObjectId.GenerateNewId().ToString();
-                    clone.StableId = Guid.NewGuid().ToString();
-                    clone.SourceId = b.Id;
-                    clone.Version = 1;
-                    clone.PublishedAt = null;
-                    clone.PageStableId = page.StableId;
-                    clone.SectionStableId = section.StableId;
-                    clone.ColumnSlotId = null;
-                    clone.CreatedAt = now;
-                    clone.UpdatedAt = now;
-                    return clone;
-                })
-                .ToList();
-
-            var blockIdMap = preset.Blocks
-                .OrderBy(block => block.Order)
-                .Zip(blocks, (source, clone) => new { source.Id, CloneId = clone.Id })
-                .ToDictionary(item => item.Id, item => item.CloneId, StringComparer.Ordinal);
-
-            foreach (var block in blocks)
-            {
-                block.ParentBlockId = !string.IsNullOrWhiteSpace(block.ParentBlockId) &&
-                                      blockIdMap.TryGetValue(block.ParentBlockId, out var newParentId)
-                    ? newParentId
-                    : null;
-            }
+            var blocks = _cloneService.CloneBlocksForPresetApply(
+                preset.Blocks,
+                page.StableId,
+                section.StableId,
+                now);
 
             if (blocks.Count > 0)
                 await _context.BlocksDraft.InsertManyAsync(blocks);
@@ -129,28 +105,5 @@ namespace FullProject.Services.SectionServices
             return new Dictionary<string, string> { ["en"] = "Canvas Preset" };
         }
 
-        private static SectionStyle CloneStyle(SectionStyle s) => new()
-        {
-            BackgroundType = s.BackgroundType,
-            BackgroundColor = s.BackgroundColor,
-            BackgroundImageUrl = s.BackgroundImageUrl,
-            BackgroundVideoUrl = s.BackgroundVideoUrl,
-            BackgroundImageFit = s.BackgroundImageFit,
-            BackgroundImagePosition = s.BackgroundImagePosition,
-            GradientFrom = s.GradientFrom,
-            GradientTo = s.GradientTo,
-            GradientDirection = s.GradientDirection,
-            OverlayColor = s.OverlayColor,
-            OverlayOpacity = s.OverlayOpacity,
-            Height = s.Height,
-            CustomMinHeightPx = s.CustomMinHeightPx,
-            Padding = s.Padding,
-            ContentWidth = s.ContentWidth,
-            TextColor = s.TextColor,
-            MobileLayout = s.MobileLayout,
-            BlockLayoutMode = "freeform",
-            BlockGridColumns = s.BlockGridColumns,
-            BlockGap = s.BlockGap
-        };
     }
 }

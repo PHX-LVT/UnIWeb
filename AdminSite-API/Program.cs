@@ -19,6 +19,7 @@ using FullProject.Services.PublishAndResetService;
 using FullProject.Security.Forms;
 using FullProject.Services.FormServices;
 using FullProject.Services.Metrics;
+using FullProject.Services.CloneServices;
 using Contracts.Auth;
 using FullProject.Security;
 
@@ -71,6 +72,9 @@ builder.Services.AddScoped<PageService>();
 builder.Services.AddScoped<SectionService>();
 builder.Services.AddScoped<BlockService>();
 builder.Services.AddScoped<CanvasSectionPresetService>();
+builder.Services.AddScoped<MongoDocumentCloneService>();
+builder.Services.AddScoped<PageGraphCloneService>();
+builder.Services.AddScoped<PageGraphPublishDiffService>();
 builder.Services.AddScoped<PublishService>();
 builder.Services.AddScoped<ResetService>();
 builder.Services.AddScoped<SettingsService>();

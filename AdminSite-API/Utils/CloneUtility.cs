@@ -3,6 +3,7 @@ using MongoDB.Bson;
 
 namespace FullProject.Utils
 {
+    [Obsolete("Use PageGraphCloneService with an explicit CloneProfile.")]
     public static class CloneUtility
     {
         // -----------------------------------------------------------

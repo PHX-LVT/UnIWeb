@@ -1,6 +1,6 @@
 ﻿using FullProject.Data;
 using FullProject.Models;
-using FullProject.Utils;
+using FullProject.Services.CloneServices;
 using FullProject.Services.AssetService;
 using MongoDB.Driver;
 
@@ -10,11 +10,16 @@ namespace FullProject.Services.PublishAndResetService
     {
         private readonly MongoDbContext _context;
         private readonly AssetCleanupService _assetCleanup;
+        private readonly PageGraphCloneService _cloneService;
 
-        public ResetService(MongoDbContext context, AssetCleanupService assetCleanup)
+        public ResetService(
+            MongoDbContext context,
+            AssetCleanupService assetCleanup,
+            PageGraphCloneService cloneService)
         {
             _context = context;
             _assetCleanup = assetCleanup;
+            _cloneService = cloneService;
         }
 
         public async Task<ResetResult> ResetPageAsync(string pageId)
@@ -73,7 +78,7 @@ namespace FullProject.Services.PublishAndResetService
                 if (publishedSections.Any())
                 {
                     var draftSections = publishedSections
-                        .Select(s => CloneUtility.CloneSection(s))
+                        .Select(s => _cloneService.CloneSection(s, CloneProfile.DraftResetSnapshot))
                         .ToList();
                     await _context.SectionsDraft.InsertManyAsync(session, draftSections);
                 }
@@ -82,7 +87,7 @@ namespace FullProject.Services.PublishAndResetService
                 if (publishedBlocks.Any())
                 {
                     var draftBlocks = publishedBlocks
-                        .Select(b => CloneUtility.CloneBlock(b))
+                        .Select(b => _cloneService.CloneBlock(b, CloneProfile.DraftResetSnapshot))
                         .ToList();
                     await _context.BlocksDraft.InsertManyAsync(session, draftBlocks);
                 }
