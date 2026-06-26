@@ -178,7 +178,6 @@ public sealed class FormSubmissionSecurityService
     private static string CreateFingerprint(string formKey, IReadOnlyDictionary<string, string> data)
     {
         var canonical = string.Join("\n", data
-            .Where(field => !string.Equals(field.Key, "PageUrl", StringComparison.OrdinalIgnoreCase))
             .OrderBy(field => field.Key, StringComparer.OrdinalIgnoreCase)
             .Select(field => $"{field.Key.Trim().ToLowerInvariant()}={field.Value.Trim()}"));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{formKey}\n{canonical}"))).ToLowerInvariant();

@@ -19,6 +19,8 @@ using FullProject.Services.PublishAndResetService;
 using FullProject.Security.Forms;
 using FullProject.Services.FormServices;
 using FullProject.Services.Metrics;
+using Contracts.Auth;
+using FullProject.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -167,6 +169,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization
     (options =>
 {
+    foreach (var permission in AdminPermissionKeys.All)
+    {
+        options.AddPolicy(permission, policy =>
+            policy.RequireAssertion(context =>
+                AdminAuthorization.HasPermission(context.User, permission)));
+    }
+
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
     .RequireAuthenticatedUser()
     .Build();

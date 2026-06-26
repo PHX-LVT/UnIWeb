@@ -7,12 +7,13 @@ using FullProject.Services.PublishAndResetService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
     public class PagesController : ControllerBase
     {
         private readonly PageService _service;

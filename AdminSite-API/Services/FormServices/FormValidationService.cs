@@ -12,6 +12,10 @@ public sealed class FormValidationService
     {
         "text", "email", "tel", "phone", "textarea", "select", "radio", "checkbox", "date", "number", "url"
     };
+    private static readonly HashSet<string> ReservedFieldKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PageUrl", "SourcePage", "Honeypot", "CaptchaToken"
+    };
     private static readonly Regex FieldKeyRegex = new(
         "^[A-Za-z][A-Za-z0-9_-]{0,99}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -99,6 +103,8 @@ public sealed class FormValidationService
             errors.Add("At least one form field is required.");
         if (definition.Fields.Any(field => !FieldKeyRegex.IsMatch(field.Key ?? string.Empty)))
             errors.Add("Every field must have a valid key.");
+        if (definition.Fields.Any(field => ReservedFieldKeys.Contains(field.Key ?? string.Empty)))
+            errors.Add("Form fields cannot use reserved metadata keys.");
         if (definition.Fields.GroupBy(field => field.Key, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
             errors.Add("Form field keys must be unique.");
         if (definition.Fields.Any(field => !SupportedTypes.Contains(field.Type)))
@@ -121,6 +127,8 @@ public sealed class FormValidationService
             errors.Add("Add at least one form field.");
         if (fields.Any(field => !FieldKeyRegex.IsMatch(field.Key ?? string.Empty)))
             errors.Add("Every field must have a valid key.");
+        if (fields.Any(field => ReservedFieldKeys.Contains(field.Key ?? string.Empty)))
+            errors.Add("Form fields cannot use reserved metadata keys.");
         if (fields.GroupBy(field => field.Key, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
             errors.Add("Form field keys must be unique.");
         if (fields.Any(field => !SupportedTypes.Contains(field.Type ?? string.Empty)))

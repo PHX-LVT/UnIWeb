@@ -198,11 +198,6 @@ namespace FullProject.Services.PublicService
                 ["PasswordProvided"] = string.IsNullOrWhiteSpace(password) ? "false" : "true"
             };
 
-            if (dto.Data.TryGetValue("PageUrl", out var pageUrl) && !string.IsNullOrWhiteSpace(pageUrl))
-            {
-                data["PageUrl"] = pageUrl.Trim();
-            }
-
             await _submissionService.CreateAsync(new FormSubmission
             {
                 PageId = "modal:sync",

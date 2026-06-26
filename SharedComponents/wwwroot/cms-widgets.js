@@ -813,7 +813,8 @@ function buildPublicModalField(field) {
 
 async function submitPublicModalForm(form, submit, status) {
     const type = form.dataset.modalType || "expert";
-    const data = { PageUrl: window.location.href };
+    const sourcePage = window.location.href;
+    const data = {};
     const honeypot = form.querySelector("[name='__website']")?.value || "";
 
     form.querySelectorAll("input, textarea, select").forEach(field => {
@@ -844,7 +845,7 @@ async function submitPublicModalForm(form, submit, status) {
         const response = await fetch(buildPublicApiUrl(endpoint), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ data, language: getPublicUiLanguage(), sourcePage: window.location.href, honeypot })
+            body: JSON.stringify({ data, language: getPublicUiLanguage(), sourcePage, honeypot })
         });
 
         const result = await response.json().catch(() => null);

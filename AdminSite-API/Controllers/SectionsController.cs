@@ -5,6 +5,7 @@ using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
+using Contracts.Auth;
 using FullProject.Services.SectionServices;
 
 
@@ -12,7 +13,7 @@ namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/sections")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
     public class SectionsController : ControllerBase
     {
         private readonly SectionService _service;

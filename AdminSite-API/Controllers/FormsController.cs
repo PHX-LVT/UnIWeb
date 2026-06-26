@@ -4,12 +4,13 @@ using FullProject.Services.FormServices;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/forms")]
-    [Authorize]
+    [Authorize(Policy = AdminPermissionKeys.ManageContent)]
     public class FormsController : ControllerBase
     {
         private readonly FormSubmissionService _submissions;

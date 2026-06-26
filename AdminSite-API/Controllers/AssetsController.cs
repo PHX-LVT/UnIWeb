@@ -1,4 +1,5 @@
 using Contracts.Admin;
+using Contracts.Auth;
 using FullProject.Security;
 using FullProject.Services;
 using FullProject.Settings;
@@ -43,6 +44,8 @@ namespace FullProject.Controllers
 
             if (!UploadSecurityPolicy.IsAllowedFolder(folder))
                 return UnprocessableEntity(ApiResult.BadRequest(UploadSecurityPolicy.UnsupportedFolderMessage));
+            if (!CanUploadToFolder(folder))
+                return Forbid();
 
             var inferredKind = ManagedResourceService.InferKindFromUpload(file.FileName, file.ContentType);
             var allowsSectionBackgroundVideo = string.Equals(folder, "section-backgrounds", StringComparison.OrdinalIgnoreCase) &&
@@ -91,6 +94,30 @@ namespace FullProject.Controllers
         public sealed class AssetUploadRequest
         {
             public IFormFile? File { get; set; }
+        }
+
+        private bool CanUploadToFolder(string folder)
+        {
+            var normalized = folder.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "branding" or "footer" =>
+                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageSettings),
+
+                "content-hero" or "content-thumbnails" or "content-body" or "content-files" or "managed-resources" =>
+                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageContent),
+
+                "sections" or "blocks" or "hero" or "gallery" or "carousel" or "showcase" or "list-items" or
+                "section-backgrounds" or "image-blocks" or "file-blocks" or "card-blocks" =>
+                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.PageBuilder),
+
+                "uploads" =>
+                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageContent) ||
+                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.PageBuilder) ||
+                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageSettings),
+
+                _ => false
+            };
         }
 
     }

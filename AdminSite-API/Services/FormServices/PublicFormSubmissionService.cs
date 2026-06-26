@@ -92,12 +92,11 @@ public sealed class PublicFormSubmissionService
             FormKey = definition.Key,
             FormName = FormValidationService.ResolveText(definition.Name, language, definition.Key),
             Language = language,
-            SourcePage = NormalizeSourcePage(request.SourcePage, securityResult.Data.GetValueOrDefault("PageUrl")),
+            SourcePage = NormalizeSourcePage(request.SourcePage),
             Status = FormSubmissionStatus.New,
             Fields = definition.Fields
                 .OrderBy(field => field.Order)
-                .Where(field => securityResult.Data.ContainsKey(field.Key) &&
-                                !string.Equals(field.Key, "PageUrl", StringComparison.OrdinalIgnoreCase))
+                .Where(field => securityResult.Data.ContainsKey(field.Key))
                 .Select(field => new FormSubmissionFieldSnapshot
                 {
                     Key = field.Key,
@@ -142,11 +141,9 @@ public sealed class PublicFormSubmissionService
         return string.IsNullOrWhiteSpace(normalized) || normalized.Length > 12 ? "en" : normalized;
     }
 
-    private static string NormalizeSourcePage(string? sourcePage, string? fallbackSourcePage = null)
+    private static string NormalizeSourcePage(string? sourcePage)
     {
-        var source = !string.IsNullOrWhiteSpace(sourcePage)
-            ? sourcePage.Trim()
-            : fallbackSourcePage?.Trim() ?? string.Empty;
+        var source = sourcePage?.Trim() ?? string.Empty;
         if (source.Length > 1_000) source = source[..1_000];
         return source.StartsWith('/') ||
                Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https"

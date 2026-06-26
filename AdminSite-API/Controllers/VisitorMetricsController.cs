@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FullProject.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = AdminPermissionKeys.ViewLogs)]
 [Route("api/admin/visitor-metrics")]
 public sealed class VisitorMetricsController : ControllerBase
 {

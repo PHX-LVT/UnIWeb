@@ -552,8 +552,7 @@ public sealed class FormDefinitionService
                 ]),
                 Field("Route", "text", "Route / Volume / Duration", true, 0, 300, 1),
                 Field("Email", "email", "Email Address", true, 0, 254, 2),
-                Field("Phone", "tel", "Phone Number", true, 0, 40, 3),
-                Field("PageUrl", "url", "Page URL", false, 0, 1000, 4)
+                Field("Phone", "tel", "Phone Number", true, 0, 40, 3)
             ]
         };
 
@@ -585,8 +584,7 @@ public sealed class FormDefinitionService
                     Option("Support", "Support", 2),
                     Option("Other", "Other", 3)
                 ]),
-                Field("Message", "textarea", "Your Message", false, 0, 2000, 5),
-                Field("PageUrl", "url", "Page URL", false, 0, 1000, 6)
+                Field("Message", "textarea", "Your Message", false, 0, 2000, 5)
             ]
         };
     }
