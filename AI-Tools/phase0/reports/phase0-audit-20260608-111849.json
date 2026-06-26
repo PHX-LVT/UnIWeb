@@ -1,0 +1,151 @@
+{
+  "generatedAt": "2026-06-08T04:18:50.006Z",
+  "collections": [
+    {
+      "name": "admin_users",
+      "count": 1
+    },
+    {
+      "name": "blocks",
+      "count": 1
+    },
+    {
+      "name": "blocks_draft",
+      "count": 5
+    },
+    {
+      "name": "blocks_published",
+      "count": 5
+    },
+    {
+      "name": "branding",
+      "count": 1
+    },
+    {
+      "name": "content_audit_logs",
+      "count": 122
+    },
+    {
+      "name": "content_draft",
+      "count": 22
+    },
+    {
+      "name": "content_published",
+      "count": 18
+    },
+    {
+      "name": "content_types",
+      "count": 6
+    },
+    {
+      "name": "footer",
+      "count": 1
+    },
+    {
+      "name": "form_submissions",
+      "count": 4
+    },
+    {
+      "name": "global_buttons",
+      "count": 1
+    },
+    {
+      "name": "pages",
+      "count": 0
+    },
+    {
+      "name": "pages_draft",
+      "count": 31
+    },
+    {
+      "name": "pages_published",
+      "count": 31
+    },
+    {
+      "name": "sections",
+      "count": 31
+    },
+    {
+      "name": "sections_draft",
+      "count": 59
+    },
+    {
+      "name": "sections_published",
+      "count": 58
+    },
+    {
+      "name": "settings",
+      "count": 1
+    },
+    {
+      "name": "social",
+      "count": 1
+    },
+    {
+      "name": "theme",
+      "count": 1
+    }
+  ],
+  "schemaDrift": [],
+  "duplicateStableIds": [],
+  "pairHealth": [
+    {
+      "draftCollection": "pages_draft",
+      "publishedCollection": "pages_published",
+      "missingDraft": [],
+      "missingPublished": []
+    },
+    {
+      "draftCollection": "sections_draft",
+      "publishedCollection": "sections_published",
+      "missingDraft": [],
+      "missingPublished": []
+    },
+    {
+      "draftCollection": "blocks_draft",
+      "publishedCollection": "blocks_published",
+      "missingDraft": [],
+      "missingPublished": []
+    },
+    {
+      "draftCollection": "content_draft",
+      "publishedCollection": "content_published",
+      "missingDraft": [],
+      "missingPublished": []
+    }
+  ],
+  "stalePublishedContent": [
+    {
+      "stableId": "95aeb3ca1c034f0bae8ebf7a0c6dc432",
+      "slug": "e-commerce",
+      "draftUpdatedAt": {
+        "$date": "2026-06-08T01:51:21.778Z"
+      },
+      "publishedUpdatedAt": {
+        "$date": "2026-06-08T01:05:32.824Z"
+      }
+    },
+    {
+      "stableId": "4ec2dfd5f1234d019f25e55f9fde5221",
+      "slug": "fmcg",
+      "draftUpdatedAt": {
+        "$date": "2026-06-08T01:51:07.513Z"
+      },
+      "publishedUpdatedAt": {
+        "$date": "2026-06-08T01:50:19.696Z"
+      }
+    },
+    {
+      "stableId": "b9e7401fcad348cd957fac1c39949934",
+      "slug": "how-control-towers-reduce-operational-risks",
+      "draftUpdatedAt": {
+        "$date": "2026-06-07T14:54:39.941Z"
+      },
+      "publishedUpdatedAt": {
+        "$date": "2026-06-07T14:54:37.847Z"
+      }
+    }
+  ],
+  "base64Usage": []
+}
+

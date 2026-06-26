@@ -1,0 +1,203 @@
+[
+  {
+    "_id": {
+      "$oid": "6a3b840f2801c42014f8d177"
+    },
+    "Kind": "image",
+    "Name": {
+      "en": "Amazon 3",
+      "vi": "",
+      "cn": ""
+    },
+    "Description": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/managed-resources/2026/06/24/a5a8fdd8ae4f411fb386e138a7f77de2.png",
+    "StorageKey": "cms/managed-resources/2026/06/24/a5a8fdd8ae4f411fb386e138a7f77de2.png",
+    "ThumbnailUrl": null,
+    "FileName": "Amazon 3.png",
+    "ContentType": "image/png",
+    "SizeBytes": {
+      "$numberLong": "107664"
+    },
+    "Source": "managed-upload",
+    "Tags": [],
+    "Active": true,
+    "CreatedById": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1782285327956"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1782285327956"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a3b84172801c42014f8d178"
+    },
+    "Kind": "image",
+    "Name": {
+      "en": "Amazon 2",
+      "vi": "",
+      "cn": ""
+    },
+    "Description": {
+      "en": "",
+      "vi": "",
+      "cn": ""
+    },
+    "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/managed-resources/2026/06/24/97fb62336caa44c48ef920bf788003d0.png",
+    "StorageKey": "cms/managed-resources/2026/06/24/97fb62336caa44c48ef920bf788003d0.png",
+    "ThumbnailUrl": null,
+    "FileName": "Amazon 2.png",
+    "ContentType": "image/png",
+    "SizeBytes": {
+      "$numberLong": "119141"
+    },
+    "Source": "managed-upload",
+    "Tags": [],
+    "Active": true,
+    "CreatedById": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1782285335333"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1782285335333"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a3b841f2801c42014f8d179"
+    },
+    "Kind": "image",
+    "Name": {
+      "en": "screenshot 2",
+      "vi": "",
+      "cn": "",
+      "jp": ""
+    },
+    "Description": {
+      "en": "",
+      "vi": "",
+      "cn": "",
+      "jp": ""
+    },
+    "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/managed-resources/2026/06/24/627431a04cdc49a1a898640f7c3bf7ee.png",
+    "StorageKey": "cms/managed-resources/2026/06/24/627431a04cdc49a1a898640f7c3bf7ee.png",
+    "ThumbnailUrl": null,
+    "FileName": "screenshot 2.png",
+    "ContentType": "image/png",
+    "SizeBytes": {
+      "$numberLong": "46753"
+    },
+    "Source": "managed-upload",
+    "Tags": [],
+    "Active": true,
+    "CreatedById": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1782285343468"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1782285352615"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a3b844a2801c42014f8d17a"
+    },
+    "Kind": "image",
+    "Name": {
+      "en": "What-is-the-easiest-way-to-tie-a-bowline-knot",
+      "vi": "",
+      "cn": "",
+      "jp": ""
+    },
+    "Description": {
+      "en": "",
+      "vi": "",
+      "cn": "",
+      "jp": ""
+    },
+    "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/managed-resources/2026/06/25/f85b847a87574d51a5645ca7b23f23c2.webp",
+    "StorageKey": "cms/managed-resources/2026/06/25/f85b847a87574d51a5645ca7b23f23c2.webp",
+    "ThumbnailUrl": null,
+    "FileName": "What-is-the-easiest-way-to-tie-a-bowline-knot.webp",
+    "ContentType": "image/webp",
+    "SizeBytes": {
+      "$numberLong": "33632"
+    },
+    "Source": "managed-upload",
+    "Tags": [],
+    "Active": true,
+    "CreatedById": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "system",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1782285386318"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1782409964964"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a3cc5d5df17db20da499a82"
+    },
+    "Kind": "file",
+    "Name": {
+      "en": "Spec - Advanced Hire Module - Depreciation-1 (1)",
+      "vi": "",
+      "cn": "",
+      "jp": ""
+    },
+    "Description": {
+      "en": "",
+      "vi": "",
+      "cn": "",
+      "jp": ""
+    },
+    "Url": "https://pub-5b4847cea7134a34ac1ad28c0e24554b.r2.dev/cms/managed-resources/2026/06/25/6f062de6e59f420997cdd4f1bbd02b98.pdf",
+    "StorageKey": "cms/managed-resources/2026/06/25/6f062de6e59f420997cdd4f1bbd02b98.pdf",
+    "ThumbnailUrl": null,
+    "FileName": "Spec - Advanced Hire Module - Depreciation-1 (1).pdf",
+    "ContentType": "application/pdf",
+    "SizeBytes": {
+      "$numberLong": "4242655"
+    },
+    "Source": "managed-upload",
+    "Tags": [],
+    "Active": true,
+    "CreatedById": "6a05676a4b5370e52b805d45",
+    "UpdatedById": "6a05676a4b5370e52b805d45",
+    "CreatedAt": {
+      "$date": {
+        "$numberLong": "1782367701453"
+      }
+    },
+    "UpdatedAt": {
+      "$date": {
+        "$numberLong": "1782367753173"
+      }
+    }
+  }
+]

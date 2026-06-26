@@ -190,27 +190,20 @@ else
 
         <section class="admin-card">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
-                <div>
+                <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
                     @if (SelectedAlbum is not null)
                     {
-                        <button type="button" class="btn-admin btn-ghost" style="margin-right:.5rem" @onclick="BackToAlbums">
+                        <button type="button" class="btn-admin btn-ghost" @onclick="BackToAlbums">
                             <i class="fas fa-arrow-left"></i> @T("BackToAlbums")
                         </button>
                     }
                     <strong>@MainPanelTitle</strong>
-                    <span class="text-muted" style="margin-left:.5rem">@VisibleItemCount</span>
                 </div>
                 @if (CanUploadResources && SelectedAlbum is not null)
                 {
                     <button class="btn-admin btn-primary" @onclick="NewResource">
                         <i class="fas fa-upload"></i> @T("UploadToAlbum")
                     </button>
-                }
-                @if (!_loading && VisibleItemCount > 0)
-                {
-                    <span class="text-muted">
-                        @string.Format(T("ShowingRange"), PageStart, PageEnd, VisibleItemCount)
-                    </span>
                 }
             </div>
 
@@ -428,19 +421,22 @@ else
                 </div>
             }
 
-            @if (TotalPages > 1)
+            @if (!_loading && !_albumLoading && VisibleItemCount > 0)
             {
-                <div class="admin-pagination" style="margin-top:1rem">
-                    <span>@string.Format(T("ShowingRange"), PageStart, PageEnd, FilteredResourceCount)</span>
-                    <div class="admin-pagination__buttons">
-                        <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="PreviousPage">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <span class="btn-admin btn-ghost">@_page / @TotalPages</span>
-                        <button class="btn-admin btn-ghost" disabled="@(_page >= TotalPages)" @onclick="NextPage">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                    </div>
+                <div class="admin-pagination" style="margin-top:1rem;display:flex;align-items:center;justify-content:flex-end;gap:1rem;flex-wrap:wrap">
+                    <span class="text-muted">@string.Format(T("ShowingRange"), PageStart, PageEnd, VisibleItemCount)</span>
+                    @if (TotalPages > 1)
+                    {
+                        <div class="admin-pagination__buttons">
+                            <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="PreviousPage">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <span class="btn-admin btn-ghost">@_page / @TotalPages</span>
+                            <button class="btn-admin btn-ghost" disabled="@(_page >= TotalPages)" @onclick="NextPage">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    }
                 </div>
             }
         </section>
@@ -541,17 +537,88 @@ else
                 }
                 else
                 {
-                    <div style="position:relative;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;padding:1.4rem;min-height:140px;display:grid;place-items:center;text-align:center;margin-bottom:1rem">
-                        <InputFile OnChange="QueueUploadFiles"
-                                   multiple
-                                   accept="@UploadAcceptForKind(_uploadKind)"
-                                   disabled="@_uploadingQueue"
-                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
-                        <div style="pointer-events:none">
-                            <i class="fas fa-cloud-arrow-up" style="font-size:2rem;color:#0f2742"></i>
-                            <strong style="display:block;margin-top:.5rem">@T("DragDropOrSelectFiles")</strong>
-                            <span class="text-muted">@string.Format(T("UploadQueueTypeHint"), DisplayKind(_uploadKind))</span>
+                    <div style="border:1px solid #d8e0ea;border-radius:10px;background:#fff;padding:1rem;margin-bottom:1rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+                            <div>
+                                <strong>@T("UploadQueue")</strong>
+                                <div class="form-hint">@string.Format(T("UploadQueueTypeHint"), DisplayKind(_uploadKind))</div>
+                            </div>
+                            <span class="text-muted">@string.Format(T("QueuedFileCount"), _uploadQueue.Count)</span>
                         </div>
+
+                        @if (!_uploadQueue.Any())
+                        {
+                            <div style="position:relative;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;padding:1.4rem;min-height:140px;display:grid;place-items:center;text-align:center">
+                                <InputFile OnChange="QueueUploadFiles"
+                                           multiple
+                                           accept="@UploadAcceptForKind(_uploadKind)"
+                                           disabled="@_uploadingQueue"
+                                           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
+                                <div style="pointer-events:none">
+                                    <i class="fas fa-cloud-arrow-up" style="font-size:2rem;color:#0f2742"></i>
+                                    <strong style="display:block;margin-top:.5rem">@T("DragDropOrSelectFiles")</strong>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="position:relative;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;padding:.75rem;margin-bottom:.75rem;display:flex;align-items:center;justify-content:center;gap:.5rem;text-align:center">
+                                <InputFile OnChange="QueueUploadFiles"
+                                           multiple
+                                           accept="@UploadAcceptForKind(_uploadKind)"
+                                           disabled="@_uploadingQueue"
+                                           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
+                                <div style="pointer-events:none;display:flex;align-items:center;gap:.5rem;color:#475569">
+                                    <i class="fas fa-cloud-arrow-up"></i>
+                                    <span>@T("DragDropOrSelectFiles")</span>
+                                </div>
+                            </div>
+
+                            <div style="display:grid;gap:.55rem;max-height:36vh;overflow:auto;padding-right:.15rem">
+                                @foreach (var item in _uploadQueue)
+                                {
+                                    <div @key="item.Id" style="display:grid;grid-template-columns:48px minmax(150px,1.2fr) minmax(160px,1fr) minmax(110px,.65fr) auto;gap:.65rem;align-items:center;border:1px solid #e5e7eb;border-radius:8px;background:#fff;padding:.55rem">
+                                        <span style="width:48px;height:42px;border-radius:7px;background:#fff7e6;color:#0f2742;display:inline-flex;align-items:center;justify-content:center">
+                                            <i class="fas @UploadQueueIconClass(item)"></i>
+                                        </span>
+                                        <div style="min-width:0">
+                                            <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@item.OriginalFileName">@item.OriginalFileName</div>
+                                            <small class="text-muted">@FormatBytes(item.File.Size)</small>
+                                        </div>
+                                        <input class="form-control"
+                                               value="@item.ResourceName"
+                                               disabled="@(_uploadingQueue || item.IsComplete)"
+                                               @oninput="e => item.ResourceName = e.Value?.ToString() ?? string.Empty" />
+                                        <div>
+                                            <span style="@UploadQueueStatusStyle(item)">@UploadQueueStatusText(item)</span>
+                                            @if (!string.IsNullOrWhiteSpace(item.Error))
+                                            {
+                                                <small style="display:block;color:#b91c1c;margin-top:.25rem">@item.Error</small>
+                                            }
+                                        </div>
+                                        <div style="display:flex;gap:.35rem;justify-content:flex-end">
+                                            @if (item.IsFailed)
+                                            {
+                                                <button type="button"
+                                                        class="btn-admin btn-ghost content-icon-btn"
+                                                        title="@T("Retry")"
+                                                        disabled="@_uploadingQueue"
+                                                        @onclick="() => RetryUpload(item)">
+                                                    <i class="fas fa-rotate"></i>
+                                                </button>
+                                            }
+                                            <button type="button"
+                                                    class="btn-admin btn-ghost content-icon-btn"
+                                                    title="@T("Remove")"
+                                                    disabled="@_uploadingQueue"
+                                                    @onclick="() => RemoveUploadQueueItem(item)">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
                 }
 
@@ -625,67 +692,6 @@ else
                     </div>
                 }
 
-                @if (!IsYoutubeLinkMode)
-                {
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.65rem">
-                        <strong>@T("UploadQueue")</strong>
-                        <span class="text-muted">@string.Format(T("QueuedFileCount"), _uploadQueue.Count)</span>
-                    </div>
-
-                    @if (!_uploadQueue.Any())
-                    {
-                        <div style="padding:1rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-align:center">
-                            <span class="text-muted">@T("QueueEmpty")</span>
-                        </div>
-                    }
-                    else
-                    {
-                        <div style="display:grid;gap:.55rem;max-height:42vh;overflow:auto;padding-right:.15rem">
-                            @foreach (var item in _uploadQueue)
-                            {
-                                <div @key="item.Id" style="display:grid;grid-template-columns:48px minmax(150px,1.2fr) minmax(160px,1fr) minmax(110px,.65fr) auto;gap:.65rem;align-items:center;border:1px solid #e5e7eb;border-radius:8px;background:#fff;padding:.55rem">
-                                    <span style="width:48px;height:42px;border-radius:7px;background:#fff7e6;color:#0f2742;display:inline-flex;align-items:center;justify-content:center">
-                                        <i class="fas @UploadQueueIconClass(item)"></i>
-                                    </span>
-                                    <div style="min-width:0">
-                                        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@item.OriginalFileName">@item.OriginalFileName</div>
-                                        <small class="text-muted">@FormatBytes(item.File.Size)</small>
-                                    </div>
-                                    <input class="form-control"
-                                           value="@item.ResourceName"
-                                           disabled="@(_uploadingQueue || item.IsComplete)"
-                                           @oninput="e => item.ResourceName = e.Value?.ToString() ?? string.Empty" />
-                                    <div>
-                                        <span style="@UploadQueueStatusStyle(item)">@UploadQueueStatusText(item)</span>
-                                        @if (!string.IsNullOrWhiteSpace(item.Error))
-                                        {
-                                            <small style="display:block;color:#b91c1c;margin-top:.25rem">@item.Error</small>
-                                        }
-                                    </div>
-                                    <div style="display:flex;gap:.35rem;justify-content:flex-end">
-                                        @if (item.IsFailed)
-                                        {
-                                            <button type="button"
-                                                    class="btn-admin btn-ghost content-icon-btn"
-                                                    title="@T("Retry")"
-                                                    disabled="@_uploadingQueue"
-                                                    @onclick="() => RetryUpload(item)">
-                                                <i class="fas fa-rotate"></i>
-                                            </button>
-                                        }
-                                        <button type="button"
-                                                class="btn-admin btn-ghost content-icon-btn"
-                                                title="@T("Remove")"
-                                                disabled="@_uploadingQueue"
-                                                @onclick="() => RemoveUploadQueueItem(item)">
-                                            <i class="fas fa-times"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                        }
-                    }
             </div>
             <div class="modal-footer">
                 <button class="btn-admin btn-ghost" disabled="@(_uploadingQueue || _savingYoutubeResource)" @onclick="CloseUploadModal">@T("Close")</button>
