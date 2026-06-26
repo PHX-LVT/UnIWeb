@@ -1,4 +1,5 @@
 using FullProject.Models;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace FullProject.Services
@@ -97,68 +98,119 @@ namespace FullProject.Services
                 .Ascending(c => c.Status)
                 .Descending(c => c.UpdatedAt);
 
-            await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(slugIndex));
-            await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(statusIndex));
-            await draft.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(
-                Builders<ContentItem>.IndexKeys.Ascending(c => c.StableId)));
-            await published.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(slugIndex));
-            await published.Indexes.CreateOneAsync(new CreateIndexModel<ContentItem>(
-                Builders<ContentItem>.IndexKeys.Ascending(c => c.StableId)));
+            await EnsureIndexAsync(draft, slugIndex, IndexOptions("ix_content_draft_type_slug"));
+            await EnsureIndexAsync(draft, statusIndex, IndexOptions("ix_content_draft_status_updated"));
+            await EnsureIndexAsync(draft,
+                Builders<ContentItem>.IndexKeys.Ascending(c => c.StableId),
+                IndexOptions("ix_content_draft_stable"));
+            await EnsureIndexAsync(draft,
+                Builders<ContentItem>.IndexKeys
+                    .Ascending(c => c.ContentTypeKey)
+                    .Ascending(c => c.Status)
+                    .Descending(c => c.UpdatedAt),
+                IndexOptions("ix_content_draft_type_status_updated"));
+            await EnsureIndexAsync(draft,
+                Builders<ContentItem>.IndexKeys
+                    .Ascending(c => c.Visible)
+                    .Ascending(c => c.Status)
+                    .Ascending(c => c.ContentTypeKey)
+                    .Descending(c => c.PublishedAt)
+                    .Descending(c => c.UpdatedAt),
+                IndexOptions("ix_content_draft_library_browse"));
+
+            await EnsureIndexAsync(published, slugIndex, IndexOptions("ix_content_published_type_slug"));
+            await EnsureIndexAsync(published,
+                Builders<ContentItem>.IndexKeys.Ascending(c => c.StableId),
+                IndexOptions("ix_content_published_stable"));
+            await EnsureIndexAsync(published,
+                Builders<ContentItem>.IndexKeys
+                    .Ascending(c => c.Visible)
+                    .Ascending(c => c.ContentTypeKey)
+                    .Ascending(c => c.Slug),
+                IndexOptions("ix_content_published_visible_type_slug"));
+            await EnsureIndexAsync(published,
+                Builders<ContentItem>.IndexKeys
+                    .Ascending(c => c.Visible)
+                    .Ascending(c => c.ContentTypeKey)
+                    .Descending(c => c.PublishedAt)
+                    .Descending(c => c.UpdatedAt),
+                IndexOptions("ix_content_published_library_browse"));
 
             var contentTypes = _database.GetCollection<ContentType>("content_types");
-            await contentTypes.Indexes.CreateOneAsync(new CreateIndexModel<ContentType>(
+            await EnsureIndexAsync(contentTypes,
                 Builders<ContentType>.IndexKeys.Ascending(t => t.Key),
-                new CreateIndexOptions { Unique = true }));
+                IndexOptions("ux_content_types_key", unique: true));
         }
 
         private async Task EnsureManagedResourceIndexesAsync()
         {
             var resources = _database.GetCollection<ManagedResource>("managed_resources");
-            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
+            await EnsureIndexAsync(resources,
                 Builders<ManagedResource>.IndexKeys
                     .Ascending(r => r.Kind)
                     .Ascending(r => r.Active)
-                    .Descending(r => r.UpdatedAt)));
-            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
+                    .Descending(r => r.UpdatedAt),
+                IndexOptions("ix_managed_resources_kind_active_updated"));
+            await EnsureIndexAsync(resources,
                 Builders<ManagedResource>.IndexKeys
                     .Ascending(r => r.CreatedById)
-                    .Descending(r => r.CreatedAt)));
-            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
-                Builders<ManagedResource>.IndexKeys.Ascending(r => r.Url)));
-            await resources.Indexes.CreateOneAsync(new CreateIndexModel<ManagedResource>(
+                    .Descending(r => r.CreatedAt),
+                IndexOptions("ix_managed_resources_creator_created"));
+            await EnsureIndexAsync(resources,
+                Builders<ManagedResource>.IndexKeys.Ascending(r => r.Url),
+                IndexOptions("ix_managed_resources_url"));
+            await EnsureIndexAsync(resources,
                 Builders<ManagedResource>.IndexKeys
                     .Ascending(r => r.AlbumId)
-                    .Descending(r => r.UpdatedAt)));
+                    .Descending(r => r.UpdatedAt),
+                IndexOptions("ix_managed_resources_album_updated"));
+            await EnsureIndexAsync(resources,
+                Builders<ManagedResource>.IndexKeys
+                    .Ascending(r => r.AlbumId)
+                    .Ascending(r => r.Active)
+                    .Descending(r => r.UpdatedAt),
+                IndexOptions("ix_managed_resources_album_active_updated"));
+            await EnsureIndexAsync(resources,
+                Builders<ManagedResource>.IndexKeys
+                    .Ascending(r => r.Kind)
+                    .Ascending(r => r.AlbumId)
+                    .Ascending(r => r.Active)
+                    .Descending(r => r.UpdatedAt),
+                IndexOptions("ix_managed_resources_kind_album_active_updated"));
 
             var albums = _database.GetCollection<ResourceAlbum>("resource_albums");
-            await albums.Indexes.CreateOneAsync(new CreateIndexModel<ResourceAlbum>(
+            await EnsureIndexAsync(albums,
                 Builders<ResourceAlbum>.IndexKeys
                     .Ascending(a => a.Scope)
-                    .Ascending(a => a.Name)));
-            await albums.Indexes.CreateOneAsync(new CreateIndexModel<ResourceAlbum>(
+                    .Ascending(a => a.Name),
+                IndexOptions("ix_resource_albums_scope_name"));
+            await EnsureIndexAsync(albums,
                 Builders<ResourceAlbum>.IndexKeys
                     .Ascending(a => a.CreatedById)
-                    .Descending(a => a.CreatedAt)));
+                    .Descending(a => a.CreatedAt),
+                IndexOptions("ix_resource_albums_creator_created"));
         }
         private async Task EnsureUserIndexesAsync()
         {
             var adminUsers = _database.GetCollection<AdminUser>("admin_users");
-            await adminUsers.Indexes.CreateOneAsync(new CreateIndexModel<AdminUser>(
+            await EnsureIndexAsync(adminUsers,
                 Builders<AdminUser>.IndexKeys.Ascending(u => u.Email),
-                new CreateIndexOptions { Unique = true }));
+                IndexOptions("ux_admin_users_email", unique: true));
 
             var adminSessions = _database.GetCollection<AdminSessionRecord>("admin_sessions");
-            await adminSessions.Indexes.CreateOneAsync(new CreateIndexModel<AdminSessionRecord>(
+            await EnsureIndexAsync(adminSessions,
                 Builders<AdminSessionRecord>.IndexKeys.Ascending(s => s.TokenId),
-                new CreateIndexOptions { Unique = true }));
-            await adminSessions.Indexes.CreateOneAsync(new CreateIndexModel<AdminSessionRecord>(
+                IndexOptions("ux_admin_sessions_token", unique: true));
+            await EnsureIndexAsync(adminSessions,
                 Builders<AdminSessionRecord>.IndexKeys
                     .Ascending(s => s.AdminId)
-                    .Descending(s => s.LoginAt)));
-            await adminSessions.Indexes.CreateOneAsync(new CreateIndexModel<AdminSessionRecord>(
+                    .Descending(s => s.LoginAt),
+                IndexOptions("ix_admin_sessions_admin_login"));
+            await EnsureIndexAsync(adminSessions,
                 Builders<AdminSessionRecord>.IndexKeys
                     .Ascending(s => s.IsRevoked)
-                    .Ascending(s => s.ExpiresAt)));
+                    .Ascending(s => s.ExpiresAt),
+                IndexOptions("ix_admin_sessions_revoked_expiry"));
 
             var adminLoginActivity = _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
             await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
@@ -252,5 +304,39 @@ namespace FullProject.Services
                 Builders<FormDefinition>.IndexKeys.Ascending(f => f.Key),
                 new CreateIndexOptions { Unique = true }));
         }
+
+        private async Task EnsureIndexAsync<T>(
+            IMongoCollection<T> collection,
+            IndexKeysDefinition<T> keys,
+            CreateIndexOptions options)
+        {
+            try
+            {
+                await collection.Indexes.CreateOneAsync(new CreateIndexModel<T>(keys, options));
+            }
+            catch (MongoCommandException ex) when (IsEquivalentIndexNameConflict(ex))
+            {
+                _logger.LogInformation(
+                    "MongoDB index already exists with a different name on {CollectionName}; existing equivalent index will be used.",
+                    collection.CollectionNamespace.CollectionName);
+            }
+        }
+
+        private static CreateIndexOptions IndexOptions(string name, bool unique = false)
+        {
+            var options = new CreateIndexOptions { Name = name };
+            if (unique)
+            {
+                options.Unique = true;
+            }
+
+            return options;
+        }
+
+        private static bool IsEquivalentIndexNameConflict(MongoCommandException ex) =>
+            ex.Message.Contains("Index already exists with a different name", StringComparison.OrdinalIgnoreCase) ||
+            (ex.CodeName?.Equals("IndexOptionsConflict", StringComparison.OrdinalIgnoreCase) == true &&
+             ex.Result is BsonDocument result &&
+             result.ToString().Contains("different name", StringComparison.OrdinalIgnoreCase));
     }
 }

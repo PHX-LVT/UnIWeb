@@ -343,7 +343,8 @@ namespace FullProject.Utils
                 Href = b.Href,
                 FormDefinitionId = b.FormDefinitionId,
                 Visible = b.Visible,
-                Order = b.Order
+                Order = b.Order,
+                ColumnSlotId = b.ColumnSlotId
             }).ToList();
             clone.CreatedAt = source.CreatedAt;
             clone.UpdatedAt = DateTime.UtcNow;

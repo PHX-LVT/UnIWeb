@@ -108,5 +108,17 @@ namespace FullProject.Services
                 CreatedAt = DateTime.UtcNow
             });
         }
+
+        public async Task LogAsync(IClientSessionHandle session, string stableId, string action, string actorId, string? message = null)
+        {
+            await _context.ContentAuditLogs.InsertOneAsync(session, new ContentAuditLog
+            {
+                ContentStableId = stableId,
+                Action = action,
+                ActorId = actorId,
+                Message = message,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
     }
 }
