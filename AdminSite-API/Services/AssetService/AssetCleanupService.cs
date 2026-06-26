@@ -1,16 +1,21 @@
 using FullProject.Models;
 
-namespace GlobalManager.Services.AssetService
+namespace FullProject.Services.AssetService
 {
     public class AssetCleanupService
     {
         private readonly AssetReferenceService _references;
         private readonly R2StorageService _storage;
+        private readonly ILogger<AssetCleanupService> _logger;
 
-        public AssetCleanupService(AssetReferenceService references, R2StorageService storage)
+        public AssetCleanupService(
+            AssetReferenceService references,
+            R2StorageService storage,
+            ILogger<AssetCleanupService> logger)
         {
             _references = references;
             _storage = storage;
+            _logger = logger;
         }
 
         public async Task<bool> DeleteIfUnusedAsync(string? oldUrl, string? replacementUrl, string? excludingManagedResourceId = null)
@@ -21,10 +26,22 @@ namespace GlobalManager.Services.AssetService
 
             try
             {
-                return await _storage.DeleteAsync(oldUrl);
+                var deleted = await _storage.DeleteAsync(oldUrl);
+                if (!deleted)
+                {
+                    _logger.LogDebug(
+                        "Unused asset cleanup skipped or did not delete an object. Url: {Url}",
+                        oldUrl);
+                }
+
+                return deleted;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(
+                    ex,
+                    "Unused asset cleanup failed. Url: {Url}",
+                    oldUrl);
                 return false;
             }
         }

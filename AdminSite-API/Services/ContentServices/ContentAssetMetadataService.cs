@@ -52,7 +52,7 @@ namespace FullProject.Services
             {
                 Id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString("N") : dto.Id.Trim(),
                 Type = type,
-                Content = type == "text" ? SanitizeLang(dto.Content) : NormalizeLang(dto.Content, false),
+                Content = ShouldSanitizeBodyContent(type) ? SanitizeLang(dto.Content) : NormalizeLang(dto.Content, false),
                 Caption = NormalizeLang(dto.Caption, false),
                 Url = CleanUrl(dto.Url),
                 ResourceId = CleanResourceId(dto.ResourceId),
@@ -362,7 +362,7 @@ namespace FullProject.Services
         private static bool GalleryItemHasContent(ContentGalleryItem item) =>
             !string.IsNullOrWhiteSpace(item.Url);
 
-        private static string RenderBodyItemHtml(ContentBodyItem item, string lang)
+        private string RenderBodyItemHtml(ContentBodyItem item, string lang)
         {
             var content = LangValue(item.Content, lang, string.Empty);
             var caption = LangValue(item.Caption, lang, string.Empty);
@@ -380,7 +380,7 @@ namespace FullProject.Services
                 "quote" when !string.IsNullOrWhiteSpace(content) =>
                     $"<blockquote class=\"sc-content-body-quote\">{H(content)}</blockquote>",
                 "cta" when !string.IsNullOrWhiteSpace(content) =>
-                    $"<div class=\"sc-content-body-cta\">{content}</div>",
+                    $"<div class=\"sc-content-body-cta\">{_contentSanitizer.SanitizeHtml(content)}</div>",
                 "divider" => "<hr class=\"sc-content-body-divider\" />",
                 _ => PlainTextToParagraphHtml(content)
             };
@@ -423,6 +423,9 @@ namespace FullProject.Services
                 value,
                 @"<\s*(p|h[1-6]|ul|ol|li|blockquote|div|figure|figcaption|table|thead|tbody|tr|td|th|br|span|strong|b|em|i|u|a)\b",
                 RegexOptions.IgnoreCase);
+
+        private static bool ShouldSanitizeBodyContent(string type) =>
+            type is "text" or "cta";
 
         private static string FormatBytes(long bytes)
         {

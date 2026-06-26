@@ -1,8 +1,8 @@
 using FullProject.Data; // Imported your new context namespace
 using FullProject.DTOs;
 using FullProject.Models;
-using GlobalManager.Services.AssetService;
-using GlobalManager.Services.SectionServices;
+using FullProject.Services.AssetService;
+using FullProject.Services.SectionServices;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;

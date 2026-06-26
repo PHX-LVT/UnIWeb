@@ -2,7 +2,7 @@ using FullProject.Data;
 using FullProject.Models;
 using MongoDB.Driver;
 
-namespace GlobalManager.Services.AssetService
+namespace FullProject.Services.AssetService
 {
     public class AssetReferenceService
     {

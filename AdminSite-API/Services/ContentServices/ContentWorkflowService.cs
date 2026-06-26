@@ -1,7 +1,7 @@
 using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 using MongoDB.Driver;
 
 namespace FullProject.Services
@@ -134,6 +134,7 @@ namespace FullProject.Services
             var stableIds = items.Select(i => i.StableId).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             await _context.ContentDraft.DeleteManyAsync(c => normalizedIds.Contains(c.Id) && c.Status == ContentStatus.Deleted);
             await _context.ContentPublished.DeleteManyAsync(c => stableIds.Contains(c.StableId));
+            await _context.ContentRevisions.DeleteManyAsync(r => stableIds.Contains(r.ContentStableId));
             await _context.ContentAuditLogs.DeleteManyAsync(l => stableIds.Contains(l.ContentStableId));
             await _assetCleanup.DeleteUnusedContentAssetsAsync(items);
             return items.Count;

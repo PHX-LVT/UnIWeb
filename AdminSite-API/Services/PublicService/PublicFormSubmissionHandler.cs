@@ -1,7 +1,7 @@
 using FullProject.DTOs;
 using FullProject.Models;
 using FullProject.Utils;
-using GlobalManager.Services.SectionServices;
+using FullProject.Services.SectionServices;
 using FullProject.Security.Forms;
 using Contracts.Forms;
 using FullProject.Services.FormServices;
@@ -12,10 +12,6 @@ namespace FullProject.Services.PublicService
 {
     public class PublicFormSubmissionHandler
     {
-        private const string SyncHubUsername = "user@yoursite.com";
-        private const string SyncHubPassword = "hello123";
-        private const string SyncHubRedirectUrl = "/home";
-
         private readonly PageService _pageService;
         private readonly SectionService _sectionService;
         private readonly BlockService _blockService;
@@ -23,6 +19,7 @@ namespace FullProject.Services.PublicService
         private readonly FormSubmissionSecurityService _formSecurity;
         private readonly FormDefinitionService _formDefinitionService;
         private readonly VisitorMetricService _metrics;
+        private readonly IConfiguration _configuration;
 
         public PublicFormSubmissionHandler(
             PageService pageService,
@@ -31,7 +28,8 @@ namespace FullProject.Services.PublicService
             FormSubmissionService submissionService,
             FormSubmissionSecurityService formSecurity,
             FormDefinitionService formDefinitionService,
-            VisitorMetricService metrics)
+            VisitorMetricService metrics,
+            IConfiguration configuration)
         {
             _pageService = pageService;
             _sectionService = sectionService;
@@ -40,6 +38,7 @@ namespace FullProject.Services.PublicService
             _formSecurity = formSecurity;
             _formDefinitionService = formDefinitionService;
             _metrics = metrics;
+            _configuration = configuration;
         }
 
         public async Task<IActionResult> SubmitPageFormAsync(
@@ -71,6 +70,9 @@ namespace FullProject.Services.PublicService
                 return new NotFoundObjectResult(ApiResult.NotFound("Form not found."));
 
             if (normalizedType != "sync")
+                return new NotFoundObjectResult(ApiResult.NotFound("Form not found."));
+
+            if (!SyncHubDemoEnabled())
                 return new NotFoundObjectResult(ApiResult.NotFound("Form not found."));
 
             var validation = ValidateModalSubmission(normalizedType, dto);
@@ -177,8 +179,16 @@ namespace FullProject.Services.PublicService
             var password = dto.Data.TryGetValue("Password", out var passwordValue)
                 ? passwordValue
                 : string.Empty;
-            var success = string.Equals(username, SyncHubUsername, StringComparison.OrdinalIgnoreCase) &&
-                          string.Equals(password, SyncHubPassword, StringComparison.Ordinal);
+            var expectedUsername = _configuration["PublicDemoForms:SyncHubUsername"]?.Trim();
+            var expectedPassword = _configuration["PublicDemoForms:SyncHubPassword"];
+            var redirectUrl = _configuration["PublicDemoForms:SyncHubRedirectUrl"]?.Trim();
+            if (string.IsNullOrWhiteSpace(redirectUrl))
+                redirectUrl = "/home";
+
+            var success = !string.IsNullOrWhiteSpace(expectedUsername) &&
+                          !string.IsNullOrEmpty(expectedPassword) &&
+                          string.Equals(username, expectedUsername, StringComparison.OrdinalIgnoreCase) &&
+                          string.Equals(password, expectedPassword, StringComparison.Ordinal);
 
             var data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -207,8 +217,11 @@ namespace FullProject.Services.PublicService
                 return new UnauthorizedObjectResult(ApiResult.Unauthorized<object>("Invalid username or password."));
             }
 
-            return new OkObjectResult(ApiResult.Ok(new { RedirectUrl = SyncHubRedirectUrl }, "Login successful."));
+            return new OkObjectResult(ApiResult.Ok(new { RedirectUrl = redirectUrl }, "Login successful."));
         }
+
+        private bool SyncHubDemoEnabled() =>
+            _configuration.GetValue<bool>("PublicDemoForms:SyncHubEnabled");
 
         private async Task<IActionResult?> ValidateFormSubmissionAsync(
             Page page,

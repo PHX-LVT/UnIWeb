@@ -3,7 +3,7 @@ using FullProject.Models;
 using FullProject.Services;
 using FullProject.Security;
 using FullProject.Utils;
-using GlobalManager.Services.PublishAndResetService;
+using FullProject.Services.PublishAndResetService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;

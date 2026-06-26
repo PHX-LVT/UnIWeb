@@ -4,7 +4,7 @@ using FullProject.Models;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 using SharedComponents.Helpers;
 
 namespace FullProject.Services
@@ -503,11 +503,21 @@ namespace FullProject.Services
             var ids = slotIds.Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
             if (ids.Count == 0) return;
 
-            await _context.BlocksDraft.DeleteManyAsync(
+            var blocks = await _context.BlocksDraft
+                .Find(b => b.PageStableId == pageStableId &&
+                           b.SectionStableId == sectionStableId &&
+                           b.ColumnSlotId != null &&
+                           ids.Contains(b.ColumnSlotId))
+                .ToListAsync();
+            var removedAssetUrls = blocks.SelectMany(_assetCleanup.BlockAssetUrls).ToList();
+
+            var result = await _context.BlocksDraft.DeleteManyAsync(
                 b => b.PageStableId == pageStableId &&
                      b.SectionStableId == sectionStableId &&
                      b.ColumnSlotId != null &&
                      ids.Contains(b.ColumnSlotId));
+            if (result.DeletedCount > 0)
+                await _assetCleanup.DeleteUnusedAsync(removedAssetUrls);
         }
 
         private static BlockLayout MapLayout(BlockLayoutDto? dto)

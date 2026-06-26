@@ -5,7 +5,7 @@ using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
-using GlobalManager.Services.SectionServices;
+using FullProject.Services.SectionServices;
 
 
 namespace FullProject.Controllers

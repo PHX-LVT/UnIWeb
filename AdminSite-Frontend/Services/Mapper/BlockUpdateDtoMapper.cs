@@ -80,6 +80,8 @@ public static class BlockUpdateDtoMapper
                 ImageUrl = block.ImageUrl,
                 ButtonLabel = block.ButtonLabel ?? new(),
                 Href = block.Href,
+                Action = block.Action ?? "linkToPage",
+                FormDefinitionId = block.FormDefinitionId,
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -87,6 +89,8 @@ public static class BlockUpdateDtoMapper
             {
                 Label = block.Label ?? new(),
                 Href = block.Href,
+                Action = block.Action ?? "linkToPage",
+                FormDefinitionId = block.FormDefinitionId,
                 Style = block.Style ?? "filled",
                 Visible = block.Visible,
                 Layout = layout

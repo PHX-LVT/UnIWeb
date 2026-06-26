@@ -1,7 +1,8 @@
 using Contracts.Public;
 using FullProject.Models;
+using FullProject.Security;
 using FullProject.Services.FormServices;
-using GlobalManager.Services.SectionServices;
+using FullProject.Services.SectionServices;
 using SharedComponents.Helpers;
 using System.Net;
 using System.Text.RegularExpressions;
@@ -10,6 +11,8 @@ namespace FullProject.Services.PublicService
 {
     public class PublicPageAssemblyService
     {
+        private static readonly ContentSanitizer BodyHtmlSanitizer = new();
+
         private readonly PageService _pageService;
         private readonly SectionService _sectionService;
         private readonly BlockService _blockService;
@@ -735,7 +738,7 @@ namespace FullProject.Services.PublicService
                 "quote" when !string.IsNullOrWhiteSpace(content) =>
                     $"<blockquote class=\"sc-content-body-item sc-content-body-quote\">{H(content)}</blockquote>",
                 "cta" when !string.IsNullOrWhiteSpace(content) =>
-                    $"<div class=\"sc-content-body-item sc-content-body-cta\">{content}</div>",
+                    $"<div class=\"sc-content-body-item sc-content-body-cta\">{BodyHtmlSanitizer.SanitizeHtml(content)}</div>",
                 "divider" => "<hr class=\"sc-content-body-item sc-content-body-divider\" />",
                 _ when !string.IsNullOrWhiteSpace(content) => $"<div class=\"sc-content-body-item sc-content-body-text\">{PlainTextToParagraphHtml(content)}</div>",
                 _ => string.Empty

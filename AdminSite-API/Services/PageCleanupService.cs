@@ -1,6 +1,6 @@
 ﻿using FullProject.Data;
 using FullProject.Models;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 using MongoDB.Driver;
 
 namespace FullProject.Services
@@ -71,6 +71,8 @@ namespace FullProject.Services
             await _context.PagesDraft.DeleteOneAsync(p => p.Id == pageId);
             await _context.PagesPublished.DeleteOneAsync(
                 p => p.StableId == page.StableId);
+            await _context.PageRevisions.DeleteManyAsync(
+                r => r.PageStableId == page.StableId);
 
             await _assetCleanup.DeleteUnusedPageGraphAssetsAsync(removedPages, removedSections, removedBlocks);
         }

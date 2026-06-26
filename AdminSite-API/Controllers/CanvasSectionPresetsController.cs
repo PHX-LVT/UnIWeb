@@ -1,7 +1,7 @@
 using Contracts.Admin;
 using FullProject.Models;
 using FullProject.Utils;
-using GlobalManager.Services.SectionServices;
+using FullProject.Services.SectionServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

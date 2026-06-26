@@ -5,9 +5,9 @@ using FullProject.Services;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 
-namespace GlobalManager.Services.SectionServices
+namespace FullProject.Services.SectionServices
 {
     public class SectionService
     {

@@ -5,7 +5,7 @@ using FullProject.Security;
 using FullProject.Services;
 using FullProject.Settings;
 using FullProject.Utils;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -24,19 +24,22 @@ namespace FullProject.Controllers
         private readonly R2StorageService _storage;
         private readonly R2StorageSettings _settings;
         private readonly SettingsService _siteSettings;
+        private readonly ILogger<ManagedResourcesController> _logger;
 
         public ManagedResourcesController(
             ManagedResourceService resources,
             ManagedResourceAlbumService albums,
             R2StorageService storage,
             IOptions<R2StorageSettings> settings,
-            SettingsService siteSettings)
+            SettingsService siteSettings,
+            ILogger<ManagedResourcesController> logger)
         {
             _resources = resources;
             _albums = albums;
             _storage = storage;
             _settings = settings.Value;
             _siteSettings = siteSettings;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -238,13 +241,26 @@ namespace FullProject.Controllers
 
             var file = validation.File!;
             var inferredKind = validation.Kind!;
-            await using var stream = file.OpenReadStream();
-            var upload = await _storage.UploadWithMetadataAsync(stream, file.FileName, file.ContentType, "managed-resources", HttpContext.RequestAborted);
-            var dto = _resources.BuildUploadCreateDto(upload.Url, upload.StorageKey, inferredKind, file.FileName, file.ContentType, file.Length, request.AlbumId);
-            var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
-            if (errors.Count > 0) return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
+            R2UploadResult? upload = null;
+            try
+            {
+                await using var stream = file.OpenReadStream();
+                upload = await _storage.UploadWithMetadataAsync(stream, file.FileName, file.ContentType, "managed-resources", HttpContext.RequestAborted);
+                var dto = _resources.BuildUploadCreateDto(upload.Url, upload.StorageKey, inferredKind, file.FileName, file.ContentType, file.Length, request.AlbumId);
+                var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
+                if (errors.Count > 0)
+                {
+                    await TryDeleteUploadedAssetAsync(upload, "resource-create-validation-failed");
+                    return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
+                }
 
-            return Ok(ApiResult.Created(MapResource(resource!, 0), "Resource uploaded."));
+                return Ok(ApiResult.Created(MapResource(resource!, 0), "Resource uploaded."));
+            }
+            catch
+            {
+                await TryDeleteUploadedAssetAsync(upload, "resource-create-exception");
+                throw;
+            }
         }
 
         [HttpPost("upload-batch")]
@@ -270,12 +286,13 @@ namespace FullProject.Controllers
                     continue;
                 }
 
+                R2UploadResult? upload = null;
                 try
                 {
                     var validatedFile = validation.File!;
                     var inferredKind = validation.Kind!;
                     await using var stream = validatedFile.OpenReadStream();
-                    var upload = await _storage.UploadWithMetadataAsync(
+                    upload = await _storage.UploadWithMetadataAsync(
                         stream,
                         validatedFile.FileName,
                         validatedFile.ContentType,
@@ -298,6 +315,7 @@ namespace FullProject.Controllers
                     var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
                     if (errors.Count > 0)
                     {
+                        await TryDeleteUploadedAssetAsync(upload, "resource-batch-create-validation-failed");
                         results.Add(FailedUploadResult(i, validatedFile.FileName, string.Join(" ", errors)));
                         continue;
                     }
@@ -312,6 +330,7 @@ namespace FullProject.Controllers
                 }
                 catch (Exception ex)
                 {
+                    await TryDeleteUploadedAssetAsync(upload, "resource-batch-create-exception");
                     results.Add(FailedUploadResult(i, file.FileName, $"Storage upload failed: {ex.Message}"));
                 }
             }
@@ -344,20 +363,33 @@ namespace FullProject.Controllers
 
             var file = validation.File!;
             var inferredKind = validation.Kind!;
-            await using var stream = file.OpenReadStream();
-            var upload = await _storage.UploadWithMetadataAsync(stream, file.FileName, file.ContentType, "managed-resources", HttpContext.RequestAborted);
-            var (resource, updatedDocuments, errors) = await _resources.ReplaceUploadAsync(
-                id,
-                upload.Url,
-                upload.StorageKey,
-                inferredKind,
-                file.FileName,
-                file.ContentType,
-                file.Length,
-                ActorId);
+            R2UploadResult? upload = null;
+            ManagedResource? resource;
+            int updatedDocuments;
+            List<string> errors;
+            try
+            {
+                await using var stream = file.OpenReadStream();
+                upload = await _storage.UploadWithMetadataAsync(stream, file.FileName, file.ContentType, "managed-resources", HttpContext.RequestAborted);
+                (resource, updatedDocuments, errors) = await _resources.ReplaceUploadAsync(
+                    id,
+                    upload.Url,
+                    upload.StorageKey,
+                    inferredKind,
+                    file.FileName,
+                    file.ContentType,
+                    file.Length,
+                    ActorId);
+            }
+            catch
+            {
+                await TryDeleteUploadedAssetAsync(upload, "resource-replace-exception");
+                throw;
+            }
 
             if (errors.Count > 0)
             {
+                await TryDeleteUploadedAssetAsync(upload, "resource-replace-validation-failed");
                 if (errors.Contains("Resource not found.")) return NotFound(ApiResult.NotFound("Resource not found."));
                 return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
             }
@@ -515,6 +547,33 @@ namespace FullProject.Controllers
                 ["vi"] = value,
                 ["cn"] = value
             };
+
+        private async Task TryDeleteUploadedAssetAsync(R2UploadResult? upload, string reason)
+        {
+            if (upload is null || string.IsNullOrWhiteSpace(upload.Url)) return;
+
+            try
+            {
+                var deleted = await _storage.DeleteAsync(upload.Url);
+                if (!deleted)
+                {
+                    _logger.LogWarning(
+                        "Uploaded resource asset rollback skipped or failed. Reason: {Reason}. Url: {Url}. StorageKey: {StorageKey}",
+                        reason,
+                        upload.Url,
+                        upload.StorageKey);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Uploaded resource asset rollback failed. Reason: {Reason}. Url: {Url}. StorageKey: {StorageKey}",
+                    reason,
+                    upload.Url,
+                    upload.StorageKey);
+            }
+        }
 
         private static ManagedResourceResponseDto MapResource(ManagedResource resource, int usageCount = 0) => new()
         {

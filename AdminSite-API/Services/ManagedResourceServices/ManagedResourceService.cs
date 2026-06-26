@@ -1,7 +1,7 @@
 using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 using MongoDB.Bson;
 using MongoDB.Driver;
 

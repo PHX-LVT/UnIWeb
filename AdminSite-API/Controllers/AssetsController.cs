@@ -3,7 +3,7 @@ using FullProject.Security;
 using FullProject.Services;
 using FullProject.Settings;
 using FullProject.Utils;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;

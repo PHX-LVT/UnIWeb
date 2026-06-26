@@ -1,10 +1,10 @@
 ﻿using FullProject.Data;
 using FullProject.Models;
 using FullProject.Utils;
-using GlobalManager.Services.AssetService;
+using FullProject.Services.AssetService;
 using MongoDB.Driver;
 
-namespace GlobalManager.Services.PublishAndResetService
+namespace FullProject.Services.PublishAndResetService
 {
     public class ResetService
     {
