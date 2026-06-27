@@ -878,14 +878,37 @@ async function submitPublicModalForm(form, submit, status) {
 
 function getPublicUiLanguage() {
     try {
-        const requested = new URLSearchParams(window.location.search).get("lang");
-        if (requested === "vi" || requested === "cn") return requested;
+        const requested = normalizePublicUiLanguage(new URLSearchParams(window.location.search).get("lang"));
+        if (requested) return requested;
 
-        const lang = window.localStorage.getItem("lang");
-        return lang === "vi" || lang === "cn" ? lang : "en";
+        const active = normalizePublicUiLanguage(window.cmsPublicLanguage);
+        if (active) return active;
+
+        const documentLang = normalizePublicUiLanguage(document.documentElement?.lang);
+        if (documentLang) return documentLang;
+
+        const stored = normalizePublicUiLanguage(readStoredPublicLanguage());
+        return stored || "en";
     } catch {
         return "en";
     }
+}
+
+function readStoredPublicLanguage() {
+    const raw = window.localStorage.getItem("lang");
+    if (!raw) return "";
+
+    try {
+        const parsed = JSON.parse(raw);
+        return typeof parsed === "string" ? parsed : "";
+    } catch {
+        return raw;
+    }
+}
+
+function normalizePublicUiLanguage(value) {
+    const lang = (value || "").toString().trim().toLowerCase();
+    return /^[a-z]{2,8}(-[a-z0-9]{2,8})*$/.test(lang) ? lang : "";
 }
 
 function publicUiText(key, lang) {

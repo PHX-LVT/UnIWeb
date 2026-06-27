@@ -8,7 +8,7 @@
 
     @if (Auth.CanViewLogs)
     {
-        <div class="website-activity__filters">
+        <div class="website-activity__filters admin-data-toolbar__row">
             <label>
                 <span>@T("DateFrom")</span>
                 <input type="date" @bind="_from" />
@@ -26,49 +26,49 @@
 
 @if (!Auth.CanViewLogs)
 {
-    <div class="admin-card">
-        <p class="text-muted">@T("NoPermission")</p>
+    <div class="admin-data-table-card">
+        <div class="admin-data-empty">@T("NoPermission")</div>
     </div>
 }
 else if (_loading)
 {
-    <div class="admin-card">
-        <p class="text-muted">@T("Loading")</p>
+    <div class="admin-data-table-card">
+        <div class="admin-data-empty">@T("Loading")</div>
     </div>
 }
 else
 {
-    <div class="website-activity__stats">
-        <article class="admin-card website-activity__stat website-activity__stat--pages">
-            <span>@T("PageViews")</span>
-            <strong>@MetricTotal(PageView)</strong>
+    <div class="admin-data-stats website-activity__stats">
+        <article class="admin-data-stat website-activity__stat website-activity__stat--pages">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("PageViews")</span>
+            <strong class="admin-data-stat__value">@MetricTotal(PageView)</strong>
         </article>
-        <article class="admin-card website-activity__stat website-activity__stat--content">
-            <span>@T("ContentPageViews")</span>
-            <strong>@MetricTotal(ContentPageView)</strong>
+        <article class="admin-data-stat website-activity__stat website-activity__stat--content">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("ContentPageViews")</span>
+            <strong class="admin-data-stat__value">@MetricTotal(ContentPageView)</strong>
         </article>
-        <article class="admin-card website-activity__stat website-activity__stat--downloads">
-            <span>@T("Downloads")</span>
-            <strong>@MetricTotal(Download)</strong>
+        <article class="admin-data-stat website-activity__stat website-activity__stat--downloads">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("Downloads")</span>
+            <strong class="admin-data-stat__value">@MetricTotal(Download)</strong>
         </article>
-        <article class="admin-card website-activity__stat website-activity__stat--forms">
-            <span>@T("FormSubmissions")</span>
-            <strong>@MetricTotal(FormSubmission)</strong>
+        <article class="admin-data-stat website-activity__stat website-activity__stat--forms">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("FormSubmissions")</span>
+            <strong class="admin-data-stat__value">@MetricTotal(FormSubmission)</strong>
         </article>
     </div>
 
     @if (_items.Count == 0)
     {
-        <div class="admin-card">
-            <p class="text-muted">@T("NoWebsiteActivity")</p>
+        <div class="admin-data-table-card">
+            <div class="admin-data-empty">@T("NoWebsiteActivity")</div>
         </div>
     }
     else
     {
         <div class="website-activity__tables">
-            <section class="admin-card">
+            <section class="admin-data-table-card">
                 <h2>@T("DailyActivity")</h2>
-                <div class="website-activity__table-scroll">
+                <div class="admin-data-table-scroll website-activity__table-scroll">
                     <table class="table">
                         <thead>
                             <tr>
@@ -95,9 +95,9 @@ else
                 </div>
             </section>
 
-            <section class="admin-card">
+            <section class="admin-data-table-card">
                 <h2>@T("TopActivityTargets")</h2>
-                <div class="website-activity__table-scroll">
+                <div class="admin-data-table-scroll website-activity__table-scroll">
                     <table class="table">
                         <thead>
                             <tr>

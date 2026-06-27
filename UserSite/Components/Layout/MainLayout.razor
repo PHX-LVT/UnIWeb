@@ -64,8 +64,9 @@ else
 
     private async Task SwitchLang(string lang)
     {
-        _lang = lang;
         await LangService.SetAsync(lang);
+        _lang = await LangService.GetAsync();
+        await PublishLanguageAsync();
         StateHasChanged();
     }
 
@@ -96,6 +97,8 @@ else
         {
             _lang = "en";
         }
+
+        await PublishLanguageAsync();
 
         var theme = await ThemeService.GetAsync();
         var css = ThemeService.ToCssVariables(theme);
@@ -128,6 +131,11 @@ else
         _scrollInitialized = true;
         _dotNetRef = DotNetObjectReference.Create(this);
         await JS.InvokeVoidAsync("userSiteShell.initHeaderScroll", _dotNetRef);
+    }
+
+    private async Task PublishLanguageAsync()
+    {
+        await JS.InvokeVoidAsync("userSiteShell.setLanguage", _lang);
     }
 
     [JSInvokable]

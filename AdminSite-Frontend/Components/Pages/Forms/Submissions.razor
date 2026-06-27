@@ -6,15 +6,27 @@
     <h1 class="page-title">@T("FormSubmissions")</h1>
 </div>
 
-<div class="admin-card" style="margin-bottom:1rem">
-    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem">
-        <div class="form-stat"><strong>@_submissions.Count</strong><span>@T("Total")</span></div>
-        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.New)</strong><span>@T("New")</span></div>
-        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.InProgress)</strong><span>@T("InProgress")</span></div>
-        <div class="form-stat"><strong>@Count(FormSubmissionStatusModel.Resolved)</strong><span>@T("Resolved")</span></div>
+<div class="admin-data-toolbar">
+    <div class="admin-data-stats form-submissions__stats">
+        <div class="admin-data-stat form-stat form-stat--total">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("Total")</span>
+            <strong class="admin-data-stat__value">@_submissions.Count</strong>
+        </div>
+        <div class="admin-data-stat form-stat form-stat--new">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("New")</span>
+            <strong class="admin-data-stat__value">@Count(FormSubmissionStatusModel.New)</strong>
+        </div>
+        <div class="admin-data-stat form-stat form-stat--inprogress">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("InProgress")</span>
+            <strong class="admin-data-stat__value">@Count(FormSubmissionStatusModel.InProgress)</strong>
+        </div>
+        <div class="admin-data-stat form-stat form-stat--resolved">
+            <span class="admin-data-stat__label"><span class="admin-data-stat__marker"></span>@T("Resolved")</span>
+            <strong class="admin-data-stat__value">@Count(FormSubmissionStatusModel.Resolved)</strong>
+        </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 180px 180px auto;gap:.75rem;align-items:end">
+    <div class="admin-data-toolbar__row form-submissions__filters">
         <label class="form-filter">
             <span>@T("Search")</span>
             <input class="form-control" @bind="_search" @bind:event="oninput" placeholder="@T("SearchFormSubmissionsPlaceholder")" />
@@ -45,89 +57,93 @@
 
 @if (_selectedIds.Count > 0)
 {
-    <div class="admin-card" style="margin-bottom:1rem;display:flex;gap:.5rem;align-items:center">
+    <div class="admin-data-bulkbar">
         <strong>@string.Format(T("SelectedCount"), _selectedIds.Count)</strong>
-        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Archived)">@T("Archive")</button>
-        <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Spam)">@T("MarkSpam")</button>
-        <button class="btn-admin btn-danger" @onclick="BulkDelete">@T("DeletePermanently")</button>
+        <div class="admin-data-bulkbar__actions">
+            <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Archived)">@T("Archive")</button>
+            <button class="btn-admin btn-secondary" @onclick="() => BulkStatus(FormSubmissionStatusModel.Spam)">@T("MarkSpam")</button>
+            <button class="btn-admin btn-danger" @onclick="BulkDelete">@T("DeletePermanently")</button>
+        </div>
     </div>
 }
 
-<div class="admin-card">
+<div class="admin-data-table-card">
     @if (_loading)
     {
-        <div style="padding:2rem;text-align:center">@T("Loading")</div>
+        <div class="admin-data-empty">@T("Loading")</div>
     }
     else if (!_filteredSubmissions.Any())
     {
-        <p class="text-muted">@T("NoSubmissionsFound")</p>
+        <div class="admin-data-empty">@T("NoSubmissionsFound")</div>
     }
     else
     {
-        <DxGrid Data="@_filteredSubmissions"
-                CssClass="w-100"
-                PageSize="20">
-            <Columns>
-                <DxGridDataColumn Width="46px">
-                    <CellDisplayTemplate>
-                        @{
-                            var sub = (FormSubmissionModel)context.DataItem;
-                            <input type="checkbox"
-                                   checked="@_selectedIds.Contains(sub.Id)"
-                                   @onchange="e => ToggleSelected(sub.Id, e.Value)" />
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(FormSubmissionModel.SubmittedAt)"
-                                  Caption="@T("SubmittedTime")"
-                                  DisplayFormat="{0:dd MMM yyyy HH:mm}"
-                                  Width="170px" />
-                <DxGridDataColumn Caption="@T("Form")" Width="170px">
-                    <CellDisplayTemplate>
-                        @{
-                            var sub = (FormSubmissionModel)context.DataItem;
-                            <span>@(string.IsNullOrWhiteSpace(sub.FormName) ? sub.FormKey : sub.FormName)</span>
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-                <DxGridDataColumn Caption="@T("Status")" Width="140px">
-                    <CellDisplayTemplate>
-                        @{
-                            var sub = (FormSubmissionModel)context.DataItem;
-                            <span class="status-pill status-@sub.Status.ToString().ToLowerInvariant()">@StatusLabel(sub.Status)</span>
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-                <DxGridDataColumn Caption="@T("Source")" Width="220px">
-                    <CellDisplayTemplate>
-                        @{
-                            var sub = (FormSubmissionModel)context.DataItem;
-                            <span>@sub.SourcePage</span>
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-                <DxGridDataColumn Caption="@T("Data")">
-                    <CellDisplayTemplate>
-                        @{
-                            var sub = (FormSubmissionModel)context.DataItem;
-                            <span>@Summary(sub)</span>
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-                <DxGridDataColumn Caption=" " Width="130px">
-                    <CellDisplayTemplate>
-                        @{
-                            var sub = (FormSubmissionModel)context.DataItem;
-                            <button class="btn-admin btn-secondary" @onclick="() => OpenDetail(sub)">@T("View")</button>
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-            </Columns>
-        </DxGrid>
+        <div class="admin-data-table-scroll admin-data-dxgrid">
+            <DxGrid Data="@_filteredSubmissions"
+                    CssClass="w-100"
+                    PageSize="20">
+                <Columns>
+                    <DxGridDataColumn Width="46px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionModel)context.DataItem;
+                                <input type="checkbox"
+                                       checked="@_selectedIds.Contains(sub.Id)"
+                                       @onchange="e => ToggleSelected(sub.Id, e.Value)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(FormSubmissionModel.SubmittedAt)"
+                                      Caption="@T("SubmittedTime")"
+                                      DisplayFormat="{0:dd MMM yyyy HH:mm}"
+                                      Width="170px" />
+                    <DxGridDataColumn Caption="@T("Form")" Width="170px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionModel)context.DataItem;
+                                <span>@(string.IsNullOrWhiteSpace(sub.FormName) ? sub.FormKey : sub.FormName)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Status")" Width="140px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionModel)context.DataItem;
+                                <span class="status-pill status-@sub.Status.ToString().ToLowerInvariant()">@StatusLabel(sub.Status)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Source")" Width="220px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionModel)context.DataItem;
+                                <span>@sub.SourcePage</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="@T("Data")">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionModel)context.DataItem;
+                                <span>@Summary(sub)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption=" " Width="130px">
+                        <CellDisplayTemplate>
+                            @{
+                                var sub = (FormSubmissionModel)context.DataItem;
+                                <button class="btn-admin btn-secondary" @onclick="() => OpenDetail(sub)">@T("View")</button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </div>
     }
 </div>
 
-<div class="admin-card" style="margin-top:1rem">
+<div class="admin-card form-definition-card">
     <div class="definition-toolbar">
         <h2 style="font-size:1.05rem;margin:0">@T("FormDefinitions")</h2>
         <div class="definition-editor-toolbar">
@@ -325,9 +341,13 @@
 }
 
 <style>
-    .form-stat { border:1px solid #111827; border-radius:8px; padding:.9rem; background:#fff; display:flex; flex-direction:column; gap:.2rem; }
-    .form-stat strong { font-size:1.4rem; }
-    .form-stat span, .form-filter span { font-size:.78rem; color:#64748b; }
+    .form-submissions__stats { margin-bottom:0; }
+    .form-submissions__filters { grid-template-columns:minmax(260px,1fr) minmax(160px,.45fr) minmax(160px,.45fr) auto; }
+    .form-stat--total { --admin-data-color:#0d47a1; }
+    .form-stat--new { --admin-data-color:#2563eb; }
+    .form-stat--inprogress { --admin-data-color:#d97706; }
+    .form-stat--resolved { --admin-data-color:#16a34a; }
+    .form-filter span { font-size:.78rem; color:#64748b; }
     .form-filter { display:flex; flex-direction:column; gap:.25rem; }
     .form-control { border:1px solid #cbd5e1; border-radius:6px; padding:.55rem .65rem; background:#fff; min-height:38px; }
     .status-pill { display:inline-flex; border-radius:999px; padding:.22rem .55rem; font-size:.78rem; font-weight:700; background:#e2e8f0; color:#0f172a; }
@@ -336,6 +356,7 @@
     .status-resolved { background:#dcfce7; color:#166534; }
     .status-spam { background:#fee2e2; color:#991b1b; }
     .status-archived { background:#e2e8f0; color:#475569; }
+    .form-definition-card { margin-top:1rem; }
     .definition-toolbar { display:grid; grid-template-columns:280px 1fr; gap:1rem; align-items:center; margin-bottom:1rem; }
     .definition-editor-toolbar { position:relative; display:flex; justify-content:space-between; align-items:center; gap:1rem; min-width:0; }
     .definition-toolbar__actions { display:flex; gap:.5rem; align-items:center; }
@@ -365,6 +386,9 @@
     .field-card__label-input { min-width:0; }
     .field-card__required { display:flex; gap:.35rem; align-items:center; color:#334155; font-size:.9rem; min-height:38px; }
     .detail-field { display:grid; grid-template-columns:180px 1fr; gap:.75rem; border-bottom:1px solid #e2e8f0; padding:.45rem 0; }
+    @@media (max-width: 900px) {
+        .form-submissions__filters { grid-template-columns:1fr; }
+    }
 </style>
 
 @code {

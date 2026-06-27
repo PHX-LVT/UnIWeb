@@ -65,8 +65,21 @@
 }
 
 .content-stat-card {
+    --admin-data-color: var(--primary);
     padding: 1rem !important;
     border: 1.5px solid #111827;
+}
+
+.content-stat-card--published {
+    --admin-data-color: #16a34a;
+}
+
+.content-stat-card--submitted {
+    --admin-data-color: #f59e0b;
+}
+
+.content-stat-card--rejected {
+    --admin-data-color: #dc2626;
 }
 
 .content-stat-label {

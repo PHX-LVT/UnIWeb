@@ -15,68 +15,70 @@
     <h1 class="page-title"><i class="@ViewIcon"></i> @T(ViewTitleKey)</h1>
 </div>
 
-<div class="admin-card" style="margin-bottom:1rem">
-    <div style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
-        <div style="flex:1;min-width:260px">
+<div class="admin-data-toolbar">
+    <div class="admin-data-toolbar__row admin-data-toolbar__row--actions">
+        <div>
             <input class="form-control"
                    placeholder="@T("SearchContents")"
                    value="@_search"
                    @oninput="OnSearchChanged" />
         </div>
-        @if (_view == "deleted" && CanManageAllContent)
-        {
-            <button class="btn-admin btn-ghost"
-                    disabled="@(!_selectedIds.Any())"
-                    @onclick="RestoreSelected">
-                <i class="fas fa-undo"></i> @T("Restore") (@_selectedIds.Count)
-            </button>
-            <button class="btn-admin btn-danger"
-                    disabled="@(!_selectedIds.Any())"
-                    @onclick="AskPermanentDelete">
-                <i class="fas fa-trash"></i> @T("PermanentDeleteSelected") (@_selectedIds.Count)
-            </button>
-        }
-        else if (CanCreateContent || CanManageAllContent)
-        {
-            @if (CanManageAllContent)
+        <div class="admin-data-toolbar__actions">
+            @if (_view == "deleted" && CanManageAllContent)
             {
+                <button class="btn-admin btn-ghost"
+                        disabled="@(!_selectedIds.Any())"
+                        @onclick="RestoreSelected">
+                    <i class="fas fa-undo"></i> @T("Restore") (@_selectedIds.Count)
+                </button>
                 <button class="btn-admin btn-danger"
                         disabled="@(!_selectedIds.Any())"
-                        @onclick="AskBulkDelete">
-                    <i class="fas fa-trash"></i> @T("DeleteSelected") (@_selectedIds.Count)
+                        @onclick="AskPermanentDelete">
+                    <i class="fas fa-trash"></i> @T("PermanentDeleteSelected") (@_selectedIds.Count)
                 </button>
             }
-            @if (CanCreateContent)
+            else if (CanCreateContent || CanManageAllContent)
             {
-                <button class="btn-admin btn-primary" @onclick="AddContent">
-                    <i class="fas fa-plus"></i> @T("AddContent")
-                </button>
+                @if (CanManageAllContent)
+                {
+                    <button class="btn-admin btn-danger"
+                            disabled="@(!_selectedIds.Any())"
+                            @onclick="AskBulkDelete">
+                        <i class="fas fa-trash"></i> @T("DeleteSelected") (@_selectedIds.Count)
+                    </button>
+                }
+                @if (CanCreateContent)
+                {
+                    <button class="btn-admin btn-primary" @onclick="AddContent">
+                        <i class="fas fa-plus"></i> @T("AddContent")
+                    </button>
+                }
             }
-        }
+        </div>
     </div>
 </div>
 
-<div class="content-stat-grid">
-    <div class="admin-card content-stat-card">
-        <div class="content-stat-label"><span class="content-status-dot"></span>@T("Total")</div>
-        <div class="content-stat-value">@NonDeletedItems.Count</div>
+<div class="admin-data-stats content-stat-grid">
+    <div class="admin-data-stat content-stat-card content-stat-card--total">
+        <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Total")</div>
+        <div class="admin-data-stat__value content-stat-value">@NonDeletedItems.Count</div>
     </div>
-    <div class="admin-card content-stat-card">
-        <div class="content-stat-label"><span class="content-status-dot is-published"></span>@T("Published")</div>
-        <div class="content-stat-value">@CountStatus("Published")</div>
+    <div class="admin-data-stat content-stat-card content-stat-card--published">
+        <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Published")</div>
+        <div class="admin-data-stat__value content-stat-value">@CountStatus("Published")</div>
     </div>
-    <div class="admin-card content-stat-card">
-        <div class="content-stat-label"><span class="content-status-dot is-submitted"></span>@T("PendingReview")</div>
-        <div class="content-stat-value">@CountStatus("Submitted")</div>
+    <div class="admin-data-stat content-stat-card content-stat-card--submitted">
+        <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("PendingReview")</div>
+        <div class="admin-data-stat__value content-stat-value">@CountStatus("Submitted")</div>
     </div>
-    <div class="admin-card content-stat-card">
-        <div class="content-stat-label"><span class="content-status-dot is-rejected"></span>@T("Rejected")</div>
-        <div class="content-stat-value">@CountStatus("Rejected")</div>
+    <div class="admin-data-stat content-stat-card content-stat-card--rejected">
+        <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Rejected")</div>
+        <div class="admin-data-stat__value content-stat-value">@CountStatus("Rejected")</div>
     </div>
 </div>
 
-<div class="admin-card" style="margin-bottom:1rem">
-    <div class="content-filter-row">
+<div class="admin-data-toolbar">
+    <div class="admin-data-toolbar__row content-filter-row">
         <div class="content-filter-field">
             <label>@T("Status")</label>
             <select class="form-control" @bind="_statusFilter" @bind:after="OnFilterChanged" disabled="@(!CanManageAllContent || _view is "submitted" or "published" or "deleted")">
@@ -108,19 +110,19 @@
     </div>
 </div>
 
-<div class="admin-card">
+<div class="admin-data-table-card">
     @if (_loading)
     {
-        <p class="text-muted">@T("Loading")</p>
+        <div class="admin-data-empty">@T("Loading")</div>
     }
     else if (!PagedItems.Any())
     {
-        <p class="text-muted">@T("NoContentYet")</p>
+        <div class="admin-data-empty">@T("NoContentYet")</div>
     }
     else
     {
-        <div style="overflow:auto">
-            <table class="table content-table" style="width:100%">
+        <div class="admin-data-table-scroll">
+            <table class="table content-table">
                 <thead>
                     <tr>
                         @if (CanSelectRows)
@@ -199,9 +201,9 @@
             </table>
         </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-top:1rem">
+        <div class="admin-data-footer">
             <span class="text-muted">@ShowingText</span>
-            <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+            <div class="admin-data-footer__actions">
                 @for (var page = 1; page <= TotalPages; page++)
                 {
                     var pageNumber = page;
@@ -214,7 +216,6 @@
         </div>
     }
 </div>
-
 @if (_deleteId is not null)
 {
     <div class="modal-backdrop" @onclick="() => _deleteId = null">

@@ -7,6 +7,12 @@ window.userSiteShell.setThemeVars = (css) => {
     }
 };
 
+window.userSiteShell.setLanguage = (lang) => {
+    const normalized = (lang || "en").toString().trim().toLowerCase() || "en";
+    window.cmsPublicLanguage = normalized;
+    document.documentElement.lang = normalized;
+};
+
 window.userSiteShell.initHeaderScroll = (dotNetRef) => {
     window.userSiteShell.disposeHeaderScroll();
 

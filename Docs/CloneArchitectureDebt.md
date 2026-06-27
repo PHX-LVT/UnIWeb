@@ -1,7 +1,8 @@
 # Clone Architecture Debt
 
-This document records the current clone surface before the serializer-based clone
-service is wired into publish, reset, and preset flows.
+This document records the clone architecture cleanup that moved page graph
+duplication from manual field-by-field copying to serializer-backed clone
+profiles and granular publish diffs.
 
 ## Current Callers
 
@@ -204,6 +205,20 @@ Cleanup input is now narrower than the old full-snapshot publish flow:
 - old block records that were updated or deleted
 - old child page records touched by parent-page child card sync
 
-`CloneUtility` remains only as obsolete legacy code until the later removal phase.
+Phase 10 retired the obsolete manual `CloneUtility` implementation. No runtime
+code path should use manual page/section/block clone mapping anymore; new clone
+behavior should go through `PageGraphCloneService` with an explicit
+`CloneProfile`.
+
+Phase 11 renamed the verification tool from CloneUtility coverage to page graph
+clone coverage:
+
+- `Tool/Tools For Page Graph Clone Testing/PageGraphCloneCoverage`
+
+That tool is the safety net for clone profiles and granular publish diffs. It
+checks normal data-field equivalence, allowed identity/workflow exceptions, diff
+insert/update/delete behavior, first-publish behavior, and duplicate stable-id
+integrity protection.
+
 Asset cleanup remains on the existing centralized cleanup service. More precise
-diff-aware asset cleanup rules belong to the next architecture phase.
+diff-aware asset cleanup rules belong to a future asset cleanup phase.

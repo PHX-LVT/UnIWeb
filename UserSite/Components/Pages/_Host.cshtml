@@ -27,8 +27,14 @@
     </div>
     <script>
         window.cmsPublicApiBaseUrl = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Configuration["ApiBaseUrl"] ?? ""));
+        window.userSiteShell = window.userSiteShell || {};
+        window.userSiteShell.setLanguage = window.userSiteShell.setLanguage || ((lang) => {
+            const normalized = (lang || "en").toString().trim().toLowerCase() || "en";
+            window.cmsPublicLanguage = normalized;
+            document.documentElement.lang = normalized;
+        });
     </script>
-    <script src="js/site-shell.js"></script>
+    <script src="js/site-shell.js" asp-append-version="true"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="_content/SharedComponents/cms-widgets.js" asp-append-version="true"></script>
     <script src="_framework/blazor.server.js"></script>

@@ -5,7 +5,7 @@ using FullProject.Models;
 using FullProject.Services.CloneServices;
 using MongoDB.Bson;
 
-namespace CloneUtilityCoverage;
+namespace PageGraphCloneCoverage;
 
 public static class Program
 {
