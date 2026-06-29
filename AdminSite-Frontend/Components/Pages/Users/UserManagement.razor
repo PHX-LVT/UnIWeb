@@ -375,8 +375,22 @@ else
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
-    private static string PermissionLabel(string permission) =>
-        permission.Replace("-", " ", StringComparison.OrdinalIgnoreCase);
+    private string PermissionLabel(string permission) => permission switch
+    {
+        AdminPermissionKeys.PageBuilder => T("PermissionPageBuilder"),
+        AdminPermissionKeys.ManageContent => T("PermissionManageContent"),
+        AdminPermissionKeys.PublishContent => T("PermissionPublishContent"),
+        AdminPermissionKeys.DeleteContent => T("PermissionDeleteContent"),
+        AdminPermissionKeys.ManageUsers => T("PermissionManageUsers"),
+        AdminPermissionKeys.ManageSettings => T("PermissionManageSettings"),
+        AdminPermissionKeys.ViewLogs => T("PermissionViewLogs"),
+        AdminPermissionKeys.ViewFormDefinitions => T("PermissionViewFormDefinitions"),
+        AdminPermissionKeys.EditFormDefinitions => T("PermissionEditFormDefinitions"),
+        AdminPermissionKeys.ViewFormSubmissions => T("PermissionViewFormSubmissions"),
+        AdminPermissionKeys.ManageFormSubmissions => T("PermissionManageFormSubmissions"),
+        AdminPermissionKeys.ExportFormSubmissions => T("PermissionExportFormSubmissions"),
+        _ => permission.Replace("-", " ", StringComparison.OrdinalIgnoreCase)
+    };
 
     private static string StatusClass(AdminUserStatus status) => status switch
     {

@@ -79,6 +79,7 @@ builder.Services.AddScoped<PublishService>();
 builder.Services.AddScoped<ResetService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<FormSubmissionService>();
+builder.Services.AddScoped<FormSubmissionExportService>();
 builder.Services.AddScoped<FormSubmissionSecurityService>();
 builder.Services.AddScoped<FormDefinitionService>();
 builder.Services.AddScoped<FormValidationService>();

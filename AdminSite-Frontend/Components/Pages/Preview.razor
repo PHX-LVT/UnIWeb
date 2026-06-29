@@ -10,6 +10,7 @@
 @inject AdminLanguageService AdminLanguageState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@using Contracts.Forms
 @using Contracts.Public
 @using SharedComponents
 @using SharedComponents.Helpers
@@ -640,6 +641,8 @@ else
                 Label = field.Label,
                 Placeholder = field.Placeholder,
                 Required = field.Required,
+                MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength),
+                InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize),
                 Options = field.Options.OrderBy(option => option.Order).Select(option => new PublicFormFieldOptionDto
                 {
                     Value = option.Value,
@@ -656,6 +659,8 @@ else
             Type = field.FieldType ?? "text",
             Label = field.Label ?? new(),
             Required = field.Required,
+            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.FieldType, 0),
+            InputBoxSize = 1,
             Options = (field.Options ?? new()).Select((option, index) => new PublicFormFieldOptionDto
             {
                 Value = option,

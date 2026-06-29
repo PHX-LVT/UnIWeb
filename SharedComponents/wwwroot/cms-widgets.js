@@ -633,14 +633,18 @@ function getPublicModalConfigFromDefinition(definition) {
         fields: (definition.fields || definition.Fields || [])
             .slice()
             .sort((a, b) => (a.order ?? a.Order ?? 0) - (b.order ?? b.Order ?? 0))
-            .map(field => ({
-                name: field.key || field.Key,
-                label: localizeText(field.label || field.Label, field.key || field.Key || ""),
-                type: normalizePublicFieldType(field.type || field.Type),
-                required: !!(field.required ?? field.Required),
-                multiline: normalizePublicFieldType(field.type || field.Type) === "textarea",
-                options: field.options || field.Options || []
-            }))
+            .map(field => {
+                const type = normalizePublicFieldType(field.type || field.Type);
+                return {
+                    name: field.key || field.Key,
+                    label: localizeText(field.label || field.Label, field.key || field.Key || ""),
+                    type,
+                    required: !!(field.required ?? field.Required),
+                    maxLength: normalizePublicMaxLength(type, field.maxLength ?? field.MaxLength),
+                    inputBoxSize: normalizePublicInputBoxSize(type, field.inputBoxSize ?? field.InputBoxSize),
+                    options: field.options || field.Options || []
+                };
+            })
     };
 }
 
@@ -675,8 +679,50 @@ function buildPublicModalErrorDialog(message) {
 }
 
 function normalizePublicFieldType(type) {
-    const value = (type || "text").toLowerCase();
-    return ["email", "tel", "url", "number", "date", "select", "textarea"].includes(value) ? value : "text";
+    const value = (type || "text").toString().trim().toLowerCase();
+    if (value === "phone") return "tel";
+    if (value === "long-text" || value === "longtext") return "textarea";
+    if (value === "dropdown") return "select";
+    if (value === "short-text" || value === "shorttext") return "text";
+    return ["text", "email", "tel", "url", "number", "date", "select", "textarea", "checkbox", "password"].includes(value) ? value : "text";
+}
+
+function getPublicFieldCapability(type) {
+    const normalized = normalizePublicFieldType(type);
+    const map = {
+        text: { inputType: "text", max: true, size: false, multiline: false, options: false },
+        email: { inputType: "email", max: true, size: false, multiline: false, options: false },
+        tel: { inputType: "tel", max: true, size: false, multiline: false, options: false },
+        url: { inputType: "url", max: true, size: false, multiline: false, options: false },
+        password: { inputType: "password", max: true, size: false, multiline: false, options: false },
+        textarea: { inputType: "textarea", max: true, size: true, multiline: true, options: false },
+        select: { inputType: "select", max: false, size: false, multiline: false, options: true },
+        checkbox: { inputType: "checkbox", max: false, size: false, multiline: false, options: false },
+        date: { inputType: "date", max: false, size: false, multiline: false, options: false },
+        number: { inputType: "number", max: false, size: false, multiline: false, options: false }
+    };
+    return map[normalized] || map.text;
+}
+
+function normalizePublicMaxLength(type, value) {
+    const capability = getPublicFieldCapability(type);
+    if (!capability.max) return 0;
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return type === "textarea" ? 2000 : type === "email" ? 254 : type === "tel" ? 40 : 500;
+    }
+
+    return Math.min(Math.max(parsed, 1), 2000);
+}
+
+function normalizePublicInputBoxSize(type, value) {
+    const capability = getPublicFieldCapability(type);
+    if (!capability.size) return 1;
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 4;
+    return Math.min(Math.max(parsed, 1), 5);
 }
 
 function normalizePublicFormLayout(layout) {
@@ -762,21 +808,27 @@ function buildPublicModalDialog(typeOrDefinition) {
 function buildPublicModalField(field) {
     const wrapper = document.createElement("label");
     wrapper.className = "sc-public-modal__field";
-    if (field.multiline) {
+    const type = normalizePublicFieldType(field.multiline ? "textarea" : field.type);
+    const capability = getPublicFieldCapability(type);
+    const inputBoxSize = normalizePublicInputBoxSize(type, field.inputBoxSize);
+    const maxLength = normalizePublicMaxLength(type, field.maxLength);
+
+    if (capability.multiline || type === "checkbox") {
         wrapper.classList.add("sc-public-modal__field--full");
     }
     const displayLabel = field.required ? `${field.label} *` : field.label;
 
-    const input = field.type === "select"
+    const input = type === "select"
         ? document.createElement("select")
-        : field.multiline
+        : capability.multiline
             ? document.createElement("textarea")
             : document.createElement("input");
 
     input.name = field.name;
-    input.required = !!field.required;
+    input.required = !!field.required && type !== "checkbox";
+    input.dataset.fieldType = type;
 
-    if (field.type === "select") {
+    if (type === "select") {
         const placeholder = document.createElement("option");
         placeholder.value = "";
         placeholder.textContent = displayLabel;
@@ -791,12 +843,23 @@ function buildPublicModalField(field) {
             option.textContent = typeof optionItem === "string" ? optionItem : localizeText(optionItem.label, optionValue || "");
             input.appendChild(option);
         });
-    } else if (!field.multiline) {
-        input.type = field.type || "text";
+    } else if (type === "checkbox") {
+        input.type = "checkbox";
+        input.required = !!field.required;
+    } else if (!capability.multiline) {
+        input.type = capability.inputType || "text";
     }
 
-    if (field.type !== "select") {
+    if (type !== "select" && type !== "checkbox") {
         input.placeholder = displayLabel;
+    }
+
+    if (capability.max && maxLength > 0) {
+        input.maxLength = maxLength;
+    }
+
+    if (capability.size) {
+        input.dataset.inputSize = inputBoxSize.toString();
     }
 
     if (field.autocomplete) {
@@ -807,7 +870,15 @@ function buildPublicModalField(field) {
         input.value = field.value;
     }
 
-    wrapper.append(input);
+    if (type === "checkbox") {
+        const text = document.createElement("span");
+        text.className = "sc-public-modal__checkbox-label";
+        text.textContent = displayLabel;
+        wrapper.classList.add("sc-public-modal__field--checkbox");
+        wrapper.append(input, text);
+    } else {
+        wrapper.append(input);
+    }
     return wrapper;
 }
 
@@ -819,7 +890,9 @@ async function submitPublicModalForm(form, submit, status) {
 
     form.querySelectorAll("input, textarea, select").forEach(field => {
         if (field.name && field.name !== "__website") {
-            data[field.name] = field.value.trim();
+            data[field.name] = field.type === "checkbox"
+                ? (field.checked ? "true" : "false")
+                : field.value.trim();
         }
     });
 
@@ -827,7 +900,7 @@ async function submitPublicModalForm(form, submit, status) {
     status.className = "sc-public-modal__status";
 
     const missingRequired = Array.from(form.querySelectorAll("input, textarea, select"))
-        .some(field => field.required && !field.value.trim());
+        .some(field => field.required && (field.type === "checkbox" ? !field.checked : !field.value.trim()));
 
     if (missingRequired) {
         status.textContent = publicUiText("RequiredFields", getPublicUiLanguage());

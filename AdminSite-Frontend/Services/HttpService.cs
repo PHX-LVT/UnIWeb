@@ -19,7 +19,25 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
         Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
+        Task<FileDownloadResult> GetFileAsync(string uri);
         void Toast(string? message, int statusCode);
+    }
+
+    public sealed class FileDownloadResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int StatusCode { get; set; }
+        public byte[] Bytes { get; set; } = Array.Empty<byte>();
+        public string FileName { get; set; } = "download.bin";
+        public string ContentType { get; set; } = "application/octet-stream";
+
+        public static FileDownloadResult Fail(string message, int statusCode) => new()
+        {
+            Success = false,
+            Message = message,
+            StatusCode = statusCode
+        };
     }
 
     public class HttpService : IHttpService
@@ -110,6 +128,58 @@ namespace AdminSite.Services
         }
         public Task<ApiResponse<T>> DeleteAsync<T>(string uri) =>
             SendAsync<T>(new HttpRequestMessage(HttpMethod.Delete, uri));
+
+        public async Task<FileDownloadResult> GetFileAsync(string uri)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+
+            try
+            {
+                var session = await _storage.GetItemAsync<AdminSession>("admin_session");
+                var hasSessionToken = !string.IsNullOrWhiteSpace(session?.Token);
+                if (hasSessionToken)
+                    request.Headers.Authorization =
+                        new AuthenticationHeaderValue("Bearer", session!.Token);
+
+                using var response = await _http.SendAsync(request);
+
+                if (response.StatusCode == HttpStatusCode.Unauthorized &&
+                    ShouldExpireSession(request, response, hasSessionToken))
+                {
+                    await _storage.RemoveItemAsync("admin_session");
+                    _nav.NavigateTo("/login");
+                    return FileDownloadResult.Fail("Session expired.", 401);
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var apiResponse = await ReadApiResponse<object>(response);
+                    return FileDownloadResult.Fail(
+                        apiResponse?.Message ?? response.ReasonPhrase ?? "Download failed.",
+                        (int)response.StatusCode);
+                }
+
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                var disposition = response.Content.Headers.ContentDisposition;
+                var filename = disposition?.FileNameStar
+                               ?? disposition?.FileName?.Trim('"')
+                               ?? "download.bin";
+
+                return new FileDownloadResult
+                {
+                    Success = true,
+                    StatusCode = (int)response.StatusCode,
+                    Bytes = bytes,
+                    FileName = filename,
+                    ContentType = response.Content.Headers.ContentType?.MediaType
+                                  ?? "application/octet-stream"
+                };
+            }
+            catch (Exception ex)
+            {
+                return FileDownloadResult.Fail(ex.Message, 500);
+            }
+        }
 
         private async Task<ApiResponse<T>> SendAsync<T>(HttpRequestMessage request)
         {

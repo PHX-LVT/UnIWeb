@@ -1,4 +1,5 @@
 @using Contracts.Public
+@using Contracts.Forms
 @using SharedComponents.Helpers
 
 <div class="@FormClass">
@@ -43,9 +44,10 @@
                 {
                     case "textarea":
                         <textarea id="@InputId(key)"
-                                  class="sc-form-input"
+                                  class="@InputClass(field)"
                                   name="@key"
                                   placeholder="@placeholder"
+                                  maxlength="@MaxLengthAttribute(field)"
                                   required="@field.Required"
                                   value="@_data.GetValueOrDefault(key)"
                                   @onchange="eventArgs => SetField(key, eventArgs.Value)"></textarea>
@@ -71,6 +73,7 @@
                             <input id="@InputId(key)"
                                    type="checkbox"
                                    name="@key"
+                                   required="@field.Required"
                                    checked="@IsChecked(key)"
                                    @onchange="eventArgs => SetField(key, eventArgs.Value)" />
                             <span>@placeholder</span>
@@ -80,9 +83,10 @@
                     default:
                         <input id="@InputId(key)"
                                type="@InputType(field.Type)"
-                               class="sc-form-input"
+                               class="@InputClass(field)"
                                name="@key"
                                placeholder="@placeholder"
+                               maxlength="@MaxLengthAttribute(field)"
                                required="@field.Required"
                                value="@_data.GetValueOrDefault(key)"
                                @onchange="eventArgs => SetField(key, eventArgs.Value)" />
@@ -187,12 +191,31 @@
     private string InputId(string key) => $"form-{Block.Id}-{key}";
     private static string FieldKey(PublicFormFieldDto field) =>
         !string.IsNullOrWhiteSpace(field.Name) ? field.Name : $"field_{field.Order}";
-    private static string FieldClass(PublicFormFieldDto field) => field.Type is "textarea" or "checkbox"
+    private static string FieldClass(PublicFormFieldDto field) => NormalizedType(field.Type) is "textarea" or "checkbox"
         ? "sc-form-field sc-form-field--wide"
         : "sc-form-field";
-    private static string InputType(string? type) => type?.ToLowerInvariant() switch
+
+    private static string InputClass(PublicFormFieldDto field)
     {
-        "phone" => "tel",
+        var size = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize);
+        return NormalizedType(field.Type) == "textarea"
+            ? $"sc-form-input sc-form-input--size-{size}"
+            : "sc-form-input";
+    }
+
+    private static int? MaxLengthAttribute(PublicFormFieldDto field)
+    {
+        var capability = FormInputTypeCatalog.Get(field.Type);
+        if (!capability.SupportsMaxCharacters) return null;
+
+        return FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength);
+    }
+
+    private static string NormalizedType(string? type) => FormInputTypeCatalog.NormalizeType(type);
+
+    private static string InputType(string? type) => NormalizedType(type) switch
+    {
+        "tel" => "tel",
         "number" => "number",
         "date" => "date",
         "url" => "url",

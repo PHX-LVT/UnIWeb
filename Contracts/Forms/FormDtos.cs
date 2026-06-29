@@ -36,7 +36,8 @@ public class FormFieldDefinitionDto
     public Dictionary<string, string> Placeholder { get; set; } = new();
     public bool Required { get; set; }
     public int MinLength { get; set; }
-    public int MaxLength { get; set; } = 500;
+    public int MaxLength { get; set; }
+    public int InputBoxSize { get; set; }
     public List<FormFieldOptionDto> Options { get; set; } = new();
     public int Order { get; set; }
 }
@@ -81,6 +82,16 @@ public class FormSubmissionFieldResponse
     public string Type { get; set; } = "text";
     public string Value { get; set; } = string.Empty;
     public int Order { get; set; }
+    public bool IsDeletedField { get; set; }
+}
+
+public class FormSubmissionTimelineEventResponse
+{
+    public string EventType { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string ActorId { get; set; } = string.Empty;
+    public string ActorName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
 }
 
 public class ManagedFormSubmissionResponse
@@ -94,6 +105,12 @@ public class ManagedFormSubmissionResponse
     public FormSubmissionStatus Status { get; set; }
     public List<FormSubmissionFieldResponse> Fields { get; set; } = new();
     public string? InternalNotes { get; set; }
+    public string? AssignedToAdminId { get; set; }
+    public string? AssignedToAdminName { get; set; }
+    public bool IsRead { get; set; }
+    public DateTime? ViewedAt { get; set; }
+    public string? ViewedByAdminId { get; set; }
+    public List<FormSubmissionTimelineEventResponse> Timeline { get; set; } = new();
     public DateTime SubmittedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -102,6 +119,14 @@ public class ManagedFormSubmissionUpdateRequest
 {
     public FormSubmissionStatus Status { get; set; }
     public string? InternalNotes { get; set; }
+    public string? AssignedToAdminId { get; set; }
+}
+
+public class FormSubmissionAssigneeResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
 }
 
 public class FormDefinitionUpsertRequest

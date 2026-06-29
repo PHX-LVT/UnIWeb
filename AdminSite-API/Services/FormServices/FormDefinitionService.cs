@@ -80,27 +80,7 @@ public sealed class FormDefinitionService
         definition.Active = request.Active;
         definition.Fields = request.Fields
             .OrderBy(field => field.Order)
-            .Select((field, index) => new FormDefinitionField
-            {
-                Key = CleanFieldKey(field.Key, index),
-                Type = string.IsNullOrWhiteSpace(field.Type) ? "text" : field.Type.Trim().ToLowerInvariant(),
-                Label = CleanTextMap(field.Label),
-                Placeholder = CleanTextMap(field.Placeholder),
-                Required = field.Required,
-                MinLength = Math.Clamp(field.MinLength, 0, 2_000),
-                MaxLength = Math.Clamp(field.MaxLength <= 0 ? 500 : field.MaxLength, 1, 2_000),
-                Order = index,
-                Options = field.Options
-                    .OrderBy(option => option.Order)
-                    .Select((option, optionIndex) => new FormDefinitionFieldOption
-                    {
-                        Value = option.Value.Trim(),
-                        Label = CleanTextMap(option.Label),
-                        Order = optionIndex
-                    })
-                    .Where(option => !string.IsNullOrWhiteSpace(option.Value))
-                    .ToList()
-            })
+            .Select((field, index) => MapRequestField(field, index))
             .ToList();
         definition.UpdatedAt = now;
 
@@ -454,7 +434,8 @@ public sealed class FormDefinitionService
                 Placeholder = new(field.Placeholder),
                 Required = field.Required,
                 MinLength = field.MinLength,
-                MaxLength = field.MaxLength,
+                MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength),
+                InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize),
                 Order = field.Order,
                 Options = field.Options
                     .OrderBy(option => option.Order)
@@ -489,7 +470,8 @@ public sealed class FormDefinitionService
                 Placeholder = new(field.Placeholder),
                 Required = field.Required,
                 MinLength = field.MinLength,
-                MaxLength = field.MaxLength,
+                MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength),
+                InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize),
                 Order = field.Order,
                 Options = field.Options
                     .OrderBy(option => option.Order)
@@ -597,18 +579,24 @@ public sealed class FormDefinitionService
         int min,
         int max,
         int order,
-        List<FormDefinitionFieldOption>? options = null) => new()
+        List<FormDefinitionFieldOption>? options = null)
+    {
+        var normalizedType = FormInputTypeCatalog.NormalizeType(type);
+        var capability = FormInputTypeCatalog.Get(normalizedType);
+        return new FormDefinitionField
         {
             Key = key,
-            Type = type,
+            Type = normalizedType,
             Label = new() { ["en"] = label },
             Placeholder = new() { ["en"] = label },
             Required = required,
-            MinLength = min,
-            MaxLength = max,
+            MinLength = capability.SupportsMaxCharacters ? min : 0,
+            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(normalizedType, max),
+            InputBoxSize = FormInputTypeCatalog.DefaultInputBoxSize(normalizedType),
             Order = order,
-            Options = options ?? new()
+            Options = capability.SupportsOptions ? options ?? new() : new()
         };
+    }
 
     private static FormDefinitionFieldOption Option(string value, string label, int order) => new()
     {
@@ -616,5 +604,39 @@ public sealed class FormDefinitionService
         Label = new() { ["en"] = label },
         Order = order
     };
+
+    private static FormDefinitionField MapRequestField(FormFieldDefinitionDto field, int index)
+    {
+        var type = FormInputTypeCatalog.NormalizeType(field.Type);
+        var capability = FormInputTypeCatalog.Get(type);
+        var options = capability.SupportsOptions
+            ? field.Options
+                .OrderBy(option => option.Order)
+                .Select((option, optionIndex) => new FormDefinitionFieldOption
+                {
+                    Value = option.Value.Trim(),
+                    Label = CleanTextMap(option.Label),
+                    Order = optionIndex
+                })
+                .Where(option => !string.IsNullOrWhiteSpace(option.Value))
+                .ToList()
+            : new List<FormDefinitionFieldOption>();
+
+        return new FormDefinitionField
+        {
+            Key = CleanFieldKey(field.Key, index),
+            Type = type,
+            Label = CleanTextMap(field.Label),
+            Placeholder = CleanTextMap(field.Placeholder),
+            Required = field.Required,
+            MinLength = capability.SupportsMaxCharacters
+                ? Math.Clamp(field.MinLength, 0, FormInputTypeCatalog.MaxCharactersLimit)
+                : 0,
+            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(type, field.MaxLength),
+            InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(type, field.InputBoxSize),
+            Order = index,
+            Options = options
+        };
+    }
 
 }

@@ -47,12 +47,29 @@
     </nav>
 }
 
-@if (Auth.CanViewLogs)
+@if (Auth.CanUseFormManagement)
 {
     <nav class="ez-nav-section">
-        <NavLink class="ez-nav-link" href="/forms" @onclick="CollapseGroups">
-            <span>@T("FormSubmissions")</span>
-        </NavLink>
+        <button class="ez-nav-toggle @ToggleClass("forms")" type="button" @onclick='() => ToggleGroup("forms")'>
+            <span>@T("FormManagement")</span>
+            <i class="fas fa-chevron-down"></i>
+        </button>
+
+        @if (_expandedGroup == "forms")
+        {
+            @if (Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions)
+            {
+                <NavLink class="ez-nav-link ez-nav-child" href="/forms/definitions" @onclick='() => ExpandGroup("forms")'>
+                    <span>@T("FormDefinitions")</span>
+                </NavLink>
+            }
+            @if (Auth.CanViewFormSubmissions)
+            {
+                <NavLink class="ez-nav-link ez-nav-child" href="/forms/submissions" @onclick='() => ExpandGroup("forms")'>
+                    <span>@T("FormSubmissions")</span>
+                </NavLink>
+            }
+        }
     </nav>
 }
 
@@ -164,10 +181,13 @@
     protected override void OnInitialized()
     {
         var path = new Uri(Nav.Uri).AbsolutePath;
-        if (path.StartsWith("/global", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/forms", StringComparison.OrdinalIgnoreCase))
+        if (path.StartsWith("/global", StringComparison.OrdinalIgnoreCase))
         {
             _expandedGroup = "global";
+        }
+        else if (path.StartsWith("/forms", StringComparison.OrdinalIgnoreCase))
+        {
+            _expandedGroup = "forms";
         }
         else if (path.StartsWith("/content", StringComparison.OrdinalIgnoreCase))
         {

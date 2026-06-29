@@ -109,7 +109,7 @@ namespace FullProject.Services.PublicService
                     field.Type,
                     field.Label,
                     field.Required,
-                    field.MaxLength,
+                    SubmissionMaximumLength(field.Type, field.MaxLength),
                     field.Options.Select(option => option.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
                     field.Order)).ToList()
                 : form.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
@@ -117,7 +117,7 @@ namespace FullProject.Services.PublicService
                     field.Type,
                     field.Label,
                     field.Required,
-                    FieldMaximumLength(field.Type),
+                    SubmissionMaximumLength(field.Type, 0),
                     field.Options?.ToHashSet(StringComparer.OrdinalIgnoreCase),
                     field.Order)).ToList();
 
@@ -303,13 +303,21 @@ namespace FullProject.Services.PublicService
                 _ => new BadRequestObjectResult(ApiResult.BadRequest(result.Message))
             };
 
-        private static int FieldMaximumLength(string? type) => type?.ToLowerInvariant() switch
+        private static int SubmissionMaximumLength(string? type, int maxLength)
         {
-            "email" => 254,
-            "tel" or "phone" => 40,
-            "textarea" => 2000,
-            _ => 500
-        };
+            var capability = FormInputTypeCatalog.Get(type);
+            if (capability.SupportsMaxCharacters)
+                return FormInputTypeCatalog.NormalizeMaxCharacters(type, maxLength);
+
+            return FormInputTypeCatalog.NormalizeType(type) switch
+            {
+                "checkbox" => 10,
+                "date" => 80,
+                "number" => 80,
+                "select" => 500,
+                _ => 500
+            };
+        }
 
         private static string NormalizeLanguage(string? language)
         {

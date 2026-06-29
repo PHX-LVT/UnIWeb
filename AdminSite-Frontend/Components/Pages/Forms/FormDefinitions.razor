@@ -1,0 +1,734 @@
+@page "/forms/definitions"
+@using Contracts.Forms
+@inject AdminFormSubmissionService FormService
+@inject IHttpService Http
+@inject AdminAuthService Auth
+
+<div class="page-header">
+    <h1 class="page-title">@T("FormDefinitions")</h1>
+</div>
+
+@if (!_hasAccess)
+{
+    <div class="admin-data-empty">
+        <strong>@T("NoPermission")</strong>
+        <div>@T("AccessDeniedHint")</div>
+    </div>
+}
+else
+{
+<div class="admin-card form-definition-card">
+    <div class="definition-toolbar">
+        <div>
+            <h2>@T("FormDefinitions")</h2>
+        </div>
+        <div class="definition-editor-toolbar">
+            <div class="definition-usage">
+                <button type="button" class="definition-usage__button" disabled="@(!CanShowUsage)" @onclick="ToggleUsage">
+                    @UsageSummary
+                </button>
+                @if (_usageExpanded && _usage is not null)
+                {
+                    <div class="definition-usage__menu">
+                        @if (_usage.TotalCount == 0)
+                        {
+                            <div class="definition-usage__empty">@T("NotUsedAnywhereSafeToDelete")</div>
+                        }
+                        else
+                        {
+                            <strong>@string.Format(T("UsedInPlaces"), _usage.TotalCount, _usage.TotalCount == 1 ? string.Empty : "s")</strong>
+                            @foreach (var item in _usage.Items.Take(8))
+                            {
+                                <div class="definition-usage__item">
+                                    <span>@item.Location</span>
+                                    <small>@item.Source</small>
+                                </div>
+                            }
+                            @if (_usage.TotalCount > 8)
+                            {
+                                <div class="definition-usage__empty">@string.Format(T("MoreCount"), _usage.TotalCount - 8)</div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+            <div class="definition-toolbar__actions">
+                <button class="btn-admin btn-primary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="NewDefinition">@T("NewForm")</button>
+                <button class="btn-admin btn-danger" disabled="@(!CanDeleteDefinition)" @onclick="DeleteDefinition">@T("PermanentDelete")</button>
+            </div>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="admin-data-empty">@T("Loading")</div>
+    }
+    else
+    {
+        <div class="definition-shell">
+            <div class="definition-list">
+                @if (_definitions.Count == 0)
+                {
+                    <div class="definition-list__empty">@T("NoFormDefinitionsYet")</div>
+                }
+                @foreach (var definition in _definitions)
+                {
+                    <button class="definition-row @(_editingDefinition?.Id == definition.Id ? "active" : null)"
+                            @onclick="() => EditDefinition(definition)">
+                        <strong>@Text(definition.Name, definition.Key)</strong>
+                        <span>@definition.Key - @(definition.Active ? T("Active") : T("Disabled"))</span>
+                    </button>
+                }
+            </div>
+
+            @if (_editingDefinition is not null)
+            {
+                <div class="definition-editor">
+                    @if (_definitionValidationErrors.Count > 0)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <strong>@T("PleaseCompleteRequiredFields")</strong>
+                            <ul style="margin:.35rem 0 0;padding-left:1.25rem">
+                                @foreach (var error in _definitionValidationErrors)
+                                {
+                                    <li>@error</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="definition-editor__identity">
+                        <label class="form-filter">
+                            <span>@T("Key") <strong class="required-mark">*</strong></span>
+                            <input class="form-control" required @bind="_editingDefinition.Key" />
+                        </label>
+                        <div class="form-filter">
+                            <span>@T("Name") <strong class="required-mark">*</strong></span>
+                            <div class="definition-name-control">
+                                <input class="form-control" required value="@Text(_editingDefinition.Name, string.Empty)" @onchange="e => SetText(_editingDefinition.Name, e.Value)" />
+                                <button type="button"
+                                        class="definition-active-toggle @(_editingDefinition.Active ? "active" : "disabled")"
+                                        aria-pressed="@_editingDefinition.Active"
+                                        @onclick="ToggleDefinitionActive">
+                                    <span class="definition-active-toggle__dot"></span>
+                                    @(_editingDefinition.Active ? T("Active") : T("Disabled"))
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <label class="form-filter" style="margin-top:.75rem">
+                        <span>@T("Introduction")</span>
+                        <textarea class="form-control" rows="2" @onchange="e => SetText(_editingDefinition.Introduction, e.Value)">@Text(_editingDefinition.Introduction, string.Empty)</textarea>
+                    </label>
+
+                    <div class="definition-settings-row">
+                        <label class="form-filter">
+                            <span>@T("SubmitButtonLabel") <strong class="required-mark">*</strong></span>
+                            <input class="form-control" required value="@Text(_editingDefinition.SubmitButtonLabel, string.Empty)" @onchange="e => SetText(_editingDefinition.SubmitButtonLabel, e.Value)" />
+                        </label>
+                        <label class="form-filter">
+                            <span>@T("ModalLayout")</span>
+                            <select class="form-control" @bind="_editingDefinition.Layout">
+                                <option value="@FormLayoutModel.Stacked">@T("Stacked")</option>
+                                <option value="@FormLayoutModel.TwoColumns">@T("TwoColumns")</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="definition-section-heading">
+                        <h3>@T("Fields")</h3>
+                        <button class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="AddField">@T("AddField")</button>
+                    </div>
+
+                    <div class="@DefinitionFieldGridClass">
+                        @foreach (var field in _editingDefinition.Fields.OrderBy(f => f.Order))
+                        {
+                            var capability = Capability(field);
+                            <div class="@FieldCardClass(field)"
+                                 @key="field"
+                                 @ondragover:preventDefault
+                                 @ondrop="() => DropField(field)">
+                                <div class="field-card__drag"
+                                     draggable="true"
+                                     title="@T("DragToReorder")"
+                                     @ondragstart="() => BeginFieldDrag(field)"
+                                     @ondragend="EndFieldDrag">
+                                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                                </div>
+                                <div class="field-card__controls">
+                                    <label class="form-filter">
+                                        <span>@T("Type")</span>
+                                        <select class="form-control" value="@field.Type" @onchange="e => ChangeFieldType(field, e.Value?.ToString())">
+                                            @foreach (var type in FieldTypes)
+                                            {
+                                                <option value="@type.Type">@T(type.LabelKey)</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label class="form-filter">
+                                        <span>@T("Key") <strong class="required-mark">*</strong></span>
+                                        <input class="form-control" required placeholder="name" @bind="field.Key" />
+                                    </label>
+                                    <label class="form-filter field-card__label-input">
+                                        <span>@T("Label") <strong class="required-mark">*</strong></span>
+                                        <input class="form-control" required placeholder="@T("Label")" value="@Text(field.Label, string.Empty)" @onchange="e => SetText(field.Label, e.Value)" />
+                                    </label>
+                                    @if (capability.SupportsMaxCharacters)
+                                    {
+                                        <label class="form-filter">
+                                            <span>@T("MaxCharacters")</span>
+                                            <input class="form-control" type="number" min="1" max="2000" @bind="field.MaxLength" />
+                                        </label>
+                                    }
+                                    @if (capability.SupportsInputBoxSize)
+                                    {
+                                        <label class="form-filter">
+                                            <span>@T("InputBoxSize")</span>
+                                            <input class="form-control" type="number" min="1" max="5" @bind="field.InputBoxSize" />
+                                            <small class="form-helper">@T("InputBoxSizeHint")</small>
+                                        </label>
+                                    }
+                                    <label class="field-card__required">
+                                        <input type="checkbox" @bind="field.Required" />
+                                        @T("Required")
+                                    </label>
+                                    <button type="button"
+                                            class="btn-admin btn-danger field-card__delete"
+                                            disabled="@(!Auth.CanEditFormDefinitions)"
+                                            title="@T("Delete")"
+                                            aria-label="@T("Delete")"
+                                            @onclick="() => RemoveField(field)">
+                                        <i class="fas fa-trash" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                @if (capability.SupportsOptions)
+                                {
+                                    <div class="field-options">
+                                        <div class="field-options__header">
+                                            <strong>@T("Options")</strong>
+                                            <button type="button" class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="() => AddOption(field)">@T("AddOption")</button>
+                                        </div>
+                                        @foreach (var option in field.Options.OrderBy(option => option.Order))
+                                        {
+                                            <div class="field-option-row" @key="option">
+                                                <label class="form-filter">
+                                                    <span>@T("OptionValue")</span>
+                                                    <input class="form-control" @bind="option.Value" />
+                                                </label>
+                                                <label class="form-filter">
+                                                    <span>@T("OptionLabel")</span>
+                                                    <input class="form-control" value="@Text(option.Label, string.Empty)" @onchange="e => SetText(option.Label, e.Value)" />
+                                                </label>
+                                                <button type="button"
+                                                        class="btn-admin btn-danger field-card__delete"
+                                                        disabled="@(!Auth.CanEditFormDefinitions)"
+                                                        title="@T("Delete")"
+                                                        aria-label="@T("Delete")"
+                                                        @onclick="() => RemoveOption(field, option)">
+                                                    <i class="fas fa-trash" aria-hidden="true"></i>
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="definition-save-row">
+                        <button class="btn-admin btn-primary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="SaveDefinition">@T("SaveDefinition")</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+}
+
+<style>
+    .form-definition-card h2,
+    .definition-section-heading h3 { font-size:1.05rem; margin:0; }
+    .definition-toolbar { display:grid; grid-template-columns:280px 1fr; gap:1rem; align-items:center; margin-bottom:1rem; }
+    .definition-editor-toolbar { position:relative; display:flex; justify-content:space-between; align-items:center; gap:1rem; min-width:0; }
+    .definition-toolbar__actions { display:flex; gap:.5rem; align-items:center; }
+    .definition-usage { position:relative; min-width:0; }
+    .definition-usage__button { border:1px solid #dbe3ef; border-radius:999px; background:#fff; color:#0f172a; padding:.45rem .75rem; font-weight:700; cursor:pointer; }
+    .definition-usage__button:disabled { opacity:.55; cursor:not-allowed; }
+    .definition-usage__menu { position:absolute; z-index:20; top:calc(100% + 8px); left:0; width:min(420px, 80vw); padding:.75rem; border:1px solid #dbe3ef; border-radius:8px; background:#fff; box-shadow:0 16px 38px rgba(15,23,42,.18); display:grid; gap:.45rem; }
+    .definition-usage__item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.75rem; align-items:center; padding:.35rem 0; border-top:1px solid #eef2f7; }
+    .definition-usage__item span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .definition-usage__item small,
+    .definition-usage__empty,
+    .definition-list__empty { color:#64748b; font-size:.8rem; }
+    .definition-shell { display:grid; grid-template-columns:280px minmax(0, 1fr); gap:1rem; }
+    .definition-list { display:flex; flex-direction:column; gap:.5rem; }
+    .definition-list__empty { border:1px dashed #cbd5e1; border-radius:8px; padding:.9rem; background:#f8fafc; }
+    .definition-row { text-align:left; border:1px solid var(--primary, #0d47a1); border-left-width:4px; border-radius:8px; padding:.75rem; background:#fff; display:flex; flex-direction:column; gap:.25rem; }
+    .definition-row.active { border-color:var(--primary, #0d47a1); box-shadow:0 0 0 2px rgba(13,71,161,.16); }
+    .definition-row span { color:#64748b; font-size:.8rem; }
+    .definition-editor { border:1px solid #dbe3ef; border-radius:8px; padding:1rem; background:#f8fafc; min-width:0; }
+    .definition-editor__identity { display:grid; grid-template-columns:160px 1fr; gap:.75rem; }
+    .required-mark { color:#dc2626; font-weight:800; }
+    .definition-name-control { display:flex; gap:.5rem; align-items:stretch; }
+    .definition-name-control .form-control { flex:1 1 auto; min-width:0; }
+    .definition-active-toggle { min-width:112px; border:1px solid #94a3b8; border-radius:6px; padding:.5rem .7rem; display:inline-flex; align-items:center; justify-content:center; gap:.45rem; background:#fff; color:#475569; font-weight:700; cursor:pointer; }
+    .definition-active-toggle.active { border-color:#16a34a; background:#f0fdf4; color:#166534; }
+    .definition-active-toggle__dot { width:9px; height:9px; border-radius:50%; background:currentColor; flex:0 0 auto; }
+    .definition-settings-row { display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:.75rem; margin-top:.75rem; }
+    .definition-section-heading { display:flex; justify-content:space-between; align-items:center; margin:1rem 0 .5rem; }
+    .definition-field-grid { display:grid; grid-template-columns:1fr; gap:.75rem; }
+    .definition-field-grid--two-columns { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .field-card { position:relative; min-width:0; border:1px solid #dbe3ef; border-radius:8px; background:#fff; padding:.75rem .75rem .75rem 2.35rem; }
+    .field-card--full { grid-column:1 / -1; }
+    .field-card__drag { position:absolute; left:.65rem; top:.95rem; width:18px; display:grid; grid-template-columns:repeat(2, 5px); gap:4px; padding:.2rem; cursor:grab; }
+    .field-card__drag:active { cursor:grabbing; }
+    .field-card__drag span { width:4px; height:4px; border-radius:50%; background:#94a3b8; display:block; }
+    .field-card__controls { display:grid; grid-template-columns:150px 130px minmax(0,1fr) minmax(110px,130px) auto 38px; gap:.5rem; align-items:start; }
+    .field-card__label-input { min-width:0; }
+    .field-card__required { display:flex; gap:.35rem; align-items:center; color:#334155; font-size:.9rem; min-height:38px; padding:1.45rem .2rem 0; }
+    .field-card__delete { width:38px; height:38px; min-width:38px; margin-top:1.45rem; padding:0; display:inline-flex; align-items:center; justify-content:center; align-self:start; }
+    .field-options { margin:1rem 0 0 .75rem; padding:.75rem .75rem .85rem 1rem; border:1px solid #dbe3ef; border-left:4px solid #b99a4a; border-radius:8px; background:#f8fafc; display:grid; gap:.65rem; }
+    .field-options__header { display:flex; justify-content:space-between; align-items:center; gap:.75rem; }
+    .field-options__header strong { color:#334155; font-size:.9rem; }
+    .field-option-row { display:grid; grid-template-columns:180px minmax(0,1fr) 38px; gap:.5rem; align-items:end; padding:.55rem; border:1px solid #e2e8f0; border-radius:7px; background:#fff; }
+    .field-option-row .field-card__delete { margin-top:0; align-self:end; }
+    .form-filter span { font-size:.78rem; color:#64748b; }
+    .form-filter { display:flex; flex-direction:column; gap:.25rem; }
+    .form-control { border:1px solid #cbd5e1; border-radius:6px; padding:.55rem .65rem; background:#fff; min-height:38px; }
+    .form-helper { color:#64748b; font-size:.74rem; line-height:1.25; }
+    .definition-save-row { display:flex; gap:.5rem; margin-top:1rem; }
+    @@media (max-width: 1100px) {
+        .definition-toolbar,
+        .definition-shell,
+        .definition-editor__identity { grid-template-columns:1fr; }
+        .definition-editor-toolbar { align-items:flex-start; flex-direction:column; }
+        .field-card__controls,
+        .field-option-row { grid-template-columns:1fr; }
+        .field-card__required { padding-top:0; }
+        .field-card__delete { width:100%; margin-top:0; }
+    }
+</style>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private static readonly IReadOnlyList<FormInputTypeCapability> FieldTypes = FormInputTypeCatalog.EditorTypes;
+    private List<FormDefinitionModel> _definitions = new();
+    private FormDefinitionModel? _editingDefinition;
+    private FormFieldDefinitionModel? _draggedField;
+    private FormDefinitionUsageModel? _usage;
+    private List<string> _definitionValidationErrors = new();
+    private bool _hasAccess = true;
+    private bool _loading = true;
+    private bool _usageExpanded;
+    private bool _usageLoading;
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private bool CanShowUsage => _editingDefinition is not null && !string.IsNullOrWhiteSpace(_editingDefinition.Id);
+
+    private string UsageSummary => !CanShowUsage
+        ? T("UsageNotSaved")
+        : _usageLoading
+            ? T("UsageLoading")
+            : _usage is null
+                ? T("UsageNotLoaded")
+                : _usage.TotalCount == 0
+                    ? T("UsageNotUsed")
+                    : string.Format(T("UsageUsedInPlaces"), _usage.TotalCount, _usage.TotalCount == 1 ? string.Empty : "s");
+
+    private string DefinitionFieldGridClass => _editingDefinition?.Layout == FormLayoutModel.TwoColumns
+        ? "definition-field-grid definition-field-grid--two-columns"
+        : "definition-field-grid";
+
+    private static FormInputTypeCapability Capability(FormFieldDefinitionModel field) => FormInputTypeCatalog.Get(field.Type);
+
+    private static string FieldCardClass(FormFieldDefinitionModel field) => Capability(field).UsesMultilineInput
+        ? "field-card field-card--full"
+        : "field-card";
+
+    private bool CanDeleteDefinition => Auth.CanEditFormDefinitions
+        && _editingDefinition is not null
+        && !string.IsNullOrWhiteSpace(_editingDefinition.Id)
+        && !_usageLoading
+        && (_usage?.TotalCount ?? 0) == 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        _hasAccess = Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions;
+        if (!_hasAccess)
+        {
+            _loading = false;
+            return;
+        }
+
+        await LoadDefinitionsAsync();
+    }
+
+    private async Task LoadDefinitionsAsync()
+    {
+        _loading = true;
+        var definitions = await FormService.GetDefinitionsAsync();
+        if (!definitions.Success)
+        {
+            Http.Toast(definitions.Message, definitions.StatusCode);
+            if (definitions.StatusCode is 401 or 403)
+                _hasAccess = false;
+            _loading = false;
+            return;
+        }
+
+        _definitions = definitions.Data ?? new();
+
+        var selectedDefinition = _editingDefinition is null
+            ? _definitions.FirstOrDefault()
+            : _definitions.FirstOrDefault(definition => definition.Id == _editingDefinition.Id) ?? _definitions.FirstOrDefault();
+        _editingDefinition = selectedDefinition is null ? null : Clone(selectedDefinition);
+        NormalizeEditingFields();
+        _loading = false;
+        await LoadUsageAsync();
+    }
+
+    private void NewDefinition()
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        _definitionValidationErrors.Clear();
+        _usage = null;
+        _usageExpanded = false;
+        _usageLoading = false;
+        _editingDefinition = new FormDefinitionModel
+        {
+            Active = true,
+            Layout = FormLayoutModel.Stacked,
+            SubmitButtonLabel = new() { [AdminLanguage] = "Submit" },
+            Name = new() { [AdminLanguage] = "New form" },
+            Fields = [new FormFieldDefinitionModel
+            {
+                Key = "Name",
+                Type = "text",
+                Label = new() { [AdminLanguage] = "Name" },
+                Placeholder = new() { [AdminLanguage] = "Name" },
+                Required = true,
+                MaxLength = 150,
+                InputBoxSize = 1,
+                Order = 0
+            }]
+        };
+        NormalizeEditingFields();
+    }
+
+    private async Task EditDefinition(FormDefinitionModel definition)
+    {
+        _definitionValidationErrors.Clear();
+        _usageExpanded = false;
+        _editingDefinition = Clone(definition);
+        NormalizeEditingFields();
+        await LoadUsageAsync();
+    }
+
+    private async Task ToggleUsage()
+    {
+        if (!CanShowUsage) return;
+        if (_usage is null)
+            await LoadUsageAsync();
+        _usageExpanded = !_usageExpanded;
+    }
+
+    private async Task LoadUsageAsync()
+    {
+        if (!CanShowUsage || _editingDefinition is null)
+        {
+            _usage = null;
+            _usageExpanded = false;
+            return;
+        }
+
+        _usageLoading = true;
+        var result = await FormService.GetDefinitionUsageAsync(_editingDefinition.Id);
+        _usage = result.Data;
+        _usageLoading = false;
+    }
+
+    private void ToggleDefinitionActive()
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        if (_editingDefinition is not null)
+            _editingDefinition.Active = !_editingDefinition.Active;
+    }
+
+    private void AddField()
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        if (_editingDefinition is null) return;
+        var order = _editingDefinition.Fields.Count;
+        _editingDefinition.Fields.Add(new FormFieldDefinitionModel
+        {
+            Key = $"Field{order + 1}",
+            Type = "text",
+            Label = new() { [AdminLanguage] = $"Field {order + 1}" },
+            Placeholder = new() { [AdminLanguage] = $"Field {order + 1}" },
+            MaxLength = 500,
+            InputBoxSize = 1,
+            Order = order
+        });
+        NormalizeEditingFields();
+    }
+
+    private void RemoveField(FormFieldDefinitionModel field)
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        if (_editingDefinition is null) return;
+        _editingDefinition.Fields.Remove(field);
+        for (var i = 0; i < _editingDefinition.Fields.Count; i++)
+            _editingDefinition.Fields[i].Order = i;
+    }
+
+    private async Task SaveDefinition()
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        if (_editingDefinition is null) return;
+
+        NormalizeEditingFields();
+        _definitionValidationErrors = ValidateDefinition(_editingDefinition);
+        if (_definitionValidationErrors.Count > 0)
+        {
+            Http.Toast(T("PleaseCompleteRequiredFields"), 400);
+            return;
+        }
+
+        var res = await FormService.SaveDefinitionAsync(_editingDefinition);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.StatusCode is >= 200 and < 300)
+        {
+            _definitionValidationErrors.Clear();
+            await LoadDefinitionsAsync();
+        }
+    }
+
+    private async Task DeleteDefinition()
+    {
+        if (!CanDeleteDefinition || _editingDefinition is null) return;
+        var res = await FormService.DeleteDefinitionAsync(_editingDefinition.Id);
+        Http.Toast(res.Message, res.StatusCode);
+        if (res.StatusCode is >= 200 and < 300)
+        {
+            _editingDefinition = null;
+            await LoadDefinitionsAsync();
+        }
+    }
+
+    private static List<string> ValidateDefinition(FormDefinitionModel definition)
+    {
+        var errors = new List<string>();
+        var key = definition.Key?.Trim() ?? string.Empty;
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^[a-z][a-z0-9-]{1,63}$"))
+            errors.Add("Enter a valid key using lowercase letters, numbers, and hyphens.");
+        if (!definition.Name.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            errors.Add("Form name is required.");
+        if (!definition.SubmitButtonLabel.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            errors.Add("Submit button label is required.");
+        if (definition.Fields.Count == 0)
+            errors.Add("Add at least one form field.");
+        if (definition.Fields.Any(field => !System.Text.RegularExpressions.Regex.IsMatch(field.Key ?? string.Empty, "^[A-Za-z][A-Za-z0-9_-]{0,99}$")))
+            errors.Add("Every field must have a valid key.");
+        if (definition.Fields.GroupBy(field => field.Key, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            errors.Add("Form field keys must be unique.");
+        if (definition.Fields.Any(field => !FormInputTypeCatalog.IsSupported(field.Type)))
+            errors.Add("Every field must use a supported field type.");
+        if (definition.Fields.Any(field => !field.Label.Values.Any(value => !string.IsNullOrWhiteSpace(value))))
+            errors.Add("Every field must have a label.");
+        AddCapabilityValidation(definition.Fields, errors);
+
+        return errors;
+    }
+
+    private string Text(Dictionary<string, string>? values, string fallback) =>
+        values?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : values?.GetValueOrDefault("en") is { Length: > 0 } english
+                ? english
+                : values?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+
+    private void SetText(Dictionary<string, string> values, object? value) =>
+        values[AdminLanguage] = value?.ToString() ?? string.Empty;
+
+    private void ChangeFieldType(FormFieldDefinitionModel field, string? type)
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        var oldCapability = Capability(field);
+        field.Type = FormInputTypeCatalog.NormalizeType(type);
+        var newCapability = Capability(field);
+        ApplyFieldDefaults(field);
+
+        if (!oldCapability.SupportsOptions && newCapability.SupportsOptions && field.Options.Count == 0)
+            AddOption(field);
+    }
+
+    private void AddOption(FormFieldDefinitionModel field)
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        var order = field.Options.Count;
+        field.Options.Add(new FormFieldOptionModel
+        {
+            Value = $"option-{order + 1}",
+            Label = new() { [AdminLanguage] = $"Option {order + 1}" },
+            Order = order
+        });
+    }
+
+    private void RemoveOption(FormFieldDefinitionModel field, FormFieldOptionModel option)
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        field.Options.Remove(option);
+        for (var i = 0; i < field.Options.Count; i++)
+            field.Options[i].Order = i;
+    }
+
+    private void BeginFieldDrag(FormFieldDefinitionModel field)
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        _draggedField = field;
+    }
+
+    private void EndFieldDrag() => _draggedField = null;
+
+    private void DropField(FormFieldDefinitionModel target)
+    {
+        if (!Auth.CanEditFormDefinitions) return;
+        if (_editingDefinition is null || _draggedField is null || ReferenceEquals(_draggedField, target))
+            return;
+
+        var ordered = _editingDefinition.Fields.OrderBy(field => field.Order).ToList();
+        var sourceIndex = ordered.IndexOf(_draggedField);
+        var targetIndex = ordered.IndexOf(target);
+        if (sourceIndex < 0 || targetIndex < 0)
+            return;
+
+        ordered.RemoveAt(sourceIndex);
+        if (sourceIndex < targetIndex)
+            targetIndex--;
+        ordered.Insert(targetIndex, _draggedField);
+
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].Order = i;
+
+        _editingDefinition.Fields = ordered;
+        _draggedField = null;
+    }
+
+    private void NormalizeEditingFields()
+    {
+        if (_editingDefinition is null) return;
+        var ordered = _editingDefinition.Fields.OrderBy(field => field.Order).ToList();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].Order = i;
+            ApplyFieldDefaults(ordered[i]);
+            NormalizeOptionOrders(ordered[i]);
+        }
+
+        _editingDefinition.Fields = ordered;
+    }
+
+    private static void ApplyFieldDefaults(FormFieldDefinitionModel field)
+    {
+        field.Type = FormInputTypeCatalog.NormalizeType(field.Type);
+        var capability = Capability(field);
+        field.MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength);
+        field.InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize);
+
+        if (!capability.SupportsOptions)
+            field.Options.Clear();
+    }
+
+    private static void NormalizeOptionOrders(FormFieldDefinitionModel field)
+    {
+        var options = field.Options.OrderBy(option => option.Order).ToList();
+        for (var i = 0; i < options.Count; i++)
+            options[i].Order = i;
+        field.Options = options;
+    }
+
+    private static void AddCapabilityValidation(IEnumerable<FormFieldDefinitionModel> fields, List<string> errors)
+    {
+        foreach (var field in fields)
+        {
+            var label = field.Label.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? field.Key;
+            var capability = Capability(field);
+            var optionsWithData = field.Options
+                .Where(option => !string.IsNullOrWhiteSpace(option.Value) ||
+                                 option.Label.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+                .ToList();
+
+            if (capability.SupportsMaxCharacters)
+            {
+                if (field.MaxLength is < 1 or > FormInputTypeCatalog.MaxCharactersLimit)
+                    errors.Add($"{label}: max characters must be between 1 and {FormInputTypeCatalog.MaxCharactersLimit}.");
+            }
+            else if (field.MaxLength > 0)
+            {
+                errors.Add($"{label}: max characters is not supported for this field type.");
+            }
+
+            if (capability.SupportsInputBoxSize)
+            {
+                if (field.InputBoxSize is < FormInputTypeCatalog.MinInputBoxSize or > FormInputTypeCatalog.MaxInputBoxSize)
+                    errors.Add($"{label}: input box size must be between {FormInputTypeCatalog.MinInputBoxSize} and {FormInputTypeCatalog.MaxInputBoxSize}.");
+            }
+            else if (field.InputBoxSize > 1)
+            {
+                errors.Add($"{label}: input box size is not supported for this field type.");
+            }
+
+            if (capability.SupportsOptions)
+            {
+                if (optionsWithData.Count == 0)
+                    errors.Add($"{label}: add at least one option.");
+                if (optionsWithData.Any(option => string.IsNullOrWhiteSpace(option.Value)))
+                    errors.Add($"{label}: every option needs a value.");
+                if (optionsWithData.GroupBy(option => option.Value, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+                    errors.Add($"{label}: option values must be unique.");
+            }
+            else if (optionsWithData.Count > 0)
+            {
+                errors.Add($"{label}: options are not supported for this field type.");
+            }
+        }
+    }
+
+    private static FormDefinitionModel Clone(FormDefinitionModel source) => new()
+    {
+        Id = source.Id,
+        Key = source.Key,
+        Name = new(source.Name),
+        Introduction = new(source.Introduction),
+        SubmitButtonLabel = new(source.SubmitButtonLabel),
+        DisplayMode = source.DisplayMode,
+        Layout = source.Layout,
+        Active = source.Active,
+        Fields = source.Fields.Select(f => new FormFieldDefinitionModel
+        {
+            Key = f.Key,
+            Type = f.Type,
+            Label = new(f.Label),
+            Placeholder = new(f.Placeholder),
+            Required = f.Required,
+            MinLength = f.MinLength,
+            MaxLength = f.MaxLength,
+            InputBoxSize = f.InputBoxSize,
+            Options = f.Options.Select(o => new FormFieldOptionModel
+            {
+                Value = o.Value,
+                Label = new(o.Label),
+                Order = o.Order
+            }).ToList(),
+            Order = f.Order
+        }).ToList(),
+        CreatedAt = source.CreatedAt,
+        UpdatedAt = source.UpdatedAt
+    };
+}

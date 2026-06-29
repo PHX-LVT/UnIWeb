@@ -1,4 +1,5 @@
 using Contracts.Forms;
+using FullProject.Models;
 using FullProject.Services;
 using FullProject.Services.FormServices;
 using FullProject.Utils;
@@ -10,24 +11,31 @@ namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/forms")]
-    [Authorize(Policy = AdminPermissionKeys.ManageContent)]
+    [Authorize]
     public class FormsController : ControllerBase
     {
         private readonly FormSubmissionService _submissions;
+        private readonly FormSubmissionExportService _submissionExports;
         private readonly FormDefinitionService _definitions;
         private readonly FormValidationService _validation;
+        private readonly AuthService _auth;
 
         public FormsController(
             FormSubmissionService submissions,
+            FormSubmissionExportService submissionExports,
             FormDefinitionService definitions,
-            FormValidationService validation)
+            FormValidationService validation,
+            AuthService auth)
         {
             _submissions = submissions;
+            _submissionExports = submissionExports;
             _definitions = definitions;
             _validation = validation;
+            _auth = auth;
         }
 
         [HttpGet("submissions")]
+        [Authorize(Policy = AdminPermissionKeys.ViewFormSubmissions)]
         public async Task<IActionResult> GetAll(
             [FromQuery] string? formKey,
             [FromQuery] FormSubmissionStatus? status,
@@ -36,40 +44,116 @@ namespace FullProject.Controllers
             [FromQuery] DateTime? to)
         {
             var submissions = await _submissions.GetAllAsync(formKey, status, search, from, to);
+            var definitions = await _definitions.GetAllAsync();
             return Ok(ApiResult.Ok(submissions
                 .Where(s => !string.Equals(s.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase))
-                .Select(MapSubmission)
+                .Select(submission => MapSubmission(submission, definitions))
                 .ToList()));
         }
 
+        [HttpGet("submissions/export")]
+        [Authorize(Policy = AdminPermissionKeys.ExportFormSubmissions)]
+        public async Task<IActionResult> ExportSubmissions(
+            [FromQuery] string? formKey,
+            [FromQuery] FormSubmissionStatus? status,
+            [FromQuery] string? search,
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to)
+        {
+            var submissions = await _submissions.GetAllAsync(formKey, status, search, from, to);
+            var visibleSubmissions = submissions
+                .Where(s => !string.Equals(s.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var definitions = await _definitions.GetAllAsync();
+            var bytes = _submissionExports.BuildXlsx(visibleSubmissions, definitions);
+            var filename = $"form-submissions-{DateTime.UtcNow:yyyyMMdd-HHmmss}.xlsx";
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        }
+
+        [HttpGet("submissions/assignees")]
+        [Authorize(Policy = AdminPermissionKeys.ManageFormSubmissions)]
+        public async Task<IActionResult> GetAssignees()
+        {
+            var users = await _auth.GetUsersAsync();
+            var assignees = users
+                .Select(user =>
+                {
+                    AuthService.NormalizeUserDefaults(user);
+                    return user;
+                })
+                .Where(user => user.Status == AdminUserStatus.Active && user.Role != AdminRole.Viewer)
+                .OrderBy(user => DisplayName(user))
+                .Select(user => new FormSubmissionAssigneeResponse
+                {
+                    Id = user.Id,
+                    DisplayName = DisplayName(user),
+                    Email = user.Email
+                })
+                .ToList();
+
+            return Ok(ApiResult.Ok(assignees));
+        }
+
         [HttpGet("submissions/{submissionId}")]
+        [Authorize(Policy = AdminPermissionKeys.ViewFormSubmissions)]
         public async Task<IActionResult> GetSubmission(string submissionId)
         {
+            var actor = await CurrentAdminAsync();
+            if (actor is null) return Unauthorized(ApiResult.Unauthorized<ManagedFormSubmissionResponse>());
+
             var submission = await _submissions.GetByIdAsync(submissionId);
-            return submission is null
-                ? NotFound(ApiResult.NotFound("Submission not found."))
-                : Ok(ApiResult.Ok(MapSubmission(submission)));
+            if (submission is null)
+                return NotFound(ApiResult.NotFound("Submission not found."));
+
+            await _submissions.MarkViewedAsync(submissionId, actor.Id, DisplayName(actor));
+            var updated = await _submissions.GetByIdAsync(submissionId);
+            var definitions = await _definitions.GetAllAsync();
+            return Ok(ApiResult.Ok(MapSubmission(updated ?? submission, definitions)));
         }
 
         [HttpPut("submissions/{submissionId}")]
+        [Authorize(Policy = AdminPermissionKeys.ManageFormSubmissions)]
         public async Task<IActionResult> UpdateSubmission(
             string submissionId,
             [FromBody] ManagedFormSubmissionUpdateRequest request)
         {
-            var ok = await _submissions.UpdateAsync(submissionId, request.Status, request.InternalNotes);
-            return ok
-                ? Ok(ApiResult.Ok("Submission updated."))
-                : NotFound(ApiResult.NotFound("Submission not found."));
+            var actor = await CurrentAdminAsync();
+            if (actor is null) return Unauthorized(ApiResult.Unauthorized<ManagedFormSubmissionResponse>());
+
+            var (assignedToAdminId, assignedToAdminName, assignmentError) = await ResolveAssigneeAsync(request.AssignedToAdminId);
+            if (assignmentError is not null)
+                return BadRequest(ApiResult.BadRequest(assignmentError));
+
+            var updated = await _submissions.UpdateWorkflowAsync(
+                submissionId,
+                request.Status,
+                request.InternalNotes,
+                assignedToAdminId,
+                assignedToAdminName,
+                actor.Id,
+                DisplayName(actor));
+
+            if (updated is null)
+                return NotFound(ApiResult.NotFound("Submission not found."));
+
+            var definitions = await _definitions.GetAllAsync();
+            return Ok(ApiResult.Ok(MapSubmission(updated, definitions), "Submission updated."));
         }
 
         [HttpPost("submissions/bulk-status")]
+        [Authorize(Policy = AdminPermissionKeys.ManageFormSubmissions)]
         public async Task<IActionResult> BulkStatus([FromBody] BulkFormSubmissionStatusRequest request)
         {
-            var count = await _submissions.BulkStatusAsync(request.Ids, request.Status);
+            var actor = await CurrentAdminAsync();
+            if (actor is null) return Unauthorized(ApiResult.Unauthorized<object>());
+
+            var count = await _submissions.BulkStatusAsync(request.Ids, request.Status, actor.Id, DisplayName(actor));
             return Ok(ApiResult.Ok(new { Count = count }, $"{count} submissions updated."));
         }
 
         [HttpPost("submissions/bulk-delete")]
+        [Authorize(Policy = AdminPermissionKeys.ManageFormSubmissions)]
         public async Task<IActionResult> BulkDelete([FromBody] BulkFormSubmissionDeleteRequest request)
         {
             var count = await _submissions.BulkDeleteAsync(request.Ids);
@@ -77,6 +161,7 @@ namespace FullProject.Controllers
         }
 
         [HttpDelete("submissions/{submissionId}")]
+        [Authorize(Policy = AdminPermissionKeys.ManageFormSubmissions)]
         public async Task<IActionResult> Delete(string submissionId)
         {
             var ok = await _submissions.DeleteAsync(submissionId);
@@ -86,6 +171,7 @@ namespace FullProject.Controllers
         }
 
         [HttpGet("definitions")]
+        [Authorize(Policy = AdminPermissionKeys.ViewFormDefinitions)]
         public async Task<IActionResult> GetDefinitions()
         {
             var definitions = await _definitions.GetAllAsync();
@@ -93,6 +179,7 @@ namespace FullProject.Controllers
         }
 
         [HttpGet("definitions/{id}")]
+        [Authorize(Policy = AdminPermissionKeys.ViewFormDefinitions)]
         public async Task<IActionResult> GetDefinition(string id)
         {
             var definition = await _definitions.GetByIdAsync(id);
@@ -103,6 +190,7 @@ namespace FullProject.Controllers
 
 
         [HttpGet("definitions/{id}/usage")]
+        [Authorize(Policy = AdminPermissionKeys.ViewFormDefinitions)]
         public async Task<IActionResult> GetDefinitionUsage(string id)
         {
             var definition = await _definitions.GetByIdAsync(id);
@@ -113,6 +201,7 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(usage));
         }
         [HttpPost("definitions")]
+        [Authorize(Policy = AdminPermissionKeys.EditFormDefinitions)]
         public async Task<IActionResult> CreateDefinition([FromBody] FormDefinitionUpsertRequest request)
         {
             var errors = _validation.ValidateDefinition(request);
@@ -124,6 +213,7 @@ namespace FullProject.Controllers
         }
 
         [HttpPut("definitions/{id}")]
+        [Authorize(Policy = AdminPermissionKeys.EditFormDefinitions)]
         public async Task<IActionResult> UpdateDefinition(string id, [FromBody] FormDefinitionUpsertRequest request)
         {
             var existing = await _definitions.GetByIdAsync(id);
@@ -146,6 +236,7 @@ namespace FullProject.Controllers
         }
 
         [HttpDelete("definitions/{id}")]
+        [Authorize(Policy = AdminPermissionKeys.EditFormDefinitions)]
         public async Task<IActionResult> DeleteDefinition(string id)
         {
             if (await _definitions.IsReferencedAsync(id))
@@ -160,7 +251,9 @@ namespace FullProject.Controllers
                 : NotFound(ApiResult.NotFound("Form definition not found."));
         }
 
-        private static ManagedFormSubmissionResponse MapSubmission(Models.FormSubmission submission) => new()
+        private static ManagedFormSubmissionResponse MapSubmission(
+            Models.FormSubmission submission,
+            IReadOnlyCollection<FormDefinition>? definitions = null) => new()
         {
             Id = submission.Id,
             FormId = submission.FormId,
@@ -177,13 +270,76 @@ namespace FullProject.Controllers
                     Label = field.Label,
                     Type = field.Type,
                     Value = field.Value,
-                    Order = field.Order
+                    Order = field.Order,
+                    IsDeletedField = IsDeletedField(submission, field, definitions)
                 })
                 .ToList(),
             InternalNotes = submission.InternalNotes,
+            AssignedToAdminId = submission.AssignedToAdminId,
+            AssignedToAdminName = submission.AssignedToAdminName,
+            IsRead = submission.IsRead,
+            ViewedAt = submission.ViewedAt,
+            ViewedByAdminId = submission.ViewedByAdminId,
+            Timeline = submission.Timeline
+                .OrderByDescending(item => item.CreatedAt)
+                .Select(item => new FormSubmissionTimelineEventResponse
+                {
+                    EventType = item.EventType,
+                    Message = item.Message,
+                    ActorId = item.ActorId,
+                    ActorName = item.ActorName,
+                    CreatedAt = item.CreatedAt
+                })
+                .ToList(),
             SubmittedAt = submission.SubmittedAt,
             UpdatedAt = submission.UpdatedAt
         };
+
+        private static bool IsDeletedField(
+            Models.FormSubmission submission,
+            FormSubmissionFieldSnapshot field,
+            IReadOnlyCollection<FormDefinition>? definitions)
+        {
+            if (definitions is null || definitions.Count == 0)
+                return false;
+
+            var definition = definitions.FirstOrDefault(item =>
+                string.Equals(item.Key, submission.FormKey, StringComparison.OrdinalIgnoreCase));
+            if (definition is null)
+                return false;
+
+            return !definition.Fields.Any(activeField =>
+                string.Equals(activeField.Key, field.Key, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private async Task<AdminUser?> CurrentAdminAsync()
+        {
+            var adminId = User.FindFirst("adminId")?.Value;
+            if (string.IsNullOrWhiteSpace(adminId)) return null;
+
+            var admin = await _auth.GetByIdAsync(adminId);
+            if (admin is not null) AuthService.NormalizeUserDefaults(admin);
+            return admin;
+        }
+
+        private async Task<(string? Id, string? Name, string? Error)> ResolveAssigneeAsync(string? adminId)
+        {
+            if (string.IsNullOrWhiteSpace(adminId))
+                return (null, null, null);
+
+            var admin = await _auth.GetByIdAsync(adminId.Trim());
+            if (admin is null)
+                return (null, null, "Assigned admin user was not found.");
+
+            AuthService.NormalizeUserDefaults(admin);
+            if (admin.Status != AdminUserStatus.Active || admin.Role == AdminRole.Viewer)
+                return (null, null, "Assigned admin user is not available for submissions.");
+
+            return (admin.Id, DisplayName(admin), null);
+        }
+
+        private static string DisplayName(AdminUser user) =>
+            string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName;
     }
 
     public sealed class BulkFormSubmissionStatusRequest

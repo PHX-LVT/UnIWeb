@@ -286,6 +286,14 @@ namespace FullProject.Services
                     .Descending(s => s.SubmittedAt)));
             await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
                 Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.AssignedToAdminId)
+                    .Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.IsRead)
+                    .Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
                     .Ascending(s => s.FormKey)
                     .Descending(s => s.SubmittedAt)));
             await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(

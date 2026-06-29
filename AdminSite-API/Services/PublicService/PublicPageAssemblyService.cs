@@ -1,4 +1,5 @@
 using Contracts.Public;
+using Contracts.Forms;
 using FullProject.Models;
 using FullProject.Security;
 using FullProject.Services.FormServices;
@@ -1258,6 +1259,8 @@ namespace FullProject.Services.PublicService
                             Label = field.Label,
                             Placeholder = field.Placeholder,
                             Required = field.Required,
+                            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength),
+                            InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize),
                             Options = field.Options
                                 .OrderBy(option => option.Order)
                                 .Select(option => new PublicFormFieldOptionDto
@@ -1282,6 +1285,8 @@ namespace FullProject.Services.PublicService
                     Type = field.Type,
                     Label = field.Label,
                     Required = field.Required,
+                    MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, 0),
+                    InputBoxSize = 1,
                     Options = (field.Options ?? new List<string>())
                         .Select((option, index) => new PublicFormFieldOptionDto
                         {

@@ -80,7 +80,8 @@ namespace AdminSite.Services
         public bool HasPermission(string permission) =>
             CurrentUser is not null &&
             (CurrentUser.Role == AdminRole.AdminAdmin ||
-             CurrentUser.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase));
+             CurrentUser.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase) ||
+             HasDefaultRolePermission(CurrentUser.Role, permission));
 
         public bool IsAdminAdmin => CurrentUser?.Role == AdminRole.AdminAdmin;
 
@@ -108,5 +109,48 @@ namespace AdminSite.Services
         public bool CanManageUsers => HasPermission(AdminPermissionKeys.ManageUsers);
 
         public bool CanViewLogs => HasPermission(AdminPermissionKeys.ViewLogs);
+
+        public bool CanViewFormDefinitions => HasPermission(AdminPermissionKeys.ViewFormDefinitions);
+
+        public bool CanEditFormDefinitions => HasPermission(AdminPermissionKeys.EditFormDefinitions);
+
+        public bool CanViewFormSubmissions => HasPermission(AdminPermissionKeys.ViewFormSubmissions);
+
+        public bool CanManageFormSubmissions => HasPermission(AdminPermissionKeys.ManageFormSubmissions);
+
+        public bool CanExportFormSubmissions => HasPermission(AdminPermissionKeys.ExportFormSubmissions);
+
+        public bool CanUseFormManagement => CanViewFormDefinitions || CanEditFormDefinitions || CanViewFormSubmissions;
+
+        private static bool HasDefaultRolePermission(AdminRole role, string permission)
+        {
+            if (role == AdminRole.Manager)
+                return ManagerDefaults.Contains(permission, StringComparer.OrdinalIgnoreCase);
+            if (role == AdminRole.Writer)
+                return WriterDefaults.Contains(permission, StringComparer.OrdinalIgnoreCase);
+            return false;
+        }
+
+        private static readonly string[] ManagerDefaults =
+        [
+            AdminPermissionKeys.ManageContent,
+            AdminPermissionKeys.PublishContent,
+            AdminPermissionKeys.DeleteContent,
+            AdminPermissionKeys.ViewFormDefinitions,
+            AdminPermissionKeys.EditFormDefinitions,
+            AdminPermissionKeys.ViewFormSubmissions,
+            AdminPermissionKeys.ManageFormSubmissions,
+            AdminPermissionKeys.ExportFormSubmissions
+        ];
+
+        private static readonly string[] WriterDefaults =
+        [
+            AdminPermissionKeys.ManageContent,
+            AdminPermissionKeys.ViewFormDefinitions,
+            AdminPermissionKeys.EditFormDefinitions,
+            AdminPermissionKeys.ViewFormSubmissions,
+            AdminPermissionKeys.ManageFormSubmissions,
+            AdminPermissionKeys.ExportFormSubmissions
+        ];
     }
 }
