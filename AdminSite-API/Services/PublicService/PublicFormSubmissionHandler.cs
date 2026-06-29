@@ -18,6 +18,7 @@ namespace FullProject.Services.PublicService
         private readonly FormSubmissionService _submissionService;
         private readonly FormSubmissionSecurityService _formSecurity;
         private readonly FormDefinitionService _formDefinitionService;
+        private readonly FormInputTypeService _formInputTypes;
         private readonly VisitorMetricService _metrics;
         private readonly IConfiguration _configuration;
 
@@ -28,6 +29,7 @@ namespace FullProject.Services.PublicService
             FormSubmissionService submissionService,
             FormSubmissionSecurityService formSecurity,
             FormDefinitionService formDefinitionService,
+            FormInputTypeService formInputTypes,
             VisitorMetricService metrics,
             IConfiguration configuration)
         {
@@ -37,6 +39,7 @@ namespace FullProject.Services.PublicService
             _submissionService = submissionService;
             _formSecurity = formSecurity;
             _formDefinitionService = formDefinitionService;
+            _formInputTypes = formInputTypes;
             _metrics = metrics;
             _configuration = configuration;
         }
@@ -103,13 +106,15 @@ namespace FullProject.Services.PublicService
             if (!string.IsNullOrWhiteSpace(form.FormDefinitionId) && definition is null)
                 return new NotFoundObjectResult(ApiResult.NotFound("Form definition is unavailable."));
 
+            var inputTypeCapabilities = await _formInputTypes.GetCapabilityLookupAsync();
+
             var fields = definition is not null
                 ? definition.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
                     field.Key,
                     field.Type,
                     field.Label,
                     field.Required,
-                    SubmissionMaximumLength(field.Type, field.MaxLength),
+                    SubmissionMaximumLength(field.Type, field.MaxLength, inputTypeCapabilities),
                     field.Options.Select(option => option.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
                     field.Order)).ToList()
                 : form.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
@@ -117,7 +122,7 @@ namespace FullProject.Services.PublicService
                     field.Type,
                     field.Label,
                     field.Required,
-                    SubmissionMaximumLength(field.Type, 0),
+                    SubmissionMaximumLength(field.Type, 0, inputTypeCapabilities),
                     field.Options?.ToHashSet(StringComparer.OrdinalIgnoreCase),
                     field.Order)).ToList();
 
@@ -303,11 +308,14 @@ namespace FullProject.Services.PublicService
                 _ => new BadRequestObjectResult(ApiResult.BadRequest(result.Message))
             };
 
-        private static int SubmissionMaximumLength(string? type, int maxLength)
+        private static int SubmissionMaximumLength(
+            string? type,
+            int maxLength,
+            IReadOnlyDictionary<string, FormInputTypeCapability> capabilities)
         {
-            var capability = FormInputTypeCatalog.Get(type);
+            var capability = FormInputTypeService.Capability(type, capabilities);
             if (capability.SupportsMaxCharacters)
-                return FormInputTypeCatalog.NormalizeMaxCharacters(type, maxLength);
+                return FormInputTypeCatalog.MaximumInputLength(capability);
 
             return FormInputTypeCatalog.NormalizeType(type) switch
             {

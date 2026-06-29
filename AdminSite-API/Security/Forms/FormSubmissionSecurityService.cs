@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using Contracts.Forms;
 using FullProject.Models;
 using FullProject.Services.FormServices;
 using FullProject.Settings;
@@ -18,13 +19,6 @@ public sealed class FormSubmissionSecurityService
     private static readonly Regex ValidFieldKeyRegex = new(
         "^[A-Za-z][A-Za-z0-9_-]{0,99}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex EmailRegex = new(
-        "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex PhoneRegex = new(
-        "^[0-9+().\\-\\s]{6,40}$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     private readonly IMongoCollection<FormSubmission> _submissions;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly FormSecuritySettings _settings;
@@ -76,16 +70,13 @@ public sealed class FormSubmissionSecurityService
 
             if (value.Length > maximumLength)
                 return Reject(formKey, "field-length", $"{rule.Key} is too long.", ipAddress);
-            if (rule.Required && string.IsNullOrWhiteSpace(value))
-                return Reject(formKey, "required-field", "Required form field missing.", ipAddress);
-            if (!IsValidTypedValue(rule.Type, value))
+            var validationError = FormInputValueValidator.Validate(
+                rule.Type,
+                value,
+                rule.Required,
+                rule.AllowedValues);
+            if (validationError != FormInputValidationError.None)
                 return Reject(formKey, "field-type", $"Invalid {rule.Key} value.", ipAddress);
-            if (!string.IsNullOrWhiteSpace(value) &&
-                rule.AllowedValues is { Count: > 0 } &&
-                !rule.AllowedValues.Contains(value))
-            {
-                return Reject(formKey, "field-option", $"Invalid {rule.Key} option.", ipAddress);
-            }
 
             if (!string.IsNullOrWhiteSpace(value))
                 clean[rule.Key] = value;
@@ -140,22 +131,6 @@ public sealed class FormSubmissionSecurityService
             Accepted = false,
             StatusCode = statusCode,
             Message = message
-        };
-    }
-
-    private static bool IsValidTypedValue(string? type, string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return true;
-
-        return type?.Trim().ToLowerInvariant() switch
-        {
-            "email" => value.Length <= 254 && EmailRegex.IsMatch(value),
-            "tel" or "phone" => value.Length <= 40 && PhoneRegex.IsMatch(value),
-            "number" => decimal.TryParse(value, out _),
-            "date" => DateTime.TryParse(value, out _),
-            "checkbox" => value is "true" or "false" or "on" or "1" or "0",
-            "url" => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https",
-            _ => true
         };
     }
 

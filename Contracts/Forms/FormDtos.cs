@@ -73,7 +73,37 @@ public class FormDefinitionUsageResponse
 {
     public string FormDefinitionId { get; set; } = string.Empty;
     public int TotalCount { get; set; }
+    public long SubmissionCount { get; set; }
     public List<FormDefinitionUsageItemDto> Items { get; set; } = new();
+}
+
+public class FormInputTypeResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public string LabelKey { get; set; } = string.Empty;
+    public Dictionary<string, string> Name { get; set; } = new();
+    public bool Active { get; set; } = true;
+    public bool SupportsMaxCharacters { get; set; }
+    public bool SupportsOptions { get; set; }
+    public bool SupportsInputBoxSize { get; set; }
+    public bool UsesMultilineInput { get; set; }
+    public int DefaultMaxCharacters { get; set; }
+    public int DefaultInputBoxSize { get; set; }
+    public int Order { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class FormInputTypeUpdateRequest
+{
+    public Dictionary<string, string> Name { get; set; } = new();
+    public bool Active { get; set; } = true;
+    public bool SupportsMaxCharacters { get; set; }
+    public bool SupportsOptions { get; set; }
+    public bool SupportsInputBoxSize { get; set; }
+    public int DefaultMaxCharacters { get; set; }
+    public int DefaultInputBoxSize { get; set; }
 }
 public class FormSubmissionFieldResponse
 {

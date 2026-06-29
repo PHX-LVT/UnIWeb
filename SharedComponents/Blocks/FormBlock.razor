@@ -49,17 +49,20 @@
                                   placeholder="@placeholder"
                                   maxlength="@MaxLengthAttribute(field)"
                                   required="@field.Required"
+                                  aria-invalid="@HasError(key)"
                                   value="@_data.GetValueOrDefault(key)"
-                                  @onchange="eventArgs => SetField(key, eventArgs.Value)"></textarea>
+                                  @oninput="eventArgs => RevalidateIfInvalid(field, eventArgs.Value)"
+                                  @onchange="eventArgs => SetField(field, eventArgs.Value)"></textarea>
                         break;
 
                     case "select":
                         <select id="@InputId(key)"
-                                class="sc-form-input"
+                                class="@InputClass(field)"
                                 name="@key"
                                 value="@_data.GetValueOrDefault(key)"
                                 required="@field.Required"
-                                @onchange="eventArgs => SetField(key, eventArgs.Value)">
+                                aria-invalid="@HasError(key)"
+                                @onchange="eventArgs => SetField(field, eventArgs.Value)">
                             <option value="">@placeholder</option>
                             @foreach (var option in field.Options.OrderBy(item => item.Order))
                             {
@@ -74,8 +77,9 @@
                                    type="checkbox"
                                    name="@key"
                                    required="@field.Required"
+                                   aria-invalid="@HasError(key)"
                                    checked="@IsChecked(key)"
-                                   @onchange="eventArgs => SetField(key, eventArgs.Value)" />
+                                   @onchange="eventArgs => SetField(field, eventArgs.Value)" />
                             <span>@placeholder</span>
                         </label>
                         break;
@@ -83,14 +87,22 @@
                     default:
                         <input id="@InputId(key)"
                                type="@InputType(field.Type)"
+                               inputmode="@InputMode(field.Type)"
                                class="@InputClass(field)"
                                name="@key"
                                placeholder="@placeholder"
                                maxlength="@MaxLengthAttribute(field)"
                                required="@field.Required"
+                               aria-invalid="@HasError(key)"
                                value="@_data.GetValueOrDefault(key)"
-                               @onchange="eventArgs => SetField(key, eventArgs.Value)" />
+                               @oninput="eventArgs => RevalidateIfInvalid(field, eventArgs.Value)"
+                               @onchange="eventArgs => SetField(field, eventArgs.Value)" />
                         break;
+                }
+
+                @if (_fieldErrors.TryGetValue(key, out var fieldError))
+                {
+                    <span class="sc-form-field__error" role="alert">@fieldError</span>
                 }
             </div>
         }
@@ -116,6 +128,7 @@
     [Parameter] public Func<Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
 
     private Dictionary<string, string> _data = new();
+    private Dictionary<string, string> _fieldErrors = new(StringComparer.OrdinalIgnoreCase);
     private bool _submitted;
     private bool _error;
     private string? _errorMessage;
@@ -140,6 +153,9 @@
         }
 
         _data = next;
+        _fieldErrors = _fieldErrors
+            .Where(error => next.ContainsKey(error.Key))
+            .ToDictionary(error => error.Key, error => error.Value, StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task Submit()
@@ -148,13 +164,12 @@
         _error = false;
         _errorMessage = null;
 
-        var missingRequired = (Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
-            .Any(field => field.Required && string.IsNullOrWhiteSpace(_data.GetValueOrDefault(FieldKey(field))));
+        _fieldErrors.Clear();
+        foreach (var field in Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
+            ValidateField(field);
 
-        if (missingRequired)
+        if (_fieldErrors.Count > 0)
         {
-            _error = true;
-            _errorMessage = "Please complete all required fields.";
             return;
         }
 
@@ -168,6 +183,7 @@
         {
             _submitted = true;
             _honeypot = string.Empty;
+            _fieldErrors.Clear();
             _data = (Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
                 .ToDictionary(FieldKey, _ => string.Empty);
         }
@@ -177,13 +193,89 @@
         }
     }
 
-    private void SetField(string key, object? value)
+    private void SetField(PublicFormFieldDto field, object? value)
     {
+        var key = FieldKey(field);
         _data[key] = value switch
         {
             bool booleanValue => booleanValue ? "true" : "false",
             null => string.Empty,
             _ => value.ToString() ?? string.Empty
+        };
+        ValidateField(field);
+    }
+
+    private void RevalidateIfInvalid(PublicFormFieldDto field, object? value)
+    {
+        var key = FieldKey(field);
+        if (!_fieldErrors.ContainsKey(key)) return;
+        SetField(field, value);
+    }
+
+    private void ValidateField(PublicFormFieldDto field)
+    {
+        var key = FieldKey(field);
+        var error = FormInputValueValidator.Validate(
+            field.Type,
+            _data.GetValueOrDefault(key),
+            field.Required,
+            field.Options.Select(option => option.Value).ToList());
+
+        if (error == FormInputValidationError.None)
+        {
+            _fieldErrors.Remove(key);
+            return;
+        }
+
+        var label = StyleHelper.Lang(field.Label, Lang);
+        _fieldErrors[key] = ValidationMessage(error, string.IsNullOrWhiteSpace(label) ? key : label);
+    }
+
+    private string ValidationMessage(FormInputValidationError error, string label)
+    {
+        var language = Lang?.Trim().ToLowerInvariant() ?? "en";
+        if (language.StartsWith("vi", StringComparison.Ordinal))
+        {
+            return error switch
+            {
+                FormInputValidationError.Required => $"{label} l\u00e0 tr\u01b0\u1eddng b\u1eaft bu\u1ed9c.",
+                FormInputValidationError.Email => "Nh\u1eadp email \u0111\u1ea7y \u0111\u1ee7, v\u00ed d\u1ee5 ten@congty.com.",
+                FormInputValidationError.Phone => "Nh\u1eadp s\u1ed1 \u0111i\u1ec7n tho\u1ea1i h\u1ee3p l\u1ec7 c\u00f3 t\u1eeb 6 \u0111\u1ebfn 15 ch\u1eef s\u1ed1.",
+                FormInputValidationError.Number => "Ch\u1ec9 nh\u1eadp m\u1ed9t s\u1ed1 h\u1ee3p l\u1ec7.",
+                FormInputValidationError.Date => "Ch\u1ecdn m\u1ed9t ng\u00e0y h\u1ee3p l\u1ec7.",
+                FormInputValidationError.Url => "Nh\u1eadp \u0111\u1ecba ch\u1ec9 http ho\u1eb7c https \u0111\u1ea7y \u0111\u1ee7.",
+                FormInputValidationError.Option => "Ch\u1ecdn m\u1ed9t gi\u00e1 tr\u1ecb c\u00f3 trong danh s\u00e1ch.",
+                FormInputValidationError.Checkbox => "Gi\u00e1 tr\u1ecb l\u1ef1a ch\u1ecdn kh\u00f4ng h\u1ee3p l\u1ec7.",
+                _ => $"{label} kh\u00f4ng h\u1ee3p l\u1ec7."
+            };
+        }
+
+        if (language.StartsWith("zh", StringComparison.Ordinal))
+        {
+            return error switch
+            {
+                FormInputValidationError.Required => $"{label}\u4e3a\u5fc5\u586b\u9879\u3002",
+                FormInputValidationError.Email => "\u8bf7\u8f93\u5165\u5b8c\u6574\u7684\u7535\u5b50\u90ae\u4ef6\u5730\u5740\uff0c\u4f8b\u5982 name@company.com\u3002",
+                FormInputValidationError.Phone => "\u8bf7\u8f93\u5165\u5305\u542b 6 \u5230 15 \u4f4d\u6570\u5b57\u7684\u6709\u6548\u7535\u8bdd\u53f7\u7801\u3002",
+                FormInputValidationError.Number => "\u8bf7\u8f93\u5165\u6709\u6548\u6570\u5b57\u3002",
+                FormInputValidationError.Date => "\u8bf7\u9009\u62e9\u6709\u6548\u65e5\u671f\u3002",
+                FormInputValidationError.Url => "\u8bf7\u8f93\u5165\u5b8c\u6574\u7684 http \u6216 https \u5730\u5740\u3002",
+                FormInputValidationError.Option => "\u8bf7\u4ece\u5217\u8868\u4e2d\u9009\u62e9\u4e00\u4e2a\u503c\u3002",
+                _ => $"{label}\u7684\u503c\u65e0\u6548\u3002"
+            };
+        }
+
+        return error switch
+        {
+            FormInputValidationError.Required => $"{label} is required.",
+            FormInputValidationError.Email => "Enter a complete email address, such as name@company.com.",
+            FormInputValidationError.Phone => "Enter a valid phone number containing 6 to 15 digits.",
+            FormInputValidationError.Number => "Enter a valid number.",
+            FormInputValidationError.Date => "Choose a valid date.",
+            FormInputValidationError.Url => "Enter a complete http or https URL.",
+            FormInputValidationError.Option => "Choose a value from the available options.",
+            FormInputValidationError.Checkbox => "This checkbox value is invalid.",
+            _ => $"{label} has an invalid value."
         };
     }
 
@@ -195,20 +287,21 @@
         ? "sc-form-field sc-form-field--wide"
         : "sc-form-field";
 
-    private static string InputClass(PublicFormFieldDto field)
+    private string InputClass(PublicFormFieldDto field)
     {
         var size = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize);
-        return NormalizedType(field.Type) == "textarea"
+        var baseClass = NormalizedType(field.Type) == "textarea"
             ? $"sc-form-input sc-form-input--size-{size}"
             : "sc-form-input";
+        return HasError(FieldKey(field)) ? $"{baseClass} sc-form-input--invalid" : baseClass;
     }
+
+    private bool HasError(string key) => _fieldErrors.ContainsKey(key);
 
     private static int? MaxLengthAttribute(PublicFormFieldDto field)
     {
-        var capability = FormInputTypeCatalog.Get(field.Type);
-        if (!capability.SupportsMaxCharacters) return null;
-
-        return FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength);
+        if (field.MaxLength <= 0) return null;
+        return Math.Clamp(field.MaxLength, 1, FormInputTypeCatalog.MaxCharactersLimit);
     }
 
     private static string NormalizedType(string? type) => FormInputTypeCatalog.NormalizeType(type);
@@ -216,10 +309,19 @@
     private static string InputType(string? type) => NormalizedType(type) switch
     {
         "tel" => "tel",
-        "number" => "number",
+        "number" => "text",
         "date" => "date",
         "url" => "url",
         "email" => "email",
         _ => "text"
+    };
+
+    private static string? InputMode(string? type) => NormalizedType(type) switch
+    {
+        "number" => "decimal",
+        "tel" => "tel",
+        "email" => "email",
+        "url" => "url",
+        _ => null
     };
 }

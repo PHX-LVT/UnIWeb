@@ -5,11 +5,17 @@ namespace FullProject.Security;
 
 public static class AdminAuthorization
 {
-    public static bool HasPermission(ClaimsPrincipal user, string permission) =>
-        IsAdminAdmin(user) || user.Claims.Any(claim =>
-            string.Equals(claim.Type, "permission", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(claim.Value, permission, StringComparison.OrdinalIgnoreCase)) ||
-        HasDefaultRolePermission(user, permission);
+    public static bool HasPermission(ClaimsPrincipal user, string permission)
+    {
+        if (IsViewer(user) && IsFormManagementPermission(permission))
+            return false;
+
+        return IsAdminAdmin(user) ||
+            user.Claims.Any(claim =>
+                string.Equals(claim.Type, "permission", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(claim.Value, permission, StringComparison.OrdinalIgnoreCase)) ||
+            HasDefaultRolePermission(user, permission);
+    }
 
     public static bool CanUsePageBuilder(ClaimsPrincipal user) =>
         HasPermission(user, AdminPermissionKeys.PageBuilder);
@@ -17,6 +23,17 @@ public static class AdminAuthorization
     private static bool IsAdminAdmin(ClaimsPrincipal user) =>
         string.Equals(user.FindFirst(ClaimTypes.Role)?.Value, AdminRole.AdminAdmin.ToString(), StringComparison.OrdinalIgnoreCase) ||
         string.Equals(user.FindFirst("role")?.Value, AdminRole.AdminAdmin.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsViewer(ClaimsPrincipal user) =>
+        string.Equals(user.FindFirst(ClaimTypes.Role)?.Value, AdminRole.Viewer.ToString(), StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(user.FindFirst("role")?.Value, AdminRole.Viewer.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFormManagementPermission(string permission) =>
+        string.Equals(permission, AdminPermissionKeys.ViewFormDefinitions, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(permission, AdminPermissionKeys.EditFormDefinitions, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(permission, AdminPermissionKeys.ViewFormSubmissions, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(permission, AdminPermissionKeys.ManageFormSubmissions, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(permission, AdminPermissionKeys.ExportFormSubmissions, StringComparison.OrdinalIgnoreCase);
 
     private static bool HasDefaultRolePermission(ClaimsPrincipal user, string permission)
     {

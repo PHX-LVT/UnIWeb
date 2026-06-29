@@ -79,6 +79,7 @@ namespace AdminSite.Services
 
         public bool HasPermission(string permission) =>
             CurrentUser is not null &&
+            !(CurrentUser.Role == AdminRole.Viewer && IsFormManagementPermission(permission)) &&
             (CurrentUser.Role == AdminRole.AdminAdmin ||
              CurrentUser.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase) ||
              HasDefaultRolePermission(CurrentUser.Role, permission));
@@ -130,6 +131,13 @@ namespace AdminSite.Services
                 return WriterDefaults.Contains(permission, StringComparer.OrdinalIgnoreCase);
             return false;
         }
+
+        private static bool IsFormManagementPermission(string permission) =>
+            string.Equals(permission, AdminPermissionKeys.ViewFormDefinitions, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(permission, AdminPermissionKeys.EditFormDefinitions, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(permission, AdminPermissionKeys.ViewFormSubmissions, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(permission, AdminPermissionKeys.ManageFormSubmissions, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(permission, AdminPermissionKeys.ExportFormSubmissions, StringComparison.OrdinalIgnoreCase);
 
         private static readonly string[] ManagerDefaults =
         [

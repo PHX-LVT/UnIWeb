@@ -88,18 +88,18 @@
         </div>
     </div>
 
-    <div class="ez-canvas__viewport">
+    <div class="ez-canvas__viewport @(IsInteractivePreview ? "ez-canvas__viewport--interactive-preview" : "")">
 
-        <div class="ez-canvas__preview-shell @(ArrangeMode ? "ez-canvas__preview-shell--arrange" : "")"
-             style="height: @(ScaledIframeHeight)px;">
+        <div class="ez-canvas__preview-shell @(ArrangeMode ? "ez-canvas__preview-shell--arrange" : "") @(IsInteractivePreview ? "ez-canvas__preview-shell--interactive-preview" : "")"
+             style="@PreviewShellStyle">
             <div class="ez-canvas__preview-scale"
-                 style="height: @(_iframeHeight)px;">
+                 style="@PreviewScaleStyle">
 
                 <iframe id="ez-preview-iframe"
                         @key="PreviewUrl"
                         src="@PreviewUrl"
-                        style="width: 100%; height: @(_iframeHeight)px; border: none; display: block; pointer-events: @(ArrangeMode ? "none" : "auto");"
-                        scrolling="no" />
+                        style="@PreviewIframeStyle"
+                        scrolling="@PreviewIframeScrolling" />
 
                 @if (!Sections.Any())
                 {
@@ -109,7 +109,7 @@
                         <span>@T("AddSectionToStart")</span>
                     </div>
                 }
-                else if (!_sectionPositions.Any())
+                else if (!IsInteractivePreview && !_sectionPositions.Any())
                 {
                     <div class="ez-canvas-empty ez-canvas-empty--loading">
                         <i class="fas fa-spinner fa-spin"></i>
@@ -306,19 +306,34 @@
     private string? _currentLang;
     private bool? _currentCanModify;
     private bool? _currentCanArrange;
+    private bool _previewOverlayDisposed;
     private int _previewVersion;
     private bool IsChildPage => !string.IsNullOrWhiteSpace(Page.ParentPageId);
     private bool CanAddChildPage => !IsChildPage;
     private bool CanModify => CanEdit && EditMode;
     private bool CanArrange => CanEdit && ArrangeMode;
+    private bool IsInteractivePreview => !CanModify && !CanArrange;
+    private string PreviewMode => CanArrange ? "arrange" : CanModify ? "editor" : "preview";
     private string AddChildTitle => CanAddChildPage
         ? "Create a child page under this parent page."
         : "Child pages cannot have child pages. Select the parent page to add another child page.";
 
     private string PreviewUrl =>
-        $"/preview/{Page.Id}?lang={Uri.EscapeDataString(AdminLanguage)}&v={_previewVersion}";
+        $"/preview/{Page.Id}?lang={Uri.EscapeDataString(AdminLanguage)}&v={_previewVersion}&mode={PreviewMode}";
 
     private double ScaledIframeHeight => _iframeHeight * PreviewScale;
+    private string PreviewShellStyle => IsInteractivePreview
+        ? "height: 100%;"
+        : $"height: {CssNumber(ScaledIframeHeight)}px;";
+    private string PreviewScaleStyle => IsInteractivePreview
+        ? $"height: {CssNumber(100 / PreviewScale)}%;"
+        : $"height: {CssNumber(_iframeHeight)}px;";
+    private string PreviewIframeStyle => IsInteractivePreview
+        ? "width: 100%; height: 100%; border: none; display: block; pointer-events: auto;"
+        : $"width: 100%; height: {CssNumber(_iframeHeight)}px; border: none; display: block; pointer-events: {(ArrangeMode ? "none" : "auto")};";
+    private string PreviewIframeScrolling => IsInteractivePreview ? "auto" : "no";
+    private static string CssNumber(double value) =>
+        value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
     private IEnumerable<PageChoice> PageChoices
     {
         get
@@ -349,6 +364,26 @@
     {
         if (firstRender)
             _dotNetRef = DotNetObjectReference.Create(this);
+
+        if (IsInteractivePreview)
+        {
+            if (!_previewOverlayDisposed)
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("disposeCanvasOverlay");
+                }
+                catch
+                {
+                }
+
+                _previewOverlayDisposed = true;
+            }
+
+            return;
+        }
+
+        _previewOverlayDisposed = false;
 
         if (!_overlayInitialized && _dotNetRef is not null)
         {
@@ -417,6 +452,7 @@
         _overlayInitialized = false;
         _sortableInitialized = false;
         _arrangeEditorInitialized = false;
+        _previewOverlayDisposed = false;
     }
 
     public async ValueTask DisposeAsync()

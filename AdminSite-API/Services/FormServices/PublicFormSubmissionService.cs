@@ -43,7 +43,7 @@ public sealed class PublicFormSubmissionService
         if (definition is null)
             return NotFound();
 
-        var definitionErrors = _validation.ValidateDefinition(definition);
+        var definitionErrors = await _validation.ValidateDefinitionAsync(definition);
         if (definitionErrors.Count > 0)
         {
             _logger.LogError("Active form definition {FormKey} is invalid: {Errors}", normalizedKey, string.Join("; ", definitionErrors));
@@ -56,7 +56,7 @@ public sealed class PublicFormSubmissionService
 
         var language = NormalizeLanguage(request.Language);
         var data = request.Data ?? new Dictionary<string, string>();
-        var fieldErrors = _validation.Validate(definition, data, language);
+        var fieldErrors = await _validation.ValidateAsync(definition, data, language);
         if (fieldErrors.Count > 0)
         {
             return (StatusCodes.Status422UnprocessableEntity, new PublicFormSubmitResponse
@@ -74,7 +74,7 @@ public sealed class PublicFormSubmissionService
         var securityResult = await _security.ValidateAsync(
             normalizedKey,
             securityInput,
-            _validation.BuildSecurityRules(definition));
+            await _validation.BuildSecurityRulesAsync(definition));
         if (!securityResult.Accepted)
         {
             return (securityResult.StatusCode, new PublicFormSubmitResponse

@@ -3454,6 +3454,9 @@ button.sc-library__media--video {
 .sc-form-field {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     gap: 6px;
 }
 
@@ -3475,6 +3478,9 @@ button.sc-library__media--video {
 
 .sc-form-input {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     padding: 10px 14px;
     color: var(--navy);
     font-family: inherit;
@@ -3487,6 +3493,20 @@ button.sc-library__media--video {
 
 .sc-form-input:focus {
     border-color: var(--gold);
+}
+
+.sc-form-input--invalid,
+.sc-form-input--invalid:focus {
+    border-color: #c62828;
+    box-shadow: 0 0 0 3px rgba(198, 40, 40, .12);
+}
+
+.sc-form-field__error,
+.sc-public-modal__field-error {
+    color: #c62828;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
 }
 
 textarea.sc-form-input {
@@ -4092,6 +4112,10 @@ textarea.sc-form-input--size-5 {
     gap: 10px;
 }
 
+.sc-public-modal__field--checkbox .sc-public-modal__field-error {
+    grid-column: 1 / -1;
+}
+
 .sc-public-modal__checkbox-label {
     min-width: 0;
     line-height: 1.35;
@@ -4164,6 +4188,12 @@ textarea.sc-form-input--size-5 {
     border-color: var(--navy);
     outline: 0;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--navy) 20%, transparent);
+}
+
+.sc-public-modal__form .sc-public-modal__input--invalid,
+.sc-public-modal__form .sc-public-modal__input--invalid:focus {
+    border-color: #c62828;
+    box-shadow: 0 0 0 3px rgba(198, 40, 40, .12);
 }
 
 .sc-public-modal__form .sc-btn {

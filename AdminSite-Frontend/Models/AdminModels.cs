@@ -676,6 +676,7 @@ namespace AdminSite.Models
     {
         public string FormDefinitionId { get; set; } = string.Empty;
         public int TotalCount { get; set; }
+        public long SubmissionCount { get; set; }
         public List<FormDefinitionUsageItemModel> Items { get; set; } = new();
     }
     public class FormSubmissionFieldModel
@@ -737,6 +738,35 @@ namespace AdminSite.Models
         public string Value { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
         public int Order { get; set; }
+    }
+
+    public class FormInputTypeModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string LabelKey { get; set; } = string.Empty;
+        public Dictionary<string, string> Name { get; set; } = new();
+        public bool Active { get; set; } = true;
+        public bool SupportsMaxCharacters { get; set; }
+        public bool SupportsOptions { get; set; }
+        public bool SupportsInputBoxSize { get; set; }
+        public bool UsesMultilineInput { get; set; }
+        public int DefaultMaxCharacters { get; set; }
+        public int DefaultInputBoxSize { get; set; } = 1;
+        public int Order { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class FormInputTypeUpdateModel
+    {
+        public Dictionary<string, string> Name { get; set; } = new();
+        public bool Active { get; set; } = true;
+        public bool SupportsMaxCharacters { get; set; }
+        public bool SupportsOptions { get; set; }
+        public bool SupportsInputBoxSize { get; set; }
+        public int DefaultMaxCharacters { get; set; }
+        public int DefaultInputBoxSize { get; set; } = 1;
     }
 
     public class FormFieldDefinitionModel

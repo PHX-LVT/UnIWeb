@@ -8,10 +8,10 @@
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
 
-        var target = Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions
-            ? "/forms/definitions"
-            : Auth.CanViewFormSubmissions
-                ? "/forms/submissions"
+        var target = Auth.CanViewFormSubmissions
+            ? "/forms/submissions"
+            : Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions
+                ? "/forms/definitions"
                 : "/";
         Nav.NavigateTo(target, replace: true);
     }

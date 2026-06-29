@@ -8,10 +8,21 @@
     padding: 1rem;
 }
 
+.ez-canvas__viewport--interactive-preview {
+    overflow: auto;
+}
+
 .ez-canvas__preview-shell {
     position: relative;
     width: 100%;
     min-width: 980px;
+}
+
+.ez-canvas__preview-shell--interactive-preview {
+    min-height: 480px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, .16);
 }
 
 .ez-canvas__preview-scale {
@@ -19,6 +30,10 @@
     width: 142.857%;
     transform: scale(.7);
     transform-origin: top left;
+}
+
+.ez-canvas__preview-shell--interactive-preview .ez-canvas__preview-scale {
+    overflow: hidden;
 }
 
 .ez-canvas-empty {

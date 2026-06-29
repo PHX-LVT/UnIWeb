@@ -15,9 +15,10 @@ namespace AdminSite.Services
             FormSubmissionStatusModel? status,
             string? search,
             DateTime? from = null,
-            DateTime? to = null)
+            DateTime? to = null,
+            string? formId = null)
         {
-            var suffix = BuildQuery(formKey, status, search, from, to);
+            var suffix = BuildQuery(formKey, status, search, from, to, formId);
             return _http.GetAsync<List<FormSubmissionModel>>($"api/admin/forms/submissions{suffix}");
         }
 
@@ -26,9 +27,11 @@ namespace AdminSite.Services
             FormSubmissionStatusModel? status,
             string? search,
             DateTime? from,
-            DateTime? to)
+            DateTime? to,
+            string? formId = null,
+            string? language = null)
         {
-            var suffix = BuildQuery(formKey, status, search, from, to);
+            var suffix = BuildQuery(formKey, status, search, from, to, formId, language);
             return _http.GetFileAsync($"api/admin/forms/submissions/export{suffix}");
         }
 
@@ -52,6 +55,27 @@ namespace AdminSite.Services
 
         public Task<ApiResponse<List<FormDefinitionModel>>> GetDefinitionsAsync() =>
             _http.GetAsync<List<FormDefinitionModel>>("api/admin/forms/definitions");
+
+        public Task<ApiResponse<List<FormInputTypeModel>>> GetInputTypesAsync() =>
+            _http.GetAsync<List<FormInputTypeModel>>("api/admin/forms/types");
+
+        public Task<ApiResponse<FormInputTypeModel>> SaveInputTypeAsync(FormInputTypeModel inputType)
+        {
+            var request = new FormInputTypeUpdateModel
+            {
+                Name = inputType.Name,
+                Active = inputType.Active,
+                SupportsMaxCharacters = inputType.SupportsMaxCharacters,
+                SupportsOptions = inputType.SupportsOptions,
+                SupportsInputBoxSize = inputType.SupportsInputBoxSize,
+                DefaultMaxCharacters = inputType.DefaultMaxCharacters,
+                DefaultInputBoxSize = inputType.DefaultInputBoxSize
+            };
+
+            return _http.PutAsync<FormInputTypeModel>(
+                $"api/admin/forms/types/{Uri.EscapeDataString(inputType.Type)}",
+                request);
+        }
 
         public Task<ApiResponse<FormDefinitionUsageModel>> GetDefinitionUsageAsync(string id) =>
             _http.GetAsync<FormDefinitionUsageModel>($"api/admin/forms/definitions/{id}/usage");
@@ -83,14 +107,18 @@ namespace AdminSite.Services
             FormSubmissionStatusModel? status,
             string? search,
             DateTime? from = null,
-            DateTime? to = null)
+            DateTime? to = null,
+            string? formId = null,
+            string? language = null)
         {
             var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(formId)) query.Add($"formId={Uri.EscapeDataString(formId)}");
             if (!string.IsNullOrWhiteSpace(formKey)) query.Add($"formKey={Uri.EscapeDataString(formKey)}");
             if (status is not null) query.Add($"status={status}");
             if (!string.IsNullOrWhiteSpace(search)) query.Add($"search={Uri.EscapeDataString(search)}");
             if (from is not null) query.Add($"from={Uri.EscapeDataString(from.Value.ToString("yyyy-MM-dd"))}");
             if (to is not null) query.Add($"to={Uri.EscapeDataString(to.Value.ToString("yyyy-MM-dd"))}");
+            if (!string.IsNullOrWhiteSpace(language)) query.Add($"language={Uri.EscapeDataString(language)}");
             return query.Count == 0 ? string.Empty : $"?{string.Join("&", query)}";
         }
     }

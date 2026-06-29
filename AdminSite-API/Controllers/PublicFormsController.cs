@@ -29,7 +29,7 @@ public sealed class PublicFormsController : ControllerBase
         var definition = await _definitions.GetActiveByKeyAsync(formKey);
         return definition is null
             ? NotFound(ApiResult.NotFound("Form not found."))
-            : Ok(ApiResult.Ok(FormDefinitionService.MapPublic(definition)));
+            : Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition)));
     }
 
     [HttpGet("by-id/{id}")]
@@ -38,7 +38,7 @@ public sealed class PublicFormsController : ControllerBase
         var definition = await _definitions.GetActiveByIdAsync(id);
         return definition is null
             ? NotFound(ApiResult.NotFound("Form not found."))
-            : Ok(ApiResult.Ok(FormDefinitionService.MapPublic(definition)));
+            : Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition)));
     }
 
     [HttpPost("{formKey}/submit")]

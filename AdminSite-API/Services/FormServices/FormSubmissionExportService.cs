@@ -10,12 +10,14 @@ public sealed class FormSubmissionExportService
 
     public byte[] BuildXlsx(
         IReadOnlyCollection<FormSubmission> submissions,
-        IReadOnlyCollection<FormDefinition>? definitions = null)
+        IReadOnlyCollection<FormDefinition>? definitions = null,
+        string language = "en")
     {
+        var exportLanguage = NormalizeLanguage(language);
         var rows = submissions
             .OrderByDescending(submission => submission.SubmittedAt)
             .ToList();
-        var fieldColumns = BuildFieldColumns(rows, definitions ?? Array.Empty<FormDefinition>());
+        var fieldColumns = BuildFieldColumns(rows, definitions ?? Array.Empty<FormDefinition>(), exportLanguage);
         var table = BuildTable(rows, fieldColumns);
 
         using var stream = new MemoryStream();
@@ -35,7 +37,8 @@ public sealed class FormSubmissionExportService
 
     private static List<ExportFieldColumn> BuildFieldColumns(
         IEnumerable<FormSubmission> submissions,
-        IReadOnlyCollection<FormDefinition> definitions)
+        IReadOnlyCollection<FormDefinition> definitions,
+        string language)
     {
         var columns = new Dictionary<string, ExportFieldColumn>(StringComparer.OrdinalIgnoreCase);
 
@@ -48,7 +51,8 @@ public sealed class FormSubmissionExportService
             if (string.IsNullOrWhiteSpace(key))
                 continue;
 
-            var label = Clean(field.Label);
+            var isDeletedField = IsDeletedField(entry.Submission, field, definitions);
+            var label = ResolveFieldLabel(entry.Submission, field, definitions, language, isDeletedField);
             if (!columns.TryGetValue(key, out var column))
             {
                 column = new ExportFieldColumn
@@ -61,7 +65,7 @@ public sealed class FormSubmissionExportService
                 columns[key] = column;
             }
 
-            if (IsDeletedField(entry.Submission, field, definitions))
+            if (isDeletedField)
                 column.HasDeletedSnapshot = true;
         }
 
@@ -182,6 +186,12 @@ public sealed class FormSubmissionExportService
     private static string Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
 
+    private static string NormalizeLanguage(string? language)
+    {
+        var clean = language?.Trim().ToLowerInvariant() ?? "en";
+        return clean.Length is > 0 and <= 12 ? clean : "en";
+    }
+
     private static string TrimExcelCell(string? value)
     {
         var clean = Clean(value);
@@ -263,13 +273,47 @@ public sealed class FormSubmissionExportService
         if (definitions.Count == 0)
             return false;
 
-        var definition = definitions.FirstOrDefault(item =>
-            string.Equals(item.Key, submission.FormKey, StringComparison.OrdinalIgnoreCase));
+        var definition = ResolveDefinitionForSubmission(submission, definitions);
         if (definition is null)
             return false;
 
         return !definition.Fields.Any(activeField =>
             string.Equals(activeField.Key, field.Key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ResolveFieldLabel(
+        FormSubmission submission,
+        FormSubmissionFieldSnapshot field,
+        IReadOnlyCollection<FormDefinition> definitions,
+        string language,
+        bool isDeletedField)
+    {
+        if (!isDeletedField && definitions.Count > 0)
+        {
+            var definition = ResolveDefinitionForSubmission(submission, definitions);
+            var activeField = definition?.Fields.FirstOrDefault(item =>
+                string.Equals(item.Key, field.Key, StringComparison.OrdinalIgnoreCase));
+            if (activeField is not null)
+                return Clean(FormValidationService.ResolveText(activeField.Label, language, field.Label));
+        }
+
+        return Clean(field.Label);
+    }
+
+    private static FormDefinition? ResolveDefinitionForSubmission(
+        FormSubmission submission,
+        IReadOnlyCollection<FormDefinition> definitions)
+    {
+        if (!string.IsNullOrWhiteSpace(submission.FormId))
+        {
+            var byId = definitions.FirstOrDefault(item =>
+                string.Equals(item.Id, submission.FormId, StringComparison.Ordinal));
+            if (byId is not null)
+                return byId;
+        }
+
+        return definitions.FirstOrDefault(item =>
+            string.Equals(item.Key, submission.FormKey, StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class ExportFieldColumn

@@ -81,6 +81,7 @@ builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<FormSubmissionService>();
 builder.Services.AddScoped<FormSubmissionExportService>();
 builder.Services.AddScoped<FormSubmissionSecurityService>();
+builder.Services.AddScoped<FormInputTypeService>();
 builder.Services.AddScoped<FormDefinitionService>();
 builder.Services.AddScoped<FormValidationService>();
 builder.Services.AddScoped<PublicFormSubmissionService>();
@@ -315,6 +316,11 @@ try
             resourceAlbumCleanup.AlbumCount,
             resourceAlbumCleanup.ResourceCount);
     }
+
+    await scope.ServiceProvider.GetRequiredService<FormInputTypeService>()
+        .EnsureDefaultsAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    logger.LogInformation("Default form input types checked.");
 
     await scope.ServiceProvider.GetRequiredService<FormDefinitionService>()
         .EnsureDefaultDefinitionsAsync()

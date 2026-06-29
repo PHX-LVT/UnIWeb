@@ -17,6 +17,7 @@ namespace FullProject.Controllers
         private readonly FormSubmissionService _submissions;
         private readonly FormSubmissionExportService _submissionExports;
         private readonly FormDefinitionService _definitions;
+        private readonly FormInputTypeService _inputTypes;
         private readonly FormValidationService _validation;
         private readonly AuthService _auth;
 
@@ -24,12 +25,14 @@ namespace FullProject.Controllers
             FormSubmissionService submissions,
             FormSubmissionExportService submissionExports,
             FormDefinitionService definitions,
+            FormInputTypeService inputTypes,
             FormValidationService validation,
             AuthService auth)
         {
             _submissions = submissions;
             _submissionExports = submissionExports;
             _definitions = definitions;
+            _inputTypes = inputTypes;
             _validation = validation;
             _auth = auth;
         }
@@ -37,13 +40,14 @@ namespace FullProject.Controllers
         [HttpGet("submissions")]
         [Authorize(Policy = AdminPermissionKeys.ViewFormSubmissions)]
         public async Task<IActionResult> GetAll(
+            [FromQuery] string? formId,
             [FromQuery] string? formKey,
             [FromQuery] FormSubmissionStatus? status,
             [FromQuery] string? search,
             [FromQuery] DateTime? from,
             [FromQuery] DateTime? to)
         {
-            var submissions = await _submissions.GetAllAsync(formKey, status, search, from, to);
+            var submissions = await _submissions.GetAllAsync(formKey, status, search, from, to, formId);
             var definitions = await _definitions.GetAllAsync();
             return Ok(ApiResult.Ok(submissions
                 .Where(s => !string.Equals(s.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase))
@@ -54,19 +58,21 @@ namespace FullProject.Controllers
         [HttpGet("submissions/export")]
         [Authorize(Policy = AdminPermissionKeys.ExportFormSubmissions)]
         public async Task<IActionResult> ExportSubmissions(
+            [FromQuery] string? formId,
             [FromQuery] string? formKey,
             [FromQuery] FormSubmissionStatus? status,
             [FromQuery] string? search,
             [FromQuery] DateTime? from,
-            [FromQuery] DateTime? to)
+            [FromQuery] DateTime? to,
+            [FromQuery] string? language)
         {
-            var submissions = await _submissions.GetAllAsync(formKey, status, search, from, to);
+            var submissions = await _submissions.GetAllAsync(formKey, status, search, from, to, formId);
             var visibleSubmissions = submissions
                 .Where(s => !string.Equals(s.PageId, "modal:sync", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             var definitions = await _definitions.GetAllAsync();
-            var bytes = _submissionExports.BuildXlsx(visibleSubmissions, definitions);
+            var bytes = _submissionExports.BuildXlsx(visibleSubmissions, definitions, language ?? "en");
             var filename = $"form-submissions-{DateTime.UtcNow:yyyyMMdd-HHmmss}.xlsx";
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
         }
@@ -175,7 +181,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> GetDefinitions()
         {
             var definitions = await _definitions.GetAllAsync();
-            return Ok(ApiResult.Ok(definitions.Select(FormDefinitionService.MapPublic).ToList()));
+            return Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definitions)));
         }
 
         [HttpGet("definitions/{id}")]
@@ -185,7 +191,7 @@ namespace FullProject.Controllers
             var definition = await _definitions.GetByIdAsync(id);
             return definition is null
                 ? NotFound(ApiResult.NotFound("Form definition not found."))
-                : Ok(ApiResult.Ok(FormDefinitionService.MapPublic(definition)));
+                : Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition)));
         }
 
 
@@ -204,12 +210,23 @@ namespace FullProject.Controllers
         [Authorize(Policy = AdminPermissionKeys.EditFormDefinitions)]
         public async Task<IActionResult> CreateDefinition([FromBody] FormDefinitionUpsertRequest request)
         {
-            var errors = _validation.ValidateDefinition(request);
+            var errors = await _validation.ValidateDefinitionAsync(request);
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
 
-            var definition = await _definitions.UpsertAsync(request);
-            return Ok(ApiResult.Ok(FormDefinitionService.MapPublic(definition), "Form definition saved."));
+            var normalizedRequestKey = FormDefinitionService.NormalizeKey(request.Key);
+            if (normalizedRequestKey is not null && await _definitions.GetByKeyAsync(normalizedRequestKey) is not null)
+                return BadRequest(ApiResult.BadRequest("Form Key already exists. Use a different Form Key."));
+
+            try
+            {
+                var definition = await _definitions.UpsertAsync(request);
+                return Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition), "Form definition saved."));
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Form Key already exists", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(ApiResult.BadRequest("Form Key already exists. Use a different Form Key."));
+            }
         }
 
         [HttpPut("definitions/{id}")]
@@ -227,12 +244,33 @@ namespace FullProject.Controllers
             if (existing.Active && !request.Active && await _definitions.IsReferencedAsync(id))
                 return BadRequest(ApiResult.BadRequest("This form is used by one or more FormBlocks or buttons. Remove those usages before disabling it."));
 
-            var errors = _validation.ValidateDefinition(request);
+            var permittedInactiveTypes = existing.Fields
+                .Select(field => FormInputTypeCatalog.NormalizeType(field.Type))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var errors = await _validation.ValidateDefinitionAsync(request, permittedInactiveTypes);
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
 
             var definition = await _definitions.UpsertAsync(request, id);
-            return Ok(ApiResult.Ok(FormDefinitionService.MapPublic(definition), "Form definition saved."));
+            return Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition), "Form definition saved."));
+        }
+
+        [HttpGet("types")]
+        [Authorize(Policy = AdminPermissionKeys.ViewFormDefinitions)]
+        public async Task<IActionResult> GetInputTypes()
+        {
+            var types = await _inputTypes.GetAllAsync();
+            return Ok(ApiResult.Ok(types));
+        }
+
+        [HttpPut("types/{type}")]
+        [Authorize(Policy = AdminPermissionKeys.EditFormDefinitions)]
+        public async Task<IActionResult> UpdateInputType(string type, [FromBody] FormInputTypeUpdateRequest request)
+        {
+            var updated = await _inputTypes.UpdateAsync(type, request);
+            return updated is null
+                ? NotFound(ApiResult.NotFound("Form input type not found."))
+                : Ok(ApiResult.Ok(updated, "Form input type saved."));
         }
 
         [HttpDelete("definitions/{id}")]
@@ -241,9 +279,6 @@ namespace FullProject.Controllers
         {
             if (await _definitions.IsReferencedAsync(id))
                 return BadRequest(ApiResult.BadRequest("This form is still used by one or more FormBlocks or buttons. Remove those usages before deleting it."));
-
-            if (await _definitions.HasSubmissionsAsync(id))
-                return BadRequest(ApiResult.BadRequest("This form already has submissions. Disable it instead, or permanently delete its submissions first."));
 
             var ok = await _definitions.DeleteAsync(id);
             return ok
@@ -303,13 +338,28 @@ namespace FullProject.Controllers
             if (definitions is null || definitions.Count == 0)
                 return false;
 
-            var definition = definitions.FirstOrDefault(item =>
-                string.Equals(item.Key, submission.FormKey, StringComparison.OrdinalIgnoreCase));
+            var definition = ResolveDefinitionForSubmission(submission, definitions);
             if (definition is null)
                 return false;
 
             return !definition.Fields.Any(activeField =>
                 string.Equals(activeField.Key, field.Key, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static FormDefinition? ResolveDefinitionForSubmission(
+            Models.FormSubmission submission,
+            IReadOnlyCollection<FormDefinition> definitions)
+        {
+            if (!string.IsNullOrWhiteSpace(submission.FormId))
+            {
+                var byId = definitions.FirstOrDefault(item =>
+                    string.Equals(item.Id, submission.FormId, StringComparison.Ordinal));
+                if (byId is not null)
+                    return byId;
+            }
+
+            return definitions.FirstOrDefault(item =>
+                string.Equals(item.Key, submission.FormKey, StringComparison.OrdinalIgnoreCase));
         }
 
         private async Task<AdminUser?> CurrentAdminAsync()

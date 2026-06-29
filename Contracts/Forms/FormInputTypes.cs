@@ -44,6 +44,8 @@ public static class FormInputTypeCatalog
 
     public static IReadOnlyList<FormInputTypeCapability> EditorTypes { get; } = Types;
 
+    public static IReadOnlyList<FormInputTypeCapability> BuiltInTypes { get; } = Types;
+
     public static string NormalizeType(string? type)
     {
         var normalized = type?.Trim().ToLowerInvariant();
@@ -88,4 +90,27 @@ public static class FormInputTypeCatalog
         var candidate = value <= 0 ? capability.DefaultInputBoxSize : value;
         return Math.Clamp(candidate, MinInputBoxSize, MaxInputBoxSize);
     }
+
+    public static int NormalizeMaxCharacters(FormInputTypeCapability capability, int value)
+    {
+        if (!capability.SupportsMaxCharacters)
+            return 0;
+
+        var candidate = value <= 0 ? capability.DefaultMaxCharacters : value;
+        return Math.Clamp(candidate, 1, MaxCharactersLimit);
+    }
+
+    public static int NormalizeInputBoxSize(FormInputTypeCapability capability, int value)
+    {
+        if (!capability.SupportsInputBoxSize)
+            return 1;
+
+        var candidate = value <= 0 ? capability.DefaultInputBoxSize : value;
+        return Math.Clamp(candidate, MinInputBoxSize, MaxInputBoxSize);
+    }
+
+    public static int MaximumInputLength(FormInputTypeCapability capability) =>
+        capability.SupportsMaxCharacters
+            ? Math.Clamp(capability.DefaultMaxCharacters, 1, MaxCharactersLimit)
+            : 0;
 }

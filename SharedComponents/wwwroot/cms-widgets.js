@@ -705,13 +705,8 @@ function getPublicFieldCapability(type) {
 }
 
 function normalizePublicMaxLength(type, value) {
-    const capability = getPublicFieldCapability(type);
-    if (!capability.max) return 0;
-
     const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-        return type === "textarea" ? 2000 : type === "email" ? 254 : type === "tel" ? 40 : 500;
-    }
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
 
     return Math.min(Math.max(parsed, 1), 2000);
 }
@@ -766,6 +761,7 @@ function buildPublicModalDialog(typeOrDefinition) {
     const form = document.createElement("form");
     form.className = `sc-public-modal__form sc-public-modal__form--${layout}`;
     form.dataset.modalType = config.type;
+    form.noValidate = true;
     form.addEventListener("submit", async e => {
         e.preventDefault();
         await submitPublicModalForm(form, submit, status);
@@ -847,14 +843,15 @@ function buildPublicModalField(field) {
         input.type = "checkbox";
         input.required = !!field.required;
     } else if (!capability.multiline) {
-        input.type = capability.inputType || "text";
+        input.type = type === "number" ? "text" : capability.inputType || "text";
+        if (type === "number") input.inputMode = "decimal";
     }
 
     if (type !== "select" && type !== "checkbox") {
         input.placeholder = displayLabel;
     }
 
-    if (capability.max && maxLength > 0) {
+    if (maxLength > 0) {
         input.maxLength = maxLength;
     }
 
@@ -879,7 +876,101 @@ function buildPublicModalField(field) {
     } else {
         wrapper.append(input);
     }
+
+    const error = document.createElement("span");
+    error.className = "sc-public-modal__field-error";
+    error.setAttribute("role", "alert");
+    error.hidden = true;
+    wrapper.appendChild(error);
+
+    input.addEventListener("blur", () => validatePublicModalField(input, true));
+    input.addEventListener("input", () => {
+        if (input.classList.contains("sc-public-modal__input--invalid")) {
+            validatePublicModalField(input, true);
+        }
+    });
+    input.addEventListener("change", () => validatePublicModalField(input, true));
     return wrapper;
+}
+
+function validatePublicModalField(field, showError) {
+    if (!field || field.name === "__website") return true;
+
+    const type = normalizePublicFieldType(field.dataset.fieldType || field.type);
+    const value = field.type === "checkbox" ? (field.checked ? "true" : "false") : field.value.trim();
+    let errorKey = "";
+
+    if ((type === "number" || type === "date") && field.validity?.badInput) {
+        errorKey = type === "number" ? "InvalidNumber" : "InvalidDate";
+    } else if (field.required && (field.type === "checkbox" ? !field.checked : !value)) {
+        errorKey = "FieldRequired";
+    } else if (value) {
+        if (type === "email" && !isValidPublicEmail(value)) errorKey = "InvalidEmail";
+        else if (type === "tel" && !isValidPublicPhone(value)) errorKey = "InvalidPhone";
+        else if (type === "number" && !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) errorKey = "InvalidNumber";
+        else if (type === "date" && !isValidPublicDate(value)) errorKey = "InvalidDate";
+        else if (type === "url" && !isValidPublicUrl(value)) errorKey = "InvalidUrl";
+        else if (type === "select" && !Array.from(field.options).some(option => option.value === value && !option.disabled)) errorKey = "InvalidOption";
+    }
+
+    setPublicModalFieldError(field, errorKey ? publicUiText(errorKey, getPublicUiLanguage()) : "", showError);
+    return !errorKey;
+}
+
+function setPublicModalFieldError(field, message, showError = true) {
+    const wrapper = field.closest(".sc-public-modal__field");
+    const error = wrapper?.querySelector(".sc-public-modal__field-error");
+    const invalid = !!message;
+    field.classList.toggle("sc-public-modal__input--invalid", invalid);
+    field.setAttribute("aria-invalid", invalid ? "true" : "false");
+    if (!error) return;
+    error.textContent = showError ? message : "";
+    error.hidden = !showError || !invalid;
+}
+
+function isValidPublicEmail(value) {
+    if (value.length > 254 || /\s/.test(value)) return false;
+    const at = value.lastIndexOf("@");
+    if (at <= 0 || at > 64 || at !== value.indexOf("@")) return false;
+    const local = value.slice(0, at);
+    const domain = value.slice(at + 1);
+    if (local.startsWith(".") || local.endsWith(".") || local.includes("..")) return false;
+    return /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(local) &&
+        /^(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?$/i.test(domain);
+}
+
+function isValidPublicPhone(value) {
+    if (value.length > 40 || !/^\+?[0-9().\-\s]+$/.test(value)) return false;
+    const digitCount = (value.match(/\d/g) || []).length;
+    return digitCount >= 6 && digitCount <= 15;
+}
+
+function isValidPublicDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function isValidPublicUrl(value) {
+    try {
+        const url = new URL(value);
+        return ["http:", "https:"].includes(url.protocol) && !!url.hostname;
+    } catch {
+        return false;
+    }
+}
+
+function applyPublicModalServerErrors(form, errors) {
+    if (!errors || typeof errors !== "object") return false;
+    let applied = false;
+    Object.entries(errors).forEach(([key, message]) => {
+        const field = Array.from(form.elements).find(element => element.name?.toLowerCase() === key.toLowerCase());
+        if (!field) return;
+        setPublicModalFieldError(field, message || publicUiText("InvalidValue", getPublicUiLanguage()), true);
+        applied = true;
+    });
+    return applied;
 }
 
 async function submitPublicModalForm(form, submit, status) {
@@ -899,12 +990,14 @@ async function submitPublicModalForm(form, submit, status) {
     status.textContent = "";
     status.className = "sc-public-modal__status";
 
-    const missingRequired = Array.from(form.querySelectorAll("input, textarea, select"))
-        .some(field => field.required && (field.type === "checkbox" ? !field.checked : !field.value.trim()));
+    const fields = Array.from(form.querySelectorAll("input, textarea, select"))
+        .filter(field => field.name !== "__website");
+    const valid = fields.map(field => validatePublicModalField(field, true)).every(Boolean);
 
-    if (missingRequired) {
-        status.textContent = publicUiText("RequiredFields", getPublicUiLanguage());
+    if (!valid) {
+        status.textContent = publicUiText("CorrectFields", getPublicUiLanguage());
         status.classList.add("sc-public-modal__status--error");
+        form.querySelector(".sc-public-modal__input--invalid")?.focus();
         return;
     }
 
@@ -924,6 +1017,13 @@ async function submitPublicModalForm(form, submit, status) {
         const result = await response.json().catch(() => null);
 
         if (!response.ok) {
+            const fieldErrors = result?.fieldErrors || result?.FieldErrors || result?.data?.fieldErrors || result?.Data?.FieldErrors;
+            if (applyPublicModalServerErrors(form, fieldErrors)) {
+                status.textContent = publicUiText("CorrectFields", getPublicUiLanguage());
+                status.classList.add("sc-public-modal__status--error");
+                form.querySelector(".sc-public-modal__input--invalid")?.focus();
+                return;
+            }
             throw new Error(result?.message || result?.Message || "Submit failed");
         }
 
@@ -1007,6 +1107,15 @@ function publicUiText(key, lang) {
         Password: { en: "Password", vi: "MÃ¡ÂºÂ­t khÃ¡ÂºÂ©u" },
         ForgotPassword: { en: "Forgot password?", vi: "QuÃƒÂªn mÃ¡ÂºÂ­t khÃ¡ÂºÂ©u?" },
         RequiredFields: { en: "Please complete all required fields.", vi: "Vui lÃƒÂ²ng Ã„â€˜iÃ¡Â»Ân Ã„â€˜Ã¡ÂºÂ§y Ã„â€˜Ã¡Â»Â§ cÃƒÂ¡c trÃ†Â°Ã¡Â»Âng bÃ¡ÂºÂ¯t buÃ¡Â»â„¢c." },
+        CorrectFields: { en: "Correct the highlighted fields.", vi: "Vui l\u00f2ng s\u1eeda c\u00e1c tr\u01b0\u1eddng \u0111\u01b0\u1ee3c \u0111\u00e1nh d\u1ea5u.", zh: "\u8bf7\u66f4\u6b63\u6807\u8bb0\u7684\u5b57\u6bb5\u3002" },
+        FieldRequired: { en: "This field is required.", vi: "Tr\u01b0\u1eddng n\u00e0y l\u00e0 b\u1eaft bu\u1ed9c.", zh: "\u6b64\u5b57\u6bb5\u4e3a\u5fc5\u586b\u9879\u3002" },
+        InvalidEmail: { en: "Enter a complete email address, such as name@company.com.", vi: "Nh\u1eadp email \u0111\u1ea7y \u0111\u1ee7, v\u00ed d\u1ee5 ten@congty.com.", zh: "\u8bf7\u8f93\u5165\u5b8c\u6574\u7684\u7535\u5b50\u90ae\u4ef6\u5730\u5740\u3002" },
+        InvalidPhone: { en: "Enter a valid phone number containing 6 to 15 digits.", vi: "Nh\u1eadp s\u1ed1 \u0111i\u1ec7n tho\u1ea1i h\u1ee3p l\u1ec7 c\u00f3 t\u1eeb 6 \u0111\u1ebfn 15 ch\u1eef s\u1ed1.", zh: "\u8bf7\u8f93\u5165\u5305\u542b 6 \u5230 15 \u4f4d\u6570\u5b57\u7684\u6709\u6548\u7535\u8bdd\u53f7\u7801\u3002" },
+        InvalidNumber: { en: "Enter a valid number.", vi: "Ch\u1ec9 nh\u1eadp m\u1ed9t s\u1ed1 h\u1ee3p l\u1ec7.", zh: "\u8bf7\u8f93\u5165\u6709\u6548\u6570\u5b57\u3002" },
+        InvalidDate: { en: "Choose a valid date.", vi: "Ch\u1ecdn m\u1ed9t ng\u00e0y h\u1ee3p l\u1ec7.", zh: "\u8bf7\u9009\u62e9\u6709\u6548\u65e5\u671f\u3002" },
+        InvalidUrl: { en: "Enter a complete http or https URL.", vi: "Nh\u1eadp \u0111\u1ecba ch\u1ec9 http ho\u1eb7c https \u0111\u1ea7y \u0111\u1ee7.", zh: "\u8bf7\u8f93\u5165\u5b8c\u6574\u7684 http \u6216 https \u5730\u5740\u3002" },
+        InvalidOption: { en: "Choose a value from the available options.", vi: "Ch\u1ecdn m\u1ed9t gi\u00e1 tr\u1ecb c\u00f3 trong danh s\u00e1ch.", zh: "\u8bf7\u4ece\u5217\u8868\u4e2d\u9009\u62e9\u4e00\u4e2a\u503c\u3002" },
+        InvalidValue: { en: "Enter a valid value.", vi: "Nh\u1eadp m\u1ed9t gi\u00e1 tr\u1ecb h\u1ee3p l\u1ec7.", zh: "\u8bf7\u8f93\u5165\u6709\u6548\u503c\u3002" },
         Submitting: { en: "Submitting...", vi: "Ã„Âang gÃ¡Â»Â­i..." },
         SubmitSuccess: { en: "Thank you, your message has been sent.", vi: "CÃ¡ÂºÂ£m Ã†Â¡n bÃ¡ÂºÂ¡n, thÃƒÂ´ng tin Ã„â€˜ÃƒÂ£ Ã„â€˜Ã†Â°Ã¡Â»Â£c gÃ¡Â»Â­i." },
         SubmitError: { en: "Something went wrong. Please try again.", vi: "Ã„ÂÃƒÂ£ xÃ¡ÂºÂ£y ra lÃ¡Â»â€”i. Vui lÃƒÂ²ng thÃ¡Â»Â­ lÃ¡ÂºÂ¡i." },

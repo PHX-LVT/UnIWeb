@@ -48,11 +48,11 @@ else
         </label>
         <label class="form-filter">
             <span>@T("Form")</span>
-            <select class="form-control" @bind="_formKey" @bind:after="OnFilterChanged">
+            <select class="form-control" @bind="_formId" @bind:after="OnFilterChanged">
                 <option value="">@T("AllForms")</option>
                 @foreach (var definition in _definitions)
                 {
-                    <option value="@definition.Key">@Text(definition.Name, definition.Key)</option>
+                    <option value="@definition.Id">@Text(definition.Name, definition.Key)</option>
                 }
             </select>
         </label>
@@ -381,7 +381,7 @@ else
     private bool _exporting;
     private int _page = 1;
     private string _search = string.Empty;
-    private string _formKey = string.Empty;
+    private string _formId = string.Empty;
     private string _statusFilter = string.Empty;
     private string _fromDate = string.Empty;
     private string _toDate = string.Empty;
@@ -433,11 +433,12 @@ else
             ? parsed
             : (FormSubmissionStatusModel?)null;
         var submissions = await FormService.GetAllAsync(
-            _formKey,
+            null,
             status,
             _search,
             ParseDate(_fromDate),
-            ParseDate(_toDate));
+            ParseDate(_toDate),
+            _formId);
         var definitions = Auth.CanViewFormDefinitions
             ? await FormService.GetDefinitionsAsync()
             : new ApiResponse<List<FormDefinitionModel>> { Success = true, Data = new() };
@@ -471,31 +472,38 @@ else
     private async Task ResetFilters()
     {
         _search = string.Empty;
-        _formKey = string.Empty;
+        _formId = string.Empty;
         _statusFilter = string.Empty;
         _fromDate = string.Empty;
         _toDate = string.Empty;
         await LoadAsync();
     }
 
-    private void OnFilterChanged() => _page = 1;
+    private void OnFilterChanged()
+    {
+        _page = 1;
+        _selectedIds.Clear();
+    }
 
     private void OnSearchChanged(ChangeEventArgs e)
     {
         _search = e.Value?.ToString() ?? string.Empty;
         _page = 1;
+        _selectedIds.Clear();
     }
 
     private void OnFromDateChanged(ChangeEventArgs e)
     {
         _fromDate = e.Value?.ToString() ?? string.Empty;
         _page = 1;
+        _selectedIds.Clear();
     }
 
     private void OnToDateChanged(ChangeEventArgs e)
     {
         _toDate = e.Value?.ToString() ?? string.Empty;
         _page = 1;
+        _selectedIds.Clear();
     }
 
     private async Task ExportAsync()
@@ -508,11 +516,13 @@ else
                 : (FormSubmissionStatusModel?)null;
 
             var result = await FormService.ExportAsync(
-                _formKey,
+                null,
                 status,
                 _search,
                 ParseDate(_fromDate),
-                ParseDate(_toDate));
+                ParseDate(_toDate),
+                _formId,
+                AdminLanguage);
 
             if (result.Success)
             {
@@ -599,8 +609,11 @@ else
         await LoadAsync(false);
     }
 
-    private void SetPage(int page) =>
+    private void SetPage(int page)
+    {
         _page = Math.Clamp(page, 1, TotalPages);
+        _selectedIds.Clear();
+    }
 
     private string Summary(FormSubmissionModel sub) =>
         string.Join(" - ", sub.Fields
@@ -632,13 +645,26 @@ else
         if (_detail is null || _definitions.Count == 0)
             return false;
 
-        var definition = _definitions.FirstOrDefault(item =>
-            string.Equals(item.Key, _detail.FormKey, StringComparison.OrdinalIgnoreCase));
+        var definition = ResolveDefinitionForSubmission(_detail);
         if (definition is null)
             return false;
 
         return !definition.Fields.Any(activeField =>
             string.Equals(activeField.Key, field.Key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private FormDefinitionModel? ResolveDefinitionForSubmission(FormSubmissionModel submission)
+    {
+        if (!string.IsNullOrWhiteSpace(submission.FormId))
+        {
+            var byId = _definitions.FirstOrDefault(item =>
+                string.Equals(item.Id, submission.FormId, StringComparison.Ordinal));
+            if (byId is not null)
+                return byId;
+        }
+
+        return _definitions.FirstOrDefault(item =>
+            string.Equals(item.Key, submission.FormKey, StringComparison.OrdinalIgnoreCase));
     }
 
     private void UpsertSubmission(FormSubmissionModel updated)

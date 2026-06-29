@@ -33,6 +33,10 @@ else
                         @if (_usage.TotalCount == 0)
                         {
                             <div class="definition-usage__empty">@T("NotUsedAnywhereSafeToDelete")</div>
+                            @if (_usage.SubmissionCount > 0)
+                            {
+                                <div class="definition-usage__empty">@string.Format(T("HistoricalSubmissionsKept"), _usage.SubmissionCount)</div>
+                            }
                         }
                         else
                         {
@@ -47,6 +51,10 @@ else
                             @if (_usage.TotalCount > 8)
                             {
                                 <div class="definition-usage__empty">@string.Format(T("MoreCount"), _usage.TotalCount - 8)</div>
+                            }
+                            @if (_usage.SubmissionCount > 0)
+                            {
+                                <div class="definition-usage__empty">@string.Format(T("HistoricalSubmissionsKept"), _usage.SubmissionCount)</div>
                             }
                         }
                     </div>
@@ -99,8 +107,16 @@ else
 
                     <div class="definition-editor__identity">
                         <label class="form-filter">
-                            <span>@T("Key") <strong class="required-mark">*</strong></span>
-                            <input class="form-control" required @bind="_editingDefinition.Key" />
+                            <span>@T("FormKey") <strong class="required-mark">*</strong></span>
+                            <input class="form-control"
+                                   required
+                                   disabled="@FormKeyLocked"
+                                   title="@(FormKeyLocked ? T("FormKeyLockedHint") : null)"
+                                   @bind="_editingDefinition.Key" />
+                            @if (FormKeyLocked)
+                            {
+                                <small class="form-helper">@T("FormKeyLockedHint")</small>
+                            }
                         </label>
                         <div class="form-filter">
                             <span>@T("Name") <strong class="required-mark">*</strong></span>
@@ -141,11 +157,11 @@ else
                         <button class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="AddField">@T("AddField")</button>
                     </div>
 
-                    <div class="@DefinitionFieldGridClass">
+                    <div class="definition-field-grid">
                         @foreach (var field in _editingDefinition.Fields.OrderBy(f => f.Order))
                         {
                             var capability = Capability(field);
-                            <div class="@FieldCardClass(field)"
+                            <div class="field-card"
                                  @key="field"
                                  @ondragover:preventDefault
                                  @ondrop="() => DropField(field)">
@@ -158,37 +174,69 @@ else
                                 </div>
                                 <div class="field-card__controls">
                                     <label class="form-filter">
-                                        <span>@T("Type")</span>
-                                        <select class="form-control" value="@field.Type" @onchange="e => ChangeFieldType(field, e.Value?.ToString())">
-                                            @foreach (var type in FieldTypes)
+                                        <span>@T("FormFieldType")</span>
+                                        <select class="form-control"
+                                                disabled="@(!CanEditFieldIdentity(field))"
+                                                value="@field.Type"
+                                                @onchange="e => ChangeFieldType(field, e.Value?.ToString())">
+                                            @foreach (var type in AvailableFieldTypes(field))
                                             {
-                                                <option value="@type.Type">@T(type.LabelKey)</option>
+                                                <option value="@type.Type">@TypeName(type)</option>
                                             }
                                         </select>
+                                        @if (!CanEditFieldIdentity(field))
+                                        {
+                                            <small class="form-helper">@T("FieldIdentityLockedHint")</small>
+                                        }
                                     </label>
                                     <label class="form-filter">
-                                        <span>@T("Key") <strong class="required-mark">*</strong></span>
-                                        <input class="form-control" required placeholder="name" @bind="field.Key" />
+                                        <span>@T("FieldKey") <strong class="required-mark">*</strong></span>
+                                        <span class="field-key-input-row">
+                                            <input class="form-control"
+                                                   required
+                                                   placeholder="name"
+                                                   disabled="@(!CanEditFieldIdentity(field))"
+                                                   value="@field.Key"
+                                                   @onchange="e => SetFieldKey(field, e.Value)" />
+                                            @if (!string.IsNullOrWhiteSpace(field.Key))
+                                            {
+                                                <span class="field-key-badge @FieldKeyBadgeClass(field)">
+                                                    @FieldKeyBadgeText(field)
+                                                </span>
+                                            }
+                                        </span>
+                                        @if (CanEditFieldIdentity(field))
+                                        {
+                                            var suggestions = FieldKeySuggestions(field).ToList();
+                                            @if (suggestions.Count > 0)
+                                            {
+                                                <div class="field-key-suggestions">
+                                                    @foreach (var suggestion in suggestions)
+                                                    {
+                                                        <button type="button"
+                                                                class="field-key-chip"
+                                                                title="@string.Format(T("UsedInFormsCount"), suggestion.FormCount)"
+                                                                @onclick="() => ApplyFieldKeySuggestion(field, suggestion.Key)">
+                                                            <span>@suggestion.Key</span>
+                                                            <small>@suggestion.FormCount</small>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <small class="form-helper">@T("NoFieldKeySuggestions")</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <small class="form-helper">@T("FieldIdentityLockedHint")</small>
+                                        }
                                     </label>
                                     <label class="form-filter field-card__label-input">
                                         <span>@T("Label") <strong class="required-mark">*</strong></span>
                                         <input class="form-control" required placeholder="@T("Label")" value="@Text(field.Label, string.Empty)" @onchange="e => SetText(field.Label, e.Value)" />
                                     </label>
-                                    @if (capability.SupportsMaxCharacters)
-                                    {
-                                        <label class="form-filter">
-                                            <span>@T("MaxCharacters")</span>
-                                            <input class="form-control" type="number" min="1" max="2000" @bind="field.MaxLength" />
-                                        </label>
-                                    }
-                                    @if (capability.SupportsInputBoxSize)
-                                    {
-                                        <label class="form-filter">
-                                            <span>@T("InputBoxSize")</span>
-                                            <input class="form-control" type="number" min="1" max="5" @bind="field.InputBoxSize" />
-                                            <small class="form-helper">@T("InputBoxSizeHint")</small>
-                                        </label>
-                                    }
                                     <label class="field-card__required">
                                         <input type="checkbox" @bind="field.Required" />
                                         @T("Required")
@@ -202,32 +250,50 @@ else
                                         <i class="fas fa-trash" aria-hidden="true"></i>
                                     </button>
                                 </div>
+                                @if (capability.SupportsInputBoxSize)
+                                {
+                                    <div class="field-card__settings">
+                                        <label class="form-filter">
+                                            <span>@T("InputBoxSize")</span>
+                                            <input class="form-control" type="number" min="1" max="5" @bind="field.InputBoxSize" />
+                                            <small class="form-helper">@T("InputBoxSizeHint")</small>
+                                        </label>
+                                    </div>
+                                }
                                 @if (capability.SupportsOptions)
                                 {
                                     <div class="field-options">
                                         <div class="field-options__header">
-                                            <strong>@T("Options")</strong>
+                                            <button type="button" class="field-options__toggle" @onclick="() => ToggleOptions(field)">
+                                                <i class="fas @(OptionsExpanded(field) ? "fa-chevron-down" : "fa-chevron-right")" aria-hidden="true"></i>
+                                                <strong>@T("Options") (@field.Options.Count)</strong>
+                                            </button>
                                             <button type="button" class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="() => AddOption(field)">@T("AddOption")</button>
                                         </div>
-                                        @foreach (var option in field.Options.OrderBy(option => option.Order))
+                                        @if (OptionsExpanded(field))
                                         {
-                                            <div class="field-option-row" @key="option">
-                                                <label class="form-filter">
-                                                    <span>@T("OptionValue")</span>
-                                                    <input class="form-control" @bind="option.Value" />
-                                                </label>
-                                                <label class="form-filter">
-                                                    <span>@T("OptionLabel")</span>
-                                                    <input class="form-control" value="@Text(option.Label, string.Empty)" @onchange="e => SetText(option.Label, e.Value)" />
-                                                </label>
-                                                <button type="button"
-                                                        class="btn-admin btn-danger field-card__delete"
-                                                        disabled="@(!Auth.CanEditFormDefinitions)"
-                                                        title="@T("Delete")"
-                                                        aria-label="@T("Delete")"
-                                                        @onclick="() => RemoveOption(field, option)">
-                                                    <i class="fas fa-trash" aria-hidden="true"></i>
-                                                </button>
+                                            <div class="field-options__items">
+                                                @foreach (var option in field.Options.OrderBy(option => option.Order))
+                                                {
+                                                    <div class="field-option-row" @key="option">
+                                                        <label class="form-filter">
+                                                            <span>@T("OptionValue")</span>
+                                                            <input class="form-control" @bind="option.Value" />
+                                                        </label>
+                                                        <label class="form-filter">
+                                                            <span>@T("OptionLabel")</span>
+                                                            <input class="form-control" value="@Text(option.Label, string.Empty)" @onchange="e => SetText(option.Label, e.Value)" />
+                                                        </label>
+                                                        <button type="button"
+                                                                class="btn-admin btn-danger field-card__delete"
+                                                                disabled="@(!Auth.CanEditFormDefinitions)"
+                                                                title="@T("Delete")"
+                                                                aria-label="@T("Delete")"
+                                                                @onclick="() => RemoveOption(field, option)">
+                                                            <i class="fas fa-trash" aria-hidden="true"></i>
+                                                        </button>
+                                                    </div>
+                                                }
                                             </div>
                                         }
                                     </div>
@@ -278,27 +344,38 @@ else
     .definition-settings-row { display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:.75rem; margin-top:.75rem; }
     .definition-section-heading { display:flex; justify-content:space-between; align-items:center; margin:1rem 0 .5rem; }
     .definition-field-grid { display:grid; grid-template-columns:1fr; gap:.75rem; }
-    .definition-field-grid--two-columns { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-    .field-card { position:relative; min-width:0; border:1px solid #dbe3ef; border-radius:8px; background:#fff; padding:.75rem .75rem .75rem 2.35rem; }
-    .field-card--full { grid-column:1 / -1; }
+    .field-card { position:relative; width:100%; max-width:100%; min-width:0; box-sizing:border-box; border:1px solid #dbe3ef; border-radius:8px; background:#fff; padding:.75rem .75rem .75rem 2.35rem; overflow:hidden; }
     .field-card__drag { position:absolute; left:.65rem; top:.95rem; width:18px; display:grid; grid-template-columns:repeat(2, 5px); gap:4px; padding:.2rem; cursor:grab; }
     .field-card__drag:active { cursor:grabbing; }
     .field-card__drag span { width:4px; height:4px; border-radius:50%; background:#94a3b8; display:block; }
-    .field-card__controls { display:grid; grid-template-columns:150px 130px minmax(0,1fr) minmax(110px,130px) auto 38px; gap:.5rem; align-items:start; }
+    .field-card__controls { display:grid; grid-template-columns:minmax(150px,170px) minmax(190px,240px) minmax(180px,1fr) minmax(94px,auto) 38px; gap:.5rem; align-items:start; min-width:0; }
     .field-card__label-input { min-width:0; }
+    .field-key-input-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.4rem; align-items:center; }
+    .field-key-badge { display:inline-flex; align-items:center; justify-content:center; min-height:26px; padding:.25rem .5rem; border-radius:999px; font-size:.68rem; font-weight:800; white-space:nowrap; }
+    .field-key-badge--new { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+    .field-key-badge--existed { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+    .field-key-suggestions { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.35rem; }
+    .field-key-chip { display:inline-flex; align-items:center; gap:.35rem; max-width:100%; border:1px solid #dbe3ef; border-radius:999px; background:#fff; color:#334155; padding:.22rem .45rem; font:inherit; font-size:.74rem; cursor:pointer; }
+    .field-key-chip:hover { border-color:var(--primary, #0d47a1); color:var(--primary, #0d47a1); }
+    .field-key-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .field-key-chip small { display:inline-grid; place-items:center; min-width:18px; height:18px; border-radius:999px; background:#eef2f7; color:#475569; font-size:.66rem; font-weight:800; }
     .field-card__required { display:flex; gap:.35rem; align-items:center; color:#334155; font-size:.9rem; min-height:38px; padding:1.45rem .2rem 0; }
     .field-card__delete { width:38px; height:38px; min-width:38px; margin-top:1.45rem; padding:0; display:inline-flex; align-items:center; justify-content:center; align-self:start; }
-    .field-options { margin:1rem 0 0 .75rem; padding:.75rem .75rem .85rem 1rem; border:1px solid #dbe3ef; border-left:4px solid #b99a4a; border-radius:8px; background:#f8fafc; display:grid; gap:.65rem; }
+    .field-card__settings { display:grid; grid-template-columns:minmax(160px,240px); margin-top:.75rem; padding-top:.75rem; border-top:1px solid #eef2f7; }
+    .field-options { width:100%; max-width:100%; box-sizing:border-box; margin:.75rem 0 0; padding:.65rem .75rem; border:1px solid #dbe3ef; border-left:4px solid #b99a4a; border-radius:8px; background:#f8fafc; display:grid; gap:.65rem; }
     .field-options__header { display:flex; justify-content:space-between; align-items:center; gap:.75rem; }
     .field-options__header strong { color:#334155; font-size:.9rem; }
-    .field-option-row { display:grid; grid-template-columns:180px minmax(0,1fr) 38px; gap:.5rem; align-items:end; padding:.55rem; border:1px solid #e2e8f0; border-radius:7px; background:#fff; }
+    .field-options__toggle { display:inline-flex; align-items:center; gap:.5rem; min-width:0; padding:.35rem 0; border:0; background:transparent; color:#334155; cursor:pointer; }
+    .field-options__toggle i { width:12px; color:#64748b; }
+    .field-options__items { display:grid; gap:.5rem; }
+    .field-option-row { display:grid; grid-template-columns:minmax(140px,180px) minmax(0,1fr) 38px; gap:.5rem; align-items:end; min-width:0; padding:.55rem; border:1px solid #e2e8f0; border-radius:7px; background:#fff; }
     .field-option-row .field-card__delete { margin-top:0; align-self:end; }
     .form-filter span { font-size:.78rem; color:#64748b; }
     .form-filter { display:flex; flex-direction:column; gap:.25rem; }
-    .form-control { border:1px solid #cbd5e1; border-radius:6px; padding:.55rem .65rem; background:#fff; min-height:38px; }
+    .form-control { width:100%; max-width:100%; min-width:0; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:6px; padding:.55rem .65rem; background:#fff; min-height:38px; }
     .form-helper { color:#64748b; font-size:.74rem; line-height:1.25; }
     .definition-save-row { display:flex; gap:.5rem; margin-top:1rem; }
-    @@media (max-width: 1100px) {
+    @@media (max-width: 1250px) {
         .definition-toolbar,
         .definition-shell,
         .definition-editor__identity { grid-template-columns:1fr; }
@@ -307,16 +384,19 @@ else
         .field-option-row { grid-template-columns:1fr; }
         .field-card__required { padding-top:0; }
         .field-card__delete { width:100%; margin-top:0; }
+        .field-card__settings { grid-template-columns:1fr; }
     }
 </style>
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
-    private static readonly IReadOnlyList<FormInputTypeCapability> FieldTypes = FormInputTypeCatalog.EditorTypes;
+    private List<FormInputTypeModel> _fieldTypes = new();
     private List<FormDefinitionModel> _definitions = new();
     private FormDefinitionModel? _editingDefinition;
     private FormFieldDefinitionModel? _draggedField;
+    private readonly HashSet<FormFieldDefinitionModel> _expandedOptionFields = new();
+    private readonly HashSet<FormFieldDefinitionModel> _newUnsavedFields = new();
     private FormDefinitionUsageModel? _usage;
     private List<string> _definitionValidationErrors = new();
     private bool _hasAccess = true;
@@ -338,21 +418,14 @@ else
                     ? T("UsageNotUsed")
                     : string.Format(T("UsageUsedInPlaces"), _usage.TotalCount, _usage.TotalCount == 1 ? string.Empty : "s");
 
-    private string DefinitionFieldGridClass => _editingDefinition?.Layout == FormLayoutModel.TwoColumns
-        ? "definition-field-grid definition-field-grid--two-columns"
-        : "definition-field-grid";
-
-    private static FormInputTypeCapability Capability(FormFieldDefinitionModel field) => FormInputTypeCatalog.Get(field.Type);
-
-    private static string FieldCardClass(FormFieldDefinitionModel field) => Capability(field).UsesMultilineInput
-        ? "field-card field-card--full"
-        : "field-card";
+    private FormInputTypeCapability Capability(FormFieldDefinitionModel field) => Capability(field.Type);
+    private bool FormKeyLocked => _editingDefinition is not null && !string.IsNullOrWhiteSpace(_editingDefinition.Id);
 
     private bool CanDeleteDefinition => Auth.CanEditFormDefinitions
         && _editingDefinition is not null
         && !string.IsNullOrWhiteSpace(_editingDefinition.Id)
         && !_usageLoading
-        && (_usage?.TotalCount ?? 0) == 0;
+        && _usage is { TotalCount: 0 };
 
     protected override async Task OnInitializedAsync()
     {
@@ -365,7 +438,21 @@ else
             return;
         }
 
+        await LoadInputTypesAsync();
         await LoadDefinitionsAsync();
+    }
+
+    private async Task LoadInputTypesAsync()
+    {
+        var result = await FormService.GetInputTypesAsync();
+        if (result.Success && result.Data is { Count: > 0 })
+        {
+            _fieldTypes = result.Data.OrderBy(type => type.Order).ToList();
+            return;
+        }
+
+        _fieldTypes = BuildFallbackTypes();
+        Http.Toast(result.Message, result.StatusCode);
     }
 
     private async Task LoadDefinitionsAsync()
@@ -382,6 +469,8 @@ else
         }
 
         _definitions = definitions.Data ?? new();
+        _expandedOptionFields.Clear();
+        _newUnsavedFields.Clear();
 
         var selectedDefinition = _editingDefinition is null
             ? _definitions.FirstOrDefault()
@@ -399,23 +488,27 @@ else
         _usage = null;
         _usageExpanded = false;
         _usageLoading = false;
+        _expandedOptionFields.Clear();
+        _newUnsavedFields.Clear();
+        var initialField = new FormFieldDefinitionModel
+        {
+            Key = string.Empty,
+            Type = DefaultFieldType,
+            Label = new() { [AdminLanguage] = "Name" },
+            Placeholder = new() { [AdminLanguage] = "Name" },
+            Required = true,
+            MaxLength = 150,
+            InputBoxSize = 1,
+            Order = 0
+        };
+        _newUnsavedFields.Add(initialField);
         _editingDefinition = new FormDefinitionModel
         {
             Active = true,
             Layout = FormLayoutModel.Stacked,
             SubmitButtonLabel = new() { [AdminLanguage] = "Submit" },
             Name = new() { [AdminLanguage] = "New form" },
-            Fields = [new FormFieldDefinitionModel
-            {
-                Key = "Name",
-                Type = "text",
-                Label = new() { [AdminLanguage] = "Name" },
-                Placeholder = new() { [AdminLanguage] = "Name" },
-                Required = true,
-                MaxLength = 150,
-                InputBoxSize = 1,
-                Order = 0
-            }]
+            Fields = [initialField]
         };
         NormalizeEditingFields();
     }
@@ -424,6 +517,8 @@ else
     {
         _definitionValidationErrors.Clear();
         _usageExpanded = false;
+        _expandedOptionFields.Clear();
+        _newUnsavedFields.Clear();
         _editingDefinition = Clone(definition);
         NormalizeEditingFields();
         await LoadUsageAsync();
@@ -464,16 +559,18 @@ else
         if (!Auth.CanEditFormDefinitions) return;
         if (_editingDefinition is null) return;
         var order = _editingDefinition.Fields.Count;
-        _editingDefinition.Fields.Add(new FormFieldDefinitionModel
+        var field = new FormFieldDefinitionModel
         {
-            Key = $"Field{order + 1}",
-            Type = "text",
+            Key = string.Empty,
+            Type = DefaultFieldType,
             Label = new() { [AdminLanguage] = $"Field {order + 1}" },
             Placeholder = new() { [AdminLanguage] = $"Field {order + 1}" },
             MaxLength = 500,
             InputBoxSize = 1,
             Order = order
-        });
+        };
+        _editingDefinition.Fields.Add(field);
+        _newUnsavedFields.Add(field);
         NormalizeEditingFields();
     }
 
@@ -481,6 +578,8 @@ else
     {
         if (!Auth.CanEditFormDefinitions) return;
         if (_editingDefinition is null) return;
+        _expandedOptionFields.Remove(field);
+        _newUnsavedFields.Remove(field);
         _editingDefinition.Fields.Remove(field);
         for (var i = 0; i < _editingDefinition.Fields.Count; i++)
             _editingDefinition.Fields[i].Order = i;
@@ -520,30 +619,59 @@ else
         }
     }
 
-    private static List<string> ValidateDefinition(FormDefinitionModel definition)
+    private List<string> ValidateDefinition(FormDefinitionModel definition)
     {
         var errors = new List<string>();
         var key = definition.Key?.Trim() ?? string.Empty;
 
-        if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^[a-z][a-z0-9-]{1,63}$"))
-            errors.Add("Enter a valid key using lowercase letters, numbers, and hyphens.");
+        if (string.IsNullOrWhiteSpace(key))
+            errors.Add($"{T("FormKey")}: {T("FormKeyRequired")}");
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^[a-z][a-z0-9-]{1,63}$"))
+            errors.Add($"{T("FormKey")}: {T("FormKeyInvalid")}");
+        else if (_definitions.Any(item =>
+            !string.Equals(item.Id, definition.Id, StringComparison.Ordinal) &&
+            string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)))
+            errors.Add($"{T("FormKey")}: {T("FormKeyAlreadyExists")}");
         if (!definition.Name.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
             errors.Add("Form name is required.");
         if (!definition.SubmitButtonLabel.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
             errors.Add("Submit button label is required.");
         if (definition.Fields.Count == 0)
             errors.Add("Add at least one form field.");
-        if (definition.Fields.Any(field => !System.Text.RegularExpressions.Regex.IsMatch(field.Key ?? string.Empty, "^[A-Za-z][A-Za-z0-9_-]{0,99}$")))
-            errors.Add("Every field must have a valid key.");
-        if (definition.Fields.GroupBy(field => field.Key, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
-            errors.Add("Form field keys must be unique.");
-        if (definition.Fields.Any(field => !FormInputTypeCatalog.IsSupported(field.Type)))
+        foreach (var field in definition.Fields.OrderBy(field => field.Order))
+        {
+            var fieldKey = field.Key?.Trim() ?? string.Empty;
+            var fieldLabel = FieldValidationLabel(field);
+            if (string.IsNullOrWhiteSpace(fieldKey))
+            {
+                errors.Add($"{fieldLabel}: {T("FieldKeyRequired")}");
+            }
+            else if (!System.Text.RegularExpressions.Regex.IsMatch(fieldKey, "^[A-Za-z][A-Za-z0-9_-]{0,99}$"))
+            {
+                errors.Add($"{fieldLabel}: {T("FieldKeyInvalid")}");
+            }
+        }
+
+        foreach (var duplicate in definition.Fields
+            .Where(field => !string.IsNullOrWhiteSpace(field.Key))
+            .GroupBy(field => field.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1))
+        {
+            errors.Add(string.Format(T("DuplicateFieldKeyInForm"), duplicate.First().Key.Trim()));
+        }
+        if (definition.Fields.Any(field => !IsSupported(field.Type)))
             errors.Add("Every field must use a supported field type.");
         if (definition.Fields.Any(field => !field.Label.Values.Any(value => !string.IsNullOrWhiteSpace(value))))
             errors.Add("Every field must have a label.");
         AddCapabilityValidation(definition.Fields, errors);
 
         return errors;
+    }
+
+    private string FieldValidationLabel(FormFieldDefinitionModel field)
+    {
+        var label = field.Label.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? field.Key;
+        return string.Format(T("FieldNumberLabel"), field.Order + 1, string.IsNullOrWhiteSpace(label) ? T("Field") : label);
     }
 
     private string Text(Dictionary<string, string>? values, string fallback) =>
@@ -553,11 +681,74 @@ else
                 ? english
                 : values?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
 
+    private string TypeName(FormInputTypeModel type) =>
+        type.Name.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : T(type.LabelKey);
+
     private void SetText(Dictionary<string, string> values, object? value) =>
         values[AdminLanguage] = value?.ToString() ?? string.Empty;
 
+    private bool CanEditFieldIdentity(FormFieldDefinitionModel field) =>
+        Auth.CanEditFormDefinitions &&
+        (_editingDefinition is null ||
+         string.IsNullOrWhiteSpace(_editingDefinition.Id) ||
+         _newUnsavedFields.Contains(field));
+
+    private void SetFieldKey(FormFieldDefinitionModel field, object? value)
+    {
+        if (!CanEditFieldIdentity(field)) return;
+        field.Key = value?.ToString()?.Trim() ?? string.Empty;
+    }
+
+    private void ApplyFieldKeySuggestion(FormFieldDefinitionModel field, string key)
+    {
+        if (!CanEditFieldIdentity(field)) return;
+        field.Key = key;
+    }
+
+    private IEnumerable<FieldKeySuggestion> FieldKeySuggestions(FormFieldDefinitionModel field)
+    {
+        var currentType = FormInputTypeCatalog.NormalizeType(field.Type);
+        var currentKey = field.Key?.Trim() ?? string.Empty;
+
+        return _definitions
+            .SelectMany(definition => definition.Fields
+                .Where(item =>
+                    string.Equals(FormInputTypeCatalog.NormalizeType(item.Type), currentType, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(item.Key))
+                .Select(item => new { definition.Id, Key = item.Key.Trim() }))
+            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new FieldKeySuggestion(
+                group.First().Key,
+                group.Select(item => item.Id).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).Count()))
+            .Where(suggestion => !string.Equals(suggestion.Key, currentKey, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(suggestion => suggestion.FormCount)
+            .ThenBy(suggestion => suggestion.Key)
+            .Take(8);
+    }
+
+    private bool FieldKeyExists(FormFieldDefinitionModel field)
+    {
+        var key = field.Key?.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        var currentType = FormInputTypeCatalog.NormalizeType(field.Type);
+        return _definitions.Any(definition => definition.Fields.Any(item =>
+            string.Equals(FormInputTypeCatalog.NormalizeType(item.Type), currentType, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.Key?.Trim(), key, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private string FieldKeyBadgeText(FormFieldDefinitionModel field) =>
+        FieldKeyExists(field) ? T("Existed") : T("New");
+
+    private string FieldKeyBadgeClass(FormFieldDefinitionModel field) =>
+        FieldKeyExists(field) ? "field-key-badge--existed" : "field-key-badge--new";
+
     private void ChangeFieldType(FormFieldDefinitionModel field, string? type)
     {
+        if (!CanEditFieldIdentity(field)) return;
         if (!Auth.CanEditFormDefinitions) return;
         var oldCapability = Capability(field);
         field.Type = FormInputTypeCatalog.NormalizeType(type);
@@ -571,6 +762,7 @@ else
     private void AddOption(FormFieldDefinitionModel field)
     {
         if (!Auth.CanEditFormDefinitions) return;
+        _expandedOptionFields.Add(field);
         var order = field.Options.Count;
         field.Options.Add(new FormFieldOptionModel
         {
@@ -578,6 +770,15 @@ else
             Label = new() { [AdminLanguage] = $"Option {order + 1}" },
             Order = order
         });
+    }
+
+    private bool OptionsExpanded(FormFieldDefinitionModel field) =>
+        _expandedOptionFields.Contains(field);
+
+    private void ToggleOptions(FormFieldDefinitionModel field)
+    {
+        if (!_expandedOptionFields.Add(field))
+            _expandedOptionFields.Remove(field);
     }
 
     private void RemoveOption(FormFieldDefinitionModel field, FormFieldOptionModel option)
@@ -634,15 +835,18 @@ else
         _editingDefinition.Fields = ordered;
     }
 
-    private static void ApplyFieldDefaults(FormFieldDefinitionModel field)
+    private void ApplyFieldDefaults(FormFieldDefinitionModel field)
     {
         field.Type = FormInputTypeCatalog.NormalizeType(field.Type);
         var capability = Capability(field);
-        field.MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength);
-        field.InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize);
+        field.MaxLength = FormInputTypeCatalog.MaximumInputLength(capability);
+        field.InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(capability, field.InputBoxSize);
 
         if (!capability.SupportsOptions)
+        {
             field.Options.Clear();
+            _expandedOptionFields.Remove(field);
+        }
     }
 
     private static void NormalizeOptionOrders(FormFieldDefinitionModel field)
@@ -653,7 +857,7 @@ else
         field.Options = options;
     }
 
-    private static void AddCapabilityValidation(IEnumerable<FormFieldDefinitionModel> fields, List<string> errors)
+    private void AddCapabilityValidation(IEnumerable<FormFieldDefinitionModel> fields, List<string> errors)
     {
         foreach (var field in fields)
         {
@@ -663,16 +867,6 @@ else
                 .Where(option => !string.IsNullOrWhiteSpace(option.Value) ||
                                  option.Label.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
                 .ToList();
-
-            if (capability.SupportsMaxCharacters)
-            {
-                if (field.MaxLength is < 1 or > FormInputTypeCatalog.MaxCharactersLimit)
-                    errors.Add($"{label}: max characters must be between 1 and {FormInputTypeCatalog.MaxCharactersLimit}.");
-            }
-            else if (field.MaxLength > 0)
-            {
-                errors.Add($"{label}: max characters is not supported for this field type.");
-            }
 
             if (capability.SupportsInputBoxSize)
             {
@@ -699,6 +893,59 @@ else
             }
         }
     }
+
+    private string DefaultFieldType =>
+        _fieldTypes.FirstOrDefault(type => type.Active && type.Type == "text")?.Type
+        ?? _fieldTypes.FirstOrDefault(type => type.Active)?.Type
+        ?? "text";
+
+    private IEnumerable<FormInputTypeModel> AvailableFieldTypes(FormFieldDefinitionModel field)
+    {
+        var currentType = FormInputTypeCatalog.NormalizeType(field.Type);
+        return _fieldTypes
+            .Where(type => type.Active || type.Type.Equals(currentType, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(type => type.Order);
+    }
+
+    private bool IsSupported(string? type)
+    {
+        var normalized = FormInputTypeCatalog.NormalizeType(type);
+        return _fieldTypes.Any(item => item.Type.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private FormInputTypeCapability Capability(string? type)
+    {
+        var normalized = FormInputTypeCatalog.NormalizeType(type);
+        var configured = _fieldTypes.FirstOrDefault(item =>
+            item.Type.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        if (configured is null)
+            return FormInputTypeCatalog.Get(normalized);
+
+        return new FormInputTypeCapability(
+            configured.Type,
+            configured.LabelKey,
+            configured.SupportsMaxCharacters,
+            configured.SupportsOptions,
+            configured.SupportsInputBoxSize,
+            configured.UsesMultilineInput,
+            configured.DefaultMaxCharacters,
+            configured.DefaultInputBoxSize);
+    }
+
+    private static List<FormInputTypeModel> BuildFallbackTypes() =>
+        FormInputTypeCatalog.EditorTypes.Select((type, index) => new FormInputTypeModel
+        {
+            Type = type.Type,
+            LabelKey = type.LabelKey,
+            Active = true,
+            SupportsMaxCharacters = type.SupportsMaxCharacters,
+            SupportsOptions = type.SupportsOptions,
+            SupportsInputBoxSize = type.SupportsInputBoxSize,
+            UsesMultilineInput = type.UsesMultilineInput,
+            DefaultMaxCharacters = type.DefaultMaxCharacters,
+            DefaultInputBoxSize = type.DefaultInputBoxSize,
+            Order = index
+        }).ToList();
 
     private static FormDefinitionModel Clone(FormDefinitionModel source) => new()
     {
@@ -731,4 +978,6 @@ else
         CreatedAt = source.CreatedAt,
         UpdatedAt = source.UpdatedAt
     };
+
+    private sealed record FieldKeySuggestion(string Key, int FormCount);
 }

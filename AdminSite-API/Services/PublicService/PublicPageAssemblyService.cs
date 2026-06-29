@@ -19,19 +19,22 @@ namespace FullProject.Services.PublicService
         private readonly BlockService _blockService;
         private readonly ContentService _contentService;
         private readonly FormDefinitionService _formDefinitionService;
+        private readonly FormInputTypeService _formInputTypes;
 
         public PublicPageAssemblyService(
             PageService pageService,
             SectionService sectionService,
             BlockService blockService,
             ContentService contentService,
-            FormDefinitionService formDefinitionService)
+            FormDefinitionService formDefinitionService,
+            FormInputTypeService formInputTypes)
         {
             _pageService = pageService;
             _sectionService = sectionService;
             _blockService = blockService;
             _contentService = contentService;
             _formDefinitionService = formDefinitionService;
+            _formInputTypes = formInputTypes;
         }
 
         public async Task<object?> GetPageResponseAsync(string slug)
@@ -105,6 +108,7 @@ namespace FullProject.Services.PublicService
                         .Where(id => !string.IsNullOrWhiteSpace(id))
                         .Select(id => id!)))
                 .ToDictionary(definition => definition.Id, StringComparer.Ordinal);
+            var formInputCapabilities = await _formInputTypes.GetCapabilityLookupAsync();
 
             // We filter for visible blocks here to keep the logic clean inside the loops
             var blocksBySection = allBlocks
@@ -236,7 +240,7 @@ namespace FullProject.Services.PublicService
                                 slot.Id,
                                 slot.Order,
                                 Blocks = blocksBySlot.TryGetValue(slot.Id, out var slotBlocks)
-                                    ? MapPublicBlocks(slotBlocks, formDefinitions)
+                                    ? MapPublicBlocks(slotBlocks, formDefinitions, formInputCapabilities)
                                     : new List<PublicBlockDto>()
                             }).ToList()
                     });
@@ -359,7 +363,7 @@ namespace FullProject.Services.PublicService
                     DefaultZoom = (section as NetworkMapSection)?.DefaultZoom,
                     AdminLabel = (section as CanvasSection)?.AdminLabel,
                     Blocks = MapPublicBlocks(visibleBlocks
-                        .Where(b => string.IsNullOrWhiteSpace(b.ColumnSlotId)), formDefinitions)
+                        .Where(b => string.IsNullOrWhiteSpace(b.ColumnSlotId)), formDefinitions, formInputCapabilities)
                 });
             }
 
@@ -369,6 +373,7 @@ namespace FullProject.Services.PublicService
         private static List<PublicBlockDto> MapPublicBlocks(
             IEnumerable<Block> blocks,
             IReadOnlyDictionary<string, FormDefinition> formDefinitions,
+            IReadOnlyDictionary<string, FormInputTypeCapability> formInputCapabilities,
             string? parentBlockId = null)
         {
             var blockList = blocks.ToList();
@@ -377,14 +382,14 @@ namespace FullProject.Services.PublicService
                     ? string.IsNullOrWhiteSpace(b.ParentBlockId)
                     : string.Equals(b.ParentBlockId, parentBlockId, StringComparison.Ordinal))
                 .OrderBy(b => b.Order)
-                .Select(block => MapPublicBlock(block, formDefinitions))
+                .Select(block => MapPublicBlock(block, formDefinitions, formInputCapabilities))
                 .Where(b => b is not null)
                 .Select(b => b!)
                 .ToList();
 
             foreach (var container in mapped.OfType<PublicContainerBlockDto>())
             {
-                container.Children = MapPublicBlocks(blockList, formDefinitions, container.Id);
+                container.Children = MapPublicBlocks(blockList, formDefinitions, formInputCapabilities, container.Id);
             }
 
             return mapped;
@@ -1088,7 +1093,8 @@ namespace FullProject.Services.PublicService
 
         private static PublicBlockDto? MapPublicBlock(
             Block block,
-            IReadOnlyDictionary<string, FormDefinition> formDefinitions)
+            IReadOnlyDictionary<string, FormDefinition> formDefinitions,
+            IReadOnlyDictionary<string, FormInputTypeCapability> formInputCapabilities)
         {
             PublicBlockDto? mapped = block switch
             {
@@ -1131,7 +1137,7 @@ namespace FullProject.Services.PublicService
                         Href = p.Href
                     }).ToList()
                 },
-                FormBlock form => MapFormBlock(form, formDefinitions),
+                FormBlock form => MapFormBlock(form, formDefinitions, formInputCapabilities),
                 CardBlock card => new PublicCardBlockDto
                 {
                     Type = "card",
@@ -1237,7 +1243,8 @@ namespace FullProject.Services.PublicService
 
         private static PublicFormBlockDto MapFormBlock(
             FormBlock block,
-            IReadOnlyDictionary<string, FormDefinition> definitions)
+            IReadOnlyDictionary<string, FormDefinition> definitions,
+            IReadOnlyDictionary<string, FormInputTypeCapability> formInputCapabilities)
         {
             if (!string.IsNullOrWhiteSpace(block.FormDefinitionId) &&
                 definitions.TryGetValue(block.FormDefinitionId, out var definition))
@@ -1259,8 +1266,11 @@ namespace FullProject.Services.PublicService
                             Label = field.Label,
                             Placeholder = field.Placeholder,
                             Required = field.Required,
-                            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, field.MaxLength),
-                            InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize),
+                            MaxLength = FormInputTypeCatalog.MaximumInputLength(
+                                FormInputTypeService.Capability(field.Type, formInputCapabilities)),
+                            InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(
+                                FormInputTypeService.Capability(field.Type, formInputCapabilities),
+                                field.InputBoxSize),
                             Options = field.Options
                                 .OrderBy(option => option.Order)
                                 .Select(option => new PublicFormFieldOptionDto

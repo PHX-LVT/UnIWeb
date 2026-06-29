@@ -20,10 +20,13 @@ namespace FullProject.Services
             FormSubmissionStatus? status = null,
             string? search = null,
             DateTime? from = null,
-            DateTime? to = null)
+            DateTime? to = null,
+            string? formId = null)
         {
             var filters = new List<FilterDefinition<FormSubmission>>();
 
+            if (!string.IsNullOrWhiteSpace(formId))
+                filters.Add(Builders<FormSubmission>.Filter.Eq(s => s.FormId, formId.Trim()));
             if (!string.IsNullOrWhiteSpace(formKey))
                 filters.Add(Builders<FormSubmission>.Filter.Eq(s => s.FormKey, formKey.Trim().ToLowerInvariant()));
             if (status is not null)
@@ -47,6 +50,7 @@ namespace FullProject.Services
                     Builders<FormSubmission>.Filter.Regex(s => s.SourcePage, regex),
                     Builders<FormSubmission>.Filter.Regex(s => s.InternalNotes, regex),
                     Builders<FormSubmission>.Filter.Regex(s => s.AssignedToAdminName, regex),
+                    Builders<FormSubmission>.Filter.Regex("Fields.Key", regex),
                     Builders<FormSubmission>.Filter.Regex("Fields.Label", regex),
                     Builders<FormSubmission>.Filter.Regex("Fields.Value", regex)));
             }

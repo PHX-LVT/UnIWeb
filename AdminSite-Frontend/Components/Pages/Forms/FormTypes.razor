@@ -1,0 +1,299 @@
+@page "/forms/types"
+@using Contracts.Forms
+@inject AdminFormSubmissionService FormService
+@inject IHttpService Http
+@inject AdminAuthService Auth
+
+<div class="page-header">
+    <h1 class="page-title">@T("FormTypes")</h1>
+</div>
+
+@if (!_hasAccess)
+{
+    <div class="admin-data-empty">
+        <strong>@T("NoPermission")</strong>
+        <div>@T("AccessDeniedHint")</div>
+    </div>
+}
+else if (_loading)
+{
+    <div class="admin-data-empty">@T("Loading")</div>
+}
+else
+{
+    <div class="admin-card form-type-card">
+        <div class="form-type-heading">
+            <div>
+                <h2>@T("FormTypeSettings")</h2>
+                <p>@T("FormTypeSettingsHint")</p>
+            </div>
+        </div>
+
+        <div class="form-type-shell">
+            <div class="form-type-list">
+                @if (_types.Count == 0)
+                {
+                    <div class="admin-data-empty">@T("NoFormTypes")</div>
+                }
+                @foreach (var type in _types.OrderBy(item => item.Order))
+                {
+                    <button type="button"
+                            class="form-type-row @(_editing?.Type == type.Type ? "active" : null)"
+                            @onclick="() => SelectType(type)">
+                        <span class="form-type-row__icon"><i class="@TypeIcon(type.Type)" aria-hidden="true"></i></span>
+                        <span>
+                            <strong>@TypeName(type)</strong>
+                            <small>@type.Type</small>
+                        </span>
+                        <span class="form-type-status @(type.Active ? "active" : "disabled")">
+                            @(type.Active ? T("Active") : T("Disabled"))
+                        </span>
+                    </button>
+                }
+            </div>
+
+            @if (_editing is not null)
+            {
+                <div class="form-type-editor">
+                    <div class="form-type-editor__title">
+                        <div>
+                            <h3>@TypeName(_editing)</h3>
+                            <code>@_editing.Type</code>
+                        </div>
+                        <button type="button"
+                                class="definition-active-toggle @(_editing.Active ? "active" : "disabled")"
+                                disabled="@(!Auth.CanEditFormDefinitions)"
+                                @onclick="ToggleActive">
+                            <span class="definition-active-toggle__dot"></span>
+                            @(_editing.Active ? T("Active") : T("Disabled"))
+                        </button>
+                    </div>
+
+                    <label class="form-filter">
+                        <span>@T("FormTypeName")</span>
+                        <input class="form-control"
+                               disabled="@(!Auth.CanEditFormDefinitions)"
+                               value="@EditableName(_editing)"
+                               placeholder="@TypeName(_editing)"
+                               @onchange="e => SetText(_editing.Name, e.Value)" />
+                    </label>
+
+                    <div class="form-type-readonly">
+                        <div>
+                            <span>@T("FormTypeCode")</span>
+                            <strong>@_editing.Type</strong>
+                        </div>
+                        <div>
+                            <span>@T("RenderingMode")</span>
+                            <strong>@(_editing.UsesMultilineInput ? T("MultilineInput") : T("SingleLineInput"))</strong>
+                        </div>
+                    </div>
+
+                    <div class="form-type-rules">
+                        <h4>@T("TypeRules")</h4>
+                        <label class="form-type-rule">
+                            <input type="checkbox" disabled="@(!CanConfigureMaxCharacters)" @bind="_editing.SupportsMaxCharacters" />
+                            <span>
+                                <strong>@T("SupportsMaxCharacters")</strong>
+                                <small>@T("SupportsMaxCharactersHint")</small>
+                            </span>
+                        </label>
+                        @if (_editing.SupportsMaxCharacters)
+                        {
+                            <label class="form-filter form-type-default">
+                                <span>@T("MaximumInputLength")</span>
+                                <input class="form-control" type="number" min="1" max="2000"
+                                       disabled="@(!Auth.CanEditFormDefinitions)"
+                                       @bind="_editing.DefaultMaxCharacters" />
+                            </label>
+                        }
+
+                        <label class="form-type-rule">
+                            <input type="checkbox" disabled="@(!CanConfigureOptions)" @bind="_editing.SupportsOptions" />
+                            <span>
+                                <strong>@T("SupportsOptions")</strong>
+                                <small>@T("SupportsOptionsHint")</small>
+                            </span>
+                        </label>
+
+                        <label class="form-type-rule">
+                            <input type="checkbox" disabled="@(!CanConfigureInputBoxSize)" @bind="_editing.SupportsInputBoxSize" />
+                            <span>
+                                <strong>@T("SupportsInputBoxSize")</strong>
+                                <small>@T("SupportsInputBoxSizeHint")</small>
+                            </span>
+                        </label>
+                        @if (_editing.SupportsInputBoxSize)
+                        {
+                            <label class="form-filter form-type-default">
+                                <span>@T("DefaultInputBoxSize")</span>
+                                <input class="form-control" type="number" min="1" max="5"
+                                       disabled="@(!Auth.CanEditFormDefinitions)"
+                                       @bind="_editing.DefaultInputBoxSize" />
+                            </label>
+                        }
+                    </div>
+
+                    <div class="form-type-note">
+                        <i class="fas fa-circle-info" aria-hidden="true"></i>
+                        <span>@T("BuiltInTypeHint") @T("ExistingFormsRemainValid")</span>
+                    </div>
+
+                    <button type="button" class="btn-admin btn-primary"
+                            disabled="@(!Auth.CanEditFormDefinitions || _saving)"
+                            @onclick="SaveType">
+                        @(_saving ? T("Saving") : T("SaveFormType"))
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .form-type-card h2, .form-type-card h3, .form-type-card h4 { margin:0; }
+    .form-type-heading { margin-bottom:1rem; }
+    .form-type-heading h2 { font-size:1.05rem; }
+    .form-type-heading p { margin:.3rem 0 0; color:#64748b; font-size:.85rem; }
+    .form-type-shell { display:grid; grid-template-columns:300px minmax(0, 1fr); gap:1rem; }
+    .form-type-list { display:flex; flex-direction:column; gap:.45rem; }
+    .form-type-row { width:100%; display:grid; grid-template-columns:34px minmax(0,1fr) auto; gap:.65rem; align-items:center; border:1px solid #dbe3ef; border-left:4px solid transparent; border-radius:8px; padding:.65rem; background:#fff; text-align:left; cursor:pointer; }
+    .form-type-row.active { border-color:var(--primary, #0d47a1); box-shadow:0 0 0 2px rgba(13,71,161,.12); }
+    .form-type-row__icon { width:34px; height:34px; display:grid; place-items:center; border-radius:6px; background:#eef2f7; color:#334155; }
+    .form-type-row strong, .form-type-row small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .form-type-row small { margin-top:.15rem; color:#64748b; font-size:.75rem; }
+    .form-type-status { padding:.2rem .45rem; border-radius:999px; font-size:.7rem; font-weight:700; background:#f1f5f9; color:#64748b; }
+    .form-type-status.active { background:#dcfce7; color:#166534; }
+    .form-type-editor { min-width:0; display:grid; gap:1rem; border:1px solid #dbe3ef; border-radius:8px; padding:1rem; background:#f8fafc; }
+    .form-type-editor__title { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+    .form-type-editor__title h3 { font-size:1.05rem; }
+    .form-type-editor__title code { color:#64748b; font-size:.78rem; }
+    .definition-active-toggle { min-width:112px; border:1px solid #94a3b8; border-radius:6px; padding:.5rem .7rem; display:inline-flex; align-items:center; justify-content:center; gap:.45rem; background:#fff; color:#475569; font-weight:700; cursor:pointer; }
+    .definition-active-toggle.active { border-color:#16a34a; background:#f0fdf4; color:#166534; }
+    .definition-active-toggle__dot { width:9px; height:9px; border-radius:50%; background:currentColor; }
+    .form-filter { display:flex; flex-direction:column; gap:.25rem; }
+    .form-filter > span, .form-type-readonly span { color:#64748b; font-size:.78rem; }
+    .form-control { min-height:38px; border:1px solid #cbd5e1; border-radius:6px; padding:.55rem .65rem; background:#fff; }
+    .form-type-readonly { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; }
+    .form-type-readonly > div { display:grid; gap:.2rem; padding:.65rem; border:1px solid #dbe3ef; border-radius:7px; background:#fff; }
+    .form-type-rules { display:grid; gap:.65rem; }
+    .form-type-rules h4 { font-size:.9rem; }
+    .form-type-rule { display:flex; align-items:flex-start; gap:.65rem; padding:.7rem; border:1px solid #dbe3ef; border-radius:7px; background:#fff; }
+    .form-type-rule input { margin-top:.2rem; }
+    .form-type-rule strong, .form-type-rule small { display:block; }
+    .form-type-rule small { margin-top:.15rem; color:#64748b; font-size:.76rem; }
+    .form-type-default { margin-left:2.1rem; max-width:260px; }
+    .form-type-note { display:flex; gap:.55rem; align-items:flex-start; color:#475569; font-size:.8rem; line-height:1.45; }
+    .form-type-note i { color:var(--primary, #0d47a1); margin-top:.15rem; }
+    @@media (max-width: 900px) { .form-type-shell { grid-template-columns:1fr; } }
+    @@media (max-width: 600px) { .form-type-readonly { grid-template-columns:1fr; } .form-type-editor__title { align-items:flex-start; flex-direction:column; } }
+</style>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private List<FormInputTypeModel> _types = new();
+    private FormInputTypeModel? _editing;
+    private bool _hasAccess;
+    private bool _loading = true;
+    private bool _saving;
+
+    private FormInputTypeCapability RendererCapability => FormInputTypeCatalog.Get(_editing?.Type);
+    private bool CanConfigureMaxCharacters => Auth.CanEditFormDefinitions && RendererCapability.SupportsMaxCharacters;
+    private bool CanConfigureOptions => Auth.CanEditFormDefinitions && RendererCapability.SupportsOptions;
+    private bool CanConfigureInputBoxSize => Auth.CanEditFormDefinitions && RendererCapability.SupportsInputBoxSize;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        _hasAccess = Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions;
+        if (_hasAccess)
+            await LoadTypesAsync();
+        else
+            _loading = false;
+    }
+
+    private async Task LoadTypesAsync(string? selectedType = null)
+    {
+        _loading = true;
+        var result = await FormService.GetInputTypesAsync();
+        if (!result.Success)
+        {
+            Http.Toast(result.Message, result.StatusCode);
+            if (result.StatusCode is 401 or 403)
+                _hasAccess = false;
+            _loading = false;
+            return;
+        }
+
+        _types = result.Data ?? new();
+        var selected = _types.FirstOrDefault(type => type.Type == (selectedType ?? _editing?.Type))
+            ?? _types.FirstOrDefault();
+        _editing = selected is null ? null : Clone(selected);
+        _loading = false;
+    }
+
+    private void SelectType(FormInputTypeModel type) => _editing = Clone(type);
+
+    private void ToggleActive()
+    {
+        if (Auth.CanEditFormDefinitions && _editing is not null)
+            _editing.Active = !_editing.Active;
+    }
+
+    private async Task SaveType()
+    {
+        if (!Auth.CanEditFormDefinitions || _editing is null || _saving) return;
+        _saving = true;
+        var result = await FormService.SaveInputTypeAsync(_editing);
+        _saving = false;
+        Http.Toast(result.Message, result.StatusCode);
+        if (result.Success)
+            await LoadTypesAsync(_editing.Type);
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private string TypeName(FormInputTypeModel type) =>
+        type.Name.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : T(type.LabelKey);
+
+    private string EditableName(FormInputTypeModel type) =>
+        type.Name.GetValueOrDefault(AdminLanguage) ?? string.Empty;
+
+    private void SetText(Dictionary<string, string> values, object? value) =>
+        values[AdminLanguage] = value?.ToString() ?? string.Empty;
+
+    private static string TypeIcon(string type) => type switch
+    {
+        "email" => "fas fa-envelope",
+        "tel" => "fas fa-phone",
+        "textarea" => "fas fa-align-left",
+        "select" => "fas fa-list",
+        "checkbox" => "fas fa-square-check",
+        "date" => "fas fa-calendar",
+        "number" => "fas fa-hashtag",
+        "url" => "fas fa-link",
+        _ => "fas fa-font"
+    };
+
+    private static FormInputTypeModel Clone(FormInputTypeModel source) => new()
+    {
+        Id = source.Id,
+        Type = source.Type,
+        LabelKey = source.LabelKey,
+        Name = new(source.Name),
+        Active = source.Active,
+        SupportsMaxCharacters = source.SupportsMaxCharacters,
+        SupportsOptions = source.SupportsOptions,
+        SupportsInputBoxSize = source.SupportsInputBoxSize,
+        UsesMultilineInput = source.UsesMultilineInput,
+        DefaultMaxCharacters = source.DefaultMaxCharacters,
+        DefaultInputBoxSize = source.DefaultInputBoxSize,
+        Order = source.Order,
+        CreatedAt = source.CreatedAt,
+        UpdatedAt = source.UpdatedAt
+    };
+}
