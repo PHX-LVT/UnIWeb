@@ -251,8 +251,15 @@ namespace FullProject.Controllers
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
 
-            var definition = await _definitions.UpsertAsync(request, id);
-            return Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition), "Form definition saved."));
+            try
+            {
+                var definition = await _definitions.UpsertAsync(request, id);
+                return Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition), "Form definition saved."));
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("saved Field Key", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(ApiResult.BadRequest(ex.Message));
+            }
         }
 
         [HttpGet("types")]

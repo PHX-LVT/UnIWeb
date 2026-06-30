@@ -182,7 +182,9 @@ function initPublicModals() {
 
         const formId = trigger.dataset.modalFormId || "";
         const modalHref = trigger.dataset.modalHref || trigger.getAttribute("href");
-        if (!formId && !isPublicModalHref(modalHref)) return;
+        const formKey = resolvePublicFormKey(modalHref);
+        const opensSync = isSyncModalHref(modalHref);
+        if (!formId && !formKey && !opensSync) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -192,7 +194,12 @@ function initPublicModals() {
             return;
         }
 
-        openPublicModal(resolveModalType(modalHref, trigger.textContent));
+        if (opensSync) {
+            openSyncModal();
+            return;
+        }
+
+        await openPublicFormModalByKey(formKey);
     });
 }
 
@@ -219,27 +226,35 @@ function ensurePublicModal() {
 }
 
 async function openPublicFormModalById(formId) {
+    await openPublicFormModalFromEndpoint(`api/public/forms/by-id/${encodeURIComponent(formId)}`);
+}
+
+async function openPublicFormModalByKey(formKey) {
+    await openPublicFormModalFromEndpoint(`api/public/forms/${encodeURIComponent(formKey)}`);
+}
+
+async function openPublicFormModalFromEndpoint(endpoint) {
     const modal = ensurePublicModal();
     try {
         modal.replaceChildren(buildPublicModalLoadingDialog());
         document.body.classList.add("sc-modal-open");
         modal.classList.add("open");
 
-        const response = await fetch(buildPublicApiUrl(`api/public/forms/by-id/${encodeURIComponent(formId)}`));
+        const response = await fetch(buildPublicApiUrl(endpoint));
         const result = await response.json().catch(() => null);
         if (!response.ok) throw new Error(result?.message || result?.Message || "Form not found");
 
         const definition = result?.data || result?.Data;
         if (!definition) throw new Error("Form not found");
-        modal.replaceChildren(buildPublicModalDialog(definition));
+        modal.replaceChildren(buildPublicModalDialog(getPublicModalConfigFromDefinition(definition)));
     } catch (error) {
         modal.replaceChildren(buildPublicModalErrorDialog(error?.message || publicUiText("SubmitError", getPublicUiLanguage())));
     }
 }
 
-function openPublicModal(type) {
+function openSyncModal() {
     const modal = ensurePublicModal();
-    modal.replaceChildren(buildPublicModalDialog(type));
+    modal.replaceChildren(buildPublicModalDialog(getSyncModalConfig()));
     document.body.classList.add("sc-modal-open");
     modal.classList.add("open");
 }
@@ -559,67 +574,33 @@ function buildMapPopup(pin) {
     return span;
 }
 
-function resolveModalType(rawHref, rawLabel) {
-    const href = (rawHref || "").toLowerCase();
-    const label = (rawLabel || "").toLowerCase();
-
-    if (href.includes("sync") || label.includes("sync")) return "sync";
-    if (href.includes("quote") || label.includes("quote")) return "quote";
-    if (href.includes("expert") || href === "#modal" || label.includes("expert")) return "expert";
-
-    return "expert";
-}
-
-function isPublicModalHref(rawHref) {
+function isSyncModalHref(rawHref) {
     const href = (rawHref || "").trim().toLowerCase();
-    return href.startsWith("modal:")
-        || href === "#modal"
-        || href === "#quote"
-        || href === "#expert";
+    return href === "modal:sync" || href === "#sync";
 }
 
-function getPublicModalConfig(type) {
-    const lang = getPublicUiLanguage();
-    const configs = {
-        quote: {
-            type: "quote",
-            title: publicUiText("QuoteTitle", lang),
-            intro: publicUiText("QuoteIntro", lang),
-            submit: publicUiText("Submit", lang),
-            fields: [
-                { name: "ServiceType", label: publicUiText("SelectService", lang), type: "select", required: true, options: ["Logistics", "Warehouse", "Transport"] },
-                { name: "Route", label: publicUiText("Route", lang), required: true },
-                { name: "Email", label: publicUiText("Email", lang), type: "email", autocomplete: "email", required: true },
-                { name: "Phone", label: publicUiText("Phone", lang), type: "tel", autocomplete: "tel", required: true }
-            ]
-        },
-        expert: {
-            type: "expert",
-            title: publicUiText("ExpertTitle", lang),
-            intro: publicUiText("ExpertIntro", lang),
-            submit: publicUiText("SubmitRequest", lang),
-            fields: [
-                { name: "Name", label: publicUiText("FullName", lang), autocomplete: "name", required: true },
-                { name: "Email", label: publicUiText("EmailAddress", lang), type: "email", autocomplete: "email", required: true },
-                { name: "Phone", label: publicUiText("Phone", lang), type: "tel", autocomplete: "tel", required: true },
-                { name: "Company", label: publicUiText("CompanyName", lang), autocomplete: "organization" },
-                { name: "Service", label: publicUiText("SelectService", lang), type: "select", required: true, options: ["Consulting", "Implementation", "Support", "Other"] },
-                { name: "Message", label: publicUiText("YourMessage", lang), multiline: true }
-            ]
-        },
-        sync: {
-            type: "sync",
-            title: publicUiText("SyncTitle", lang),
-            intro: publicUiText("SyncIntro", lang),
-            submit: publicUiText("Login", lang),
-            fields: [
-                { name: "Username", label: publicUiText("Username", lang), autocomplete: "username", required: true },
-                { name: "Password", label: publicUiText("Password", lang), type: "password", autocomplete: "current-password", required: true }
-            ]
-        }
-    };
+function resolvePublicFormKey(rawHref) {
+    const href = (rawHref || "").trim().toLowerCase();
+    if (href === "#quote") return "quote";
+    if (href === "#expert") return "expert";
+    if (!href.startsWith("modal:")) return "";
 
-    return configs[type] || configs.expert;
+    const key = href.slice("modal:".length);
+    return key !== "sync" && /^[a-z][a-z0-9-]{1,63}$/.test(key) ? key : "";
+}
+
+function getSyncModalConfig() {
+    const lang = getPublicUiLanguage();
+    return {
+        type: "sync",
+        title: publicUiText("SyncTitle", lang),
+        intro: publicUiText("SyncIntro", lang),
+        submit: publicUiText("Login", lang),
+        fields: [
+            { name: "Username", label: publicUiText("Username", lang), autocomplete: "username", required: true },
+            { name: "Password", label: publicUiText("Password", lang), type: "password", autocomplete: "current-password", required: true }
+        ]
+    };
 }
 
 function getPublicModalConfigFromDefinition(definition) {
@@ -733,10 +714,7 @@ function localizeText(value, fallback) {
     const lang = getPublicUiLanguage();
     return value[lang] || value.en || Object.values(value).find(v => !!v) || fallback || "";
 }
-function buildPublicModalDialog(typeOrDefinition) {
-    const config = typeof typeOrDefinition === "string"
-        ? getPublicModalConfig(typeOrDefinition)
-        : getPublicModalConfigFromDefinition(typeOrDefinition);
+function buildPublicModalDialog(config) {
     const dialog = document.createElement("div");
     const layout = normalizePublicFormLayout(config.layout);
     dialog.className = `sc-public-modal__dialog sc-public-modal__dialog--${layout}`;
@@ -1086,23 +1064,10 @@ function normalizePublicUiLanguage(value) {
 
 function publicUiText(key, lang) {
     const text = {
-        QuoteTitle: { en: "Get a Quote", vi: "NhÃ¡ÂºÂ­n bÃƒÂ¡o giÃƒÂ¡" },
-        QuoteIntro: { en: "Fill out the form below and our sales team will contact you shortly.", vi: "Ã„ÂiÃ¡Â»Ân thÃƒÂ´ng tin bÃƒÂªn dÃ†Â°Ã¡Â»â€ºi vÃƒÂ  Ã„â€˜Ã¡Â»â„¢i ngÃ…Â© tÃ†Â° vÃ¡ÂºÂ¥n sÃ¡ÂºÂ½ liÃƒÂªn hÃ¡Â»â€¡ vÃ¡Â»â€ºi bÃ¡ÂºÂ¡n sÃ¡Â»â€ºm." },
-        ExpertTitle: { en: "Talk to an Expert", vi: "Trao Ã„â€˜Ã¡Â»â€¢i vÃ¡Â»â€ºi chuyÃƒÂªn gia" },
-        ExpertIntro: { en: "Our specialists are here to answer your questions and help you find the best solution.", vi: "ChuyÃƒÂªn gia cÃ¡Â»Â§a chÃƒÂºng tÃƒÂ´i sÃ¡ÂºÂ½ hÃ¡Â»â€” trÃ¡Â»Â£ cÃƒÂ¢u hÃ¡Â»Âi vÃƒÂ  Ã„â€˜Ã¡Â»Â xuÃ¡ÂºÂ¥t giÃ¡ÂºÂ£i phÃƒÂ¡p phÃƒÂ¹ hÃ¡Â»Â£p." },
         SyncTitle: { en: "Login to SyncHub", vi: "Ã„ÂÃ„Æ’ng nhÃ¡ÂºÂ­p SyncHub" },
         SyncIntro: { en: "Access your dashboard and start managing shipments seamlessly.", vi: "Truy cÃ¡ÂºÂ­p bÃ¡ÂºÂ£ng Ã„â€˜iÃ¡Â»Âu khiÃ¡Â»Æ’n Ã„â€˜Ã¡Â»Æ’ quÃ¡ÂºÂ£n lÃƒÂ½ lÃƒÂ´ hÃƒÂ ng liÃ¡Â»Ân mÃ¡ÂºÂ¡ch." },
         Submit: { en: "Submit", vi: "GÃ¡Â»Â­i" },
-        SubmitRequest: { en: "Submit Request", vi: "GÃ¡Â»Â­i yÃƒÂªu cÃ¡ÂºÂ§u" },
         Login: { en: "Login", vi: "Ã„ÂÃ„Æ’ng nhÃ¡ÂºÂ­p" },
-        SelectService: { en: "Select Service", vi: "ChÃ¡Â»Ân dÃ¡Â»â€¹ch vÃ¡Â»Â¥" },
-        Route: { en: "Route / Volume / Duration", vi: "TuyÃ¡ÂºÂ¿n / KhÃ¡Â»â€˜i lÃ†Â°Ã¡Â»Â£ng / ThÃ¡Â»Âi gian" },
-        Email: { en: "Email", vi: "Email" },
-        EmailAddress: { en: "Email Address", vi: "Ã„ÂÃ¡Â»â€¹a chÃ¡Â»â€° email" },
-        Phone: { en: "Phone Number", vi: "SÃ¡Â»â€˜ Ã„â€˜iÃ¡Â»â€¡n thoÃ¡ÂºÂ¡i" },
-        FullName: { en: "Full Name", vi: "HÃ¡Â»Â vÃƒÂ  tÃƒÂªn" },
-        CompanyName: { en: "Company Name", vi: "TÃƒÂªn cÃƒÂ´ng ty" },
-        YourMessage: { en: "Your Message", vi: "NÃ¡Â»â„¢i dung" },
         Username: { en: "Email / Username", vi: "Email / TÃƒÂªn Ã„â€˜Ã„Æ’ng nhÃ¡ÂºÂ­p" },
         Password: { en: "Password", vi: "MÃ¡ÂºÂ­t khÃ¡ÂºÂ©u" },
         ForgotPassword: { en: "Forgot password?", vi: "QuÃƒÂªn mÃ¡ÂºÂ­t khÃ¡ÂºÂ©u?" },

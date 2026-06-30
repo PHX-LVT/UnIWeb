@@ -92,31 +92,13 @@ else
             @if (_editingDefinition is not null)
             {
                 <div class="definition-editor">
-                    @if (_definitionValidationErrors.Count > 0)
-                    {
-                        <div class="alert alert-danger" role="alert">
-                            <strong>@T("PleaseCompleteRequiredFields")</strong>
-                            <ul style="margin:.35rem 0 0;padding-left:1.25rem">
-                                @foreach (var error in _definitionValidationErrors)
-                                {
-                                    <li>@error</li>
-                                }
-                            </ul>
-                        </div>
-                    }
-
                     <div class="definition-editor__identity">
                         <label class="form-filter">
                             <span>@T("FormKey") <strong class="required-mark">*</strong></span>
                             <input class="form-control"
                                    required
                                    disabled="@FormKeyLocked"
-                                   title="@(FormKeyLocked ? T("FormKeyLockedHint") : null)"
                                    @bind="_editingDefinition.Key" />
-                            @if (FormKeyLocked)
-                            {
-                                <small class="form-helper">@T("FormKeyLockedHint")</small>
-                            }
                         </label>
                         <div class="form-filter">
                             <span>@T("Name") <strong class="required-mark">*</strong></span>
@@ -154,7 +136,6 @@ else
 
                     <div class="definition-section-heading">
                         <h3>@T("Fields")</h3>
-                        <button class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="AddField">@T("AddField")</button>
                     </div>
 
                     <div class="definition-field-grid">
@@ -184,53 +165,45 @@ else
                                                 <option value="@type.Type">@TypeName(type)</option>
                                             }
                                         </select>
-                                        @if (!CanEditFieldIdentity(field))
-                                        {
-                                            <small class="form-helper">@T("FieldIdentityLockedHint")</small>
-                                        }
                                     </label>
                                     <label class="form-filter">
                                         <span>@T("FieldKey") <strong class="required-mark">*</strong></span>
-                                        <span class="field-key-input-row">
-                                            <input class="form-control"
-                                                   required
-                                                   placeholder="name"
-                                                   disabled="@(!CanEditFieldIdentity(field))"
-                                                   value="@field.Key"
-                                                   @onchange="e => SetFieldKey(field, e.Value)" />
-                                            @if (!string.IsNullOrWhiteSpace(field.Key))
-                                            {
-                                                <span class="field-key-badge @FieldKeyBadgeClass(field)">
-                                                    @FieldKeyBadgeText(field)
-                                                </span>
-                                            }
-                                        </span>
-                                        @if (CanEditFieldIdentity(field))
+                                        @if (IsCreatingNewFieldKey(field))
                                         {
-                                            var suggestions = FieldKeySuggestions(field).ToList();
-                                            @if (suggestions.Count > 0)
-                                            {
-                                                <div class="field-key-suggestions">
-                                                    @foreach (var suggestion in suggestions)
+                                            <span class="field-key-create-row">
+                                                <span class="field-key-create-input">
+                                                    <input class="form-control"
+                                                           required
+                                                           placeholder="name"
+                                                           value="@field.Key"
+                                                           @onchange="e => SetFieldKey(field, e.Value)" />
+                                                    @if (!string.IsNullOrWhiteSpace(field.Key))
                                                     {
-                                                        <button type="button"
-                                                                class="field-key-chip"
-                                                                title="@string.Format(T("UsedInFormsCount"), suggestion.FormCount)"
-                                                                @onclick="() => ApplyFieldKeySuggestion(field, suggestion.Key)">
-                                                            <span>@suggestion.Key</span>
-                                                            <small>@suggestion.FormCount</small>
-                                                        </button>
+                                                        <span class="field-key-badge @FieldKeyBadgeClass(field)">
+                                                            @FieldKeyBadgeText(field)
+                                                        </span>
                                                     }
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <small class="form-helper">@T("NoFieldKeySuggestions")</small>
-                                            }
+                                                </span>
+                                                <button type="button"
+                                                        class="field-key-existing-button"
+                                                        @onclick="() => ReturnToExistingFieldKeys(field)">
+                                                    @T("ExistingFieldKeys")
+                                                </button>
+                                            </span>
                                         }
                                         else
                                         {
-                                            <small class="form-helper">@T("FieldIdentityLockedHint")</small>
+                                            <select class="form-control"
+                                                    disabled="@(!CanEditFieldIdentity(field))"
+                                                    value="@FieldKeySelection(field)"
+                                                    @onchange="e => SelectFieldKey(field, e.Value?.ToString())">
+                                                <option value="">@T("SelectExistingFieldKey")</option>
+                                                @foreach (var suggestion in FieldKeySuggestions(field))
+                                                {
+                                                    <option value="@suggestion.Key">@($"{suggestion.Key} ({suggestion.FormCount})")</option>
+                                                }
+                                                <option value="@CreateNewFieldKeySelection">@T("CreateBrandNewFieldKey")</option>
+                                            </select>
                                         }
                                     </label>
                                     <label class="form-filter field-card__label-input">
@@ -246,7 +219,7 @@ else
                                             disabled="@(!Auth.CanEditFormDefinitions)"
                                             title="@T("Delete")"
                                             aria-label="@T("Delete")"
-                                            @onclick="() => RemoveField(field)">
+                                            @onclick="() => RequestRemoveField(field)">
                                         <i class="fas fa-trash" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -304,12 +277,29 @@ else
 
                     <div class="definition-save-row">
                         <button class="btn-admin btn-primary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="SaveDefinition">@T("SaveDefinition")</button>
+                        <button class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="AddField">@T("AddField")</button>
                     </div>
                 </div>
             }
         </div>
     }
 </div>
+}
+
+@if (_fieldPendingRemoval is not null)
+{
+    <div class="modal-backdrop" @onclick="CancelFieldRemoval">
+        <div class="modal-box" style="max-width:460px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("RemoveSavedFieldTitle")</div>
+            <div class="modal-body">
+                <p>@string.Format(T("RemoveSavedFieldPrompt"), FieldDisplayName(_fieldPendingRemoval))</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-admin btn-ghost" @onclick="CancelFieldRemoval">@T("Cancel")</button>
+                <button type="button" class="btn-admin btn-danger" @onclick="ConfirmFieldRemoval">@T("Delete")</button>
+            </div>
+        </div>
+    </div>
 }
 
 <style>
@@ -350,17 +340,18 @@ else
     .field-card__drag span { width:4px; height:4px; border-radius:50%; background:#94a3b8; display:block; }
     .field-card__controls { display:grid; grid-template-columns:minmax(150px,170px) minmax(190px,240px) minmax(180px,1fr) minmax(94px,auto) 38px; gap:.5rem; align-items:start; min-width:0; }
     .field-card__label-input { min-width:0; }
-    .field-key-input-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.4rem; align-items:center; }
+    .field-key-create-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.4rem; align-items:center; min-width:0; }
+    .field-key-create-input { position:relative; min-width:0; }
+    .field-key-create-input .form-control { padding-right:4.6rem; }
+    .field-key-create-input .field-key-badge { position:absolute; top:50%; right:.4rem; transform:translateY(-50%); pointer-events:none; }
+    .field-key-existing-button { min-height:38px; padding:.45rem .6rem; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc; color:#334155; font:inherit; font-size:.76rem; font-weight:700; white-space:nowrap; cursor:pointer; }
+    .field-key-existing-button:hover { border-color:var(--primary, #0d47a1); color:var(--primary, #0d47a1); background:#fff; }
     .field-key-badge { display:inline-flex; align-items:center; justify-content:center; min-height:26px; padding:.25rem .5rem; border-radius:999px; font-size:.68rem; font-weight:800; white-space:nowrap; }
     .field-key-badge--new { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
     .field-key-badge--existed { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
-    .field-key-suggestions { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.35rem; }
-    .field-key-chip { display:inline-flex; align-items:center; gap:.35rem; max-width:100%; border:1px solid #dbe3ef; border-radius:999px; background:#fff; color:#334155; padding:.22rem .45rem; font:inherit; font-size:.74rem; cursor:pointer; }
-    .field-key-chip:hover { border-color:var(--primary, #0d47a1); color:var(--primary, #0d47a1); }
-    .field-key-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .field-key-chip small { display:inline-grid; place-items:center; min-width:18px; height:18px; border-radius:999px; background:#eef2f7; color:#475569; font-size:.66rem; font-weight:800; }
-    .field-card__required { display:flex; gap:.35rem; align-items:center; color:#334155; font-size:.9rem; min-height:38px; padding:1.45rem .2rem 0; }
-    .field-card__delete { width:38px; height:38px; min-width:38px; margin-top:1.45rem; padding:0; display:inline-flex; align-items:center; justify-content:center; align-self:start; }
+    .field-card__required { display:flex; gap:.35rem; align-items:center; align-self:end; color:#334155; font-size:.9rem; min-height:38px; padding:0 .2rem; }
+    .field-card__required input { margin:0; }
+    .field-card__delete { width:38px; height:38px; min-width:38px; margin-top:0; padding:0; display:inline-flex; align-items:center; justify-content:center; align-self:end; }
     .field-card__settings { display:grid; grid-template-columns:minmax(160px,240px); margin-top:.75rem; padding-top:.75rem; border-top:1px solid #eef2f7; }
     .field-options { width:100%; max-width:100%; box-sizing:border-box; margin:.75rem 0 0; padding:.65rem .75rem; border:1px solid #dbe3ef; border-left:4px solid #b99a4a; border-radius:8px; background:#f8fafc; display:grid; gap:.65rem; }
     .field-options__header { display:flex; justify-content:space-between; align-items:center; gap:.75rem; }
@@ -392,13 +383,15 @@ else
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private List<FormInputTypeModel> _fieldTypes = new();
+    private const string CreateNewFieldKeySelection = "__create_new_field_key__";
     private List<FormDefinitionModel> _definitions = new();
     private FormDefinitionModel? _editingDefinition;
     private FormFieldDefinitionModel? _draggedField;
+    private FormFieldDefinitionModel? _fieldPendingRemoval;
     private readonly HashSet<FormFieldDefinitionModel> _expandedOptionFields = new();
     private readonly HashSet<FormFieldDefinitionModel> _newUnsavedFields = new();
+    private readonly HashSet<FormFieldDefinitionModel> _fieldsCreatingNewKey = new();
     private FormDefinitionUsageModel? _usage;
-    private List<string> _definitionValidationErrors = new();
     private bool _hasAccess = true;
     private bool _loading = true;
     private bool _usageExpanded;
@@ -471,6 +464,8 @@ else
         _definitions = definitions.Data ?? new();
         _expandedOptionFields.Clear();
         _newUnsavedFields.Clear();
+        _fieldsCreatingNewKey.Clear();
+        _fieldPendingRemoval = null;
 
         var selectedDefinition = _editingDefinition is null
             ? _definitions.FirstOrDefault()
@@ -484,12 +479,13 @@ else
     private void NewDefinition()
     {
         if (!Auth.CanEditFormDefinitions) return;
-        _definitionValidationErrors.Clear();
         _usage = null;
         _usageExpanded = false;
         _usageLoading = false;
         _expandedOptionFields.Clear();
         _newUnsavedFields.Clear();
+        _fieldsCreatingNewKey.Clear();
+        _fieldPendingRemoval = null;
         var initialField = new FormFieldDefinitionModel
         {
             Key = string.Empty,
@@ -515,10 +511,11 @@ else
 
     private async Task EditDefinition(FormDefinitionModel definition)
     {
-        _definitionValidationErrors.Clear();
         _usageExpanded = false;
         _expandedOptionFields.Clear();
         _newUnsavedFields.Clear();
+        _fieldsCreatingNewKey.Clear();
+        _fieldPendingRemoval = null;
         _editingDefinition = Clone(definition);
         NormalizeEditingFields();
         await LoadUsageAsync();
@@ -574,15 +571,50 @@ else
         NormalizeEditingFields();
     }
 
+    private void RequestRemoveField(FormFieldDefinitionModel field)
+    {
+        if (!Auth.CanEditFormDefinitions || _editingDefinition is null) return;
+
+        if (_newUnsavedFields.Contains(field))
+        {
+            RemoveField(field);
+            return;
+        }
+
+        _fieldPendingRemoval = field;
+    }
+
+    private void CancelFieldRemoval() => _fieldPendingRemoval = null;
+
+    private void ConfirmFieldRemoval()
+    {
+        if (_fieldPendingRemoval is null) return;
+
+        var field = _fieldPendingRemoval;
+        _fieldPendingRemoval = null;
+        RemoveField(field);
+    }
+
     private void RemoveField(FormFieldDefinitionModel field)
     {
         if (!Auth.CanEditFormDefinitions) return;
         if (_editingDefinition is null) return;
         _expandedOptionFields.Remove(field);
         _newUnsavedFields.Remove(field);
+        _fieldsCreatingNewKey.Remove(field);
         _editingDefinition.Fields.Remove(field);
         for (var i = 0; i < _editingDefinition.Fields.Count; i++)
             _editingDefinition.Fields[i].Order = i;
+    }
+
+    private string FieldDisplayName(FormFieldDefinitionModel field)
+    {
+        var label = Text(field.Label, string.Empty);
+        return !string.IsNullOrWhiteSpace(label)
+            ? label
+            : !string.IsNullOrWhiteSpace(field.Key)
+                ? field.Key
+                : T("Field");
     }
 
     private async Task SaveDefinition()
@@ -591,10 +623,10 @@ else
         if (_editingDefinition is null) return;
 
         NormalizeEditingFields();
-        _definitionValidationErrors = ValidateDefinition(_editingDefinition);
-        if (_definitionValidationErrors.Count > 0)
+        var validationErrors = ValidateDefinition(_editingDefinition);
+        if (validationErrors.Count > 0)
         {
-            Http.Toast(T("PleaseCompleteRequiredFields"), 400);
+            Http.Toast($"{T("PleaseCompleteRequiredFields")} {string.Join(" | ", validationErrors)}", 400);
             return;
         }
 
@@ -602,7 +634,6 @@ else
         Http.Toast(res.Message, res.StatusCode);
         if (res.StatusCode is >= 200 and < 300)
         {
-            _definitionValidationErrors.Clear();
             await LoadDefinitionsAsync();
         }
     }
@@ -701,31 +732,62 @@ else
         field.Key = value?.ToString()?.Trim() ?? string.Empty;
     }
 
-    private void ApplyFieldKeySuggestion(FormFieldDefinitionModel field, string key)
+    private void SelectFieldKey(FormFieldDefinitionModel field, string? selection)
     {
         if (!CanEditFieldIdentity(field)) return;
-        field.Key = key;
+
+        if (string.Equals(selection, CreateNewFieldKeySelection, StringComparison.Ordinal))
+        {
+            field.Key = string.Empty;
+            _fieldsCreatingNewKey.Add(field);
+            return;
+        }
+
+        _fieldsCreatingNewKey.Remove(field);
+        field.Key = selection?.Trim() ?? string.Empty;
+    }
+
+    private void ReturnToExistingFieldKeys(FormFieldDefinitionModel field)
+    {
+        if (!CanEditFieldIdentity(field)) return;
+        field.Key = string.Empty;
+        _fieldsCreatingNewKey.Remove(field);
+    }
+
+    private bool IsCreatingNewFieldKey(FormFieldDefinitionModel field) =>
+        CanEditFieldIdentity(field) && _fieldsCreatingNewKey.Contains(field);
+
+    private string FieldKeySelection(FormFieldDefinitionModel field)
+    {
+        if (_fieldsCreatingNewKey.Contains(field))
+            return CreateNewFieldKeySelection;
+
+        return field.Key?.Trim() ?? string.Empty;
     }
 
     private IEnumerable<FieldKeySuggestion> FieldKeySuggestions(FormFieldDefinitionModel field)
     {
         var currentType = FormInputTypeCatalog.NormalizeType(field.Type);
         var currentKey = field.Key?.Trim() ?? string.Empty;
+        var keysUsedByOtherFields = (_editingDefinition?.Fields ?? [])
+            .Where(item => !ReferenceEquals(item, field) && !string.IsNullOrWhiteSpace(item.Key))
+            .Select(item => item.Key.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return _definitions
             .SelectMany(definition => definition.Fields
                 .Where(item =>
                     string.Equals(FormInputTypeCatalog.NormalizeType(item.Type), currentType, StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(item.Key))
+                    !string.IsNullOrWhiteSpace(item.Key) &&
+                    (!keysUsedByOtherFields.Contains(item.Key.Trim()) ||
+                     string.Equals(item.Key.Trim(), currentKey, StringComparison.OrdinalIgnoreCase)))
                 .Select(item => new { definition.Id, Key = item.Key.Trim() }))
             .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
             .Select(group => new FieldKeySuggestion(
                 group.First().Key,
                 group.Select(item => item.Id).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).Count()))
-            .Where(suggestion => !string.Equals(suggestion.Key, currentKey, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(suggestion => suggestion.FormCount)
-            .ThenBy(suggestion => suggestion.Key)
-            .Take(8);
+            .ThenBy(suggestion => suggestion.Key);
     }
 
     private bool FieldKeyExists(FormFieldDefinitionModel field)
@@ -751,7 +813,13 @@ else
         if (!CanEditFieldIdentity(field)) return;
         if (!Auth.CanEditFormDefinitions) return;
         var oldCapability = Capability(field);
-        field.Type = FormInputTypeCatalog.NormalizeType(type);
+        var nextType = FormInputTypeCatalog.NormalizeType(type);
+        if (!string.Equals(field.Type, nextType, StringComparison.OrdinalIgnoreCase))
+        {
+            field.Key = string.Empty;
+            _fieldsCreatingNewKey.Remove(field);
+        }
+        field.Type = nextType;
         var newCapability = Capability(field);
         ApplyFieldDefaults(field);
 

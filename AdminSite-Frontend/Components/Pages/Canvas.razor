@@ -326,7 +326,7 @@
         ? "height: 100%;"
         : $"height: {CssNumber(ScaledIframeHeight)}px;";
     private string PreviewScaleStyle => IsInteractivePreview
-        ? $"height: {CssNumber(100 / PreviewScale)}%;"
+        ? "width: 100%; height: 100%; transform: none;"
         : $"height: {CssNumber(_iframeHeight)}px;";
     private string PreviewIframeStyle => IsInteractivePreview
         ? "width: 100%; height: 100%; border: none; display: block; pointer-events: auto;"

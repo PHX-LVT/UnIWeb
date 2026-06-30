@@ -86,6 +86,9 @@ public sealed class FormDefinitionService
             existing = await GetByIdAsync(id);
         }
 
+        if (existing is not null)
+            EnsureRetainedFieldTypesUnchanged(existing.Fields, request.Fields);
+
         var definition = existing ?? new FormDefinition
         {
             Id = ObjectId.GenerateNewId().ToString(),
@@ -112,6 +115,31 @@ public sealed class FormDefinitionService
             new ReplaceOptions { IsUpsert = true });
 
         return definition;
+    }
+
+    private static void EnsureRetainedFieldTypesUnchanged(
+        IEnumerable<FormDefinitionField> existingFields,
+        IEnumerable<FormFieldDefinitionDto> requestedFields)
+    {
+        var requestedByKey = requestedFields
+            .Where(field => !string.IsNullOrWhiteSpace(field.Key))
+            .GroupBy(field => field.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var existingField in existingFields)
+        {
+            if (!requestedByKey.TryGetValue(existingField.Key, out var requestedField))
+                continue;
+
+            if (string.Equals(
+                    FormInputTypeCatalog.NormalizeType(existingField.Type),
+                    FormInputTypeCatalog.NormalizeType(requestedField.Type),
+                    StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            throw new InvalidOperationException(
+                $"Form-Field Type for saved Field Key \"{existingField.Key}\" cannot be changed. Delete the field and create a new one.");
+        }
     }
 
     public async Task<bool> DeleteAsync(string id)

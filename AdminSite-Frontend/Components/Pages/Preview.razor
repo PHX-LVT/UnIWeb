@@ -24,10 +24,17 @@
 @if (IsRuntimePreviewMode)
 {
     <style>
-        html, body {
-            height: auto !important;
+        html {
+            height: 100% !important;
             min-height: 100%;
             overflow: auto !important;
+            background: #fff;
+        }
+
+        body {
+            height: auto !important;
+            min-height: 100%;
+            overflow: visible !important;
             background: #fff;
         }
     </style>
