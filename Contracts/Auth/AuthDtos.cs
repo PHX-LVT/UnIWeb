@@ -42,6 +42,11 @@ public static class AdminPermissionKeys
     public const string ManageSettings = "manage-settings";
     public const string DeleteContent = "delete-content";
     public const string ViewLogs = "view-logs";
+    public const string ViewFormDefinitions = "view-form-definitions";
+    public const string EditFormDefinitions = "edit-form-definitions";
+    public const string ViewFormSubmissions = "view-form-submissions";
+    public const string ManageFormSubmissions = "manage-form-submissions";
+    public const string ExportFormSubmissions = "export-form-submissions";
 
     public static readonly string[] All =
     [
@@ -51,7 +56,12 @@ public static class AdminPermissionKeys
         ManageUsers,
         ManageSettings,
         DeleteContent,
-        ViewLogs
+        ViewLogs,
+        ViewFormDefinitions,
+        EditFormDefinitions,
+        ViewFormSubmissions,
+        ManageFormSubmissions,
+        ExportFormSubmissions
     ];
 }
 

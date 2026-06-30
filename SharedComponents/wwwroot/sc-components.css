@@ -3454,6 +3454,9 @@ button.sc-library__media--video {
 .sc-form-field {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     gap: 6px;
 }
 
@@ -3475,6 +3478,9 @@ button.sc-library__media--video {
 
 .sc-form-input {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     padding: 10px 14px;
     color: var(--navy);
     font-family: inherit;
@@ -3489,9 +3495,44 @@ button.sc-library__media--video {
     border-color: var(--gold);
 }
 
+.sc-form-input--invalid,
+.sc-form-input--invalid:focus {
+    border-color: #c62828;
+    box-shadow: 0 0 0 3px rgba(198, 40, 40, .12);
+}
+
+.sc-form-field__error,
+.sc-public-modal__field-error {
+    color: #c62828;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
 textarea.sc-form-input {
     min-height: 120px;
+    max-height: min(42vh, 320px);
     resize: vertical;
+}
+
+textarea.sc-form-input--size-1 {
+    min-height: 86px;
+}
+
+textarea.sc-form-input--size-2 {
+    min-height: 118px;
+}
+
+textarea.sc-form-input--size-3 {
+    min-height: 150px;
+}
+
+textarea.sc-form-input--size-4 {
+    min-height: 182px;
+}
+
+textarea.sc-form-input--size-5 {
+    min-height: 214px;
 }
 
 @media (max-width: 680px) {
@@ -4065,6 +4106,21 @@ textarea.sc-form-input {
     font-weight: 600;
 }
 
+.sc-public-modal__field--checkbox {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+}
+
+.sc-public-modal__field--checkbox .sc-public-modal__field-error {
+    grid-column: 1 / -1;
+}
+
+.sc-public-modal__checkbox-label {
+    min-width: 0;
+    line-height: 1.35;
+}
+
 .sc-public-modal__form input,
 .sc-public-modal__form select,
 .sc-public-modal__form textarea {
@@ -4093,10 +4149,37 @@ textarea.sc-form-input {
     background-repeat: no-repeat;
 }
 
+.sc-public-modal__form input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    accent-color: var(--navy);
+}
+
 .sc-public-modal__form textarea {
     min-height: 110px;
-    max-height: 34vh;
+    max-height: min(42vh, 280px);
     resize: vertical;
+}
+
+.sc-public-modal__form textarea[data-input-size="1"] {
+    min-height: 86px;
+}
+
+.sc-public-modal__form textarea[data-input-size="2"] {
+    min-height: 118px;
+}
+
+.sc-public-modal__form textarea[data-input-size="3"] {
+    min-height: 150px;
+}
+
+.sc-public-modal__form textarea[data-input-size="4"] {
+    min-height: 182px;
+}
+
+.sc-public-modal__form textarea[data-input-size="5"] {
+    min-height: 214px;
 }
 
 .sc-public-modal__form input:focus,
@@ -4105,6 +4188,12 @@ textarea.sc-form-input {
     border-color: var(--navy);
     outline: 0;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--navy) 20%, transparent);
+}
+
+.sc-public-modal__form .sc-public-modal__input--invalid,
+.sc-public-modal__form .sc-public-modal__input--invalid:focus {
+    border-color: #c62828;
+    box-shadow: 0 0 0 3px rgba(198, 40, 40, .12);
 }
 
 .sc-public-modal__form .sc-btn {

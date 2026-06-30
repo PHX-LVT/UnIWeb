@@ -506,9 +506,22 @@ namespace FullProject.Services
                 {
                     AdminPermissionKeys.ManageContent,
                     AdminPermissionKeys.PublishContent,
-                    AdminPermissionKeys.DeleteContent
+                    AdminPermissionKeys.DeleteContent,
+                    AdminPermissionKeys.ViewFormDefinitions,
+                    AdminPermissionKeys.EditFormDefinitions,
+                    AdminPermissionKeys.ViewFormSubmissions,
+                    AdminPermissionKeys.ManageFormSubmissions,
+                    AdminPermissionKeys.ExportFormSubmissions
                 },
-                AdminRole.Writer => new[] { AdminPermissionKeys.ManageContent },
+                AdminRole.Writer => new[]
+                {
+                    AdminPermissionKeys.ManageContent,
+                    AdminPermissionKeys.ViewFormDefinitions,
+                    AdminPermissionKeys.EditFormDefinitions,
+                    AdminPermissionKeys.ViewFormSubmissions,
+                    AdminPermissionKeys.ManageFormSubmissions,
+                    AdminPermissionKeys.ExportFormSubmissions
+                },
                 _ => Array.Empty<string>()
             };
 
@@ -662,9 +675,22 @@ namespace FullProject.Services
             {
                 AdminPermissionKeys.ManageContent,
                 AdminPermissionKeys.PublishContent,
-                AdminPermissionKeys.DeleteContent
+                AdminPermissionKeys.DeleteContent,
+                AdminPermissionKeys.ViewFormDefinitions,
+                AdminPermissionKeys.EditFormDefinitions,
+                AdminPermissionKeys.ViewFormSubmissions,
+                AdminPermissionKeys.ManageFormSubmissions,
+                AdminPermissionKeys.ExportFormSubmissions
             },
-            AdminRole.Writer => new[] { AdminPermissionKeys.ManageContent },
+            AdminRole.Writer => new[]
+            {
+                AdminPermissionKeys.ManageContent,
+                AdminPermissionKeys.ViewFormDefinitions,
+                AdminPermissionKeys.EditFormDefinitions,
+                AdminPermissionKeys.ViewFormSubmissions,
+                AdminPermissionKeys.ManageFormSubmissions,
+                AdminPermissionKeys.ExportFormSubmissions
+            },
             _ => Array.Empty<string>()
         };
 

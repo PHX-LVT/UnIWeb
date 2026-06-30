@@ -286,6 +286,14 @@ namespace FullProject.Services
                     .Descending(s => s.SubmittedAt)));
             await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
                 Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.AssignedToAdminId)
+                    .Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
+                    .Ascending(s => s.IsRead)
+                    .Descending(s => s.SubmittedAt)));
+            await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
+                Builders<FormSubmission>.IndexKeys
                     .Ascending(s => s.FormKey)
                     .Descending(s => s.SubmittedAt)));
             await submissions.Indexes.CreateOneAsync(new CreateIndexModel<FormSubmission>(
@@ -300,9 +308,14 @@ namespace FullProject.Services
                     .Descending(s => s.SubmittedAt)));
 
             var formDefinitions = _database.GetCollection<FormDefinition>("form_definitions");
-            await formDefinitions.Indexes.CreateOneAsync(new CreateIndexModel<FormDefinition>(
+            await EnsureIndexAsync(formDefinitions,
                 Builders<FormDefinition>.IndexKeys.Ascending(f => f.Key),
-                new CreateIndexOptions { Unique = true }));
+                IndexOptions("ux_form_definitions_key", unique: true));
+
+            var formInputTypes = _database.GetCollection<FormInputTypeDefinition>("form_input_types");
+            await EnsureIndexAsync(formInputTypes,
+                Builders<FormInputTypeDefinition>.IndexKeys.Ascending(t => t.Type),
+                IndexOptions("ux_form_input_types_type", unique: true));
         }
 
         private async Task EnsureIndexAsync<T>(

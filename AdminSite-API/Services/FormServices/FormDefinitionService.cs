@@ -13,10 +13,12 @@ public sealed class FormDefinitionService
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly IMongoDatabase _database;
     private readonly IMongoCollection<FormDefinition> _definitions;
+    private readonly FormInputTypeService _inputTypes;
 
-    public FormDefinitionService(IMongoDatabase database)
+    public FormDefinitionService(IMongoDatabase database, FormInputTypeService inputTypes)
     {
         _database = database;
+        _inputTypes = inputTypes;
         _definitions = database.GetCollection<FormDefinition>("form_definitions");
     }
 
@@ -27,6 +29,16 @@ public sealed class FormDefinitionService
 
         return await _definitions
             .Find(definition => definition.Key == normalizedKey && definition.Active)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<FormDefinition?> GetByKeyAsync(string key)
+    {
+        var normalizedKey = NormalizeKey(key);
+        if (normalizedKey is null) return null;
+
+        return await _definitions
+            .Find(definition => definition.Key == normalizedKey)
             .FirstOrDefaultAsync();
     }
 
@@ -61,9 +73,21 @@ public sealed class FormDefinitionService
     {
         var key = NormalizeKey(request.Key) ?? throw new ArgumentException("Invalid form key.", nameof(request));
         var now = DateTime.UtcNow;
-        var existing = string.IsNullOrWhiteSpace(id)
-            ? await _definitions.Find(definition => definition.Key == key).FirstOrDefaultAsync()
-            : await GetByIdAsync(id);
+        FormDefinition? existing;
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            if (await _definitions.Find(definition => definition.Key == key).Limit(1).AnyAsync())
+                throw new InvalidOperationException("Form Key already exists.");
+
+            existing = null;
+        }
+        else
+        {
+            existing = await GetByIdAsync(id);
+        }
+
+        if (existing is not null)
+            EnsureRetainedFieldTypesUnchanged(existing.Fields, request.Fields);
 
         var definition = existing ?? new FormDefinition
         {
@@ -78,29 +102,10 @@ public sealed class FormDefinitionService
         definition.DisplayMode = request.DisplayMode;
         definition.Layout = request.Layout;
         definition.Active = request.Active;
+        var capabilities = await _inputTypes.GetCapabilityLookupAsync();
         definition.Fields = request.Fields
             .OrderBy(field => field.Order)
-            .Select((field, index) => new FormDefinitionField
-            {
-                Key = CleanFieldKey(field.Key, index),
-                Type = string.IsNullOrWhiteSpace(field.Type) ? "text" : field.Type.Trim().ToLowerInvariant(),
-                Label = CleanTextMap(field.Label),
-                Placeholder = CleanTextMap(field.Placeholder),
-                Required = field.Required,
-                MinLength = Math.Clamp(field.MinLength, 0, 2_000),
-                MaxLength = Math.Clamp(field.MaxLength <= 0 ? 500 : field.MaxLength, 1, 2_000),
-                Order = index,
-                Options = field.Options
-                    .OrderBy(option => option.Order)
-                    .Select((option, optionIndex) => new FormDefinitionFieldOption
-                    {
-                        Value = option.Value.Trim(),
-                        Label = CleanTextMap(option.Label),
-                        Order = optionIndex
-                    })
-                    .Where(option => !string.IsNullOrWhiteSpace(option.Value))
-                    .ToList()
-            })
+            .Select((field, index) => MapRequestField(field, index, capabilities))
             .ToList();
         definition.UpdatedAt = now;
 
@@ -110,6 +115,31 @@ public sealed class FormDefinitionService
             new ReplaceOptions { IsUpsert = true });
 
         return definition;
+    }
+
+    private static void EnsureRetainedFieldTypesUnchanged(
+        IEnumerable<FormDefinitionField> existingFields,
+        IEnumerable<FormFieldDefinitionDto> requestedFields)
+    {
+        var requestedByKey = requestedFields
+            .Where(field => !string.IsNullOrWhiteSpace(field.Key))
+            .GroupBy(field => field.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var existingField in existingFields)
+        {
+            if (!requestedByKey.TryGetValue(existingField.Key, out var requestedField))
+                continue;
+
+            if (string.Equals(
+                    FormInputTypeCatalog.NormalizeType(existingField.Type),
+                    FormInputTypeCatalog.NormalizeType(requestedField.Type),
+                    StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            throw new InvalidOperationException(
+                $"Form-Field Type for saved Field Key \"{existingField.Key}\" cannot be changed. Delete the field and create a new one.");
+        }
     }
 
     public async Task<bool> DeleteAsync(string id)
@@ -126,6 +156,14 @@ public sealed class FormDefinitionService
             .Find(submission => submission.FormId == id)
             .Limit(1)
             .AnyAsync();
+    }
+
+    public async Task<long> CountSubmissionsAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return 0;
+
+        return await _database.GetCollection<FormSubmission>("form_submissions")
+            .CountDocumentsAsync(submission => submission.FormId == id);
     }
 
     public async Task<bool> IsReferencedAsync(string id)
@@ -177,6 +215,7 @@ public sealed class FormDefinitionService
         {
             FormDefinitionId = id,
             TotalCount = ordered.Count,
+            SubmissionCount = await CountSubmissionsAsync(id),
             Items = ordered
         };
     }
@@ -454,7 +493,8 @@ public sealed class FormDefinitionService
                 Placeholder = new(field.Placeholder),
                 Required = field.Required,
                 MinLength = field.MinLength,
-                MaxLength = field.MaxLength,
+                MaxLength = FormInputTypeCatalog.MaximumInputLength(FormInputTypeCatalog.Get(field.Type)),
+                InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize),
                 Order = field.Order,
                 Options = field.Options
                     .OrderBy(option => option.Order)
@@ -469,7 +509,18 @@ public sealed class FormDefinitionService
             .ToList()
     };
 
-    public static FormDefinitionResponse MapPublic(FormDefinition definition) => new()
+    public async Task<FormDefinitionResponse> MapPublicAsync(FormDefinition definition) =>
+        MapPublic(definition, await _inputTypes.GetCapabilityLookupAsync());
+
+    public async Task<List<FormDefinitionResponse>> MapPublicAsync(IEnumerable<FormDefinition> definitions)
+    {
+        var capabilities = await _inputTypes.GetCapabilityLookupAsync();
+        return definitions.Select(definition => MapPublic(definition, capabilities)).ToList();
+    }
+
+    public static FormDefinitionResponse MapPublic(
+        FormDefinition definition,
+        IReadOnlyDictionary<string, FormInputTypeCapability>? capabilities = null) => new()
     {
         Id = definition.Id,
         Key = definition.Key,
@@ -489,7 +540,8 @@ public sealed class FormDefinitionService
                 Placeholder = new(field.Placeholder),
                 Required = field.Required,
                 MinLength = field.MinLength,
-                MaxLength = field.MaxLength,
+                MaxLength = FormInputTypeCatalog.MaximumInputLength(Capability(field.Type, capabilities)),
+                InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(Capability(field.Type, capabilities), field.InputBoxSize),
                 Order = field.Order,
                 Options = field.Options
                     .OrderBy(option => option.Order)
@@ -505,6 +557,11 @@ public sealed class FormDefinitionService
         CreatedAt = definition.CreatedAt,
         UpdatedAt = definition.UpdatedAt
     };
+
+    private static FormInputTypeCapability Capability(
+        string? type,
+        IReadOnlyDictionary<string, FormInputTypeCapability>? capabilities) =>
+        FormInputTypeService.Capability(type, capabilities);
 
     private static Dictionary<string, string> CleanTextMap(Dictionary<string, string>? values) =>
         values is null
@@ -597,18 +654,24 @@ public sealed class FormDefinitionService
         int min,
         int max,
         int order,
-        List<FormDefinitionFieldOption>? options = null) => new()
+        List<FormDefinitionFieldOption>? options = null)
+    {
+        var normalizedType = FormInputTypeCatalog.NormalizeType(type);
+        var capability = FormInputTypeCatalog.Get(normalizedType);
+        return new FormDefinitionField
         {
             Key = key,
-            Type = type,
+            Type = normalizedType,
             Label = new() { ["en"] = label },
             Placeholder = new() { ["en"] = label },
             Required = required,
-            MinLength = min,
-            MaxLength = max,
+            MinLength = capability.SupportsMaxCharacters ? min : 0,
+            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(normalizedType, max),
+            InputBoxSize = FormInputTypeCatalog.DefaultInputBoxSize(normalizedType),
             Order = order,
-            Options = options ?? new()
+            Options = capability.SupportsOptions ? options ?? new() : new()
         };
+    }
 
     private static FormDefinitionFieldOption Option(string value, string label, int order) => new()
     {
@@ -616,5 +679,42 @@ public sealed class FormDefinitionService
         Label = new() { ["en"] = label },
         Order = order
     };
+
+    private static FormDefinitionField MapRequestField(
+        FormFieldDefinitionDto field,
+        int index,
+        IReadOnlyDictionary<string, FormInputTypeCapability>? capabilities = null)
+    {
+        var type = FormInputTypeCatalog.NormalizeType(field.Type);
+        var capability = Capability(type, capabilities);
+        var options = capability.SupportsOptions
+            ? field.Options
+                .OrderBy(option => option.Order)
+                .Select((option, optionIndex) => new FormDefinitionFieldOption
+                {
+                    Value = option.Value.Trim(),
+                    Label = CleanTextMap(option.Label),
+                    Order = optionIndex
+                })
+                .Where(option => !string.IsNullOrWhiteSpace(option.Value))
+                .ToList()
+            : new List<FormDefinitionFieldOption>();
+
+        return new FormDefinitionField
+        {
+            Key = CleanFieldKey(field.Key, index),
+            Type = type,
+            Label = CleanTextMap(field.Label),
+            Placeholder = CleanTextMap(field.Placeholder),
+            Required = field.Required,
+            MinLength = capability.SupportsMaxCharacters
+                ? Math.Clamp(field.MinLength, 0, FormInputTypeCatalog.MaxCharactersLimit)
+                : 0,
+            MaxLength = FormInputTypeCatalog.MaximumInputLength(capability),
+            InputBoxSize = FormInputTypeCatalog.NormalizeInputBoxSize(capability, field.InputBoxSize),
+            Order = index,
+            Options = options
+        };
+    }
 
 }

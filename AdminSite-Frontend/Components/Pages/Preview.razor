@@ -10,6 +10,7 @@
 @inject AdminLanguageService AdminLanguageState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@using Contracts.Forms
 @using Contracts.Public
 @using SharedComponents
 @using SharedComponents.Helpers
@@ -18,6 +19,25 @@
 @if (!string.IsNullOrWhiteSpace(_themeCss))
 {
     <style>@((MarkupString)_themeCss)</style>
+}
+
+@if (IsRuntimePreviewMode)
+{
+    <style>
+        html {
+            height: 100% !important;
+            min-height: 100%;
+            overflow: auto !important;
+            background: #fff;
+        }
+
+        body {
+            height: auto !important;
+            min-height: 100%;
+            overflow: visible !important;
+            background: #fff;
+        }
+    </style>
 }
 
 @if (!_ready)
@@ -41,6 +61,7 @@ else
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter, SupplyParameterFromQuery(Name = "lang")] public string? Lang { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "v")] public string? Version { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "mode")] public string? Mode { get; set; }
 
     private PublicPageDto? _pageDto;
     private string _lang = "en";
@@ -156,9 +177,17 @@ else
             : string.Concat(lang.Where(c => char.IsLetterOrDigit(c) || c == '-'));
     }
 
-    private string GetRequestKey() => $"{PageId}:{GetRequestedLang()}:{Version}";
+    private string GetRequestKey() => $"{PageId}:{GetRequestedLang()}:{Version}:{GetRequestedMode()}";
 
     private string GetRequestedLang() => NormalizeLang(Lang);
+
+    private string GetRequestedMode()
+    {
+        var mode = (Mode ?? string.Empty).Trim().ToLowerInvariant();
+        return mode is "editor" or "arrange" ? mode : "preview";
+    }
+
+    private bool IsRuntimePreviewMode => GetRequestedMode() == "preview";
 
     private async Task<Dictionary<string, List<BlockModel>>> LoadBlocksAsync(List<SectionModel> sections)
     {
@@ -640,6 +669,8 @@ else
                 Label = field.Label,
                 Placeholder = field.Placeholder,
                 Required = field.Required,
+                MaxLength = field.MaxLength,
+                InputBoxSize = field.InputBoxSize,
                 Options = field.Options.OrderBy(option => option.Order).Select(option => new PublicFormFieldOptionDto
                 {
                     Value = option.Value,
@@ -656,6 +687,8 @@ else
             Type = field.FieldType ?? "text",
             Label = field.Label ?? new(),
             Required = field.Required,
+            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.FieldType, 0),
+            InputBoxSize = 1,
             Options = (field.Options ?? new()).Select((option, index) => new PublicFormFieldOptionDto
             {
                 Value = option,

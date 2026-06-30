@@ -676,6 +676,7 @@ namespace AdminSite.Models
     {
         public string FormDefinitionId { get; set; } = string.Empty;
         public int TotalCount { get; set; }
+        public long SubmissionCount { get; set; }
         public List<FormDefinitionUsageItemModel> Items { get; set; } = new();
     }
     public class FormSubmissionFieldModel
@@ -685,6 +686,16 @@ namespace AdminSite.Models
         public string Type { get; set; } = "text";
         public string Value { get; set; } = string.Empty;
         public int Order { get; set; }
+        public bool IsDeletedField { get; set; }
+    }
+
+    public class FormSubmissionTimelineEventModel
+    {
+        public string EventType { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string ActorId { get; set; } = string.Empty;
+        public string ActorName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
     }
 
     public class FormSubmissionModel
@@ -698,6 +709,12 @@ namespace AdminSite.Models
         public FormSubmissionStatusModel Status { get; set; }
         public List<FormSubmissionFieldModel> Fields { get; set; } = new();
         public string? InternalNotes { get; set; }
+        public string? AssignedToAdminId { get; set; }
+        public string? AssignedToAdminName { get; set; }
+        public bool IsRead { get; set; }
+        public DateTime? ViewedAt { get; set; }
+        public string? ViewedByAdminId { get; set; }
+        public List<FormSubmissionTimelineEventModel> Timeline { get; set; } = new();
         public DateTime SubmittedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -706,6 +723,14 @@ namespace AdminSite.Models
     {
         public FormSubmissionStatusModel Status { get; set; }
         public string? InternalNotes { get; set; }
+        public string? AssignedToAdminId { get; set; }
+    }
+
+    public class FormSubmissionAssigneeModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
     }
 
     public class FormFieldOptionModel
@@ -713,6 +738,35 @@ namespace AdminSite.Models
         public string Value { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
         public int Order { get; set; }
+    }
+
+    public class FormInputTypeModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string LabelKey { get; set; } = string.Empty;
+        public Dictionary<string, string> Name { get; set; } = new();
+        public bool Active { get; set; } = true;
+        public bool SupportsMaxCharacters { get; set; }
+        public bool SupportsOptions { get; set; }
+        public bool SupportsInputBoxSize { get; set; }
+        public bool UsesMultilineInput { get; set; }
+        public int DefaultMaxCharacters { get; set; }
+        public int DefaultInputBoxSize { get; set; } = 1;
+        public int Order { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class FormInputTypeUpdateModel
+    {
+        public Dictionary<string, string> Name { get; set; } = new();
+        public bool Active { get; set; } = true;
+        public bool SupportsMaxCharacters { get; set; }
+        public bool SupportsOptions { get; set; }
+        public bool SupportsInputBoxSize { get; set; }
+        public int DefaultMaxCharacters { get; set; }
+        public int DefaultInputBoxSize { get; set; } = 1;
     }
 
     public class FormFieldDefinitionModel
@@ -723,7 +777,8 @@ namespace AdminSite.Models
         public Dictionary<string, string> Placeholder { get; set; } = new();
         public bool Required { get; set; }
         public int MinLength { get; set; }
-        public int MaxLength { get; set; } = 500;
+        public int MaxLength { get; set; }
+        public int InputBoxSize { get; set; } = 1;
         public List<FormFieldOptionModel> Options { get; set; } = new();
         public int Order { get; set; }
     }

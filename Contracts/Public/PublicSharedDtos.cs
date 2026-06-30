@@ -206,6 +206,8 @@ namespace Contracts.Public
         public Dictionary<string, string> Label { get; set; } = new();
         public Dictionary<string, string> Placeholder { get; set; } = new();
         public bool Required { get; set; }
+        public int MaxLength { get; set; }
+        public int InputBoxSize { get; set; } = 1;
         public List<PublicFormFieldOptionDto> Options { get; set; } = new();
         public int Order { get; set; }
     }
