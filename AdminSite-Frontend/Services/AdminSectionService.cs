@@ -39,13 +39,20 @@ namespace AdminSite.Services
         public Task<ApiResponse<List<CanvasSectionPresetModel>>> GetCanvasPresetsAsync() =>
             _http.GetAsync<List<CanvasSectionPresetModel>>("api/admin/canvas-section-presets");
 
-        public Task<ApiResponse<CanvasSectionPresetModel>> SaveCanvasPresetAsync(string pageId, string sectionId, Dictionary<string, string> name) =>
+        public Task<ApiResponse<CanvasSectionPresetModel>> SaveCanvasPresetAsync(
+            string pageId,
+            string sectionId,
+            Dictionary<string, string> name,
+            List<CanvasPresetEditableSlotModel> editableSlots,
+            CanvasPresetLockPolicyModel lockPolicy) =>
             _http.PostAsync<CanvasSectionPresetModel>("api/admin/canvas-section-presets",
                 new CanvasSectionPresetCreateRequest
                 {
                     PageId = pageId,
                     SectionId = sectionId,
-                    Name = name
+                    Name = name,
+                    EditableSlots = editableSlots,
+                    LockPolicy = lockPolicy
                 });
 
         public Task<ApiResponse<object>> ApplyCanvasPresetAsync(string pageId, string presetId) =>

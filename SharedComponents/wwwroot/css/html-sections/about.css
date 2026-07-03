@@ -1,0 +1,187 @@
+/* About-page HTML sections
+   HTML roots: .sc-about-*, .sc-cta--about-final
+   Source-controlled styles for handcrafted CMS HTML compositions. */
+.sc-about-identity {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: clamp(48px, 7vw, 100px);
+    align-items: center;
+}
+
+.sc-about-identity__eyebrow,
+.sc-about-flags__eyebrow {
+    display: inline-block;
+    margin-bottom: 18px;
+    color: var(--gold);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+}
+
+.sc-about-identity h2 {
+    margin: 0 0 22px;
+    color: var(--navy);
+    font-size: clamp(30px, 3.4vw, 46px);
+    font-weight: 700;
+    line-height: 1.16;
+}
+
+.sc-about-identity p {
+    max-width: 680px;
+    margin: 0 0 18px;
+    color: #4a5568;
+    font-size: 16px;
+    line-height: 1.75;
+}
+
+.sc-about-identity__metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px 40px;
+    margin-top: 54px;
+}
+
+.sc-about-identity__metric strong {
+    display: block;
+    color: var(--navy);
+    font-size: 38px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.sc-about-identity__metric span {
+    display: block;
+    margin-top: 10px;
+    color: #7a8599;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.sc-about-identity__frame {
+    position: relative;
+    padding: 5px;
+    background: linear-gradient(145deg, #f3f3f3, #c1ddff);
+    border-radius: 28px;
+    box-shadow: 0 20px 60px rgba(0, 26, 51, 0.1);
+}
+
+.sc-about-identity__frame img {
+    width: 100%;
+    display: block;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 24px;
+}
+
+.sc-about-flags {
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+}
+
+.sc-about-flags::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: url("/_content/SharedComponents/demo-assets/world-map-light.svg") center 70% / 30% no-repeat;
+    opacity: 0.2;
+    pointer-events: none;
+}
+
+.sc-about-flags__inner {
+    position: relative;
+    z-index: 1;
+}
+
+.sc-about-flags h2 {
+    max-width: 900px;
+    margin: 0 auto 18px;
+    color: #0f172a;
+    font-size: clamp(30px, 3vw, 42px);
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.sc-about-flags p {
+    margin: 0;
+    color: #677281;
+    font-size: 16px;
+}
+
+.sc-about-flags__grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 34px;
+}
+
+.sc-about-flags__grid img {
+    width: 48px;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.22);
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.12));
+    transition: transform var(--transition);
+}
+
+.sc-about-flags__grid img:hover {
+    transform: translateY(-6px) scale(1.1);
+}
+
+.sc-cta--about-final {
+    max-width: min(1200px, calc(100% - 60px));
+    padding: 64px 48px;
+    color: #fff;
+    background: linear-gradient(135deg, #001a33, #002b55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+}
+
+.sc-cta--about-final::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 42px 42px;
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.sc-cta--about-final > * {
+    position: relative;
+    z-index: 1;
+}
+
+.sc-cta--about-final .sc-btn--outline {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+.sc-cta--about-final .sc-btn--outline:hover {
+    color: #392a0c;
+    background: var(--gold-gradient);
+    border-color: transparent;
+}
+
+@media (max-width: 992px) {
+.sc-about-identity {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+.sc-about-identity__metrics {
+        flex-direction: column;
+    }
+
+.sc-cta--about-final {
+        max-width: calc(100% - 36px);
+        padding: 48px 28px;
+    }
+}

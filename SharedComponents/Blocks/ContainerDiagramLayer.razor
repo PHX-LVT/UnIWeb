@@ -1,0 +1,81 @@
+@using Contracts.Public
+@using System.Globalization
+
+<svg class="sc-container-diagram"
+     data-sc-diagram="@DiagramId"
+     aria-hidden="true"
+     focusable="false"
+     preserveAspectRatio="none">
+    <defs>
+        <marker id="@MarkerId"
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="5"
+                markerHeight="5"
+                orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+        </marker>
+    </defs>
+    @foreach (var item in Diagram.Decorations)
+    {
+        <path class="@StrokeClass(item.ColorMode, item.Style)"
+              data-sc-diagram-role="decoration"
+              data-sc-diagram-kind="@item.Kind"
+              data-sc-from-anchor="@item.FromAnchor"
+              data-sc-to-anchor="@item.ToAnchor"
+              data-sc-radius="@Number(item.RadiusPercent)"
+              data-sc-start-angle="@item.StartAngle"
+              data-sc-end-angle="@item.EndAngle"
+              style="@StrokeStyle(item.ColorMode, item.Color, item.Width, item.Opacity)" />
+    }
+    @foreach (var item in Diagram.Connectors)
+    {
+        <path class="@StrokeClass(item.ColorMode, item.Style)"
+              data-sc-diagram-role="connector"
+              data-sc-diagram-kind="@item.Routing"
+              data-sc-from-anchor="@item.FromAnchor"
+              data-sc-to-anchor="@item.ToAnchor"
+              marker-end="@(item.ArrowEnd ? $"url(#{MarkerId})" : null)"
+              style="@StrokeStyle(item.ColorMode, item.Color, item.Width, item.Opacity)" />
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public PublicContainerDiagramSettingsDto Diagram { get; set; } = default!;
+    [Parameter] public string DiagramId { get; set; } = string.Empty;
+
+    private string MarkerId => $"sc-diagram-arrow-{SanitizeId(DiagramId)}";
+
+    private static string StrokeClass(string? colorMode, string? style) =>
+        $"sc-container-diagram__stroke sc-container-diagram__stroke--{NormalizeColorMode(colorMode)} sc-container-diagram__stroke--{NormalizeStyle(style)}";
+
+    private static string StrokeStyle(string? colorMode, string? color, double width, double opacity)
+    {
+        var values = new List<string>
+        {
+            $"--sc-diagram-width: {Number(Math.Clamp(width, 0.5, 12))}",
+            $"--sc-diagram-opacity: {Number(Math.Clamp(opacity, 0, 1))}"
+        };
+        if (NormalizeColorMode(colorMode) == "color" && !string.IsNullOrWhiteSpace(color))
+            values.Add($"--sc-diagram-color: {color}");
+        return string.Join("; ", values);
+    }
+
+    private static string NormalizeColorMode(string? value) => value switch
+    {
+        "theme-primary" => "theme-primary",
+        "color" => "color",
+        _ => "theme-accent"
+    };
+
+    private static string NormalizeStyle(string? value) => value switch
+    {
+        "dashed" => "dashed",
+        "dotted" => "dotted",
+        _ => "solid"
+    };
+
+    private static string Number(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+    private static string SanitizeId(string value) => new(value.Where(char.IsLetterOrDigit).ToArray());
+}

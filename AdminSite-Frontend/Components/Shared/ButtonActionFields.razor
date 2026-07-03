@@ -87,6 +87,7 @@
     [Parameter] public string LinkActionValue { get; set; } = "linkToPage";
     [Parameter] public string OpenFormActionValue { get; set; } = "openForm";
     [Parameter] public string? ExternalActionValue { get; set; }
+    [Parameter] public string? DownloadActionValue { get; set; }
     [Parameter] public bool ShowModalHrefFallback { get; set; }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
@@ -111,7 +112,9 @@
                 new(OpenFormActionValue, "Open Form")
             };
             if (!string.IsNullOrWhiteSpace(ExternalActionValue))
-                options.Add(new(ExternalActionValue!, "External Link"));
+                options.Add(new(ExternalActionValue!, T("ExternalLink")));
+            if (!string.IsNullOrWhiteSpace(DownloadActionValue))
+                options.Add(new(DownloadActionValue!, T("DownloadFile")));
             return options;
         }
     }

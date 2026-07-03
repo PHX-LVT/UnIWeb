@@ -52,9 +52,9 @@
 .ez-modal--section-picker {
     display: flex;
     flex-direction: column;
-    width: min(1040px, calc(100vw - 2rem));
-    max-width: min(1040px, calc(100vw - 2rem));
-    max-height: min(720px, calc(100vh - 2rem));
+    width: min(840px, calc(100vw - 2rem));
+    max-width: min(840px, calc(100vw - 2rem));
+    max-height: min(680px, calc(100vh - 2rem));
     padding: 0;
     overflow: hidden;
 }
@@ -81,12 +81,16 @@
 
 .ez-section-picker {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: .9rem 1rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .75rem;
 }
 
 .ez-picker-group {
     min-width: 0;
+    padding: .75rem;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--surface) 96%, var(--primary) 4%);
 }
 
 .ez-picker-group__label {
@@ -99,13 +103,22 @@
 }
 
 .ez-section-picker .ez-picker-grid {
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: .6rem;
 }
 
 .ez-section-picker .ez-picker-card {
-    min-height: 104px;
+    width: 100%;
+    min-height: 102px;
     padding: .9rem .65rem;
+}
+
+.ez-section-picker .ez-picker-card__text small {
+    display: -webkit-box;
+    min-height: 2.5em;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 @media (max-width: 760px) {
@@ -115,7 +128,13 @@
         max-height: calc(100vh - 1rem);
     }
 
-    .ez-section-picker {
-        grid-template-columns: 1fr;
+    .ez-section-picker .ez-picker-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 480px) {
+    .ez-section-picker .ez-picker-grid {
+        grid-template-columns: minmax(0, 1fr);
     }
 }

@@ -14,6 +14,12 @@
     opacity: 1;
 }
 
+.ez-arrange-section--active {
+    outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
 .ez-section-btn {
     display: inline-flex;
     align-items: center;
@@ -95,11 +101,53 @@
 
 .ez-freeform-block-overlay {
     box-sizing: border-box;
+    overflow: visible;
     border: 1px solid #111;
     background: rgba(229, 192, 118, .08);
     color: #001a33;
     pointer-events: auto;
     touch-action: none;
+    transform: rotate(var(--ez-block-rotation, 0deg));
+    transform-origin: center;
+}
+
+.ez-freeform-block-overlay--radius-small { border-radius: 6px; }
+.ez-freeform-block-overlay--radius-medium { border-radius: 10px; }
+.ez-freeform-block-overlay--radius-large { border-radius: 16px; }
+.ez-freeform-block-overlay--radius-pill { border-radius: 999px; }
+.ez-freeform-block-overlay--radius-circle { border-radius: 50%; }
+
+.ez-freeform-block-overlay--shape-rounded { border-radius: 14px; }
+.ez-freeform-block-overlay--shape-pill { border-radius: 999px; }
+.ez-freeform-block-overlay--shape-circle,
+.ez-freeform-block-overlay--shape-ellipse { border-radius: 50%; }
+
+.ez-freeform-block-overlay--container {
+    border-width: 2px;
+    border-style: dashed;
+    border-color: #2563eb;
+    background: rgba(37, 99, 235, .035);
+}
+
+.ez-freeform-container-policy {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: calc(100% - 12px);
+    padding: 3px 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(239, 246, 255, .94);
+    color: #1d4ed8;
+    font-size: .64rem;
+    font-weight: 750;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
 .ez-freeform-block-overlay--editing {

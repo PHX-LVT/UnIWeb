@@ -1,21 +1,55 @@
 @using Contracts.Public
+@using SharedComponents.Helpers
 
 @if (ShouldRenderContainer)
 {
     <div class="@GetContainerClass()"
          data-block-zone="@NormalizeZone(DataZoneId ?? BlockZone)"
          style="@GetContainerStyle()">
+        @if (Diagram?.Enabled == true)
+        {
+            <ContainerDiagramLayer Diagram="Diagram" DiagramId="@DiagramId" />
+        }
+        @if (CenterContent is not null)
+        {
+            <div class="sc-pattern-center">@CenterContent</div>
+        }
         @{ var renderedBlocks = ZoneBlocks.OrderBy(block => block.Order).ToList(); }
         @for (var index = 0; index < renderedBlocks.Count; index++)
         {
             var block = renderedBlocks[index];
             <div class="@GetBlockClass(block)"
                  data-block-id="@block.Id"
+                 data-block-stable-id="@block.StableId"
+                 data-block-parent-id="@block.ParentBlockId"
+                 data-block-type="@block.Type"
                  data-block-section-id="@GetSectionId()"
-                 data-block-zone="@NormalizeZone(block.ZoneId ?? block.BlockZone)"
+                 data-block-zone="@GetFrameZone(block)"
                  data-block-position-mode="@EffectivePositionMode(block)"
+                 data-block-shape="@NormalizeShape(EffectiveAppearance(block).Shape)"
+                 data-block-radius="@EffectiveRadius(EffectiveAppearance(block).BorderRadius, block.Layout?.BorderRadius)"
+                 aria-hidden="@GetAriaHidden(block)"
                  style="@GetBlockStyle(block, index, renderedBlocks.Count)">
-                @RenderBlock(block)
+                <div class="@GetAnimationClass(block)"
+                     data-sc-animation="@NormalizeAnimationEffect(block.Animation?.Effect)"
+                     data-sc-animation-trigger="@NormalizeAnimationTrigger(block.Animation?.Trigger)"
+                     data-sc-animation-once="@((block.Animation?.PlayOnce ?? true).ToString().ToLowerInvariant())"
+                     data-sc-animation-reduced="@((block.Animation?.DisableForReducedMotion ?? true).ToString().ToLowerInvariant())"
+                     data-sc-continuous-motion="@NormalizeContinuousEffect(block.Animation?.ContinuousEffect)"
+                     style="@GetAnimationStyle(block, index)">
+                    <div class="sc-block-rotation" style="@GetBlockRotationStyle(block)">
+                        <div class="@GetBlockVisualClass(block)" style="@GetBlockVisualStyle(block)">
+                            @if (IsEmptyBlock(block))
+                            {
+                                <BlockStarterPlaceholder Type="@block.Type" Lang="@Lang" />
+                            }
+                            else
+                            {
+                                @RenderBlock(block)
+                            }
+                        </div>
+                    </div>
+                </div>
             </div>
         }
     </div>
@@ -29,9 +63,24 @@
     [Parameter] public string? DataZoneId { get; set; }
     [Parameter] public bool IncludeDefaultZone { get; set; }
     [Parameter] public bool ForceFreeform { get; set; }
+    [Parameter] public string? MobileCompositionMode { get; set; }
+    [Parameter] public string ContainerPurpose { get; set; } = "composition";
+    [Parameter] public string? BlockFrameZoneId { get; set; }
+    [Parameter] public int? DefaultColumnSpan { get; set; }
     [Parameter] public int PatternRadius { get; set; } = 180;
     [Parameter] public int PatternStartAngle { get; set; } = -90;
     [Parameter] public int PatternEndAngle { get; set; } = 270;
+    [Parameter] public string PatternDirection { get; set; } = "clockwise";
+    [Parameter] public string ContainerAlignItems { get; set; } = "stretch";
+    [Parameter] public string ContainerJustifyContent { get; set; } = "start";
+    [Parameter] public bool ContainerWrap { get; set; } = true;
+    [Parameter] public int CompactRadius { get; set; } = 120;
+    [Parameter] public int CompactChildWidth { get; set; } = 120;
+    [Parameter] public PublicContainerDiagramSettingsDto? Diagram { get; set; }
+    [Parameter] public string DiagramId { get; set; } = string.Empty;
+    [Parameter] public int ChildStaggerMs { get; set; }
+    [Parameter] public PublicBlockAppearanceDto? InheritedAppearance { get; set; }
+    [Parameter] public RenderFragment? CenterContent { get; set; }
     [Parameter] public string? ParentBlockId { get; set; }
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
@@ -77,7 +126,7 @@
         };
 
         var forced = ForceFreeform ? " sc-section-blocks--force-freeform" : string.Empty;
-        return $"sc-section-blocks sc-block-zone sc-section-blocks--{LayoutMode} sc-section-blocks--gap-{gap}{forced}";
+        return $"sc-section-blocks sc-block-zone sc-section-blocks--{LayoutMode} sc-section-blocks--gap-{gap} sc-section-blocks--mobile-{EffectiveMobileMode}{forced}";
     }
 
     private string GetContainerStyle()
@@ -87,21 +136,30 @@
             : Math.Clamp(Style?.BlockGridColumns ?? 12, 1, 12);
         var styles = new List<string>
         {
-            $"--sc-block-grid-columns: {columns}"
+            $"--sc-block-grid-columns: {columns}",
+            $"--sc-container-align: {NormalizeAlignItems(ContainerAlignItems)}",
+            $"--sc-container-justify: {NormalizeJustifyContent(ContainerJustifyContent)}",
+            $"--sc-container-wrap: {(ContainerWrap ? "wrap" : "nowrap")}"
         };
 
         if (LayoutMode == "freeform")
         {
             var height = Math.Clamp(Style?.CustomMinHeightPx ?? 640, 120, 3000);
             styles.Add($"--sc-freeform-min-height: {height}px");
+            styles.Add($"--sc-mobile-freeform-min-height: {Math.Clamp((int)Math.Round(height * 0.65), 180, 900)}px");
         }
 
         else if (LayoutMode is "orbit" or "semicircle")
         {
             var radius = Math.Clamp(PatternRadius, 80, 480);
             var height = LayoutMode == "orbit" ? radius * 2 + 180 : radius + 200;
+            var mobileRadius = Math.Clamp(CompactRadius, 60, 220);
+            var mobileHeight = LayoutMode == "orbit" ? mobileRadius * 2 + 136 : mobileRadius + 168;
             styles.Add($"--sc-pattern-radius: {radius}px");
             styles.Add($"--sc-pattern-min-height: {height}px");
+            styles.Add($"--sc-mobile-pattern-radius: {mobileRadius}px");
+            styles.Add($"--sc-mobile-pattern-min-height: {mobileHeight}px");
+            styles.Add($"--sc-mobile-pattern-child-width: {Math.Clamp(CompactChildWidth, 72, 180)}px");
         }
 
         return string.Join("; ", styles);
@@ -110,30 +168,131 @@
     private string GetBlockClass(PublicBlockDto block)
     {
         var layout = block.Layout ?? new PublicBlockLayoutDto();
-        var span = Math.Clamp(layout.ColumnSpan, 1, 12);
-
-        return string.Join(" ", new[]
+        var appearance = EffectiveAppearance(block);
+        var span = EffectiveColumnSpan(layout);
+        var classes = new List<string>
         {
             "sc-block-frame",
             $"sc-block-frame--position-{EffectivePositionMode(block)}",
             $"sc-block-frame--span-{span}",
             $"sc-block-frame--width-{Normalize(layout.Width, "auto")}",
+            $"sc-block-frame--tablet-{NormalizeResponsiveMode(block.Responsive?.Tablet?.Mode, "inherit")}",
+            $"sc-block-frame--mobile-{NormalizeResponsiveMode(block.Responsive?.Mobile?.Mode, "inherit")}",
+            $"sc-block-frame--tablet-width-{NormalizeResponsiveWidth(block.Responsive?.Tablet?.Width)}",
+            $"sc-block-frame--mobile-width-{NormalizeResponsiveWidth(block.Responsive?.Mobile?.Width)}",
             $"sc-block-frame--align-{Normalize(layout.Align, "stretch")}",
             $"sc-block-frame--justify-{Normalize(layout.Justify, "start")}",
-            $"sc-block-frame--pad-{Normalize(layout.Padding, "none")}",
-            $"sc-block-frame--margin-{Normalize(layout.Margin, "none")}",
-            $"sc-block-frame--radius-{Normalize(layout.BorderRadius, "none")}"
-        });
+            $"sc-block-frame--margin-{EffectiveSpacing(appearance.Margin, layout.Margin)}",
+            $"sc-block-frame--shape-{NormalizeShape(appearance.Shape)}"
+        };
+
+        classes.Add($"sc-block-frame--aspect-{NormalizeAspectRatio(appearance.AspectRatio)}");
+
+        if (IsEmptyBlock(block))
+            classes.Add("sc-block-frame--empty-starter");
+
+        if (appearance.Decorative)
+            classes.Add("sc-block-frame--decorative");
+
+        return string.Join(" ", classes);
     }
+
+    private string GetBlockVisualClass(PublicBlockDto block)
+    {
+        var layout = block.Layout ?? new PublicBlockLayoutDto();
+        var appearance = EffectiveAppearance(block);
+        var classes = new List<string>
+        {
+            "sc-block-visual",
+            $"sc-block-visual--pad-{EffectiveSpacing(appearance.Padding, layout.Padding)}",
+            $"sc-block-visual--radius-{EffectiveRadius(appearance.BorderRadius, layout.BorderRadius)}",
+            $"sc-block-visual--shadow-{NormalizeShadow(appearance.Shadow)}",
+            $"sc-block-visual--shape-{NormalizeShape(appearance.Shape)}",
+            $"sc-block-visual--background-{NormalizeBackgroundMode(appearance.BackgroundMode)}",
+            $"sc-block-visual--text-{NormalizeTextAlign(appearance.TextAlign)}",
+            $"sc-block-visual--media-{NormalizeMediaFit(appearance.MediaFit)}",
+            $"sc-block-visual--media-position-{NormalizeMediaPosition(appearance.MediaPosition)}"
+        };
+        if (appearance.Decorative) classes.Add("sc-block-visual--decorative");
+        return string.Join(" ", classes);
+    }
+
+    private static bool IsEmptyBlock(PublicBlockDto block)
+    {
+        return block switch
+        {
+            PublicTextBlockDto text =>
+                !HasLocalizedText(text.Title) &&
+                !HasLocalizedText(text.Content) &&
+                !HasButtonContent(text.Buttons),
+            PublicImageBlockDto image =>
+                !HasValue(image.ImageUrl) && !HasValue(image.Asset?.Url),
+            PublicVideoBlockDto video =>
+                !HasValue(video.EmbedUrl) && !HasValue(video.Asset?.Url),
+            PublicFileBlockDto file =>
+                !HasValue(file.FileUrl) && !HasValue(file.Asset?.Url),
+            PublicMapBlockDto map =>
+                (map.Pins is null || map.Pins.Count == 0) &&
+                (map.CenterLat is null || Math.Abs(map.CenterLat.Value) < 0.000001) &&
+                (map.CenterLng is null || Math.Abs(map.CenterLng.Value) < 0.000001),
+            PublicFormBlockDto form =>
+                !HasValue(form.FormDefinitionId) &&
+                (form.Fields is null || form.Fields.Count == 0),
+            PublicCardBlockDto card =>
+                !HasValue(card.Icon) &&
+                !HasLocalizedText(card.Title) &&
+                !HasLocalizedText(card.Description) &&
+                !HasValue(card.ImageUrl) &&
+                !HasValue(card.Asset?.Url) &&
+                !HasLocalizedText(card.ButtonLabel) &&
+                !HasValue(card.Href) &&
+                !HasValue(card.FormDefinitionId),
+            PublicButtonBlockDto button => !HasLocalizedText(button.Label),
+            PublicMetricBlockDto metric =>
+                !HasValue(metric.Icon) &&
+                !HasLocalizedText(metric.Label) &&
+                !HasValue(metric.Value) &&
+                !HasValue(metric.Prefix) &&
+                !HasValue(metric.Suffix) &&
+                !HasLocalizedText(metric.Description),
+            PublicBulletListBlockDto list =>
+                !HasLocalizedText(list.Title) &&
+                !(list.Items?.Any(item => item.Visible && HasLocalizedText(item.Text)) ?? false),
+            PublicStepBlockDto step =>
+                !HasValue(step.Icon) &&
+                !HasLocalizedText(step.StepLabel) &&
+                !HasLocalizedText(step.Title) &&
+                !HasLocalizedText(step.Description),
+            PublicIconBlockDto icon =>
+                !HasValue(icon.Icon) &&
+                !HasLocalizedText(icon.Label) &&
+                !HasLocalizedText(icon.Description),
+            PublicContainerBlockDto container =>
+                !HasLocalizedText(container.Title) &&
+                (container.Children is null || container.Children.Count == 0),
+            _ => false
+        };
+    }
+
+    private static bool HasButtonContent(IEnumerable<PublicBlockButtonDto>? buttons) =>
+        buttons?.Any(button =>
+            button.Visible &&
+            (HasLocalizedText(button.Label) || HasValue(button.Href) || HasValue(button.FormDefinitionId))) ?? false;
+
+    private static bool HasLocalizedText(IReadOnlyDictionary<string, string>? values) =>
+        values?.Values.Any(HasValue) ?? false;
+
+    private static bool HasValue(string? value) => !string.IsNullOrWhiteSpace(value);
 
     private string GetBlockStyle(PublicBlockDto block, int index, int count)
     {
         var layout = block.Layout ?? new PublicBlockLayoutDto();
+        var span = EffectiveColumnSpan(layout);
         var left = FormatNumber(FreeformLeftPercent(layout));
         var width = FormatNumber(FreeformWidthPercent(layout));
         var parts = new List<string>
         {
-            $"--sc-block-column-span: {Math.Clamp(layout.ColumnSpan, 1, 12)}",
+            $"--sc-block-column-span: {span}",
             $"--sc-block-left: {left}%",
             $"--sc-block-width: {width}%",
             $"--sc-block-top: {FormatNumber(FreeformTopPx(layout))}px",
@@ -142,20 +301,137 @@
             $"z-index: {Math.Clamp(layout.ZIndex, 0, 1000)}"
         };
 
-        if (!string.IsNullOrWhiteSpace(layout.BackgroundColor))
-            parts.Add($"background-color: {layout.BackgroundColor}");
+        AddResponsiveStyleParts(parts, "tablet", layout, block.Responsive?.Tablet, span);
+        AddResponsiveStyleParts(parts, "mobile", layout, block.Responsive?.Mobile, span);
 
         return string.Join("; ", parts);
     }
 
+    private string GetBlockVisualStyle(PublicBlockDto block)
+    {
+        var layout = block.Layout ?? new PublicBlockLayoutDto();
+        var appearance = EffectiveAppearance(block);
+        var parts = new List<string>();
+        var backgroundColor = NormalizeBackgroundMode(appearance.BackgroundMode) == "color" && !string.IsNullOrWhiteSpace(appearance.BackgroundColor)
+            ? appearance.BackgroundColor
+            : appearance.SchemaVersion == 0 ? layout.BackgroundColor : null;
+        if (!string.IsNullOrWhiteSpace(backgroundColor))
+            parts.Add($"background-color: {backgroundColor}");
+
+        if (!string.IsNullOrWhiteSpace(appearance.TextColor))
+            parts.Add($"color: {appearance.TextColor}");
+
+        var opacity = Math.Clamp(appearance.Opacity, 0, 1);
+        if (opacity < 1)
+            parts.Add($"opacity: {FormatNumber(opacity)}");
+
+        var borderStyle = NormalizeBorderStyle(appearance.BorderStyle);
+        var borderWidth = Math.Clamp(appearance.BorderWidth, 0, 20);
+        if (borderWidth > 0 && borderStyle != "none")
+        {
+            parts.Add($"border-width: {borderWidth}px");
+            parts.Add($"border-style: {borderStyle}");
+            parts.Add($"border-color: {(string.IsNullOrWhiteSpace(appearance.BorderColor) ? "currentColor" : appearance.BorderColor)}");
+        }
+
+        return string.Join("; ", parts);
+    }
+
+    private string GetBlockRotationStyle(PublicBlockDto block)
+    {
+        var rotation = EffectiveAppearance(block).RotationDeg;
+        if (!double.IsFinite(rotation)) rotation = 0;
+        rotation %= 360d;
+        return $"--sc-block-rotation: {FormatNumber(rotation)}deg";
+    }
+
+    private PublicBlockAppearanceDto EffectiveAppearance(PublicBlockDto block) =>
+        block.Appearance?.InheritFromContainer == true && InheritedAppearance is not null
+            ? InheritedAppearance
+            : block.Appearance ?? new PublicBlockAppearanceDto();
+
+    private static string GetAnimationClass(PublicBlockDto block)
+    {
+        var effect = NormalizeAnimationEffect(block.Animation?.Effect);
+        var continuous = NormalizeContinuousEffect(block.Animation?.ContinuousEffect);
+        return $"sc-block-motion sc-block-motion--{effect} sc-block-motion--continuous-{continuous}";
+    }
+
+    private string GetAnimationStyle(PublicBlockDto block, int index)
+    {
+        var animation = block.Animation ?? new PublicBlockAnimationSettingsDto();
+        var delay = Math.Clamp(animation.DelayMs + index * Math.Clamp(ChildStaggerMs, 0, 2000), 0, 10000);
+        return string.Join("; ", new[]
+        {
+            $"--sc-motion-duration: {Math.Clamp(animation.DurationMs, 0, 5000)}ms",
+            $"--sc-motion-delay: {delay}ms",
+            $"--sc-motion-easing: {NormalizeAnimationEasing(animation.Easing)}"
+        });
+    }
+
+    private string EffectiveMobileMode => ResolveAutomaticMobileMode(MobileCompositionMode ?? Style?.MobileLayout);
+
     private static string Normalize(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    private static string EffectiveSpacing(string? appearanceValue, string? layoutValue) =>
+        NormalizeSpacing(!string.IsNullOrWhiteSpace(appearanceValue) ? appearanceValue : layoutValue);
+
+    private static string EffectiveRadius(string? appearanceValue, string? layoutValue) =>
+        NormalizeRadius(!string.IsNullOrWhiteSpace(appearanceValue) ? appearanceValue : layoutValue);
+
+    private static string NormalizeSpacing(string? value) => value switch
+    {
+        "small" => "small",
+        "medium" => "medium",
+        "large" => "large",
+        _ => "none"
+    };
+
+    private static string NormalizeRadius(string? value) => value switch
+    {
+        "small" => "small",
+        "medium" => "medium",
+        "large" => "large",
+        "pill" => "pill",
+        "circle" => "circle",
+        _ => "none"
+    };
+
+    private static string NormalizeShadow(string? value) => value switch
+    {
+        "small" => "small",
+        "medium" => "medium",
+        "large" => "large",
+        _ => "none"
+    };
+
+    private static string NormalizeShape(string? value) => value switch
+    {
+        "rounded" => "rounded",
+        "pill" => "pill",
+        "circle" => "circle",
+        "ellipse" => "ellipse",
+        "decorative" => "decorative",
+        _ => "rectangle"
+    };
+
+    private static string NormalizeBorderStyle(string? value) => value switch
+    {
+        "dashed" => "dashed",
+        "dotted" => "dotted",
+        "none" => "none",
+        _ => "solid"
+    };
 
     private static string NormalizePositionMode(string? value) =>
         string.Equals(value, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
 
     private string EffectivePositionMode(PublicBlockDto block) =>
         ForceFreeform ? "freeform" : NormalizePositionMode(block.PositionMode);
+
+    private string GetFrameZone(PublicBlockDto block) =>
+        NormalizeZone(BlockFrameZoneId ?? block.ZoneId ?? block.BlockZone);
 
     private static double FreeformLeftPercent(PublicBlockLayoutDto layout) =>
         Math.Clamp(layout.LeftPercent ?? (Math.Clamp(layout.X, 0, 11) / 12d * 100), 0, 100);
@@ -169,23 +445,174 @@
     private static double FreeformHeightPx(PublicBlockLayoutDto layout) =>
         Math.Clamp(layout.HeightPx ?? (Math.Clamp(layout.H, 1, 40) * 48d), 24, 10000);
 
+    private int EffectiveColumnSpan(PublicBlockLayoutDto layout)
+    {
+        return BlockLayoutResolver.ResolveColumnSpan(
+            layout.ColumnSpan,
+            DefaultColumnSpan,
+            GridColumns,
+            LayoutMode is "grid" or "split");
+    }
+
+    private int GridColumns => LayoutMode == "split"
+        ? 2
+        : Math.Clamp(Style?.BlockGridColumns ?? 12, 1, 12);
+
+    private static void AddResponsiveStyleParts(
+        List<string> parts,
+        string breakpoint,
+        PublicBlockLayoutDto layout,
+        PublicBlockResponsiveOverrideDto? responsive,
+        int baseColumnSpan)
+    {
+        parts.Add($"--sc-block-{breakpoint}-column-span: {Math.Clamp(responsive?.ColumnSpan ?? baseColumnSpan, 1, 12)}");
+        parts.Add($"--sc-block-{breakpoint}-left: {FormatNumber(Math.Clamp(responsive?.LeftPercent ?? FreeformLeftPercent(layout), 0, 100))}%");
+        parts.Add($"--sc-block-{breakpoint}-width: {FormatNumber(Math.Clamp(responsive?.WidthPercent ?? FreeformWidthPercent(layout), 1, 100))}%");
+        var topPx = Math.Clamp(responsive?.TopPx ?? FreeformTopPx(layout), 0, 10000);
+        var heightPx = Math.Clamp(responsive?.HeightPx ?? FreeformHeightPx(layout), 24, 10000);
+        parts.Add($"--sc-block-{breakpoint}-top: {FormatNumber(topPx)}px");
+        parts.Add($"--sc-block-{breakpoint}-min-height: {FormatNumber(heightPx)}px");
+        parts.Add($"--sc-block-{breakpoint}-top-compact: {FormatNumber(topPx * 0.65)}px");
+        parts.Add($"--sc-block-{breakpoint}-min-height-compact: {FormatNumber(Math.Max(24, heightPx * 0.65))}px");
+    }
+
+    private static string NormalizeResponsiveMode(string? value, string fallback) => value switch
+    {
+        "stack" => "stack",
+        "scroll" => "horizontal-scroll",
+        "preserve" => "compact-preserve",
+        "compact-preserve" => "compact-preserve",
+        "horizontal-scroll" => "horizontal-scroll",
+        "custom" => "custom",
+        "hide" => "hide",
+        "inherit" => "inherit",
+        _ => fallback
+    };
+
+    private string ResolveAutomaticMobileMode(string? value)
+    {
+        var requested = NormalizeResponsiveMode(value, "auto");
+        if (ContainerPurpose == "collection")
+            return "stack";
+
+        if (LayoutMode is "orbit" or "semicircle" ||
+            (Diagram?.Enabled == true && LayoutMode == "freeform"))
+        {
+            return requested is "custom" or "hide" or "horizontal-scroll"
+                ? requested
+                : "compact-preserve";
+        }
+
+        return requested is "auto" or "inherit" ? "stack" : requested;
+    }
+
+    private static string NormalizeResponsiveWidth(string? value) => value switch
+    {
+        "full" => "full",
+        "half" => "half",
+        "third" => "third",
+        "auto" => "auto",
+        "custom" => "custom",
+        _ => "inherit"
+    };
+
     private static string FormatNumber(double value) =>
         value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 
     private double PatternAngle(int index, int count)
-    {
-        if (LayoutMode == "orbit")
-            return PatternStartAngle + (count <= 1 ? 0 : index * (360d / count));
-
-        if (LayoutMode == "semicircle")
-            return count <= 1
-                ? (PatternStartAngle + PatternEndAngle) / 2d
-                : PatternStartAngle + index * ((PatternEndAngle - PatternStartAngle) / (double)(count - 1));
-
-        return 0;
-    }
+        => BlockLayoutResolver.ResolvePatternAngle(
+            LayoutMode,
+            index,
+            count,
+            PatternStartAngle,
+            PatternEndAngle,
+            PatternDirection);
 
     private string GetSectionId() => SectionId ?? string.Empty;
+
+    private static string? GetAriaHidden(PublicBlockDto block) =>
+        block.Appearance?.Decorative == true ? "true" : null;
+
+    private static string NormalizeBackgroundMode(string? value) => value switch
+    {
+        "color" => "color",
+        "theme-primary" => "theme-primary",
+        "theme-accent" => "theme-accent",
+        "theme-background" => "theme-background",
+        _ => "none"
+    };
+
+    private static string NormalizeTextAlign(string? value) => value switch
+    {
+        "left" => "left",
+        "center" => "center",
+        "right" => "right",
+        _ => "inherit"
+    };
+
+    private static string NormalizeAspectRatio(string? value) => value switch
+    {
+        "square" => "square",
+        "landscape" => "landscape",
+        "widescreen" => "widescreen",
+        "portrait" => "portrait",
+        _ => "auto"
+    };
+
+    private static string NormalizeMediaFit(string? value) => value == "contain" ? "contain" : "cover";
+    private static string NormalizeMediaPosition(string? value) => value switch
+    {
+        "top" => "top",
+        "bottom" => "bottom",
+        "left" => "left",
+        "right" => "right",
+        _ => "center"
+    };
+
+    private static string NormalizeAnimationEffect(string? value) => value switch
+    {
+        "fade" => "fade",
+        "rise" => "rise",
+        "fall" => "fall",
+        "slide" => "slide",
+        "slide-left" => "slide-left",
+        "slide-right" => "slide-right",
+        "scale" => "scale",
+        _ => "none"
+    };
+
+    private static string NormalizeAnimationTrigger(string? value) =>
+        value == "load" ? "load" : "enter-viewport";
+
+    private static string NormalizeAnimationEasing(string? value) => value switch
+    {
+        "linear" => "linear",
+        "ease" => "ease",
+        "ease-in" => "ease-in",
+        "ease-in-out" => "ease-in-out",
+        _ => "ease-out"
+    };
+
+    private static string NormalizeContinuousEffect(string? value) =>
+        value == "rotate-slow" ? "rotate-slow" : "none";
+
+    private static string NormalizeAlignItems(string? value) => value switch
+    {
+        "start" => "flex-start",
+        "center" => "center",
+        "end" => "flex-end",
+        _ => "stretch"
+    };
+
+    private static string NormalizeJustifyContent(string? value) => value switch
+    {
+        "center" => "center",
+        "end" => "flex-end",
+        "between" => "space-between",
+        "around" => "space-around",
+        "evenly" => "space-evenly",
+        _ => "flex-start"
+    };
 
     private static string NormalizeZone(string? zone) =>
         string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();

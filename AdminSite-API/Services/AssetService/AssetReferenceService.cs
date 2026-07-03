@@ -61,6 +61,7 @@ namespace FullProject.Services.AssetService
         private static async Task<bool> BlockReferencesAsync(IMongoCollection<Block> blocks, string url)
         {
             var filter = Builders<Block>.Filter.Or(
+                Builders<Block>.Filter.Eq("Asset.Url", url),
                 Builders<Block>.Filter.Eq("ImageUrl", url),
                 Builders<Block>.Filter.Eq("FileUrl", url),
                 Builders<Block>.Filter.Eq("EmbedUrl", url));

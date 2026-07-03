@@ -20,46 +20,21 @@ namespace AdminSite.Services
 
         public Task<ApiResponse<BlockModel>> GetByIdAsync(string pageId, string sectionId, string blockId) =>
             _http.GetAsync<BlockModel>($"{Base(pageId, sectionId)}/{blockId}");
-        public Task<ApiResponse<BlockModel>> CreateAsync(string pageId, string sectionId, string type) =>
-            _http.PostAsync<BlockModel>(Base(pageId, sectionId), type 
-                switch
-            {
-                "text" => (BlockCreateDto)new TextBlockCreateDto(),
-                "image" => new ImageBlockCreateDto(),
-                "video" => new VideoBlockCreateDto(),
-                "file" => new FileBlockCreateDto(),
-                "map" => new MapBlockCreateDto(),
-                "form" => new FormBlockCreateDto(),
-                "card" => new CardBlockCreateDto(),
-                "button" => new ButtonBlockCreateDto(),
-                "metric" => new MetricBlockCreateDto(),
-                "bullet-list" => new BulletListBlockCreateDto(),
-                "step" => new StepBlockCreateDto(),
-                "icon" => new IconBlockCreateDto(),
-                "container" => new ContainerBlockCreateDto(),
-                    _ => new TextBlockCreateDto()
-            });
+        public Task<ApiResponse<BlockModel>> CreateAsync(
+            string pageId,
+            string sectionId,
+            BlockCreateDto dto) =>
+            _http.PostAsync<BlockModel>(Base(pageId, sectionId), dto);
 
-
-        public Task<ApiResponse<BlockModel>> CreateInSlotAsync(string pageId, string sectionId, string slotId, string type) =>
-             _http.PostAsync<BlockModel>(Base(pageId, sectionId), type 
-                 switch
-              {
-                "text" => (BlockCreateDto)new TextBlockCreateDto { ColumnSlotId = slotId },
-                "image" => new ImageBlockCreateDto { ColumnSlotId = slotId },
-                "video" => new VideoBlockCreateDto { ColumnSlotId = slotId },
-                "file" => new FileBlockCreateDto { ColumnSlotId = slotId },
-                "map" => new MapBlockCreateDto { ColumnSlotId = slotId },
-                "form" => new FormBlockCreateDto { ColumnSlotId = slotId },
-                "card" => new CardBlockCreateDto { ColumnSlotId = slotId },
-                "button" => new ButtonBlockCreateDto { ColumnSlotId = slotId },
-                "metric" => new MetricBlockCreateDto { ColumnSlotId = slotId },
-                "bullet-list" => new BulletListBlockCreateDto { ColumnSlotId = slotId },
-                "step" => new StepBlockCreateDto { ColumnSlotId = slotId },
-                "icon" => new IconBlockCreateDto { ColumnSlotId = slotId },
-                "container" => new ContainerBlockCreateDto { ColumnSlotId = slotId },
-                    _ => new TextBlockCreateDto { ColumnSlotId = slotId }
-              });
+        public Task<ApiResponse<BlockModel>> CreateInSlotAsync(
+            string pageId,
+            string sectionId,
+            string slotId,
+            BlockCreateDto dto)
+        {
+            dto.ColumnSlotId = slotId;
+            return _http.PostAsync<BlockModel>(Base(pageId, sectionId), dto);
+        }
         public Task<ApiResponse<BlockModel>> UpdateAsync(string pageId, string sectionId, string blockId, object dto) =>
             _http.PutAsync<BlockModel>($"{Base(pageId, sectionId)}/{blockId}", dto);
 
@@ -76,5 +51,32 @@ namespace AdminSite.Services
         public Task<ApiResponse<object>> ReorderAsync(string pageId, string sectionId, List<string> orderedIds) =>
             _http.PutAsync<object>($"{Base(pageId, sectionId)}/reorder",
                 new ReorderRequest { OrderedIds = orderedIds });
+
+        public Task<ApiResponse<BlockAuthoringOperationResponseDto>> UpdateLayoutsAsync(
+            string pageId, string sectionId, BlockBulkLayoutUpdateDto dto) =>
+            _http.PutAsync<BlockAuthoringOperationResponseDto>($"{Base(pageId, sectionId)}/authoring/layouts", dto);
+
+        public Task<ApiResponse<BlockAuthoringOperationResponseDto>> DuplicateAsync(
+            string pageId, string sectionId, IEnumerable<string> blockIds) =>
+            _http.PostAsync<BlockAuthoringOperationResponseDto>($"{Base(pageId, sectionId)}/authoring/duplicate",
+                new BlockDuplicateRequestDto { BlockIds = blockIds.ToList() });
+
+        public Task<ApiResponse<BlockAuthoringOperationResponseDto>> GroupAsync(
+            string pageId, string sectionId, IEnumerable<string> blockIds, Dictionary<string, string> title) =>
+            _http.PostAsync<BlockAuthoringOperationResponseDto>($"{Base(pageId, sectionId)}/authoring/group",
+                new BlockGroupRequestDto { BlockIds = blockIds.ToList(), Title = title });
+
+        public Task<ApiResponse<BlockAuthoringOperationResponseDto>> UngroupAsync(
+            string pageId, string sectionId, string containerId) =>
+            _http.PostAsync<BlockAuthoringOperationResponseDto>($"{Base(pageId, sectionId)}/authoring/ungroup/{containerId}", new { });
+
+        public Task<ApiResponse<object>> DeleteGraphsAsync(
+            string pageId, string sectionId, IEnumerable<string> blockIds) =>
+            _http.PostAsync<object>($"{Base(pageId, sectionId)}/authoring/delete-graphs",
+                new BlockDuplicateRequestDto { BlockIds = blockIds.ToList() });
+
+        public Task<ApiResponse<BlockModel>> UpdateAuthoringLockAsync(
+            string pageId, string sectionId, string blockId, BlockAuthoringLockUpdateDto dto) =>
+            _http.PutAsync<BlockModel>($"{Base(pageId, sectionId)}/{blockId}/authoring-lock", dto);
     }
 }

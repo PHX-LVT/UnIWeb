@@ -30,21 +30,21 @@ namespace FullProject.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CanvasSectionPresetCreateDto dto)
         {
-            var preset = await _service.CreateFromSectionAsync(dto);
-            if (preset is null)
-                return NotFound(ApiResult.NotFound("Canvas section not found."));
+            var (preset, error) = await _service.CreateFromSectionAsync(dto);
+            if (error is not null)
+                return BadRequest(ApiResult.BadRequest(error));
 
-            return Ok(ApiResult.Ok(MapToDto(preset), "Canvas preset saved."));
+            return Ok(ApiResult.Ok(MapToDto(preset!), "Canvas preset saved."));
         }
 
         [HttpPost("{presetId}/apply")]
         public async Task<IActionResult> Apply(string presetId, [FromBody] CanvasSectionPresetApplyDto dto)
         {
-            var section = await _service.ApplyAsync(presetId, dto);
-            if (section is null)
-                return NotFound(ApiResult.NotFound("Canvas preset not found."));
+            var (section, error) = await _service.ApplyAsync(presetId, dto);
+            if (error is not null)
+                return BadRequest(ApiResult.BadRequest(error));
 
-            return Ok(ApiResult.Ok(new { section.Id }, "Canvas preset inserted."));
+            return Ok(ApiResult.Ok(new { section!.Id }, "Canvas preset inserted."));
         }
 
         [HttpDelete("{presetId}")]
@@ -57,14 +57,26 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok("Canvas preset deleted."));
         }
 
-        private static CanvasSectionPresetResponseDto MapToDto(CanvasSectionPreset preset) => new()
+        private CanvasSectionPresetResponseDto MapToDto(CanvasSectionPreset preset)
         {
-            Id = preset.Id,
-            Name = preset.Name,
-            BlockCount = preset.Blocks.Count,
-            SchemaVersion = preset.SchemaVersion,
-            CreatedAt = preset.CreatedAt,
-            UpdatedAt = preset.UpdatedAt
-        };
+            var compatibility = _service.Compatibility(preset);
+            return new CanvasSectionPresetResponseDto
+            {
+                Id = preset.Id,
+                Name = preset.Name,
+                BlockCount = preset.Blocks.Count,
+                SchemaVersion = preset.SchemaVersion,
+                SlotCount = preset.EditableSlots?.Count ?? 0,
+                LockPolicy = new CanvasPresetLockPolicyDto
+                {
+                    LockGeometryOnApply = preset.LockPolicy?.LockGeometryOnApply ?? false,
+                    LockContentOutsideSlots = preset.LockPolicy?.LockContentOutsideSlots ?? false
+                },
+                IsCompatible = compatibility.IsCompatible,
+                CompatibilityMessage = compatibility.Message,
+                CreatedAt = preset.CreatedAt,
+                UpdatedAt = preset.UpdatedAt
+            };
+        }
     }
 }

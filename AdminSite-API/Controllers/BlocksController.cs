@@ -1,5 +1,6 @@
 using FullProject.DTOs;
 using FullProject.Models;
+using FullProject.Services.BlockServices;
 using FullProject.Services;
 using FullProject.Security;
 using FullProject.Utils;
@@ -18,11 +19,19 @@ namespace FullProject.Controllers
     {
         private readonly BlockService _service;
         private readonly SectionService _sectionService;
+        private readonly BlockAssetMetadataService _assetMetadata;
+        private readonly BlockAuthoringService _authoring;
 
-        public BlocksController(BlockService service, SectionService sectionService)
+        public BlocksController(
+            BlockService service,
+            SectionService sectionService,
+            BlockAssetMetadataService assetMetadata,
+            BlockAuthoringService authoring)
         {
             _service = service;
             _sectionService = sectionService;
+            _assetMetadata = assetMetadata;
+            _authoring = authoring;
         }
 
         // GET api/admin/pages/:pageId/sections/:sectionId/blocks
@@ -74,10 +83,38 @@ namespace FullProject.Controllers
             [FromBody] BlockCreateDto dto)
         {
             if (!CanUsePageBuilder) return Forbid();
+            BlockStarterPresetCatalog.Apply(dto);
+            var assetError = await _assetMetadata.CanonicalizeAsync(dto);
+            if (assetError is not null)
+                return BadRequest(ApiResult.BadRequest(assetError));
+            var referenceError = await _service.ValidateFunctionalReferencesAsync(dto, false);
+            if (referenceError is not null)
+                return BadRequest(ApiResult.BadRequest(referenceError));
+            var validationErrors = BlockContractService.Validate(dto);
+            if (validationErrors.Count > 0)
+                return BadRequest(ApiResult.BadRequest(string.Join(" ", validationErrors)));
+            var parentError = await _service.ValidateParentAsync(pageId, sectionId, null, dto.ParentBlockId);
+            if (parentError is not null)
+                return BadRequest(ApiResult.BadRequest(parentError));
+            if (dto is ContainerBlockCreateDto containerDto)
+            {
+                var diagramError = await _service.ValidateDiagramAnchorsAsync(
+                    pageId, sectionId, string.Empty, containerDto.ContainerLayout?.Diagram);
+                if (diagramError is not null)
+                    return BadRequest(ApiResult.BadRequest(diagramError));
+            }
             var section = await _sectionService.GetByIdAsync(pageId, sectionId);
             if (section is null) return NotFound(ApiResult.NotFound("Section not found."));
 
-            var created = await _service.CreateAsync(pageId, sectionId, dto);
+            Block created;
+            try
+            {
+                created = await _service.CreateAsync(pageId, sectionId, dto);
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(ApiResult.BadRequest(exception.Message));
+            }
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId, blockId = created.Id },
                 ApiResult.Created(MapToDto(pageId, sectionId, created), "Block created."));
@@ -89,7 +126,41 @@ namespace FullProject.Controllers
             [FromBody] BlockUpdateDto dto)
         {
             if (!CanUsePageBuilder) return Forbid();
-            var updated = await _service.UpdateAsync(pageId, sectionId, blockId, dto);
+            var lockError = await _authoring.PrepareContentUpdateAsync(pageId, sectionId, blockId, dto);
+            if (lockError is not null)
+                return BadRequest(ApiResult.BadRequest(lockError));
+            var assetError = await _assetMetadata.CanonicalizeAsync(dto);
+            if (assetError is not null)
+                return BadRequest(ApiResult.BadRequest(assetError));
+            var referenceError = await _service.ValidateFunctionalReferencesAsync(dto, true);
+            if (referenceError is not null)
+                return BadRequest(ApiResult.BadRequest(referenceError));
+            var validationErrors = BlockContractService.Validate(dto);
+            if (validationErrors.Count > 0)
+                return BadRequest(ApiResult.BadRequest(string.Join(" ", validationErrors)));
+            var parentError = await _service.ValidateParentAsync(pageId, sectionId, blockId, dto.ParentBlockId);
+            if (parentError is not null)
+                return BadRequest(ApiResult.BadRequest(parentError));
+            if (dto is ContainerBlockUpdateDto containerDto)
+            {
+                var policyError = await _service.PrepareContainerPolicyUpdateAsync(
+                    pageId, sectionId, blockId, containerDto.ContainerLayout);
+                if (policyError is not null)
+                    return BadRequest(ApiResult.BadRequest(policyError));
+                var diagramError = await _service.ValidateDiagramAnchorsAsync(
+                    pageId, sectionId, blockId, containerDto.ContainerLayout?.Diagram);
+                if (diagramError is not null)
+                    return BadRequest(ApiResult.BadRequest(diagramError));
+            }
+            Block? updated;
+            try
+            {
+                updated = await _service.UpdateAsync(pageId, sectionId, blockId, dto);
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(ApiResult.BadRequest(exception.Message));
+            }
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block updated."));
         }
@@ -100,6 +171,9 @@ namespace FullProject.Controllers
             [FromBody] BlockLayoutDto dto)
         {
             if (!CanUsePageBuilder) return Forbid();
+            var lockError = await _authoring.ValidateGeometryMutationAsync(pageId, sectionId, [blockId]);
+            if (lockError is not null)
+                return BadRequest(ApiResult.BadRequest(lockError));
             var updated = await _service.UpdateLayoutAsync(pageId, sectionId, blockId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block layout updated."));
@@ -110,6 +184,12 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Delete(string pageId, string sectionId, string blockId)
         {
             if (!CanUsePageBuilder) return Forbid();
+            var lockError = await _authoring.ValidateContentMutationAsync(pageId, sectionId, blockId);
+            if (lockError is not null)
+                return BadRequest(ApiResult.BadRequest(lockError));
+            var diagramError = await _service.ValidateDiagramDeletionAsync(pageId, sectionId, blockId);
+            if (diagramError is not null)
+                return BadRequest(ApiResult.BadRequest(diagramError));
             var ok = await _service.DeleteAsync(pageId, sectionId, blockId);
             if (!ok) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok("Block deleted."));
@@ -121,6 +201,9 @@ namespace FullProject.Controllers
             string blockId, [FromBody] VisibilityDto dto)
         {
             if (!CanUsePageBuilder) return Forbid();
+            var lockError = await _authoring.ValidateContentMutationAsync(pageId, sectionId, blockId);
+            if (lockError is not null)
+                return BadRequest(ApiResult.BadRequest(lockError));
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, blockId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok($"Block {(dto.Visible ? "shown" : "hidden")}."));
@@ -132,9 +215,106 @@ namespace FullProject.Controllers
             [FromBody] ReorderDto dto)
         {
             if (!CanUsePageBuilder) return Forbid();
+            var lockError = await _authoring.ValidateGeometryMutationAsync(pageId, sectionId, dto.OrderedIds);
+            if (lockError is not null)
+                return BadRequest(ApiResult.BadRequest(lockError));
             var ok = await _service.ReorderAsync(pageId, sectionId, dto.OrderedIds);
             if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
             return Ok(ApiResult.Ok("Blocks reordered."));
+        }
+
+        [HttpPut("authoring/layouts")]
+        public async Task<IActionResult> UpdateLayouts(
+            string pageId,
+            string sectionId,
+            [FromBody] BlockBulkLayoutUpdateDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var (blocks, error) = await _authoring.UpdateLayoutsAsync(pageId, sectionId, dto);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
+            {
+                BlockIds = blocks!.Select(block => block.Id).ToList()
+            }, "Block layouts updated."));
+        }
+
+        [HttpPost("authoring/duplicate")]
+        public async Task<IActionResult> Duplicate(
+            string pageId,
+            string sectionId,
+            [FromBody] BlockDuplicateRequestDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var (blocks, error) = await _authoring.DuplicateAsync(pageId, sectionId, dto.BlockIds);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
+            {
+                BlockIds = blocks!.Select(block => block.Id).ToList()
+            }, "Blocks duplicated."));
+        }
+
+        [HttpPost("authoring/group")]
+        public async Task<IActionResult> Group(
+            string pageId,
+            string sectionId,
+            [FromBody] BlockGroupRequestDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var (container, error) = await _authoring.GroupAsync(pageId, sectionId, dto);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
+            {
+                ContainerId = container!.Id,
+                BlockIds = dto.BlockIds
+            }, "Blocks grouped."));
+        }
+
+        [HttpPost("authoring/ungroup/{containerId}")]
+        public async Task<IActionResult> Ungroup(
+            string pageId,
+            string sectionId,
+            string containerId)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var (ids, error) = await _authoring.UngroupAsync(pageId, sectionId, containerId);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
+            {
+                BlockIds = ids!
+            }, "Container ungrouped."));
+        }
+
+        [HttpPost("authoring/delete-graphs")]
+        public async Task<IActionResult> DeleteGraphs(
+            string pageId,
+            string sectionId,
+            [FromBody] BlockDuplicateRequestDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var error = await _authoring.DeleteGraphsAsync(pageId, sectionId, dto.BlockIds);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok("Block graphs deleted."));
+        }
+
+        [HttpPut("{blockId}/authoring-lock")]
+        public async Task<IActionResult> UpdateAuthoringLock(
+            string pageId,
+            string sectionId,
+            string blockId,
+            [FromBody] BlockAuthoringLockUpdateDto dto)
+        {
+            if (!AdminAuthorization.IsAdminAdmin(User)) return Forbid();
+            var (block, error) = await _authoring.UpdateLockAsync(
+                pageId,
+                sectionId,
+                blockId,
+                dto,
+                canUnlock: true);
+            if (error is not null)
+                return error.Contains("Only AdminAdmin", StringComparison.Ordinal)
+                    ? Forbid()
+                    : BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, block!), "Block lock updated."));
         }
 
        
@@ -148,6 +328,7 @@ namespace FullProject.Controllers
             var dto = new BlockResponseDto
             {
                 Id = b.Id,
+                StableId = b.StableId,
                 PageId = pageId,
                 SectionId = sectionId,
                 Type = b switch
@@ -187,6 +368,18 @@ namespace FullProject.Controllers
                 ZoneId = b.BlockZone,
                 PositionMode = ResolvePositionMode(b),
                 ParentBlockId = b.ParentBlockId,
+                Appearance = BlockContractService.ToAdminAppearance(b),
+                Responsive = BlockContractService.ToAdminResponsive(b.Responsive),
+                Animation = BlockContractService.ToAdminAnimation(b.Animation),
+                Authoring = new BlockAuthoringPolicyDto
+                {
+                    SchemaVersion = Math.Max(b.Authoring?.SchemaVersion ?? 0, 1),
+                    ContentLocked = b.Authoring?.ContentLocked ?? false,
+                    GeometryLocked = b.Authoring?.GeometryLocked ?? false,
+                    FullLocked = b.Authoring?.FullLocked ?? false,
+                    PresetSlotName = b.Authoring?.PresetSlotName,
+                    PresetSourceId = b.Authoring?.PresetSourceId
+                },
 
             };
 
@@ -199,18 +392,31 @@ namespace FullProject.Controllers
 
                 case ImageBlock img:
                     dto.ImageUrl = img.ImageUrl;
+                    dto.Asset = BlockAssetMetadataService.ToAdmin(img.Asset);
                     dto.AltText = img.AltText;
+                    dto.Caption = img.Caption;
+                    dto.OpenInLightbox = img.OpenInLightbox;
+                    dto.FocalPointX = img.FocalPointX;
+                    dto.FocalPointY = img.FocalPointY;
                     break;
 
                 case VideoBlock v:
                     dto.EmbedUrl = v.EmbedUrl;
+                    dto.Asset = BlockAssetMetadataService.ToAdmin(v.Asset);
+                    dto.SourceType = v.SourceType;
                     dto.Title = v.Title;
+                    dto.ShowControls = v.ShowControls;
+                    dto.Autoplay = v.Autoplay;
+                    dto.Muted = v.Muted;
+                    dto.Loop = v.Loop;
                     break;
 
                 case FileBlock f:
+                    dto.Asset = BlockAssetMetadataService.ToAdmin(f.Asset);
                     dto.Filename = f.Filename;
                     dto.FileType = f.FileType;
                     dto.FileUrl = f.FileUrl;
+                    dto.OpenBehavior = f.OpenBehavior;
                     break;
 
                 // Map: pins returned as embedded array â€” no separate pin endpoints
@@ -248,6 +454,7 @@ namespace FullProject.Controllers
                     dto.Title = card.Title;
                     dto.Description = card.Description;
                     dto.ImageUrl = card.ImageUrl;
+                    dto.Asset = BlockAssetMetadataService.ToAdmin(card.Asset);
                     dto.ButtonLabel = card.ButtonLabel;
                     dto.Href = card.Href;
                     dto.Action = card.Action;
@@ -297,6 +504,7 @@ namespace FullProject.Controllers
                     break;
                 case ContainerBlock container:
                     dto.Title = container.Title;
+                    dto.ContainerLayout = BlockContractService.ToAdminContainerLayout(container.ContainerLayout);
                     dto.LayoutMode = container.LayoutMode;
                     dto.Columns = container.Columns;
                     dto.Gap = container.Gap;

@@ -1,0 +1,221 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+
+<div class="block-contract-editor block-motion-editor">
+    <div class="block-layout-panel__section-actions block-motion-toolbar">
+        <button type="button" @onclick="Reset">@T("ResetAnimation")</button>
+        <button type="button" @onclick="ReplaySelected">@T("ReplaySelected")</button>
+        <button type="button" @onclick="ReplaySection">@T("ReplaySection")</button>
+    </div>
+
+    <p class="block-motion-editor__hint">@T("AnimationCardPickerHint")</p>
+
+    <div class="block-motion-effects" role="radiogroup" aria-label="@T("AnimationEffect")">
+        @foreach (var effect in AnimationEffectCards)
+        {
+            <button type="button"
+                    class="block-motion-card @(Value.Effect == effect.Value ? "is-active" : null)"
+                    aria-pressed="@(Value.Effect == effect.Value)"
+                    @onclick="() => SelectEffect(effect.Value)">
+                <span class="block-motion-card__preview block-motion-card__preview--@effect.PreviewClass" aria-hidden="true">
+                    <span></span>
+                </span>
+                <strong>@T(effect.LabelKey)</strong>
+                <small>@T(effect.HintKey)</small>
+            </button>
+        }
+    </div>
+
+    <div class="block-motion-timing">
+        <span>@T("AnimationTiming")</span>
+        <div class="block-motion-preset-row" role="group" aria-label="@T("AnimationTiming")">
+            @foreach (var preset in TimingPresets)
+            {
+                <button type="button"
+                        class="@(ActiveTimingPresetKey == preset.Key ? "is-active" : null)"
+                        title="@T(preset.HintKey)"
+                        @onclick="() => SelectTimingPreset(preset)">
+                    <strong>@T(preset.LabelKey)</strong>
+                    <small>@T(preset.HintKey)</small>
+                </button>
+            }
+        </div>
+    </div>
+
+    <p class="block-motion-editor__safety">
+        <i class="fas fa-universal-access"></i>
+        @T("ReducedMotionAlwaysRespected")
+    </p>
+
+    <details class="block-motion-advanced">
+        <summary>@T("AdvancedTiming")</summary>
+        <div class="block-layout-panel__grid">
+            <label>
+                <span>@T("AnimationTrigger")</span>
+                <select @bind="Value.Trigger">
+                    <option value="enter-viewport">@T("EnterViewport")</option>
+                    <option value="load">@T("OnLoad")</option>
+                </select>
+            </label>
+            <label>
+                <span>@T("DurationMs")</span>
+                <input type="number" min="0" max="5000" step="50" @bind="Value.DurationMs" />
+            </label>
+            <label>
+                <span>@T("DelayMs")</span>
+                <input type="number" min="0" max="5000" step="50" @bind="Value.DelayMs" />
+            </label>
+            <label>
+                <span>@T("Easing")</span>
+                <select @bind="Value.Easing">
+                    @foreach (var easing in EasingOptions)
+                    {
+                        <option value="@easing.Value">@T(easing.LabelKey)</option>
+                    }
+                </select>
+            </label>
+            @if (IsContainer)
+            {
+                <label>
+                    <span>@T("ChildStaggerMs")</span>
+                    <input type="number" min="0" max="2000" step="25" @bind="Value.StaggerMs" />
+                </label>
+            }
+            else
+            {
+                <p class="block-motion-editor__hint block-motion-editor__hint--inline">
+                    <i class="fas fa-layer-group"></i>@T("ContainerStaggerOnlyHint")
+                </p>
+            }
+            @if (AllowContinuous)
+            {
+                <label>
+                    <span>@T("ContinuousMotion")</span>
+                    <select @bind="Value.ContinuousEffect">
+                        <option value="none">@T("None")</option>
+                        <option value="rotate-slow">@T("SlowRotation")</option>
+                    </select>
+                </label>
+            }
+            else
+            {
+                <p class="block-motion-editor__hint block-motion-editor__hint--inline">
+                    <i class="fas fa-sparkles"></i>@T("DecorativeContinuousOnlyHint")
+                </p>
+            }
+            <label class="block-layout-panel__check">
+                <input type="checkbox" @bind="Value.PlayOnce" />
+                <span>@T("PlayOnce")</span>
+            </label>
+            <label class="block-layout-panel__check">
+                <input type="checkbox" @bind="_previewReducedMotion" @bind:after="ApplyReducedMotionPreview" />
+                <span>@T("PreviewReducedMotion")</span>
+            </label>
+        </div>
+    </details>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BlockAnimationSettingsModel Value { get; set; } = default!;
+    [Parameter] public string BlockId { get; set; } = string.Empty;
+    [Parameter] public string Language { get; set; } = "en";
+    [Parameter] public bool IsContainer { get; set; }
+    [Parameter] public bool AllowContinuous { get; set; }
+
+    private bool _previewReducedMotion;
+
+    private static readonly IReadOnlyList<AnimationEffectCard> AnimationEffectCards =
+    [
+        new("none", "None", "AnimationEffectNoneHint", "none"),
+        new("fade", "Fade", "AnimationEffectFadeHint", "fade"),
+        new("rise", "Rise", "AnimationEffectRiseHint", "rise"),
+        new("fall", "Fall", "AnimationEffectFallHint", "fall"),
+        new("slide", "Slide", "AnimationEffectSlideHint", "slide"),
+        new("scale", "Scale", "AnimationEffectScaleHint", "scale")
+    ];
+
+    private static readonly IReadOnlyList<TimingPreset> TimingPresets =
+    [
+        new("slow", "Slow", "AnimationTimingSlowHint", 900, "ease-out"),
+        new("normal", "Normal", "AnimationTimingNormalHint", 500, "ease-out"),
+        new("fast", "Fast", "AnimationTimingFastHint", 250, "ease-out")
+    ];
+
+    private static readonly IReadOnlyList<EasingOption> EasingOptions =
+    [
+        new("linear", "Linear"),
+        new("ease", "Ease"),
+        new("ease-in", "EaseIn"),
+        new("ease-out", "EaseOut"),
+        new("ease-in-out", "EaseInOut")
+    ];
+
+    private string ActiveTimingPresetKey =>
+        TimingPresets.FirstOrDefault(preset =>
+            Value.DurationMs == preset.DurationMs &&
+            string.Equals(Value.Easing, preset.Easing, StringComparison.OrdinalIgnoreCase))?.Key ?? "custom";
+
+    private string T(string key) => AdminUiLocalizer.T(key, Language);
+
+    protected override void OnParametersSet()
+    {
+        Value.SchemaVersion = Math.Max(Value.SchemaVersion, 1);
+        Value.Effect = NormalizeEffect(Value.Effect);
+        Value.Trigger = Value.Trigger == "load" ? "load" : "enter-viewport";
+        Value.DurationMs = Math.Clamp(Value.DurationMs, 0, 5000);
+        Value.DelayMs = Math.Clamp(Value.DelayMs, 0, 5000);
+        Value.Easing = NormalizeEasing(Value.Easing);
+        Value.StaggerMs = IsContainer ? Math.Clamp(Value.StaggerMs, 0, 2000) : 0;
+        Value.ContinuousEffect = AllowContinuous && Value.ContinuousEffect == "rotate-slow" ? "rotate-slow" : "none";
+        Value.DisableForReducedMotion = true;
+    }
+
+    private void SelectEffect(string value) => Value.Effect = NormalizeEffect(value);
+
+    private void SelectTimingPreset(TimingPreset preset)
+    {
+        Value.DurationMs = preset.DurationMs;
+        Value.Easing = preset.Easing;
+    }
+
+    private void Reset()
+    {
+        Value.SchemaVersion = 1;
+        Value.Effect = "none";
+        Value.Trigger = "enter-viewport";
+        Value.DurationMs = 500;
+        Value.DelayMs = 0;
+        Value.Easing = "ease-out";
+        Value.PlayOnce = true;
+        Value.StaggerMs = 0;
+        Value.ContinuousEffect = "none";
+        Value.DisableForReducedMotion = true;
+    }
+
+    private async Task ReplaySelected() => await JS.InvokeVoidAsync("scBlockAnimations.replayBlock", BlockId);
+    private async Task ReplaySection() => await JS.InvokeVoidAsync("scBlockAnimations.replayAll");
+    private async Task ApplyReducedMotionPreview() => await JS.InvokeVoidAsync("scBlockAnimations.setReducedPreview", _previewReducedMotion);
+
+    private static string NormalizeEffect(string? value) => value switch
+    {
+        "fade" => "fade",
+        "rise" => "rise",
+        "fall" => "fall",
+        "slide" or "slide-left" or "slide-right" => "slide",
+        "scale" => "scale",
+        _ => "none"
+    };
+
+    private static string NormalizeEasing(string? value) => value switch
+    {
+        "linear" => "linear",
+        "ease" => "ease",
+        "ease-in" => "ease-in",
+        "ease-in-out" => "ease-in-out",
+        _ => "ease-out"
+    };
+
+    private sealed record AnimationEffectCard(string Value, string LabelKey, string HintKey, string PreviewClass);
+    private sealed record TimingPreset(string Key, string LabelKey, string HintKey, int DurationMs, string Easing);
+    private sealed record EasingOption(string Value, string LabelKey);
+}

@@ -1,4 +1,5 @@
 @inject AdminSectionService SectionService
+@inject AdminBlockService BlockService
 @inject IHttpService Http
 
 <div class="form-section">
@@ -10,6 +11,35 @@
         <label class="form-label">@T("PresetName")</label>
         <input class="form-control" value="@_presetName" @oninput="e => _presetName = e.Value?.ToString() ?? string.Empty" />
     </div>
+
+    <details class="canvas-preset-governance">
+        <summary>@T("PresetGovernance")</summary>
+        <label class="block-layout-panel__check">
+            <input type="checkbox" @bind="_lockGeometryOnApply" />
+            <span>@T("LockPresetGeometry")</span>
+        </label>
+        <label class="block-layout-panel__check">
+            <input type="checkbox" @bind="_lockContentOutsideSlots" />
+            <span>@T("LockContentOutsideSlots")</span>
+        </label>
+        <div class="form-hint">@T("PresetSlotsHint")</div>
+        <div class="canvas-preset-slots">
+            @foreach (var slot in _slotEditors)
+            {
+                <div class="canvas-preset-slot">
+                    <input type="checkbox" @bind="slot.Enabled" title="@T("EditableSlot")" />
+                    <span title="@slot.BlockStableId">@slot.BlockLabel</span>
+                    <input class="form-control" @bind="slot.Name" disabled="@(!slot.Enabled)" />
+                    <select class="form-select" @bind="slot.Kind" disabled="@(!slot.Enabled)">
+                        @foreach (var kind in _slotKinds)
+                        {
+                            <option value="@kind">@T($"PresetSlot_{kind}")</option>
+                        }
+                    </select>
+                </div>
+            }
+        </div>
+    </details>
 
     <div class="ez-editor-actions">
         <button type="button" class="btn-admin btn-primary" @onclick="SavePreset">
@@ -26,7 +56,7 @@
             <option value="">@T("SelectPreset")</option>
             @foreach (var preset in _presets)
             {
-                <option value="@preset.Id">@GetPresetName(preset) (@string.Format(T("BlocksCount"), preset.BlockCount))</option>
+                <option value="@preset.Id" disabled="@(!preset.IsCompatible)">@GetPresetName(preset) (@string.Format(T("BlocksCount"), preset.BlockCount), @preset.SlotCount @T("EditableSlots"))</option>
             }
         </select>
     </div>
@@ -59,13 +89,17 @@
     private List<CanvasSectionPresetModel> _presets = new();
     private string _presetName = string.Empty;
     private string _selectedPresetId = string.Empty;
+    private bool _lockGeometryOnApply;
+    private bool _lockContentOutsideSlots;
+    private List<PresetSlotEditor> _slotEditors = new();
+    private readonly string[] _slotKinds = ["content", "text", "icon", "image", "video", "link", "form"];
 
     protected override async Task OnParametersSetAsync()
     {
         _presetName = GetText(Section.AdminLabel) is { Length: > 0 } label
             ? label
             : T("CanvasPreset");
-        await LoadPresets();
+        await Task.WhenAll(LoadPresets(), LoadSlotEditors());
     }
 
     private async Task LoadPresets()
@@ -77,7 +111,26 @@
     private async Task SavePreset()
     {
         var name = new Dictionary<string, string> { [AdminLanguage] = string.IsNullOrWhiteSpace(_presetName) ? T("CanvasPreset") : _presetName.Trim() };
-        var res = await SectionService.SaveCanvasPresetAsync(PageId, Section.Id, name);
+        var slots = _slotEditors
+            .Where(slot => slot.Enabled)
+            .Select(slot => new CanvasPresetEditableSlotModel
+            {
+                Name = slot.Name,
+                BlockStableId = slot.BlockStableId,
+                Kind = slot.Kind,
+                Label = new Dictionary<string, string> { [AdminLanguage] = slot.BlockLabel }
+            })
+            .ToList();
+        var res = await SectionService.SaveCanvasPresetAsync(
+            PageId,
+            Section.Id,
+            name,
+            slots,
+            new CanvasPresetLockPolicyModel
+            {
+                LockGeometryOnApply = _lockGeometryOnApply,
+                LockContentOutsideSlots = _lockContentOutsideSlots
+            });
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success)
         {
@@ -115,6 +168,40 @@
     private string GetPresetName(CanvasSectionPresetModel preset) =>
         GetText(preset.Name) is { Length: > 0 } value ? value : T("CanvasPreset");
 
+    private async Task LoadSlotEditors()
+    {
+        var response = await BlockService.GetAllAsync(PageId, Section.Id);
+        _slotEditors = (response.Data ?? new())
+            .OrderBy(block => block.Order)
+            .Select((block, index) => new PresetSlotEditor
+            {
+                Enabled = true,
+                BlockStableId = block.StableId,
+                BlockLabel = BlockLabel(block, index),
+                Name = $"{block.Type}-{index + 1}",
+                Kind = SlotKind(block.Type)
+            })
+            .ToList();
+    }
+
+    private string BlockLabel(BlockModel block, int index)
+    {
+        var label = GetText(block.Title);
+        if (string.IsNullOrWhiteSpace(label)) label = GetText(block.Label);
+        return string.IsNullOrWhiteSpace(label) ? $"{block.Type} {index + 1}" : label;
+    }
+
+    private static string SlotKind(string type) => type switch
+    {
+        "text" or "metric" or "bullet-list" or "step" => "text",
+        "icon" => "icon",
+        "image" => "image",
+        "video" => "video",
+        "button" or "card" or "file" => "link",
+        "form" => "form",
+        _ => "content"
+    };
+
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     private string GetText(Dictionary<string, string>? value)
@@ -123,5 +210,14 @@
         if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
         return value.TryGetValue("en", out var english) ? english : string.Empty;
+    }
+
+    private sealed class PresetSlotEditor
+    {
+        public bool Enabled { get; set; }
+        public string BlockStableId { get; set; } = string.Empty;
+        public string BlockLabel { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Kind { get; set; } = "content";
     }
 }

@@ -1,21 +1,21 @@
-@using Contracts.Public 
+@using Contracts.Public
+@using System.Text.Json
 
 <div class="sc-block sc-block--map">
-    <div class="sc-map-placeholder">
-        <p>Map centered at @Block.CenterLat, @Block.CenterLng</p>
-        @if (Block.Pins?.Any() == true)
-        {
-            <ul>
-                @foreach (var pin in Block.Pins)
-                {
-                    <li>@pin.Label</li>
-                }
-            </ul>
-        }
+    <div class="sc-map-block__canvas"
+         data-sc-network-map
+         data-center-lat="@(Block.CenterLat ?? 0)"
+         data-center-lng="@(Block.CenterLng ?? 0)"
+         data-zoom="@(Block.DefaultZoom ?? 12)"
+         data-pins="@PinsJson"
+         aria-label="Map">
+        <div class="sc-map-placeholder">Map</div>
     </div>
 </div>
 
 @code {
     [Parameter, EditorRequired] public PublicMapBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
+    private string PinsJson => JsonSerializer.Serialize((Block.Pins ?? new())
+        .Select(pin => new { pin.Label, pin.Lat, pin.Lng, pin.Href }));
 }

@@ -58,6 +58,7 @@ namespace FullProject.Services.CloneServices
                 .ToList();
 
             RemapParentBlockIds(orderedSources, clones);
+            RemapGraphReferences(orderedSources, clones);
             return clones;
         }
 
@@ -80,6 +81,30 @@ namespace FullProject.Services.CloneServices
                 .ToList();
 
             RemapParentBlockIds(orderedSources, clones);
+            RemapGraphReferences(orderedSources, clones);
+            return clones;
+        }
+
+        public List<Block> CloneBlocksAsNewContent(
+            IEnumerable<Block> sourceBlocks,
+            string targetPageStableId,
+            string targetSectionStableId,
+            DateTime? timestamp = null)
+        {
+            var now = timestamp ?? DateTime.UtcNow;
+            var orderedSources = sourceBlocks.OrderBy(block => block.Order).ToList();
+            var clones = orderedSources
+                .Select(block =>
+                {
+                    var clone = CloneBlock(block, CloneProfile.DuplicateAsNewContent, now);
+                    clone.PageStableId = targetPageStableId;
+                    clone.SectionStableId = targetSectionStableId;
+                    return clone;
+                })
+                .ToList();
+
+            RemapParentBlockIds(orderedSources, clones, preserveExternalParent: true);
+            RemapGraphReferences(orderedSources, clones);
             return clones;
         }
 
@@ -246,7 +271,10 @@ namespace FullProject.Services.CloneServices
             }
         }
 
-        private static void RemapParentBlockIds(IReadOnlyList<Block> sources, IReadOnlyList<Block> clones)
+        private static void RemapParentBlockIds(
+            IReadOnlyList<Block> sources,
+            IReadOnlyList<Block> clones,
+            bool preserveExternalParent = false)
         {
             var idMap = sources
                 .Zip(clones, (source, clone) => new { source.Id, CloneId = clone.Id })
@@ -255,10 +283,42 @@ namespace FullProject.Services.CloneServices
 
             foreach (var clone in clones)
             {
-                clone.ParentBlockId = !string.IsNullOrWhiteSpace(clone.ParentBlockId) &&
-                                      idMap.TryGetValue(clone.ParentBlockId, out var newParentId)
+                if (string.IsNullOrWhiteSpace(clone.ParentBlockId))
+                {
+                    clone.ParentBlockId = null;
+                    continue;
+                }
+
+                clone.ParentBlockId = idMap.TryGetValue(clone.ParentBlockId, out var newParentId)
                     ? newParentId
-                    : null;
+                    : preserveExternalParent ? clone.ParentBlockId : null;
+            }
+        }
+
+        private static void RemapGraphReferences(
+            IReadOnlyList<Block> sources,
+            IReadOnlyList<Block> clones)
+        {
+            var stableIdMap = sources
+                .Zip(clones, (source, clone) => new { source.StableId, CloneStableId = clone.StableId })
+                .Where(item => !string.IsNullOrWhiteSpace(item.StableId))
+                .ToDictionary(item => item.StableId, item => item.CloneStableId, StringComparer.Ordinal);
+
+            static string Remap(string value, IReadOnlyDictionary<string, string> map) =>
+                map.TryGetValue(value, out var remapped) ? remapped : value;
+
+            foreach (var container in clones.OfType<ContainerBlock>())
+            {
+                foreach (var decoration in container.ContainerLayout.Diagram.Decorations)
+                {
+                    decoration.FromAnchor = Remap(decoration.FromAnchor, stableIdMap);
+                    decoration.ToAnchor = Remap(decoration.ToAnchor, stableIdMap);
+                }
+                foreach (var connector in container.ContainerLayout.Diagram.Connectors)
+                {
+                    connector.FromAnchor = Remap(connector.FromAnchor, stableIdMap);
+                    connector.ToAnchor = Remap(connector.ToAnchor, stableIdMap);
+                }
             }
         }
     }

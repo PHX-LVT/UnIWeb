@@ -1,0 +1,110 @@
+/* Loaded after HTML-section styles so Theme typography remains authoritative. */
+.sc-section {
+    font-size: var(--theme-text-body, var(--theme-text-base, 16px));
+}
+
+.sc-hero__tagline,
+.sc-list__eyebrow,
+.sc-network-map__eyebrow,
+.sc-showcase__eyebrow,
+.sc-library__eyebrow,
+.sc-testimonial__eyebrow,
+.sc-insight-subscribe__eyebrow,
+.sc-about-identity__eyebrow,
+.sc-about-flags__eyebrow,
+.sc-sustain__eyebrow,
+.sc-tech-arch__eyebrow,
+.sc-contact-eyebrow,
+.sc-library__tag,
+.sc-carousel__case-tag {
+    font-size: var(--theme-text-eyebrow, 13px);
+}
+
+.sc-hero__heading--small {
+    font-size: clamp(calc(var(--theme-text-heading, 40px) * .65), 3vw, calc(var(--theme-text-heading, 40px) * .9));
+}
+
+.sc-hero__heading--medium {
+    font-size: clamp(calc(var(--theme-text-heading, 40px) * .8), 4vw, calc(var(--theme-text-heading, 40px) * 1.15));
+}
+
+.sc-hero__heading--large {
+    font-size: clamp(var(--theme-text-heading, 40px), 5vw, calc(var(--theme-text-heading, 40px) * 1.5));
+}
+
+.sc-list__title,
+.sc-showcase__title,
+.sc-library__title,
+.sc-cta__heading,
+.sc-stats__title,
+.sc-carousel__title,
+.sc-network-map__title,
+.sc-testimonial__title,
+.sc-html h1,
+.sc-html h2,
+.sc-sustain__title,
+.sc-tech-os__title,
+.sc-tech-arch__title,
+.sc-about-identity__title,
+.sc-contact-title {
+    font-size: var(--theme-text-heading, 40px);
+}
+
+.sc-hero__sub,
+.sc-library__subheading,
+.sc-cta__sub,
+.sc-testimonial__sub,
+.sc-contact-subtitle,
+.sc-about-identity__lead {
+    font-size: var(--theme-text-subheading, 17px);
+}
+
+.sc-html p,
+.sc-library__summary,
+.sc-carousel__body p,
+.sc-testimonial__card p,
+.sc-list__card-text,
+.sc-showcase__content,
+.sc-cta p,
+.sc-block__content {
+    font-size: var(--theme-text-body, 16px);
+}
+
+.sc-library__meta,
+.sc-stat__label,
+.sc-footer__link,
+.sc-footer__meta,
+.sc-search__input,
+.sc-library__search-input,
+.sc-library__filter-select,
+.sc-public-modal__hint {
+    font-size: var(--theme-text-small, 13px);
+}
+
+.sc-library__item-title,
+.sc-carousel__body h3,
+.sc-testimonial__card h3,
+.sc-showcase__item-title,
+.sc-list__card-title,
+.sc-block__title {
+    font-size: var(--theme-text-item-title, 20px);
+}
+
+@media (max-width: 900px) {
+    .sc-list__grid--2,
+    .sc-list__grid--3,
+    .sc-list__grid--4,
+    .sc-list__grid--5 {
+        grid-template-columns: 1fr;
+    }
+
+    .sc-list__card,
+    .sc-list__card-body {
+        min-width: 0;
+    }
+
+    .sc-list__card-title,
+    .sc-list__card-desc {
+        overflow-wrap: anywhere;
+    }
+}

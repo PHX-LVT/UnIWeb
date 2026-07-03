@@ -21,53 +21,55 @@
     else
     {
         <div class="ez-dashboard__page-nav">
-            <button type="button"
-                    class="ez-page-scroll-btn"
-                    title='@T("PreviousPages")'
-                    aria-label='@T("PreviousPages")'
-                    @onclick="() => ScrollPageTabs(-1)">
-                <i class="fas fa-chevron-left"></i>
-            </button>
+            <div class="ez-dashboard__page-controls">
+                <button type="button"
+                        class="ez-page-scroll-btn"
+                        title='@T("PreviousPages")'
+                        aria-label='@T("PreviousPages")'
+                        @onclick="() => ScrollPageTabs(-1)">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
 
-            <div class="ez-dashboard__page-scroll" @ref="_pageTabsScrollRef">
-                <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
-                    @foreach (var page in RootPages)
-                    {
-                        <button class="ez-tab @(_activeParentPage?.Id == page.Id ? "ez-tab--active" : "")"
-                                data-root-page-id="@(page.Id)"
-                                @onclick="() => SelectPage(page)">
-                            @PageTitle(page)
-                            @if (CanEditDashboard && IsEditMode && _activeParentPage?.Id == page.Id)
-                            {
-                                <span class="ez-tab__action" title='@T("Settings")'
-                                      @onclick:stopPropagation="true"
-                                      @onclick="() => OpenSettings(page)">
-                                    <i class="fas fa-cog"></i>
-                                </span>
-                                <span class="ez-tab__action ez-tab__action--danger" title='@T("Delete")'
-                                      @onclick:stopPropagation="true"
-                                      @onclick="() => _confirmDelete = page">
-                                    <i class="fas fa-trash"></i>
-                                </span>
-                            }
-                        </button>
-                    }
-                    @if (CanEditDashboard && IsEditMode)
-                    {
-                        <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                    }
+                <div class="ez-dashboard__page-scroll" @ref="_pageTabsScrollRef">
+                    <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
+                        @foreach (var page in RootPages)
+                        {
+                            <button class="ez-tab @(_activeParentPage?.Id == page.Id ? "ez-tab--active" : "")"
+                                    data-root-page-id="@(page.Id)"
+                                    @onclick="() => SelectPage(page)">
+                                @PageTitle(page)
+                                @if (CanEditDashboard && IsEditMode && _activeParentPage?.Id == page.Id)
+                                {
+                                    <span class="ez-tab__action" title='@T("Settings")'
+                                          @onclick:stopPropagation="true"
+                                          @onclick="() => OpenSettings(page)">
+                                        <i class="fas fa-cog"></i>
+                                    </span>
+                                    <span class="ez-tab__action ez-tab__action--danger" title='@T("Delete")'
+                                          @onclick:stopPropagation="true"
+                                          @onclick="() => _confirmDelete = page">
+                                        <i class="fas fa-trash"></i>
+                                    </span>
+                                }
+                            </button>
+                        }
+                        @if (CanEditDashboard && IsEditMode)
+                        {
+                            <button class="ez-tab ez-tab--add" @onclick="ShowPagePicker">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        }
+                    </div>
                 </div>
-            </div>
 
-            <button type="button"
-                    class="ez-page-scroll-btn"
-                    title='@T("NextPages")'
-                    aria-label='@T("NextPages")'
-                    @onclick="() => ScrollPageTabs(1)">
-                <i class="fas fa-chevron-right"></i>
-            </button>
+                <button type="button"
+                        class="ez-page-scroll-btn"
+                        title='@T("NextPages")'
+                        aria-label='@T("NextPages")'
+                        @onclick="() => ScrollPageTabs(1)">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
 
             <button class="btn-admin ez-dashboard__mode-toggle ez-dashboard__mode-toggle--@_canvasMode"
                     type="button"

@@ -26,6 +26,7 @@ namespace FullProject.Security
             "list-items",
             "section-backgrounds",
             "image-blocks",
+            "video-blocks",
             "file-blocks",
             "card-blocks",
             "content-hero",

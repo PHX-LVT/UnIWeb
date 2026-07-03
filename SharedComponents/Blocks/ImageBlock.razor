@@ -1,16 +1,44 @@
 @using Contracts.Public
 @using SharedComponents.Helpers
 
-<div class="sc-block sc-block--image">
+<figure class="sc-block sc-block--image">
     @if (!string.IsNullOrEmpty(Block.ImageUrl))
     {
-        <img src="@Block.ImageUrl"
-             alt="@StyleHelper.Lang(Block.AltText, Lang)"
-             class="sc-block__image" />
+        @if (Block.OpenInLightbox)
+        {
+            <button type="button"
+                    class="sc-block__image-trigger"
+                    data-sc-library-image
+                    data-image-url="@Block.ImageUrl"
+                    data-image-title="@LightboxTitle"
+                    aria-label="@LightboxTitle">
+                @ImageContent
+            </button>
+        }
+        else
+        {
+            @ImageContent
+        }
+        @if (!string.IsNullOrWhiteSpace(CaptionText))
+        {
+            <figcaption class="sc-block__image-caption">@CaptionText</figcaption>
+        }
     }
-</div>
+</figure>
 
 @code {
     [Parameter, EditorRequired] public PublicImageBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
+
+    private string AltText => StyleHelper.Lang(Block.AltText, Lang);
+    private string CaptionText => StyleHelper.Lang(Block.Caption, Lang);
+    private string LightboxTitle => string.IsNullOrWhiteSpace(CaptionText)
+        ? (string.IsNullOrWhiteSpace(AltText) ? "Image" : AltText)
+        : CaptionText;
+    private string FocalStyle =>
+        $"object-position:{Math.Clamp(Block.FocalPointX, 0, 100):0.##}% {Math.Clamp(Block.FocalPointY, 0, 100):0.##}%";
+    private RenderFragment ImageContent => @<img src="@Block.ImageUrl"
+                                                  alt="@AltText"
+                                                  class="sc-block__image"
+                                                  style="@FocalStyle" />;
 }

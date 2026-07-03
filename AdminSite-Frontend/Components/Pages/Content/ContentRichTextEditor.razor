@@ -3,6 +3,13 @@
 
 <div class="content-rich-editor">
     <div class="content-rich-toolbar" aria-label='@T("RichTextToolbar")'>
+        <label class="content-rich-format" title='@T("TextStyle")'>
+            <select class="content-rich-select" value="@_blockFormat" @onchange="SetBlockFormat">
+                <option value="p">@T("Paragraph")</option>
+                <option value="h2">@T("Heading2")</option>
+                <option value="h3">@T("Heading3")</option>
+            </select>
+        </label>
         <label class="content-rich-size" title='@T("TextSize")'>
             <input type="number" min="10" max="72" step="1" value="@_fontSizePx" @onchange="SetFontSize" />
             <span>px</span>
@@ -13,6 +20,9 @@
         <button type="button" class="content-rich-btn" @onclick='() => Exec("insertUnorderedList")' title='@T("BulletList")'><i class="fas fa-list-ul"></i></button>
         <button type="button" class="content-rich-btn" @onclick='() => Exec("insertOrderedList")' title='@T("NumberedList")'><i class="fas fa-list-ol"></i></button>
         <button type="button" class="content-rich-btn" @onclick="CreateLink" title='@T("Link")'><i class="fas fa-link"></i></button>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyLeft")' title='@T("AlignLeft")'><i class="fas fa-align-left"></i></button>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyCenter")' title='@T("AlignCenter")'><i class="fas fa-align-center"></i></button>
+        <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyRight")' title='@T("AlignRight")'><i class="fas fa-align-right"></i></button>
         <label class="content-rich-color" title='@T("TextColor")'>
             <i class="fas fa-palette"></i>
             <input type="color" value="@_textColor" @onchange="SetColor" />
@@ -38,6 +48,7 @@
     private string _lastValue = string.Empty;
     private int _fontSizePx = 16;
     private string _textColor = "#0f3460";
+    private string _blockFormat = "p";
     private bool _initialized;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -72,6 +83,13 @@
         await JS.InvokeVoidAsync("contentRichTextEditor.setFontSize", _id, _fontSizePx);
     }
 
+    private async Task SetBlockFormat(ChangeEventArgs e)
+    {
+        var requested = e.Value?.ToString()?.Trim().ToLowerInvariant();
+        _blockFormat = requested is "h2" or "h3" ? requested : "p";
+        await JS.InvokeVoidAsync("contentRichTextEditor.setBlockFormat", _id, _blockFormat);
+    }
+
     private async Task SetColor(ChangeEventArgs e)
     {
         var color = e.Value?.ToString() ?? "#0f3460";
@@ -92,13 +110,15 @@
     }
 
     [JSInvokable]
-    public void OnFormatChanged(int fontSizePx, string? color)
+    public void OnFormatChanged(int fontSizePx, string? color, string? blockFormat)
     {
         if (fontSizePx >= 10 && fontSizePx <= 72)
             _fontSizePx = fontSizePx;
 
         if (IsHexColor(color))
             _textColor = color!.ToLowerInvariant();
+
+        _blockFormat = blockFormat is "h2" or "h3" ? blockFormat : "p";
 
         _ = InvokeAsync(StateHasChanged);
     }

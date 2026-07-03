@@ -1,0 +1,45 @@
+<label>
+    <span>@T("StrokeColor")</span>
+    <select value="@ColorMode" @onchange="ChangeColorMode">
+        <option value="theme-primary">@T("ThemePrimary")</option>
+        <option value="theme-accent">@T("ThemeAccent")</option>
+        <option value="color">@T("CustomColor")</option>
+    </select>
+</label>
+@if (ColorMode == "color")
+{
+    <label><span>@T("CustomColor")</span><input value="@Color" @onchange="ChangeColor" placeholder="#0f3460" /></label>
+}
+<label><span>@T("StrokeWidth")</span><input type="number" min="0.5" max="12" step="0.5" value="@Width" @onchange="ChangeWidth" /></label>
+<label>
+    <span>@T("StrokeStyle")</span>
+    <select value="@StrokeStyle" @onchange="ChangeStrokeStyle">
+        <option value="solid">@T("Solid")</option>
+        <option value="dashed">@T("Dashed")</option>
+        <option value="dotted">@T("Dotted")</option>
+    </select>
+</label>
+<label><span>@T("Opacity")</span><input type="number" min="0" max="1" step="0.05" value="@Opacity" @onchange="ChangeOpacity" /></label>
+
+@code {
+    [Parameter] public string ColorMode { get; set; } = "theme-accent";
+    [Parameter] public EventCallback<string> ColorModeChanged { get; set; }
+    [Parameter] public string? Color { get; set; }
+    [Parameter] public EventCallback<string?> ColorChanged { get; set; }
+    [Parameter] public double Width { get; set; } = 2;
+    [Parameter] public EventCallback<double> WidthChanged { get; set; }
+    [Parameter] public string StrokeStyle { get; set; } = "solid";
+    [Parameter] public EventCallback<string> StrokeStyleChanged { get; set; }
+    [Parameter] public double Opacity { get; set; } = 0.5;
+    [Parameter] public EventCallback<double> OpacityChanged { get; set; }
+    [Parameter] public string Language { get; set; } = "en";
+
+    private string T(string key) => AdminUiLocalizer.T(key, Language);
+    private Task ChangeColorMode(ChangeEventArgs args) => ColorModeChanged.InvokeAsync(args.Value?.ToString() ?? "theme-accent");
+    private Task ChangeColor(ChangeEventArgs args) => ColorChanged.InvokeAsync(args.Value?.ToString());
+    private Task ChangeStrokeStyle(ChangeEventArgs args) => StrokeStyleChanged.InvokeAsync(args.Value?.ToString() ?? "solid");
+    private Task ChangeWidth(ChangeEventArgs args) => WidthChanged.InvokeAsync(Parse(args.Value, Width));
+    private Task ChangeOpacity(ChangeEventArgs args) => OpacityChanged.InvokeAsync(Parse(args.Value, Opacity));
+    private static double Parse(object? value, double fallback) =>
+        double.TryParse(value?.ToString(), out var parsed) ? parsed : fallback;
+}

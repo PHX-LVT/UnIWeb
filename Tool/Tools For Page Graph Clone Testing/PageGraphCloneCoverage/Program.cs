@@ -1,9 +1,15 @@
 using System.Collections;
 using System.Reflection;
+using System.Text.Json;
 using Contracts.Admin;
+using Contracts.Public;
+using Contracts.Global;
 using FullProject.Models;
 using FullProject.Services.CloneServices;
+using FullProject.Services.BlockServices;
+using SharedComponents.Helpers;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 
 namespace PageGraphCloneCoverage;
 
@@ -26,6 +32,14 @@ public static class Program
         TestDraftResetSnapshotClones();
         TestPresetBlockProfiles();
         TestPublishDiffService();
+        TestBlockContractCompatibility();
+        TestBlockContractDtoRoundTrip();
+        TestBlockContractNormalization();
+        TestBlockContractPropertyParity();
+        TestMediaBlockContracts();
+        TestBlockAuthoringAndPresetContracts();
+        TestBlockLayoutResolution();
+        TestThemeMotionContract();
 
         if (Failures.Count == 0)
         {
@@ -165,6 +179,19 @@ public static class Program
             Content = Lang("Preset child content")
         });
         child.ParentBlockId = parent.Id;
+        parent.ContainerLayout.Diagram = new ContainerDiagramSettings
+        {
+            Enabled = true,
+            Connectors =
+            [
+                new ContainerConnectorSettings
+                {
+                    Id = "preset-connector",
+                    FromAnchor = "center",
+                    ToAnchor = child.StableId
+                }
+            ]
+        };
 
         var sourceBlocks = new List<Block> { parent, child };
         var captured = CloneService.CloneBlocksForPresetCapture(sourceBlocks, ClonePublishedAt);
@@ -173,6 +200,8 @@ public static class Program
         AssertPresetCaptureBlock(parent, captured[0], "PresetCapture parent");
         AssertPresetCaptureBlock(child, captured[1], "PresetCapture child");
         Expect(captured[1].ParentBlockId == captured[0].Id, "PresetCapture should remap child ParentBlockId to captured parent Id.");
+        Expect(((ContainerBlock)captured[0]).ContainerLayout.Diagram.Connectors[0].ToAnchor == captured[1].StableId,
+            "PresetCapture should remap connector anchors to captured child stable identities.");
 
         var applied = CloneService.CloneBlocksForPresetApply(
             captured,
@@ -184,6 +213,8 @@ public static class Program
         AssertPresetApplyBlock(captured[0], applied[0], "PresetApply parent");
         AssertPresetApplyBlock(captured[1], applied[1], "PresetApply child");
         Expect(applied[1].ParentBlockId == applied[0].Id, "PresetApply should remap child ParentBlockId to applied parent Id.");
+        Expect(((ContainerBlock)applied[0]).ContainerLayout.Diagram.Connectors[0].ToAnchor == applied[1].StableId,
+            "PresetApply should remap connector anchors to applied child stable identities.");
     }
 
     private static void TestPublishDiffService()
@@ -298,6 +329,626 @@ public static class Program
             publishedBlocks);
 
         Expect(integrity.HasIntegrityIssues, "Publish diff should flag duplicate stable ids.");
+    }
+
+    private static void TestBlockContractCompatibility()
+    {
+        var source = WithBlockBase(new ContainerBlock
+        {
+            Title = Lang("Contract container"),
+            ContainerLayout = new ContainerLayoutSettings
+            {
+                SchemaVersion = 2,
+                Purpose = "collection",
+                AllowedChildType = "text",
+                Mode = "orbit",
+                Columns = 5,
+                Gap = "large",
+                AlignItems = "center",
+                JustifyContent = "between",
+                Wrap = false,
+                OrbitRadius = 240,
+                OrbitStartAngle = 20,
+                OrbitEndAngle = 320,
+                OrbitDirection = "counter-clockwise",
+                MobileMode = "compact-preserve",
+                CompactRadius = 110,
+                CompactChildWidth = 104,
+                GeometryLocked = true,
+                ShareAppearance = true,
+                SharedAppearance = new BlockAppearance { SchemaVersion = 2, BackgroundMode = "theme-background", Padding = "small" },
+                Diagram = DiagramFixture()
+            }
+        });
+
+        var roundTrip = BsonSerializer.Deserialize<Block>(source.ToBsonDocument());
+        Expect(roundTrip is ContainerBlock, "Block contract BSON round-trip should preserve ContainerBlock type.");
+        Expect(roundTrip.Appearance.Shape == "circle", "Block contract BSON round-trip should preserve appearance.");
+        Expect(roundTrip.Responsive.SchemaVersion == 1, "Block contract BSON round-trip should preserve responsive schema version.");
+        Expect(roundTrip.Responsive.Mobile?.Mode == "compact-preserve", "Block contract BSON round-trip should preserve responsive settings.");
+        Expect(roundTrip.Animation.Effect == "rise", "Block contract BSON round-trip should preserve animation settings.");
+        var roundTripContainer = (ContainerBlock)roundTrip;
+        Expect(roundTripContainer.ContainerLayout.GeometryLocked, "Block contract BSON round-trip should preserve Container layout settings.");
+        Expect(roundTripContainer.ContainerLayout.OrbitDirection == "counter-clockwise", "Block contract BSON round-trip should preserve orbit direction.");
+        Expect(roundTripContainer.ContainerLayout.CompactRadius == 110, "Block contract BSON round-trip should preserve compact geometry.");
+        Expect(roundTripContainer.ContainerLayout.Purpose == "collection" && roundTripContainer.ContainerLayout.AllowedChildType == "text",
+            "Block contract BSON round-trip should preserve Collection governance.");
+        Expect(roundTripContainer.ContainerLayout.ShareAppearance && roundTripContainer.ContainerLayout.SharedAppearance?.Padding == "small",
+            "Block contract BSON round-trip should preserve shared child appearance.");
+        Expect(roundTripContainer.ContainerLayout.Diagram.Connectors.Count == 1, "Block contract BSON round-trip should preserve diagram connectors.");
+        Expect(roundTripContainer.ContainerLayout.Diagram.Decorations[0].Kind == "arc", "Block contract BSON round-trip should preserve diagram decorations.");
+
+        var legacyDocument = source.ToBsonDocument();
+        legacyDocument.Remove(nameof(Block.Appearance));
+        legacyDocument.Remove(nameof(Block.Responsive));
+        legacyDocument.Remove(nameof(Block.Animation));
+        legacyDocument.Remove(nameof(ContainerBlock.ContainerLayout));
+        legacyDocument[nameof(ContainerBlock.LayoutMode)] = "semicircle";
+        legacyDocument[nameof(ContainerBlock.Columns)] = 4;
+        legacyDocument[nameof(ContainerBlock.Gap)] = "small";
+        legacyDocument[nameof(ContainerBlock.SemicircleRadius)] = 210;
+        legacyDocument[nameof(ContainerBlock.SemicircleStartAngle)] = 120;
+        legacyDocument[nameof(ContainerBlock.SemicircleEndAngle)] = 300;
+
+        var legacy = BsonSerializer.Deserialize<Block>(legacyDocument) as ContainerBlock;
+        Expect(legacy is not null, "Legacy Block BSON should still deserialize as ContainerBlock.");
+        Expect(legacy?.ContainerLayout.Mode == "semicircle", "Legacy Container LayoutMode should populate the unified contract.");
+        Expect(legacy?.ContainerLayout.Columns == 4, "Legacy Container Columns should populate the unified contract.");
+        Expect(legacy?.ContainerLayout.SemicircleRadius == 210, "Legacy Container geometry should populate the unified contract.");
+        Expect(legacy?.Appearance is not null, "Legacy Block should receive default appearance settings.");
+        Expect(legacy?.Responsive is not null, "Legacy Block should receive default responsive settings.");
+        Expect(legacy?.Animation is not null, "Legacy Block should receive default animation settings.");
+    }
+
+    private static void TestBlockContractDtoRoundTrip()
+    {
+        BlockUpdateDto source = new ContainerBlockUpdateDto
+        {
+            Title = Lang("DTO container"),
+            Appearance = new BlockAppearanceDto
+            {
+                SchemaVersion = 1,
+                BackgroundMode = "theme-primary",
+                TextAlign = "center",
+                Shape = "circle",
+                BorderRadius = "circle",
+                AspectRatio = "square",
+                MediaFit = "contain",
+                MediaPosition = "top",
+                Opacity = 0.75,
+                Padding = "large",
+                InheritFromContainer = true
+            },
+            Responsive = new BlockResponsiveSettingsDto
+            {
+                SchemaVersion = 1,
+                Mobile = new BlockResponsiveOverrideDto
+                {
+                    Mode = "compact-preserve",
+                    WidthPercent = 90
+                }
+            },
+            Animation = new BlockAnimationSettingsDto
+            {
+                SchemaVersion = 1,
+                Effect = "rise",
+                DurationMs = 700,
+                StaggerMs = 100,
+                DisableForReducedMotion = true
+            },
+            ContainerLayout = new ContainerLayoutSettingsDto
+            {
+                SchemaVersion = 2,
+                Purpose = "collection",
+                AllowedChildType = "card",
+                Mode = "orbit",
+                OrbitRadius = 230,
+                OrbitEndAngle = 240,
+                OrbitDirection = "counter-clockwise",
+                MobileMode = "compact-preserve",
+                CompactRadius = 108,
+                CompactChildWidth = 96,
+                GeometryLocked = true,
+                ShareAppearance = true,
+                SharedAppearance = new BlockAppearanceDto { SchemaVersion = 2, BackgroundMode = "theme-background", Padding = "small" },
+                Diagram = new ContainerDiagramSettingsDto
+                {
+                    Enabled = true,
+                    Decorations =
+                    [
+                        new ContainerDecorationSettingsDto
+                        {
+                            Id = "dto-ring",
+                            Kind = "ring",
+                            RadiusPercent = 42
+                        }
+                    ],
+                    Connectors =
+                    [
+                        new ContainerConnectorSettingsDto
+                        {
+                            Id = "dto-connector",
+                            FromAnchor = "center",
+                            ToAnchor = "child-one",
+                            Routing = "curve",
+                            ArrowEnd = true
+                        }
+                    ]
+                }
+            }
+        };
+
+        var json = JsonSerializer.Serialize(source);
+        var result = JsonSerializer.Deserialize<BlockUpdateDto>(json) as ContainerBlockUpdateDto;
+
+        Expect(result is not null, "Polymorphic Block DTO should round-trip as ContainerBlockUpdateDto.");
+        Expect(result?.Appearance?.Shape == "circle", "Block DTO should preserve appearance settings.");
+        Expect(result?.Appearance?.MediaFit == "contain", "Block DTO should preserve media-fit settings.");
+        Expect(result?.Appearance?.InheritFromContainer == true, "Block DTO should preserve Container appearance inheritance.");
+        Expect(result?.Responsive?.SchemaVersion == 1, "Block DTO should preserve responsive schema version.");
+        Expect(result?.Responsive?.Mobile?.Mode == "compact-preserve", "Block DTO should preserve responsive settings.");
+        Expect(result?.Animation?.Effect == "rise", "Block DTO should preserve animation settings.");
+        Expect(result?.ContainerLayout?.Mode == "orbit", "Block DTO should preserve Container layout settings.");
+        Expect(result?.ContainerLayout?.OrbitDirection == "counter-clockwise", "Block DTO should preserve orbit direction.");
+        Expect(result?.ContainerLayout?.GeometryLocked == true, "Block DTO should preserve geometry lock settings.");
+        Expect(result?.ContainerLayout?.Purpose == "collection" && result.ContainerLayout.AllowedChildType == "card",
+            "Block DTO should preserve Collection governance.");
+        Expect(result?.ContainerLayout?.ShareAppearance == true && result.ContainerLayout.SharedAppearance?.Padding == "small",
+            "Block DTO should preserve shared child appearance.");
+        Expect(result?.ContainerLayout?.Diagram?.Decorations?.Count == 1, "Block DTO should preserve diagram decorations.");
+        Expect(result?.ContainerLayout?.Diagram?.Connectors?[0].ArrowEnd == true, "Block DTO should preserve connector arrow settings.");
+    }
+
+    private static void TestBlockContractNormalization()
+    {
+        var legacy = new TextBlock
+        {
+            Layout = new BlockLayout
+            {
+                BackgroundColor = "#112233",
+                BorderRadius = "large",
+                Padding = "medium",
+                Margin = "small"
+            }
+        };
+
+        var legacyAppearance = BlockContractService.ToAdminAppearance(legacy);
+        Expect(legacyAppearance.BorderRadius == "large", "Legacy layout appearance should be exposed through the unified contract.");
+
+        legacy.Appearance = new BlockAppearance
+        {
+            SchemaVersion = 1,
+            BackgroundColor = "#334455"
+        };
+        var versionOneAppearance = BlockContractService.ToAdminAppearance(legacy);
+        Expect(versionOneAppearance.BackgroundMode == "color",
+            "Version-one appearance documents should infer color mode from their stored background color.");
+
+        legacy.Appearance = BlockContractService.MergeAppearance(
+            legacy.Appearance,
+            new BlockAppearanceDto
+            {
+                BorderRadius = "none",
+                Padding = "none",
+                Opacity = 2,
+                BorderWidth = 100
+            });
+
+        var configuredAppearance = BlockContractService.ToAdminAppearance(legacy);
+        Expect(configuredAppearance.BorderRadius == "none", "Explicit unified appearance should override legacy layout values.");
+        Expect(configuredAppearance.Padding == "none", "Explicit unified spacing should override legacy layout values.");
+        Expect(configuredAppearance.Opacity == 1, "Appearance opacity should be clamped.");
+        Expect(configuredAppearance.BorderWidth == 20, "Appearance border width should be clamped.");
+
+        var responsive = BlockContractService.MergeResponsive(
+            null,
+            new BlockResponsiveSettingsDto
+            {
+                Mobile = new BlockResponsiveOverrideDto
+                {
+                    Mode = "hide",
+                    ColumnSpan = 99,
+                    WidthPercent = 250
+                }
+            });
+
+        Expect(responsive.SchemaVersion == 1, "Responsive contract should be versioned when normalized.");
+        Expect(responsive.Mobile?.Mode == "hide", "Responsive contract should preserve allowed hide mode.");
+        Expect(responsive.Mobile?.ColumnSpan == 12, "Responsive column span should be clamped.");
+        Expect(responsive.Mobile?.WidthPercent == 100, "Responsive width percent should be clamped.");
+
+        var inheritedResponsive = BlockContractService.MergeResponsive(
+            responsive,
+            new BlockResponsiveSettingsDto { SchemaVersion = 1 });
+        Expect(inheritedResponsive.Tablet is null && inheritedResponsive.Mobile is null,
+            "Explicit null breakpoint overrides should reset responsive settings to inherited values.");
+
+        var invalidVisual = BlockContractService.Validate(new ImageBlockUpdateDto
+        {
+            ImageUrl = "/image.jpg",
+            Appearance = new BlockAppearanceDto
+            {
+                BackgroundMode = "color",
+                BackgroundColor = "red; display:none",
+                Shape = "circle",
+                AspectRatio = "auto",
+                Decorative = false
+            },
+            AltText = new Dictionary<string, string>()
+        });
+        Expect(invalidVisual.Count >= 3,
+            "Visual contract validation should reject unsafe colors, invalid circle geometry, and missing alt text.");
+
+        var container = BlockContractService.MergeContainerLayout(
+            null,
+            new ContainerLayoutSettingsDto
+            {
+                Mode = "orbit",
+                Columns = 99,
+                OrbitRadius = 999,
+                OrbitDirection = "counter-clockwise",
+                MobileMode = "compact-preserve",
+                CompactRadius = 999,
+                CompactChildWidth = 999,
+                Diagram = new ContainerDiagramSettingsDto
+                {
+                    Enabled = true,
+                    Decorations =
+                    [
+                        new ContainerDecorationSettingsDto
+                        {
+                            Kind = "unsupported",
+                            RadiusPercent = 99,
+                            Width = 30,
+                            Opacity = 3
+                        }
+                    ],
+                    Connectors =
+                    [
+                        new ContainerConnectorSettingsDto
+                        {
+                            FromAnchor = "center",
+                            ToAnchor = "child-one",
+                            Routing = "curve",
+                            ArrowEnd = true
+                        }
+                    ]
+                }
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        Expect(container.SchemaVersion == 2, "Container contract should be versioned when normalized.");
+        Expect(container.Purpose == "collection" && container.AllowedChildType is null,
+            "New Container contracts should default to an unlocked Collection.");
+        Expect(container.Columns == 6, "Container columns should be clamped.");
+        Expect(container.OrbitRadius == 480, "Container orbit radius should be clamped.");
+        Expect(container.OrbitDirection == "counter-clockwise", "Container orbit direction should be normalized.");
+        Expect(container.CompactRadius == 220, "Container compact radius should be clamped.");
+        Expect(container.CompactChildWidth == 180, "Container compact child width should be clamped.");
+        Expect(container.MobileMode == "compact-preserve", "Container mobile mode should preserve an allowed value.");
+        Expect(container.Diagram.Decorations[0].Kind == "ring", "Unknown decoration kinds should fall back safely.");
+        Expect(container.Diagram.Decorations[0].RadiusPercent == 50, "Decoration radius should be clamped.");
+        Expect(container.Diagram.Connectors[0].Routing == "curve", "Allowed connector routing should be preserved.");
+
+        var invalidDiagram = BlockContractService.Validate(new ContainerBlockUpdateDto
+        {
+            Appearance = new BlockAppearanceDto { Decorative = false },
+            Animation = new BlockAnimationSettingsDto
+            {
+                Effect = "scripted-motion",
+                ContinuousEffect = "rotate-slow",
+                StaggerMs = 2501
+            },
+            ContainerLayout = new ContainerLayoutSettingsDto
+            {
+                Diagram = new ContainerDiagramSettingsDto
+                {
+                    Enabled = true,
+                    Decorations =
+                    [
+                        new ContainerDecorationSettingsDto
+                        {
+                            ColorMode = "color",
+                            Color = "url(javascript:alert(1))",
+                            RadiusPercent = 80
+                        }
+                    ]
+                }
+            }
+        });
+        Expect(invalidDiagram.Count >= 4,
+            "Animation and diagram validation should reject unsupported motion, unsafe color, and out-of-range geometry.");
+
+        Expect(BlockContractService.Validate(new ImageBlockUpdateDto { FocalPointX = -1, FocalPointY = 101 }).Count > 0,
+            "Image Block should reject invalid focal points.");
+        Expect(BlockContractService.Validate(new VideoBlockUpdateDto { SourceType = "upload", Autoplay = true, Muted = false }).Count > 0,
+            "Video Block should require muted autoplay.");
+        Expect(BlockContractService.Validate(new FileBlockUpdateDto { OpenBehavior = "execute" }).Count > 0,
+            "File Block should reject unsupported open behavior.");
+        Expect(BlockContractService.Validate(new MapBlockUpdateDto
+        {
+            CenterLat = 91,
+            CenterLng = 181,
+            DefaultZoom = 21,
+            Pins = [new MapPinDto { Lat = 0, Lng = 0, Href = "javascript:alert(1)" }]
+        }).Count > 0,
+            "Map Block should reject invalid center and zoom settings.");
+    }
+
+    private static void TestBlockLayoutResolution()
+    {
+        Expect(BlockLayoutResolver.ResolveColumnSpan(8, 1, 3, true) == 3,
+            "Grid child spans should not exceed the Container column count.");
+        Expect(BlockLayoutResolver.ResolveColumnSpan(12, 1, 3, true) == 1,
+            "Default grid children should occupy one Container cell.");
+
+        var partialOrbitEnd = BlockLayoutResolver.ResolvePatternAngle(
+            "orbit", 2, 3, -90, 90, "clockwise");
+        Expect(Math.Abs(partialOrbitEnd - 90) < 0.001,
+            "Partial orbit distribution should honor the configured end angle.");
+
+        var counterClockwise = BlockLayoutResolver.ResolvePatternAngle(
+            "orbit", 1, 4, 0, 360, "counter-clockwise");
+        Expect(Math.Abs(counterClockwise - (-90)) < 0.001,
+            "Orbit direction should affect satellite placement.");
+    }
+
+    private static void TestBlockContractPropertyParity()
+    {
+        AssertPropertyParity(typeof(BlockAppearance), typeof(BlockAppearanceDto), typeof(PublicBlockAppearanceDto));
+        AssertPropertyParity(typeof(BlockResponsiveOverride), typeof(BlockResponsiveOverrideDto), typeof(PublicBlockResponsiveOverrideDto));
+        AssertPropertyParity(typeof(BlockResponsiveSettings), typeof(BlockResponsiveSettingsDto), typeof(PublicBlockResponsiveSettingsDto));
+        AssertPropertyParity(typeof(BlockAnimationSettings), typeof(BlockAnimationSettingsDto), typeof(PublicBlockAnimationSettingsDto));
+        AssertPropertyParity(typeof(ContainerLayoutSettings), typeof(ContainerLayoutSettingsDto), typeof(PublicContainerLayoutSettingsDto));
+        AssertPropertyParity(typeof(ContainerDiagramSettings), typeof(ContainerDiagramSettingsDto), typeof(PublicContainerDiagramSettingsDto));
+        AssertPropertyParity(typeof(ContainerDecorationSettings), typeof(ContainerDecorationSettingsDto), typeof(PublicContainerDecorationSettingsDto));
+        AssertPropertyParity(typeof(ContainerConnectorSettings), typeof(ContainerConnectorSettingsDto), typeof(PublicContainerConnectorSettingsDto));
+        AssertPropertyParity(typeof(BlockAssetReference), typeof(BlockAssetReferenceDto), typeof(PublicBlockAssetReferenceDto));
+    }
+
+    private static void TestMediaBlockContracts()
+    {
+        var assetDto = new BlockAssetReferenceDto
+        {
+            SchemaVersion = 1,
+            Url = "/media/library-image.webp",
+            ResourceId = NewId(),
+            ResourceSource = "ManagedResource",
+            StorageKey = "blocks/library-image.webp",
+            FileName = "library-image.webp",
+            ContentType = "image/webp",
+            SizeBytes = 45678
+        };
+
+        var model = BlockAssetMetadataService.ToModel(assetDto);
+        var admin = BlockAssetMetadataService.ToAdmin(model);
+        var publicAsset = BlockAssetMetadataService.ToPublic(model);
+        Expect(admin.ResourceId == assetDto.ResourceId && publicAsset.ResourceId == assetDto.ResourceId,
+            "Block asset mappings should preserve managed ResourceId.");
+        Expect(admin.StorageKey == assetDto.StorageKey && publicAsset.StorageKey == assetDto.StorageKey,
+            "Block asset mappings should preserve storage metadata.");
+        Expect(admin.ContentType == "image/webp" && admin.SizeBytes == 45678,
+            "Block asset mappings should preserve MIME type and size.");
+
+        var source = WithBlockBase(new ImageBlock
+        {
+            Asset = model,
+            AltText = Lang("Accessible image"),
+            Caption = Lang("Image caption"),
+            OpenInLightbox = true,
+            FocalPointX = 32,
+            FocalPointY = 68
+        });
+        var document = source.ToBsonDocument();
+        var restored = BsonSerializer.Deserialize<ImageBlock>(document);
+        Expect(restored.Asset.ResourceId == source.Asset.ResourceId,
+            "BSON round-trip should preserve Block asset metadata.");
+        Expect(restored.OpenInLightbox && restored.FocalPointX == 32 && restored.FocalPointY == 68,
+            "BSON round-trip should preserve Image Block behavior.");
+
+        document.Remove("Asset");
+        document["ImageUrl"] = "/legacy/image.jpg";
+        var restoredLegacy = BsonSerializer.Deserialize<ImageBlock>(document);
+        Expect(restoredLegacy.Asset.Url == "/legacy/image.jpg",
+            "Legacy URL-only Block documents should hydrate the unified asset contract.");
+
+        BlockUpdateDto update = new VideoBlockUpdateDto
+        {
+            Asset = new BlockAssetReferenceDto
+            {
+                SchemaVersion = 1,
+                Url = "/media/video.mp4",
+                ResourceSource = "DirectUpload",
+                StorageKey = "video-blocks/video.mp4",
+                ContentType = "video/mp4",
+                SizeBytes = 1024
+            },
+            SourceType = "upload",
+            ShowControls = false,
+            Autoplay = true,
+            Muted = true,
+            Loop = true
+        };
+        var json = JsonSerializer.Serialize(update);
+        var restoredUpdate = JsonSerializer.Deserialize<BlockUpdateDto>(json) as VideoBlockUpdateDto;
+        Expect(restoredUpdate?.Asset?.StorageKey == "video-blocks/video.mp4",
+            "Polymorphic Block DTO round-trip should preserve asset metadata.");
+        Expect(restoredUpdate?.Autoplay == true && restoredUpdate.Muted == true && restoredUpdate.Loop == true,
+            "Polymorphic Block DTO round-trip should preserve Video Block behavior.");
+    }
+
+    private static void TestBlockAuthoringAndPresetContracts()
+    {
+        AssertPropertyParity(typeof(BlockAuthoringPolicy), typeof(BlockAuthoringPolicyDto));
+
+        var contract = new FullProject.Services.SectionServices.CanvasPresetContractService();
+        var presetBlock = WithBlockBase(new TextBlock
+        {
+            Title = Lang("Editable heading"),
+            Content = Lang("Editable content")
+        });
+        presetBlock.ParentBlockId = null;
+        var lockedBlock = WithBlockBase(new IconBlock { Icon = "lock", Label = Lang("Locked icon") });
+        lockedBlock.ParentBlockId = null;
+        var legacyPreset = new CanvasSectionPreset
+        {
+            Id = NewId(),
+            Name = Lang("Legacy preset"),
+            SchemaVersion = 1,
+            Blocks = [presetBlock, lockedBlock],
+            LockPolicy = new CanvasPresetLockPolicy
+            {
+                LockGeometryOnApply = true,
+                LockContentOutsideSlots = true
+            },
+            EditableSlots =
+            [
+                new CanvasPresetEditableSlot
+                {
+                    Name = "Heading Slot",
+                    BlockStableId = presetBlock.StableId,
+                    Kind = "text",
+                    Label = Lang("Heading")
+                }
+            ]
+        };
+        var validation = contract.PrepareAndValidate(legacyPreset);
+        Expect(validation is null, "Supported legacy preset schemas should migrate and validate.");
+        Expect(legacyPreset.SchemaVersion == FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion,
+            "Preset migration should advance to the current schema.");
+        Expect(legacyPreset.EditableSlots[0].Name == "heading-slot",
+            "Preset editable slot names should be normalized.");
+
+        var futurePreset = new CanvasSectionPreset
+        {
+            Name = Lang("Future"),
+            SchemaVersion = FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion + 1,
+            Blocks = [presetBlock]
+        };
+        Expect(!contract.Compatibility(futurePreset).IsCompatible,
+            "Future preset schemas should be rejected instead of silently downgraded.");
+
+        var unsupportedSlotPreset = new CanvasSectionPreset
+        {
+            Name = Lang("Unsupported slot"),
+            SchemaVersion = FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion,
+            Blocks = [presetBlock],
+            EditableSlots =
+            [
+                new CanvasPresetEditableSlot
+                {
+                    Name = "unsupported",
+                    BlockStableId = presetBlock.StableId,
+                    Kind = "script"
+                }
+            ]
+        };
+        Expect(contract.PrepareAndValidate(unsupportedSlotPreset)?.Contains("unsupported kind", StringComparison.OrdinalIgnoreCase) == true,
+            "Preset validation should reject unknown editable slot kinds.");
+
+        var duplicateBlockSlotPreset = new CanvasSectionPreset
+        {
+            Name = Lang("Duplicate Block slot"),
+            SchemaVersion = FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion,
+            Blocks = [presetBlock],
+            EditableSlots =
+            [
+                new CanvasPresetEditableSlot { Name = "heading", BlockStableId = presetBlock.StableId, Kind = "text" },
+                new CanvasPresetEditableSlot { Name = "body", BlockStableId = presetBlock.StableId, Kind = "content" }
+            ]
+        };
+        Expect(contract.PrepareAndValidate(duplicateBlockSlotPreset)?.Contains("only one editable slot", StringComparison.OrdinalIgnoreCase) == true,
+            "Preset validation should prevent assigning one Block to multiple editable slots.");
+
+        var firstApply = CloneService.CloneBlocksForPresetApply(
+            legacyPreset.Blocks, "page-one", "section-one", ClonePublishedAt);
+        var secondApply = CloneService.CloneBlocksForPresetApply(
+            legacyPreset.Blocks, "page-two", "section-two", ClonePublishedAt);
+        Expect(firstApply[0].Id != secondApply[0].Id && firstApply[0].StableId != secondApply[0].StableId,
+            "Repeated preset application should create independent IDs and stable identities.");
+        Expect(firstApply[0].Authoring.PresetSlotName == presetBlock.Authoring.PresetSlotName,
+            "Preset cloning should preserve authoring metadata until apply policy is assigned.");
+        contract.ApplyPolicy(legacyPreset, firstApply);
+        Expect(firstApply.All(block => block.Authoring.GeometryLocked),
+            "Preset geometry policy should lock every applied Block.");
+        Expect(firstApply[0].Authoring.PresetSlotName == "heading-slot" && !firstApply[0].Authoring.ContentLocked,
+            "Named preset slots should remain content-editable.");
+        Expect(firstApply[1].Authoring.ContentLocked,
+            "Preset policy should lock content outside named editable slots.");
+
+        var externalParent = WithBlockBase(new TextBlock { Content = Lang("Nested duplicate") });
+        externalParent.ParentBlockId = "existing-container";
+        var duplicated = CloneService.CloneBlocksAsNewContent(
+            [externalParent], "page-target", "section-target", ClonePublishedAt);
+        Expect(duplicated[0].ParentBlockId == "existing-container",
+            "Duplicating a child without its parent should preserve the existing parent relationship.");
+    }
+
+    private static void TestThemeMotionContract()
+    {
+        var disabled = ThemeCssBuilder.Build(new PublicTheme
+        {
+            AnimationsEnabled = false,
+            AnimationSpeed = "normal"
+        });
+        Expect(disabled.Contains("--theme-motion-duration: 0s;", StringComparison.Ordinal),
+            "A Theme with animations disabled should expose a zero motion duration.");
+        Expect(disabled.Contains("--theme-motion-play-state: paused;", StringComparison.Ordinal),
+            "A Theme with animations disabled should pause continuous Block motion.");
+    }
+
+    private static ContainerDiagramSettings DiagramFixture() => new()
+    {
+        SchemaVersion = 1,
+        Enabled = true,
+        Decorations =
+        [
+            new ContainerDecorationSettings
+            {
+                Id = "fixture-arc",
+                Kind = "arc",
+                RadiusPercent = 38,
+                StartAngle = 20,
+                EndAngle = 280,
+                ColorMode = "theme-primary",
+                Width = 3,
+                Style = "dashed",
+                Opacity = 0.45
+            }
+        ],
+        Connectors =
+        [
+            new ContainerConnectorSettings
+            {
+                Id = "fixture-connector",
+                FromAnchor = "center",
+                ToAnchor = "child-one",
+                Routing = "curve",
+                ColorMode = "theme-accent",
+                Width = 2.5,
+                Style = "solid",
+                Opacity = 0.75,
+                ArrowEnd = true
+            }
+        ]
+    };
+
+    private static void AssertPropertyParity(params Type[] contractTypes)
+    {
+        var expected = contractTypes[0].GetProperties().Select(property => property.Name).OrderBy(name => name).ToArray();
+        foreach (var contractType in contractTypes.Skip(1))
+        {
+            var actual = contractType.GetProperties().Select(property => property.Name).OrderBy(name => name).ToArray();
+            Expect(expected.SequenceEqual(actual),
+                $"{contractType.Name} must expose the same contract properties as {contractTypes[0].Name}.");
+        }
     }
 
     private static IEnumerable<Section> SectionFixtures()
@@ -573,9 +1224,20 @@ public static class Program
     private static IEnumerable<Block> BlockFixtures()
     {
         yield return WithBlockBase(new TextBlock { Title = Lang("Text title"), Content = Lang("Text content") });
-        yield return WithBlockBase(new ImageBlock { ImageUrl = "/image.jpg", AltText = Lang("Image alt") });
-        yield return WithBlockBase(new VideoBlock { EmbedUrl = "https://www.youtube.com/embed/abc123", Title = Lang("Video title") });
-        yield return WithBlockBase(new FileBlock { FileUrl = "/file.pdf", Filename = "file.pdf", FileType = "application/pdf" });
+        yield return WithBlockBase(new ImageBlock
+        {
+            Asset = AssetFixture("/image.jpg", "image/jpeg"), AltText = Lang("Image alt"),
+            Caption = Lang("Image caption"), OpenInLightbox = true, FocalPointX = 35, FocalPointY = 65
+        });
+        yield return WithBlockBase(new VideoBlock
+        {
+            Asset = AssetFixture("/video.mp4", "video/mp4"), SourceType = "upload", Title = Lang("Video title"),
+            ShowControls = false, Autoplay = true, Muted = true, Loop = true
+        });
+        yield return WithBlockBase(new FileBlock
+        {
+            Asset = AssetFixture("/file.pdf", "application/pdf"), Filename = "file.pdf", OpenBehavior = "download"
+        });
         yield return WithBlockBase(new MapBlock
         {
             CenterLat = 11.1,
@@ -615,7 +1277,7 @@ public static class Program
             Icon = "spark",
             Title = Lang("Card title"),
             Description = Lang("Card description"),
-            ImageUrl = "/card-block.jpg",
+            Asset = AssetFixture("/card-block.jpg", "image/jpeg"),
             ButtonLabel = Lang("Card button"),
             Href = "/card",
             Action = "openForm",
@@ -728,8 +1390,71 @@ public static class Program
         block.PositionMode = "freeform";
         block.ParentBlockId = "parent-block";
         block.Layout = BlockLayout();
+        block.Appearance = new BlockAppearance
+        {
+            SchemaVersion = 1,
+            BackgroundColor = "#123456",
+            BackgroundMode = "color",
+            TextColor = "#ffffff",
+            TextAlign = "center",
+            Opacity = 0.85,
+            BorderColor = "#abcdef",
+            BorderWidth = 2,
+            BorderStyle = "dashed",
+            BorderRadius = "circle",
+            Shadow = "medium",
+            Shape = "circle",
+            AspectRatio = "square",
+            MediaFit = "contain",
+            MediaPosition = "top",
+            Padding = "large",
+            Margin = "small",
+            Decorative = true
+        };
+        block.Responsive = new BlockResponsiveSettings
+        {
+            SchemaVersion = 1,
+            Tablet = new BlockResponsiveOverride { Mode = "stack", ColumnSpan = 8 },
+            Mobile = new BlockResponsiveOverride
+            {
+                Mode = "compact-preserve",
+                Width = "full",
+                WidthPercent = 92
+            }
+        };
+        block.Animation = new BlockAnimationSettings
+        {
+            SchemaVersion = 1,
+            Effect = "rise",
+            Trigger = "enter-viewport",
+            DurationMs = 725,
+            DelayMs = 80,
+            Easing = "ease-in-out",
+            PlayOnce = false,
+            StaggerMs = 120,
+            ContinuousEffect = "rotate-slow",
+            DisableForReducedMotion = true
+        };
+        block.Authoring = new BlockAuthoringPolicy
+        {
+            SchemaVersion = 1,
+            PresetSlotName = "fixture-slot",
+            PresetSourceId = "fixture-preset"
+        };
         return block;
     }
+
+    private static BlockAssetReference AssetFixture(string url, string contentType) => new()
+    {
+        SchemaVersion = 1,
+        Url = url,
+        ResourceId = NewId(),
+        ResourceSource = "ManagedResource",
+        StorageKey = url.TrimStart('/'),
+        FileName = Path.GetFileName(url),
+        ContentType = contentType,
+        SizeBytes = 12345
+    };
 
     private static void AssertDocumentMetadata(Page source, Page clone, string label)
     {
@@ -872,6 +1597,12 @@ public static class Program
         if (mode == CloneComparisonMode.PresetBlock &&
             typeof(Block).IsAssignableFrom(ownerType) &&
             propertyName is nameof(Block.StableId) or nameof(Block.PageStableId) or nameof(Block.SectionStableId) or nameof(Block.CreatedAt) or nameof(Block.ColumnSlotId) or nameof(Block.ParentBlockId))
+            return true;
+
+        if (mode == CloneComparisonMode.PresetBlock &&
+            ownerType is not null &&
+            (ownerType == typeof(ContainerConnectorSettings) || ownerType == typeof(ContainerDecorationSettings)) &&
+            propertyName is nameof(ContainerConnectorSettings.FromAnchor) or nameof(ContainerConnectorSettings.ToAnchor))
             return true;
 
         if (ownerType == typeof(ColumnSlot) && propertyName == nameof(ColumnSlot.Blocks))

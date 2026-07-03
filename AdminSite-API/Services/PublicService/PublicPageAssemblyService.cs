@@ -1,6 +1,7 @@
 using Contracts.Public;
 using Contracts.Forms;
 using FullProject.Models;
+using FullProject.Services.BlockServices;
 using FullProject.Security;
 using FullProject.Services.FormServices;
 using FullProject.Services.SectionServices;
@@ -1107,20 +1108,34 @@ namespace FullProject.Services.PublicService
                 ImageBlock image => new PublicImageBlockDto
                 {
                     Type = "image",
+                    Asset = BlockAssetMetadataService.ToPublic(image.Asset),
                     ImageUrl = image.ImageUrl,
-                    AltText = image.AltText
+                    AltText = image.AltText,
+                    Caption = image.Caption,
+                    OpenInLightbox = image.OpenInLightbox,
+                    FocalPointX = image.FocalPointX,
+                    FocalPointY = image.FocalPointY
                 },
                 VideoBlock video => new PublicVideoBlockDto
                 {
                     Type = "video",
-                    EmbedUrl = video.EmbedUrl
+                    Asset = BlockAssetMetadataService.ToPublic(video.Asset),
+                    EmbedUrl = video.EmbedUrl,
+                    SourceType = video.SourceType,
+                    Title = video.Title,
+                    ShowControls = video.ShowControls,
+                    Autoplay = video.Autoplay,
+                    Muted = video.Muted,
+                    Loop = video.Loop
                 },
                 FileBlock file => new PublicFileBlockDto
                 {
                     Type = "file",
+                    Asset = BlockAssetMetadataService.ToPublic(file.Asset),
                     FileUrl = file.FileUrl,
                     Filename = file.Filename,
-                    FileType = file.FileType
+                    FileType = file.FileType,
+                    OpenBehavior = file.OpenBehavior
                 },
                 MapBlock map => new PublicMapBlockDto
                 {
@@ -1145,6 +1160,7 @@ namespace FullProject.Services.PublicService
                     Title = card.Title,
                     Description = card.Description,
                     ImageUrl = card.ImageUrl,
+                    Asset = BlockAssetMetadataService.ToPublic(card.Asset),
                     ButtonLabel = card.ButtonLabel,
                     Href = card.Href,
                     Action = card.Action,
@@ -1201,6 +1217,7 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "container",
                     Title = container.Title,
+                    ContainerLayout = BlockContractService.ToPublicContainerLayout(container.ContainerLayout),
                     LayoutMode = container.LayoutMode,
                     Columns = container.Columns,
                     Gap = container.Gap,
@@ -1216,6 +1233,7 @@ namespace FullProject.Services.PublicService
             if (mapped is null) return null;
 
             mapped.Id = block.Id;
+            mapped.StableId = block.StableId;
             mapped.Visible = block.Visible;
             mapped.Order = block.Order;
             mapped.BlockZone = block.BlockZone;
@@ -1223,6 +1241,9 @@ namespace FullProject.Services.PublicService
             mapped.PositionMode = ResolveBlockPositionMode(block);
             mapped.ParentBlockId = block.ParentBlockId;
             mapped.Layout = MapBlockLayout(block.Layout);
+            mapped.Appearance = BlockContractService.ToPublicAppearance(block);
+            mapped.Responsive = BlockContractService.ToPublicResponsive(block.Responsive);
+            mapped.Animation = BlockContractService.ToPublicAnimation(block.Animation);
             mapped.Buttons = block.Buttons
                 .Where(b => b.Visible)
                 .OrderBy(b => b.Order)
@@ -1241,7 +1262,7 @@ namespace FullProject.Services.PublicService
             return mapped;
         }
 
-        private static PublicFormBlockDto MapFormBlock(
+        private static PublicFormBlockDto? MapFormBlock(
             FormBlock block,
             IReadOnlyDictionary<string, FormDefinition> definitions,
             IReadOnlyDictionary<string, FormInputTypeCapability> formInputCapabilities)
@@ -1284,29 +1305,7 @@ namespace FullProject.Services.PublicService
                 };
             }
 
-            return new PublicFormBlockDto
-            {
-                Type = "form",
-                FormDefinitionId = block.FormDefinitionId,
-                SubmitButtonLabel = block.SubmitButtonLabel,
-                Fields = block.Fields.Select(field => new PublicFormFieldDto
-                {
-                    Name = field.Name,
-                    Type = field.Type,
-                    Label = field.Label,
-                    Required = field.Required,
-                    MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.Type, 0),
-                    InputBoxSize = 1,
-                    Options = (field.Options ?? new List<string>())
-                        .Select((option, index) => new PublicFormFieldOptionDto
-                        {
-                            Value = option,
-                            Label = new Dictionary<string, string> { ["en"] = option },
-                            Order = index
-                        }).ToList(),
-                    Order = field.Order
-                }).ToList()
-            };
+            return null;
         }
 
         private static PublicBlockLayoutDto MapBlockLayout(BlockLayout? layout)

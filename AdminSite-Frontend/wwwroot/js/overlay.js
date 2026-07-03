@@ -60,6 +60,8 @@
                         id: blockId,
                         sectionId: block.getAttribute('data-block-section-id') || sectionId,
                         positionMode: block.getAttribute('data-block-position-mode') || 'flow',
+                        parentBlockId: block.getAttribute('data-block-parent-id') || null,
+                        type: block.getAttribute('data-block-type') || 'block',
                         top: blockRect.top + window.scrollY,
                         left: blockRect.left + window.scrollX,
                         width: blockRect.width,
