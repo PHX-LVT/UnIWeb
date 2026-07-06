@@ -6,8 +6,8 @@
 @inject AdminSectionService SectionService
 @inject AdminPageService PageService
 @inject AdminBlockService BlockService
-@inject AdminAuthService Auth
 @inject IHttpService Http
+@inject AdminLanguageService AdminLanguageState
 @implements IAsyncDisposable
 
 <div class="ez-canvas">
@@ -123,27 +123,25 @@
                           BlockItems="BlockSelectorItems"
                           VisualState="SelectedVisualState"
                           CanVisualEdit="CanEditVisualSelection"
-                          CanEditPrecise="CanEditPreciseSelection"
-                          CanGroup="CanGroupSelection"
-                          CanUngroup="CanUngroupSelection"
                           CanStaggerSelection="CanStaggerAnimationSelection"
                           CanContinuousSelection="CanContinuousAnimationSelection"
-                          CanManageLocks="Auth.IsAdminAdmin"
                           CanDelete="CanDeleteSelection"
-                          SelectionContentLocked="SelectionContentLocked"
-                          SelectionGeometryLocked="SelectionGeometryLocked"
-                          Busy="@(_runningAuthoringCommand || _creatingArrangeBlock)"
+                          DeletingContainer="SelectionIncludesContainer"
+                          DeleteDescendantCount="SelectedContainerDescendantCount"
+                          DeleteNestedContainerCount="SelectedNestedContainerCount"
+                          Busy="@ArrangeAuthoringBusy"
                           Breadcrumbs="SelectionBreadcrumbs"
+                          CanAdd="ArrangeCreateHasCapacity"
+                          AddTitle="@ArrangeAddTitle"
                           AddRequested="OpenArrangeBlockWizard"
+                          DoneRequested="ExitArrangeBlocks"
                           BlockSelected="SelectBlockFromToolbar"
-                          SectionSelected="SelectArrangeSection"
                           BlocksReordered="ReorderBlocksFromToolbar"
                           VisualChanged="ApplyToolbarVisualUpdate"
                           ShapePreviewChanged="PreviewToolbarShape"
                           VisualPreviewCancelled="RestoreToolbarVisualPreview"
                           RotationPreviewChanged="PreviewToolbarRotation"
                           RotationCommitted="CommitToolbarRotation"
-                          LocksChanged="ApplyToolbarLocks"
                           DeleteRequested="DeleteArrangeSelection"
                           Command="RunAuthoringCommand"
                           BreadcrumbSelected="SelectBreadcrumb" />
@@ -175,7 +173,7 @@
 
     <div class="ez-canvas__viewport @(IsInteractivePreview ? "ez-canvas__viewport--interactive-preview" : "")">
 
-        <div class="ez-canvas__preview-shell @(ArrangeMode ? "ez-canvas__preview-shell--arrange" : "") @(IsInteractivePreview ? "ez-canvas__preview-shell--interactive-preview" : "")"
+        <div class="ez-canvas__preview-shell @(CanArrange ? "ez-canvas__preview-shell--arrange" : "") @(IsInteractivePreview ? "ez-canvas__preview-shell--interactive-preview" : "")"
              style="@PreviewShellStyle">
             <div class="ez-canvas__preview-scale"
                  style="@PreviewScaleStyle">
@@ -209,7 +207,8 @@
                          class="ez-canvas-arrange-overlay @(CanArrange ? "ez-canvas-arrange-overlay--active" : "")"
                          style="position: absolute; top: 0; left: 0;
                                 width: 100%; height: 100%;
-                                pointer-events: @(CanArrange ? "auto" : "none"); z-index: 10;">
+                                pointer-events: @(CanArrange ? "auto" : "none"); z-index: 10;"
+                         @onclick="SelectArrangeCanvasBackground">
 
                         @foreach (var pos in _sectionPositions)
                         {
@@ -255,9 +254,9 @@
                                 }
                                 else if (CanArrange && IsArrangeCompatible(section))
                                 {
-                                    <div class="ez-arrange-section @(_activeArrangeSectionId == section.Id ? "ez-arrange-section--active" : null)"
-                                         style="position: absolute; inset: 6px; pointer-events: auto; cursor: pointer;"
-                                         @onclick="() => SelectArrangeSection(section.Id)"
+                                    <div class="ez-arrange-section @(IsArrangeScopeSection(section.Id) ? "ez-arrange-section--active" : "ez-arrange-section--target")"
+                                         style="position: absolute; inset: 6px; pointer-events: auto; cursor: pointer; z-index: 1;"
+                                         @onclick="() => TargetArrangeSection(section.Id)"
                                          @onclick:stopPropagation="true">
                                         <span class="ez-arrange-section__label">@GetArrangeSectionLabel(section)</span>
                                     </div>
@@ -272,15 +271,19 @@
                                 var zoneSection = Sections.FirstOrDefault(s => s.Id == zone.SectionId);
                                 if (zoneSection is null || !IsArrangeCompatible(zoneSection)) continue;
 
-                                <div class="ez-arrange-zone-overlay"
+                                <div class="ez-arrange-zone-overlay @(IsArrangeTargetZone(zone) ? "ez-arrange-zone-overlay--active" : null)"
                                      data-section-id="@zone.SectionId"
                                      data-zone-id="@zone.Id"
+                                     data-zone-kind="@zone.Kind"
+                                     @onclick="() => TargetArrangeZone(zone)"
+                                     @onclick:stopPropagation="true"
                                      style="position: absolute;
                                             top: @(zone.Top)px;
                                             left: @(zone.Left)px;
                                             width: @(zone.Width)px;
                                             height: @(zone.Height)px;
-                                            pointer-events: none;
+                                            pointer-events: auto;
+                                            cursor: pointer;
                                             z-index: 4;">
                                     <span class="ez-arrange-zone-overlay__label">
                                         @(zone.Kind == "column" ? T("ColumnZone") : T("CanvasZone"))
@@ -288,10 +291,11 @@
                                 </div>
                             }
 
-                            @foreach (var block in _blockPositions)
+                            @foreach (var block in _blockPositions.Where(block => IsArrangeScopeSection(block.SectionId)))
                             {
                                 var blockSection = Sections.FirstOrDefault(s => s.Id == block.SectionId);
-                                var canSelectBlock = blockSection is not null && IsArrangeCompatible(blockSection);
+                                var canSelectBlock = blockSection is not null && IsArrangeCompatible(blockSection) &&
+                                    IsArrangeScopeSection(block.SectionId);
                                 var canMoveBlock = canSelectBlock &&
                                     string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase);
                                 var arrangeBlock = ArrangeBlock(block.Id);
@@ -341,7 +345,18 @@
                                         </button>
                                         <span class="ez-freeform-block-resize" @onclick:stopPropagation="true" title="Resize block"></span>
                                     }
-                                    <span class="ez-freeform-block-label">@BlockDisplayLabel(block.Id)</span>
+                                    <div class="ez-freeform-block-titlebar @(canMoveBlock ? null : "ez-freeform-block-titlebar--readonly")">
+                                        <span class="ez-freeform-block-label">@BlockDisplayLabel(block.Id)</span>
+                                        <button type="button"
+                                                class="ez-freeform-block-edit"
+                                                title="@T("Edit")"
+                                                aria-label="@T("Edit")"
+                                                disabled="@(arrangeBlock is null || arrangeBlock.Authoring.FullLocked || arrangeBlock.Authoring.ContentLocked)"
+                                                @onclick="() => OpenArrangeContentEditor(block.Id)"
+                                                @onclick:stopPropagation="true">
+                                            <i class="fas fa-pencil-alt"></i>
+                                        </button>
+                                    </div>
                                     @if (block.Type == "container")
                                     {
                                         <span class="ez-freeform-container-policy">
@@ -381,10 +396,116 @@
                 <EditPanel @key="_selectedSection.Id"
                            Section="_selectedSection"
                            PageId="@Page.Id"
+                           InitialTab="@_editPanelInitialTab"
+                           InitialBlockId="@_editPanelSelectedBlockId"
+                           CanArrangeBlocks="@IsArrangeCompatible(_selectedSection)"
                            OnClose="ClosePanel"
                            OnSectionSaved="HandleSectionSaved"
                            OnSectionsChanged="OnSectionsChanged"
-                           OnBlocksChanged="HandleBlocksChanged" />
+                           OnBlocksChanged="HandleBlocksChanged"
+                           OnActiveBlockChanged="HandleEditorActiveBlockChanged"
+                           OnArrangeBlocksRequested="EnterArrangeBlocks"
+                           OnDiscardAndArrangeRequested="DiscardSectionChangesAndEnterArrangeBlocks" />
+            </div>
+        }
+    </BodyTemplate>
+</DxWindow>
+
+<DxWindow Visible="@(CanArrange && ArrangeEditBlock is not null)"
+          VisibleChanged="OnArrangeContentEditorVisibilityChanged"
+          Width="680px"
+          MaxWidth="calc(100vw - 32px)"
+          CssClass="ez-arrange-content-window"
+          BodyCssClass="ez-arrange-content-window__body"
+          AllowResize="false"
+          CloseOnEscape="true"
+          ShowCloseButton="false"
+          HorizontalAlignment="HorizontalAlignment.Center"
+          VerticalAlignment="VerticalAlignment.Center">
+    <BodyTemplate>
+        @if (ArrangeEditBlock is { } editBlock)
+        {
+            <div class="ez-arrange-content-editor" @key="editBlock.Id">
+                <header class="ez-arrange-content-editor__header">
+                    <span>
+                        <strong><i class="fas @BlockIcon(editBlock.Type)"></i> @BlockDisplayLabel(editBlock.Id)</strong>
+                        <small>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</small>
+                    </span>
+                    <button type="button" class="ez-icon-btn" @onclick="CloseArrangeContentEditor" aria-label="@T("Close")">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </header>
+
+                @if (editBlock.Authoring.FullLocked || editBlock.Authoring.ContentLocked)
+                {
+                    <div class="block-layout-panel__lock-notice">
+                        <i class="fas fa-lock"></i> @T("ContentLockedHint")
+                    </div>
+                }
+                else
+                {
+                    <div class="ez-arrange-content-editor__body">
+                        @switch (editBlock.Type)
+                        {
+                            case "text":
+                                <TextBlockEditor Block="editBlock"
+                                                 PageId="@Page.Id"
+                                                 SectionId="@editBlock.SectionId"
+                                                 Languages="_languages"
+                                                 OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            case "image":
+                                <ImageBlockEditor Block="editBlock"
+                                                  PageId="@Page.Id"
+                                                  SectionId="@editBlock.SectionId"
+                                                  Languages="_languages"
+                                                  OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            case "video":
+                                <VideoBlockEditor Block="editBlock"
+                                                  PageId="@Page.Id"
+                                                  SectionId="@editBlock.SectionId"
+                                                  Languages="_languages"
+                                                  OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            case "file":
+                                <FileBlockEditor Block="editBlock"
+                                                 PageId="@Page.Id"
+                                                 SectionId="@editBlock.SectionId"
+                                                 OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            case "map":
+                                <MapBlockEditor Block="editBlock"
+                                                PageId="@Page.Id"
+                                                SectionId="@editBlock.SectionId"
+                                                OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            case "form":
+                                <FormBlockEditor Block="editBlock"
+                                                 PageId="@Page.Id"
+                                                 SectionId="@editBlock.SectionId"
+                                                 Languages="_languages"
+                                                 OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            case "card":
+                            case "button":
+                            case "metric":
+                            case "bullet-list":
+                            case "step":
+                            case "icon":
+                            case "container":
+                                <DesignBlockEditor Block="editBlock"
+                                                   PageId="@Page.Id"
+                                                   SectionId="@editBlock.SectionId"
+                                                   Languages="_languages"
+                                                   OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            default:
+                                <p class="text-muted">@T("UnknownBlockType")</p>
+                                break;
+                        }
+                    </div>
+                }
             </div>
         }
     </BodyTemplate>
@@ -411,7 +532,7 @@
     private SectionModel? _selectedSection;
     private bool _publishing = false;
     private bool _resetting = false;
-    private const double CanvasScale = 1;
+    private const double CanvasScale = 0.7;
     private double _iframeHeight = 2000;
     private List<SectionPosition> _sectionPositions = new();
     private List<BlockPosition> _blockPositions = new();
@@ -425,7 +546,19 @@
     private bool _runningAuthoringCommand;
     private bool _showArrangeBlockWizard;
     private bool _creatingArrangeBlock;
+    private bool _arrangeBlocksActive;
+    private bool _restoreSectionEditorOnEdit;
+    private string? _arrangeReturnSectionId;
+    private string _editPanelInitialTab = "style";
+    private string? _editPanelSelectedBlockId;
+    private string? _pendingArrangeSelectionId;
     private string? _activeArrangeSectionId;
+    private string? _activeArrangeZoneId;
+    private string? _activeArrangeZoneKind;
+    private string? _activeArrangeColumnSlotId;
+    private bool _pendingArrangeExit;
+    private string? _arrangeContentEditBlockId;
+    private List<string> _languages = new() { "en" };
     private DotNetObjectReference<Canvas>? _dotNetRef;
     private ElementReference _overlayRef;
     private bool _overlayInitialized;
@@ -441,8 +574,11 @@
     private string _previewViewport = "desktop";
     private bool IsChildPage => !string.IsNullOrWhiteSpace(Page.ParentPageId);
     private bool CanAddChildPage => !IsChildPage;
-    private bool CanModify => CanEdit && EditMode;
-    private bool CanArrange => CanEdit && ArrangeMode;
+    private bool ArrangeWorkspaceActive => ArrangeMode || _arrangeBlocksActive;
+    private string? ArrangeScopeSectionId => _activeArrangeSectionId ?? _arrangeReturnSectionId;
+    private bool CanModify => CanEdit && EditMode && !ArrangeWorkspaceActive;
+    private bool CanArrange => CanEdit && EditMode && ArrangeWorkspaceActive;
+    private bool ArrangeAuthoringBusy => _runningAuthoringCommand || _creatingArrangeBlock;
     private IReadOnlyList<BlockPosition> SelectedPositions => _blockPositions
         .Where(position => _selectedBlockIds.Contains(position.Id))
         .ToList();
@@ -452,19 +588,32 @@
     private bool SelectionHasGeometryLock => _selectedBlockIds
         .Select(ArrangeBlock)
         .Any(block => block?.Authoring.GeometryLocked == true || block?.Authoring.FullLocked == true);
-    private bool CanGroupSelection => !_runningAuthoringCommand && _selectedBlockIds.Count >= 2 &&
-        IsCoherentSelection && !SelectionHasGeometryLock && SelectedPositions.All(position => position.Type != "container");
-    private bool CanUngroupSelection => !_runningAuthoringCommand && _selectedBlockIds.Count == 1 &&
-        ArrangeBlock(_selectedBlockIds.FirstOrDefault())?.Type == "container" && !SelectionHasGeometryLock;
     private bool CanEditVisualSelection => !_runningAuthoringCommand && _selectedBlockIds.Count > 0 && IsCoherentSelection && !SelectionHasGeometryLock;
-    private bool CanEditPreciseSelection => CanEditVisualSelection && _selectedBlockIds.Count == 1;
     private bool CanDeleteSelection => !_runningAuthoringCommand && _selectedBlockIds.Count > 0 &&
         _selectedBlockIds.Select(ArrangeBlock).All(block => block is not null && !block.Authoring.FullLocked && !block.Authoring.ContentLocked) &&
+        _selectedBlockIds.Select(ArrangeBlock).All(block => block is not null && !IsRequiredContainerSlot(block)) &&
         _selectedBlockIds.Select(ArrangeBlock).Where(block => block is not null).Select(block => block!.SectionId).Distinct(StringComparer.Ordinal).Count() == 1;
-    private bool SelectionContentLocked => _selectedBlockIds.Count > 0 &&
-        _selectedBlockIds.Select(ArrangeBlock).All(block => block?.Authoring.ContentLocked == true || block?.Authoring.FullLocked == true);
-    private bool SelectionGeometryLocked => _selectedBlockIds.Count > 0 &&
-        _selectedBlockIds.Select(ArrangeBlock).All(block => block?.Authoring.GeometryLocked == true || block?.Authoring.FullLocked == true);
+    private bool SelectionIncludesContainer => _selectedBlockIds
+        .Select(ArrangeBlock)
+        .Any(block => string.Equals(block?.Type, "container", StringComparison.OrdinalIgnoreCase));
+    private HashSet<string> SelectedContainerDescendantIds => OwnedDescendantIds(_selectedBlockIds
+        .Select(ArrangeBlock)
+        .Where(block => string.Equals(block?.Type, "container", StringComparison.OrdinalIgnoreCase))
+        .Select(block => block!.Id));
+    private int SelectedContainerDescendantCount => SelectedContainerDescendantIds.Count;
+    private int SelectedNestedContainerCount => SelectedContainerDescendantIds
+        .Select(ArrangeBlock)
+        .Count(block => string.Equals(block?.Type, "container", StringComparison.OrdinalIgnoreCase));
+    private bool IsRequiredContainerSlot(BlockModel block)
+    {
+        if (string.IsNullOrWhiteSpace(block.ParentBlockId) ||
+            string.IsNullOrWhiteSpace(block.Authoring?.PresetSlotName))
+            return false;
+
+        var parent = ArrangeBlock(block.ParentBlockId);
+        return parent is not null &&
+               ContainerCapacityPolicy.IsRequiredSlot(parent.PresetKey, block.Authoring.PresetSlotName);
+    }
     private bool CanStaggerAnimationSelection => _selectedBlockIds.Count > 0 &&
         _selectedBlockIds.Select(ArrangeBlock).All(block => string.Equals(block?.Type, "container", StringComparison.OrdinalIgnoreCase));
     private bool CanContinuousAnimationSelection => _selectedBlockIds.Count > 0 &&
@@ -484,6 +633,7 @@
         }
     }
     private IReadOnlyList<CanvasArrangeToolbar.CanvasBlockSelectorItem> BlockSelectorItems => BuildBlockSelectorItems();
+    private BlockModel? ArrangeEditBlock => ArrangeBlock(_arrangeContentEditBlockId);
     private CanvasArrangeToolbar.CanvasBlockVisualState? SelectedVisualState
     {
         get
@@ -493,8 +643,6 @@
             if (block is null) return null;
             var appearance = block.Appearance ?? new BlockAppearanceModel();
             var animation = block.Animation ?? new BlockAnimationSettingsModel();
-            var layout = block.Layout ?? new BlockLayoutModel();
-            var position = _blockPositions.FirstOrDefault(item => item.Id == block.Id);
             return new CanvasArrangeToolbar.CanvasBlockVisualState(
                 $"{string.Join(',', _selectedBlockIds.OrderBy(id => id, StringComparer.Ordinal))}:{_previewVersion}:{_visualStateVersion}",
                 appearance.Shape,
@@ -516,12 +664,7 @@
                 appearance.Opacity,
                 appearance.Shadow,
                 appearance.TextAlign,
-                appearance.Padding,
-                layout.LeftPercent ?? (position is null ? 0 : Math.Max(0, (position.Left - position.SectionLeft) / Math.Max(position.SectionWidth, 1) * 100)),
-                layout.TopPx ?? (position is null ? 0 : Math.Max(0, position.Top - position.SectionTop)),
-                layout.WidthPercent ?? (position is null ? 33.333 : Math.Clamp(position.Width / Math.Max(position.SectionWidth, 1) * 100, 1, 100)),
-                layout.HeightPx ?? position?.Height ?? 96,
-                layout.ZIndex ?? position?.ZIndex ?? 1);
+                appearance.Padding);
         }
     }
     private bool IsInteractivePreview => !CanModify && !CanArrange;
@@ -548,7 +691,7 @@
     private string PreviewScaleStyle =>
         $"width: {PreviewViewportWidth}px; height: {CssNumber(_iframeHeight)}px; transform: scale({CssNumber(CanvasScale)}); transform-origin: top left;";
     private string PreviewIframeStyle =>
-        $"width: {PreviewViewportWidth}px; height: {CssNumber(_iframeHeight)}px; border: none; display: block; pointer-events: {(ArrangeMode ? "none" : "auto")};";
+        $"width: {PreviewViewportWidth}px; height: {CssNumber(_iframeHeight)}px; border: none; display: block; pointer-events: {(CanArrange ? "none" : "auto")};";
     private const string PreviewIframeScrolling = "no";
     private static string CssNumber(double value) =>
         value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
@@ -613,53 +756,63 @@
     private IReadOnlyList<CanvasArrangeToolbar.CanvasBlockSelectorItem> BuildBlockSelectorItems()
     {
         var result = new List<CanvasArrangeToolbar.CanvasBlockSelectorItem>();
-        foreach (var section in Sections.Where(IsArrangeCompatible).OrderBy(item => item.Order))
+        var section = Sections.FirstOrDefault(item => item.Id == ArrangeScopeSectionId && IsArrangeCompatible(item));
+        if (section is null)
+            return result;
+
+        var sectionBlocks = _arrangeBlocks.Values
+            .Where(block => block.SectionId == section.Id)
+            .OrderByDescending(block => block.Order)
+            .ThenBy(block => block.Id, StringComparer.Ordinal)
+            .ToList();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        string PeerKey(BlockModel block) => $"{section.Id}|{NormalizeParentId(block.ParentBlockId)}|{NormalizeBlockZone(block.BlockZone)}|{block.ColumnSlotId ?? string.Empty}";
+        bool PeerHasLock(BlockModel block)
         {
-            var sectionBlocks = _arrangeBlocks.Values
-                .Where(block => block.SectionId == section.Id)
-                .OrderByDescending(block => block.Order)
-                .ThenBy(block => block.Id, StringComparer.Ordinal)
-                .ToList();
-            var visited = new HashSet<string>(StringComparer.Ordinal);
-            string PeerKey(BlockModel block) => $"{section.Id}|{NormalizeParentId(block.ParentBlockId)}|{NormalizeBlockZone(block.BlockZone)}|{block.ColumnSlotId ?? string.Empty}";
-            bool PeerHasLock(BlockModel block)
-            {
-                var key = PeerKey(block);
-                return sectionBlocks.Any(peer => PeerKey(peer) == key && (peer.Authoring.FullLocked || peer.Authoring.GeometryLocked));
-            }
+            var key = PeerKey(block);
+            return sectionBlocks.Any(peer => PeerKey(peer) == key && (peer.Authoring.FullLocked || peer.Authoring.GeometryLocked));
+        }
+        bool PresetAllowsReorder(BlockModel block)
+        {
+            if (string.IsNullOrWhiteSpace(block.ParentBlockId)) return true;
+            var parent = sectionBlocks.FirstOrDefault(candidate => candidate.Id == block.ParentBlockId && candidate.Type == "container");
+            return parent is null ||
+                   !ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out var preset) ||
+                   preset.ChildOrderingAllowed;
+        }
 
-            void Append(string? parentId, int depth)
+        void Append(string? parentId, int depth)
+        {
+            foreach (var block in sectionBlocks.Where(item => NormalizeParentId(item.ParentBlockId) == NormalizeParentId(parentId)))
             {
-                foreach (var block in sectionBlocks.Where(item => NormalizeParentId(item.ParentBlockId) == NormalizeParentId(parentId)))
-                {
-                    if (!visited.Add(block.Id)) continue;
-                    var peerKey = PeerKey(block);
-                    var locked = block.Authoring.FullLocked || block.Authoring.GeometryLocked;
-                    result.Add(new CanvasArrangeToolbar.CanvasBlockSelectorItem(
-                        block.Id,
-                        section.Id,
-                        ArrangeSectionDisplayName(section),
-                        BlockDisplayLabel(block.Id),
-                        block.Type,
-                        Math.Min(depth, 12),
-                        block.Order,
-                        peerKey,
-                        block.Visible,
-                        locked,
-                        !locked && !PeerHasLock(block)));
-                    Append(block.Id, depth + 1);
-                }
-            }
-
-            Append(null, 0);
-            foreach (var orphan in sectionBlocks.Where(block => !visited.Contains(block.Id)))
-            {
-                var peerKey = PeerKey(orphan);
-                var locked = orphan.Authoring.FullLocked || orphan.Authoring.GeometryLocked;
+                if (!visited.Add(block.Id)) continue;
+                var peerKey = PeerKey(block);
+                var locked = block.Authoring.FullLocked || block.Authoring.GeometryLocked;
                 result.Add(new CanvasArrangeToolbar.CanvasBlockSelectorItem(
-                    orphan.Id, section.Id, ArrangeSectionDisplayName(section), BlockDisplayLabel(orphan.Id), orphan.Type,
-                    0, orphan.Order, peerKey, orphan.Visible, locked, !locked && !PeerHasLock(orphan)));
+                    block.Id,
+                    section.Id,
+                    ArrangeSectionDisplayName(section),
+                    BlockDisplayLabel(block.Id),
+                    block.Type,
+                    Math.Min(depth, 12),
+                    block.Order,
+                    peerKey,
+                    block.Visible,
+                    locked,
+                    !locked && !PeerHasLock(block) && PresetAllowsReorder(block)));
+                Append(block.Id, depth + 1);
             }
+        }
+
+        Append(null, 0);
+        foreach (var orphan in sectionBlocks.Where(block => !visited.Contains(block.Id)))
+        {
+            var peerKey = PeerKey(orphan);
+            var locked = orphan.Authoring.FullLocked || orphan.Authoring.GeometryLocked;
+            result.Add(new CanvasArrangeToolbar.CanvasBlockSelectorItem(
+                orphan.Id, section.Id, ArrangeSectionDisplayName(section), BlockDisplayLabel(orphan.Id), orphan.Type,
+                0, orphan.Order, peerKey, orphan.Visible, locked,
+                !locked && !PeerHasLock(orphan) && PresetAllowsReorder(orphan)));
         }
         return result;
     }
@@ -671,6 +824,14 @@
         var peers = Sections.Where(IsArrangeCompatible).OrderBy(item => item.Order).ThenBy(item => item.Id).ToList();
         var index = Math.Max(0, peers.FindIndex(item => item.Id == section.Id)) + 1;
         return $"{GetArrangeSectionLabel(section)} {index}";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AdminLanguageState.LoadSettingsAsync();
+        _languages = AdminLanguageState.SupportedLanguages.Any()
+            ? AdminLanguageState.SupportedLanguages.ToList()
+            : new List<string> { "en" };
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -725,12 +886,48 @@
 
     protected override void OnParametersSet()
     {
+        var pageChanged = _currentPageId is not null && _currentPageId != Page.Id;
+        if (pageChanged)
+        {
+            _arrangeBlocksActive = false;
+            _restoreSectionEditorOnEdit = false;
+            _arrangeReturnSectionId = null;
+            _editPanelInitialTab = "style";
+            _editPanelSelectedBlockId = null;
+            _pendingArrangeSelectionId = null;
+            _activeArrangeZoneId = null;
+            _activeArrangeZoneKind = null;
+            _activeArrangeColumnSlotId = null;
+            _pendingArrangeExit = false;
+        }
+
+        if (!EditMode && _arrangeBlocksActive)
+        {
+            _editPanelSelectedBlockId = _selectedBlockIds.FirstOrDefault() ?? _editPanelSelectedBlockId;
+            _arrangeBlocksActive = false;
+            _restoreSectionEditorOnEdit = !string.IsNullOrWhiteSpace(_arrangeReturnSectionId);
+        }
+
+        SectionModel? sectionToRestore = null;
+        if (EditMode && !ArrangeWorkspaceActive && _restoreSectionEditorOnEdit)
+        {
+            sectionToRestore = Sections.FirstOrDefault(section => section.Id == _arrangeReturnSectionId);
+            _restoreSectionEditorOnEdit = false;
+            _arrangeReturnSectionId = null;
+            _editPanelInitialTab = "blocks";
+        }
+
         var langChanged = _currentLang != AdminLanguage;
         var modeChanged = _currentCanModify != CanModify;
         var arrangeChanged = _currentCanArrange != CanArrange;
         var previewUrl = PreviewUrl;
         if (_currentPageId == Page.Id && _currentPreviewUrl == previewUrl &&
-            !langChanged && !modeChanged && !arrangeChanged) return;
+            !langChanged && !modeChanged && !arrangeChanged)
+        {
+            if (sectionToRestore is not null)
+                _selectedSection = sectionToRestore;
+            return;
+        }
 
         if (langChanged)
         {
@@ -746,9 +943,13 @@
         _blockPositions = new();
         _zonePositions = new();
         _iframeHeight = 2000;
-        _selectedSection = null;
+        _selectedSection = sectionToRestore;
         _selectedBlockIds.Clear();
         _activeArrangeSectionId = null;
+        _activeArrangeZoneId = null;
+        _activeArrangeZoneKind = null;
+        _activeArrangeColumnSlotId = null;
+        _pendingArrangeExit = false;
         _showArrangeBlockWizard = false;
         _arrangeBlocks.Clear();
         _arrangeBlocksLoadedForPage = null;
@@ -865,7 +1066,7 @@
         double widthPercent,
         double heightPx)
     {
-        if (!CanArrange)
+        if (!CanArrange || !IsArrangeScopeSection(sectionId))
             return false;
 
         if (string.IsNullOrWhiteSpace(sectionId) || string.IsNullOrWhiteSpace(blockId))
@@ -894,7 +1095,8 @@
     [JSInvokable]
     public async Task<bool> SaveFreeformBlockLayouts(List<CanvasLayoutMutation> items)
     {
-        if (!CanArrange || items.Count < 2) return false;
+        if (!CanArrange || items.Count < 2 || items.Any(item => !IsArrangeScopeSection(item.SectionId)))
+            return false;
         var before = new List<CanvasLayoutState>();
         var after = new List<CanvasLayoutState>();
         foreach (var item in items)
@@ -929,12 +1131,20 @@
             _arrangeBlocks.Clear();
             foreach (var block in response.Data ?? new())
                 _arrangeBlocks[block.Id] = block;
-            _selectedBlockIds.RemoveWhere(id => !_arrangeBlocks.ContainsKey(id));
-            if (string.IsNullOrWhiteSpace(_activeArrangeSectionId) ||
-                !Sections.Any(section => section.Id == _activeArrangeSectionId && IsArrangeCompatible(section)))
+            _selectedBlockIds.RemoveWhere(id => !_arrangeBlocks.ContainsKey(id) || !IsArrangeScopeSection(_arrangeBlocks[id].SectionId));
+            if (!string.IsNullOrWhiteSpace(_pendingArrangeSelectionId) &&
+                _arrangeBlocks.TryGetValue(_pendingArrangeSelectionId, out var pendingBlock) &&
+                IsArrangeScopeSection(pendingBlock.SectionId))
             {
-                _activeArrangeSectionId = Sections.Where(IsArrangeCompatible).OrderBy(section => section.Order).FirstOrDefault()?.Id;
+                _selectedBlockIds.Clear();
+                _selectedBlockIds.Add(_pendingArrangeSelectionId);
+                _editPanelSelectedBlockId = _pendingArrangeSelectionId;
             }
+            _pendingArrangeSelectionId = null;
+            _activeArrangeSectionId = Sections.Any(section =>
+                section.Id == ArrangeScopeSectionId && IsArrangeCompatible(section))
+                    ? ArrangeScopeSectionId
+                    : null;
         }
         finally
         {
@@ -962,13 +1172,17 @@
             ?? block.Pins?.Select(pin => pin.Label).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
         if (!string.IsNullOrWhiteSpace(title)) return title;
 
+        return $"{T("Untitled")} {BlockTypeOrdinal(block)}";
+    }
+
+    private int BlockTypeOrdinal(BlockModel block)
+    {
         var peers = _arrangeBlocks.Values
             .Where(candidate => candidate.SectionId == block.SectionId && candidate.Type == block.Type)
             .OrderBy(candidate => candidate.Order)
             .ThenBy(candidate => candidate.Id, StringComparer.Ordinal)
             .ToList();
-        var ordinal = Math.Max(0, peers.FindIndex(candidate => candidate.Id == block.Id)) + 1;
-        return $"{T(BlockTypeLabelKey(block.Type))} {ordinal}";
+        return Math.Max(0, peers.FindIndex(candidate => candidate.Id == block.Id)) + 1;
     }
 
     private string? LangValue(Dictionary<string, string>? values)
@@ -996,6 +1210,23 @@
         "icon" => "Icon",
         "container" => "Container",
         _ => "Text"
+    };
+
+    private static string BlockIcon(string? type) => type switch
+    {
+        "image" => "fa-image",
+        "video" => "fa-video",
+        "file" => "fa-file-alt",
+        "map" => "fa-map-marker-alt",
+        "form" => "fa-clipboard-list",
+        "card" => "fa-id-card",
+        "button" => "fa-hand-pointer",
+        "metric" => "fa-chart-line",
+        "bullet-list" => "fa-list-ul",
+        "step" => "fa-shoe-prints",
+        "icon" => "fa-icons",
+        "container" => "fa-layer-group",
+        _ => "fa-font"
     };
 
     private static string NormalizeParentId(string? value) => value?.Trim() ?? string.Empty;
@@ -1028,50 +1259,103 @@
 
     private string ContainerPolicyLabel(BlockModel? container)
     {
-        if (NormalizeContainerPurpose(container?.ContainerLayout?.Purpose) != "collection")
-            return T("Composition");
+        if (container is null) return T("Container");
+        var used = _arrangeBlocks.Values.Count(block => block.ParentBlockId == container.Id);
+        var capacity = ContainerCapacityPolicy.MaxChildren(
+            container.PresetKey,
+            container.ContainerLayout?.Mode,
+            container.ContainerLayout?.Columns);
+        var capacityLabel = $"{used}/{capacity}";
+        if (NormalizeContainerPurpose(container.ContainerLayout?.Purpose) != "collection")
+            return $"{T("Composition")} · {capacityLabel}";
         var allowed = container?.ContainerLayout?.AllowedChildType;
-        return string.IsNullOrWhiteSpace(allowed)
+        var policy = string.IsNullOrWhiteSpace(allowed)
             ? T("EmptyCollection")
             : $"{T("Collection")}: {T(BlockTypeLabelKey(allowed))}";
+        return $"{policy} · {capacityLabel}";
     }
 
     private void SelectArrangeBlock(BlockPosition position, MouseEventArgs args)
     {
-        if (!CanArrange) return;
-        _activeArrangeSectionId = position.SectionId;
+        if (!CanArrange || !IsArrangeScopeSection(position.SectionId)) return;
         var additive = args.CtrlKey || args.MetaKey || args.ShiftKey;
         if (!additive) _selectedBlockIds.Clear();
         if (additive && _selectedBlockIds.Contains(position.Id))
             _selectedBlockIds.Remove(position.Id);
         else
             _selectedBlockIds.Add(position.Id);
+        _editPanelSelectedBlockId = position.Id;
+        _activeArrangeSectionId = position.SectionId;
+        _arrangeReturnSectionId = position.SectionId;
     }
 
     private void SelectBreadcrumb(string blockId)
     {
         _selectedBlockIds.Clear();
-        if (_arrangeBlocks.TryGetValue(blockId, out var block))
+        if (_arrangeBlocks.TryGetValue(blockId, out var block) && IsArrangeScopeSection(block.SectionId))
         {
             _selectedBlockIds.Add(blockId);
+            _editPanelSelectedBlockId = blockId;
             _activeArrangeSectionId = block.SectionId;
+            _arrangeReturnSectionId = block.SectionId;
         }
     }
 
     private void SelectBlockFromToolbar(string blockId) => SelectBreadcrumb(blockId);
 
-    private void SelectArrangeSection(string sectionId)
+    private void SelectArrangeCanvasBackground()
     {
-        if (!CanArrange || !Sections.Any(section => section.Id == sectionId && IsArrangeCompatible(section))) return;
-        _activeArrangeSectionId = sectionId;
         _selectedBlockIds.Clear();
+        _editPanelSelectedBlockId = null;
+        StateHasChanged();
     }
+
+    private void TargetArrangeSection(string sectionId)
+    {
+        if (!CanArrange) return;
+        var section = Sections.FirstOrDefault(item => item.Id == sectionId && IsArrangeCompatible(item));
+        if (section is null) return;
+
+        _activeArrangeSectionId = section.Id;
+        _arrangeReturnSectionId = section.Id;
+        _activeArrangeZoneId = null;
+        _activeArrangeZoneKind = string.Equals(section.Type, "canvas", StringComparison.OrdinalIgnoreCase)
+            ? "canvas"
+            : "column";
+        _activeArrangeColumnSlotId = null;
+        _selectedBlockIds.Clear();
+        _editPanelSelectedBlockId = null;
+        _showArrangeBlockWizard = false;
+    }
+
+    private void TargetArrangeZone(ZonePosition zone)
+    {
+        if (!CanArrange) return;
+        var section = Sections.FirstOrDefault(item => item.Id == zone.SectionId && IsArrangeCompatible(item));
+        if (section is null) return;
+
+        _activeArrangeSectionId = section.Id;
+        _arrangeReturnSectionId = section.Id;
+        _activeArrangeZoneId = zone.Id;
+        _activeArrangeZoneKind = string.IsNullOrWhiteSpace(zone.Kind) ? "canvas" : zone.Kind.Trim().ToLowerInvariant();
+        _activeArrangeColumnSlotId = string.Equals(_activeArrangeZoneKind, "column", StringComparison.OrdinalIgnoreCase)
+            ? zone.Id
+            : null;
+        _selectedBlockIds.Clear();
+        _editPanelSelectedBlockId = null;
+        _showArrangeBlockWizard = false;
+    }
+
+    private bool IsArrangeTargetZone(ZonePosition zone) =>
+        CanArrange &&
+        string.Equals(zone.SectionId, _activeArrangeSectionId, StringComparison.Ordinal) &&
+        string.Equals(zone.Id, _activeArrangeZoneId, StringComparison.Ordinal);
 
     [JSInvokable]
     public void ClearArrangeSelection()
     {
-        if (_selectedBlockIds.Count == 0) return;
         _selectedBlockIds.Clear();
+        _editPanelSelectedBlockId = null;
         StateHasChanged();
     }
 
@@ -1112,14 +1396,23 @@
             }
 
             var isCanvas = string.Equals(section.Type, "canvas", StringComparison.OrdinalIgnoreCase);
+            var activeZoneKind = string.IsNullOrWhiteSpace(_activeArrangeZoneKind)
+                ? (isCanvas ? "canvas" : "column")
+                : _activeArrangeZoneKind;
+            var activeColumnSlot = string.Equals(activeZoneKind, "column", StringComparison.OrdinalIgnoreCase)
+                ? _activeArrangeColumnSlotId
+                : null;
             var defaultSlot = isCanvas
                 ? null
-                : _zonePositions.FirstOrDefault(zone => zone.SectionId == section.Id && zone.Kind == "column")?.Id;
+                : activeColumnSlot ?? _zonePositions.FirstOrDefault(zone => zone.SectionId == section.Id && zone.Kind == "column")?.Id;
             if (!isCanvas && string.IsNullOrWhiteSpace(defaultSlot)) return null;
+            var targetZone = isCanvas || string.Equals(activeZoneKind, "canvas", StringComparison.OrdinalIgnoreCase)
+                ? "canvas"
+                : "default";
             var label = string.IsNullOrWhiteSpace(defaultSlot)
                 ? ArrangeSectionDisplayName(section)
                 : $"{ArrangeSectionDisplayName(section)} / {T("ColumnZone")}";
-            return new ArrangeCreateTarget(section.Id, null, isCanvas ? "canvas" : "default", defaultSlot, null, label);
+            return new ArrangeCreateTarget(section.Id, null, targetZone, defaultSlot, null, label);
         }
     }
 
@@ -1127,20 +1420,67 @@
     private BlockModel? ArrangeCreateParent => CurrentArrangeCreateTarget?.ParentBlockId is { Length: > 0 } parentId
         ? ArrangeBlock(parentId)
         : null;
-    private IReadOnlyCollection<string>? ArrangeCreateAllowedTypes =>
-        NormalizeContainerPurpose(ArrangeCreateParent?.ContainerLayout?.Purpose) == "collection" &&
-        !string.IsNullOrWhiteSpace(ArrangeCreateParent?.ContainerLayout?.AllowedChildType)
-            ? new[] { ArrangeCreateParent.ContainerLayout.AllowedChildType! }
-            : null;
+    private int ArrangeCreateChildCount => ArrangeCreateParent is null
+        ? 0
+        : _arrangeBlocks.Values.Count(block => block.ParentBlockId == ArrangeCreateParent.Id);
+    private int ArrangeCreateCapacity => ArrangeCreateParent is null
+        ? int.MaxValue
+        : ContainerCapacityPolicy.MaxChildren(
+            ArrangeCreateParent.PresetKey,
+            ArrangeCreateParent.ContainerLayout?.Mode,
+            ArrangeCreateParent.ContainerLayout?.Columns);
+    private bool ArrangeCreateHasCapacity => ArrangeCreateParent is null || ArrangeCreateChildCount < ArrangeCreateCapacity;
+    private ContainerPresetDefinition? ArrangeCreatePreset => ArrangeCreateParent is null
+        ? null
+        : ContainerPresetCatalog.ForExisting(ArrangeCreateParent.PresetKey);
+    private ContainerPresetSlotDefinition? ArrangeCreateNextSlot =>
+        ArrangeCreateParent is null
+            ? null
+            : ContainerCapacityPolicy.NextAvailableSlot(
+                ArrangeCreateParent.PresetKey,
+                _arrangeBlocks.Values
+                    .Where(block => block.ParentBlockId == ArrangeCreateParent.Id)
+                    .Select(block => block.Authoring?.PresetSlotName),
+                ArrangeCreateAllowedTypes?.Count == 1 ? ArrangeCreateAllowedTypes.First() : "text");
+    private string ArrangeAddTitle => ArrangeCreateHasCapacity
+        ? T("AddBlock")
+        : string.Format(T("ContainerCapacityReached"),
+            ContainerCapacityPolicy.NormalizeMode(ArrangeCreateParent?.ContainerLayout?.Mode),
+            ArrangeCreateCapacity);
+    private IReadOnlyCollection<string>? ArrangeCreateAllowedTypes
+    {
+        get
+        {
+            var parent = ArrangeCreateParent;
+            if (parent is null) return null;
+            var lockedType = parent.ContainerLayout?.AllowedChildType;
+            return NormalizeContainerPurpose(parent.ContainerLayout?.Purpose) == "collection" &&
+                   ContainerCapacityPolicy.CanOwn(lockedType)
+                ? new[] { lockedType! }
+                : ContainerCapacityPolicy.AllowedChildTypes(parent.PresetKey);
+        }
+    }
     private string? ArrangeCreateConstraintLabel
     {
         get
         {
             var parent = ArrangeCreateParent;
-            if (parent is null || NormalizeContainerPurpose(parent.ContainerLayout?.Purpose) != "collection") return null;
-            return string.IsNullOrWhiteSpace(parent.ContainerLayout?.AllowedChildType)
-                ? T("CollectionFirstChildLocksType")
-                : $"{T("CollectionAllowsOnly")} {T(BlockTypeLabelKey(parent.ContainerLayout.AllowedChildType))}.";
+            if (parent is null) return null;
+            var messages = new List<string>
+            {
+                string.Format(T("ContainerCapacityStatus"), ArrangeCreateChildCount, ArrangeCreateCapacity)
+            };
+            if (ArrangeCreatePreset is not null)
+                messages.Insert(0, string.Format(T("ContainerPresetStatus"), ArrangeCreatePreset.DisplayName));
+            if (ArrangeCreateNextSlot is not null)
+                messages.Add(string.Format(T("NextContainerSlot"), ArrangeCreateNextSlot.DisplayName));
+            if (NormalizeContainerPurpose(parent.ContainerLayout?.Purpose) == "collection")
+            {
+                messages.Add(string.IsNullOrWhiteSpace(parent.ContainerLayout?.AllowedChildType)
+                    ? T("CollectionFirstChildLocksType")
+                    : $"{T("CollectionAllowsOnly")} {T(BlockTypeLabelKey(parent.ContainerLayout.AllowedChildType))}.");
+            }
+            return string.Join(" ", messages);
         }
     }
 
@@ -1149,6 +1489,11 @@
         if (CurrentArrangeCreateTarget is null)
         {
             Http.Toast(T("SelectSectionFirst"), 400);
+            return;
+        }
+        if (!ArrangeCreateHasCapacity)
+        {
+            Http.Toast(ArrangeAddTitle, 400);
             return;
         }
         _showArrangeBlockWizard = true;
@@ -1163,8 +1508,9 @@
     private async Task CreateArrangeBlock(BlockStarterSelection selection)
     {
         var target = CurrentArrangeCreateTarget;
-        if (target is null || _creatingArrangeBlock) return;
+        if (target is null || _creatingArrangeBlock || !ArrangeCreateHasCapacity) return;
         _creatingArrangeBlock = true;
+        var created = false;
         try
         {
             var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey);
@@ -1178,17 +1524,21 @@
             if (!response.Success || response.Data is null) return;
             _showArrangeBlockWizard = false;
             _activeArrangeSectionId = target.SectionId;
+            _editPanelSelectedBlockId = response.Data.Id;
             await RefreshAuthoringAsync([response.Data.Id]);
+            created = true;
         }
         finally
         {
             _creatingArrangeBlock = false;
+            await CompleteArrangeBusyStateAsync(created);
         }
     }
 
-    private async Task ReorderBlocksFromToolbar(CanvasArrangeToolbar.CanvasBlockReorderRequest request)
+    private async Task<bool> ReorderBlocksFromToolbar(CanvasArrangeToolbar.CanvasBlockReorderRequest request)
     {
-        if (!CanArrange || request.OrderedIds.Count == 0) return;
+        if (!CanArrange || !IsArrangeScopeSection(request.SectionId) || request.OrderedIds.Count == 0)
+            return false;
         var requestedSet = request.OrderedIds.ToHashSet(StringComparer.Ordinal);
         var before = _arrangeBlocks.Values
             .Where(block => block.SectionId == request.SectionId && requestedSet.Contains(block.Id))
@@ -1196,7 +1546,7 @@
             .Select(block => block.Id)
             .ToList();
         var after = request.OrderedIds.ToList();
-        if (before.Count != after.Count) return;
+        if (before.Count != after.Count) return false;
 
         async Task<bool> Apply(IReadOnlyList<string> ids)
         {
@@ -1208,7 +1558,12 @@
         }
 
         if (await Apply(after))
+        {
             PushHistory(new CanvasHistoryEntry(T("ReorderBlocks"), () => Apply(before), () => Apply(after)));
+            return true;
+        }
+
+        return false;
     }
 
     private async Task ApplyToolbarVisualUpdate(CanvasArrangeToolbar.CanvasBlockVisualUpdate update)
@@ -1270,26 +1625,6 @@
                     dto.Appearance.Shadow = update.Shadow;
                     dto.Appearance.TextAlign = update.TextAlign;
                     dto.Appearance.Padding = update.Padding;
-                    if (update.ApplyPreciseLayout)
-                    {
-                        var position = _blockPositions.FirstOrDefault(item => item.Id == state.BlockId);
-                        var heightPx = update.HeightPx;
-                        if (NormalizeAuthoringShape(dto.Appearance.Shape) == "circle")
-                        {
-                            dto.Appearance.AspectRatio = "square";
-                            if (position is not null)
-                                heightPx = Math.Clamp(position.SectionWidth * update.WidthPercent / 100d, 48, Math.Max(position.SectionHeight, 48));
-                        }
-                        dto.Layout.LeftPercent = update.LeftPercent;
-                        dto.Layout.TopPx = update.TopPx;
-                        dto.Layout.WidthPercent = update.WidthPercent;
-                        dto.Layout.HeightPx = heightPx;
-                        dto.Layout.ZIndex = update.ZIndex;
-                        dto.Layout.X = Math.Clamp((int)Math.Round(update.LeftPercent / 100d * 12), 0, 11);
-                        dto.Layout.Y = Math.Clamp((int)Math.Round(update.TopPx / 48d), 0, 60);
-                        dto.Layout.W = Math.Clamp((int)Math.Round(update.WidthPercent / 100d * 12), 1, 12);
-                        dto.Layout.H = Math.Clamp((int)Math.Round(heightPx / 48d), 1, 40);
-                    }
                     break;
             }
             return state with { Dto = dto };
@@ -1312,6 +1647,7 @@
     {
         if (states.Count == 0) return false;
         _runningAuthoringCommand = true;
+        var succeeded = false;
         try
         {
             var updatedBlocks = new List<BlockModel>(states.Count);
@@ -1333,11 +1669,13 @@
             await InvokeAsync(StateHasChanged);
             for (var index = 0; index < updatedBlocks.Count; index++)
                 await PatchPreviewBlockAsync(updatedBlocks[index], index == updatedBlocks.Count - 1);
+            succeeded = true;
             return true;
         }
         finally
         {
             _runningAuthoringCommand = false;
+            await CompleteArrangeBusyStateAsync(succeeded);
         }
     }
 
@@ -1440,26 +1778,30 @@
         }
     }
 
-    private Task ApplyToolbarLocks(CanvasArrangeToolbar.CanvasBlockLockUpdate update) =>
-        SetSelectionLocksAsync(update.ContentLocked, update.GeometryLocked, full: false);
-
     private async Task DeleteArrangeSelection()
     {
         if (!CanDeleteSelection) return;
         var selected = _selectedBlockIds.Select(ArrangeBlock).Where(block => block is not null).Cast<BlockModel>().ToList();
         var sectionId = selected.Select(block => block.SectionId).Distinct(StringComparer.Ordinal).Single();
+        var deletingIds = new HashSet<string>(_selectedBlockIds, StringComparer.Ordinal);
+        deletingIds.UnionWith(OwnedDescendantIds(_selectedBlockIds));
         _runningAuthoringCommand = true;
+        var deleted = false;
         try
         {
             var response = await BlockService.DeleteGraphsAsync(Page.Id, sectionId, selected.Select(block => block.Id));
             Http.Toast(response.Message, response.StatusCode);
             if (!response.Success) return;
+            if (!string.IsNullOrWhiteSpace(_editPanelSelectedBlockId) && deletingIds.Contains(_editPanelSelectedBlockId))
+                _editPanelSelectedBlockId = null;
             _selectedBlockIds.Clear();
             await RefreshAuthoringAsync(Array.Empty<string>());
+            deleted = true;
         }
         finally
         {
             _runningAuthoringCommand = false;
+            await CompleteArrangeBusyStateAsync(deleted);
         }
     }
 
@@ -1500,9 +1842,24 @@
         switch (command)
         {
             case "duplicate": await DuplicateSelectionAsync(); return;
-            case "group": await GroupSelectionAsync(); return;
-            case "ungroup": await UngroupSelectionAsync(); return;
         }
+    }
+
+    private HashSet<string> OwnedDescendantIds(IEnumerable<string> containerIds)
+    {
+        var pending = new Queue<string>(containerIds.Distinct(StringComparer.Ordinal));
+        var descendants = new HashSet<string>(StringComparer.Ordinal);
+        while (pending.Count > 0)
+        {
+            var parentId = pending.Dequeue();
+            foreach (var child in _arrangeBlocks.Values.Where(block => block.ParentBlockId == parentId))
+            {
+                if (!descendants.Add(child.Id)) continue;
+                if (string.Equals(child.Type, "container", StringComparison.OrdinalIgnoreCase))
+                    pending.Enqueue(child.Id);
+            }
+        }
+        return descendants;
     }
 
     private async Task ApplyLayoutHistoryAsync(
@@ -1523,6 +1880,7 @@
         var sectionId = states[0].SectionId;
         if (states.Any(state => state.SectionId != sectionId)) return false;
         _runningAuthoringCommand = true;
+        var succeeded = false;
         try
         {
             var response = await BlockService.UpdateLayoutsAsync(Page.Id, sectionId, new BlockBulkLayoutUpdateDto
@@ -1546,9 +1904,14 @@
                 catch { }
             }
             await InvokeAsync(StateHasChanged);
+            succeeded = true;
             return true;
         }
-        finally { _runningAuthoringCommand = false; }
+        finally
+        {
+            _runningAuthoringCommand = false;
+            await CompleteArrangeBusyStateAsync(succeeded);
+        }
     }
 
     private async Task DuplicateSelectionAsync()
@@ -1557,6 +1920,7 @@
         var originals = _selectedBlockIds.ToList();
         var sectionId = SelectedPositions[0].SectionId;
         _runningAuthoringCommand = true;
+        var succeeded = false;
         try
         {
             List<string> currentIds = new();
@@ -1580,137 +1944,16 @@
                 return true;
             }
             if (await Duplicate())
+            {
                 PushHistory(new CanvasHistoryEntry(T("DuplicateBlocks"), Remove, Duplicate));
+                succeeded = true;
+            }
         }
-        finally { _runningAuthoringCommand = false; }
-    }
-
-    private async Task GroupSelectionAsync()
-    {
-        if (!CanGroupSelection) return;
-        var children = _selectedBlockIds.ToList();
-        var sectionId = SelectedPositions[0].SectionId;
-        _runningAuthoringCommand = true;
-        try
+        finally
         {
-            string? currentContainerId = null;
-            async Task<bool> Group()
-            {
-                var response = await BlockService.GroupAsync(
-                    Page.Id, sectionId, children,
-                    new Dictionary<string, string> { [AdminLanguage] = T("BlockGroup") });
-                if (!response.Success || response.Data?.ContainerId is null)
-                {
-                    Http.Toast(response.Message, response.StatusCode);
-                    return false;
-                }
-                currentContainerId = response.Data.ContainerId;
-                await RefreshAuthoringAsync([currentContainerId]);
-                return true;
-            }
-            async Task<bool> Ungroup()
-            {
-                if (currentContainerId is null) return false;
-                var response = await BlockService.UngroupAsync(Page.Id, sectionId, currentContainerId);
-                if (!response.Success) { Http.Toast(response.Message, response.StatusCode); return false; }
-                await RefreshAuthoringAsync(children);
-                return true;
-            }
-            if (await Group())
-                PushHistory(new CanvasHistoryEntry(T("GroupIntoContainer"), Ungroup, Group));
+            _runningAuthoringCommand = false;
+            await CompleteArrangeBusyStateAsync(succeeded);
         }
-        finally { _runningAuthoringCommand = false; }
-    }
-
-    private async Task UngroupSelectionAsync()
-    {
-        if (!CanUngroupSelection) return;
-        var currentContainerId = _selectedBlockIds.First();
-        var container = ArrangeBlock(currentContainerId);
-        if (container is null) return;
-        var sectionId = container.SectionId;
-        var children = _arrangeBlocks.Values
-            .Where(block => block.ParentBlockId == currentContainerId)
-            .Select(block => block.Id)
-            .ToList();
-        var snapshot = AdminSite.Services.Mapper.BlockUpdateDtoMapper.Build(container);
-
-        async Task<bool> Ungroup()
-        {
-            var response = await BlockService.UngroupAsync(Page.Id, sectionId, currentContainerId);
-            if (!response.Success || response.Data is null)
-            {
-                Http.Toast(response.Message, response.StatusCode);
-                return false;
-            }
-            await RefreshAuthoringAsync(response.Data.BlockIds);
-            return true;
-        }
-
-        async Task<bool> Regroup()
-        {
-            var response = await BlockService.GroupAsync(
-                Page.Id,
-                sectionId,
-                children,
-                container.Title ?? new Dictionary<string, string>());
-            if (!response.Success || response.Data?.ContainerId is null)
-            {
-                Http.Toast(response.Message, response.StatusCode);
-                return false;
-            }
-            currentContainerId = response.Data.ContainerId;
-            var restore = await BlockService.UpdateAsync(Page.Id, sectionId, currentContainerId, snapshot);
-            if (!restore.Success)
-            {
-                Http.Toast(restore.Message, restore.StatusCode);
-                return false;
-            }
-            await RefreshAuthoringAsync([currentContainerId]);
-            return true;
-        }
-
-        if (await Ungroup())
-            PushHistory(new CanvasHistoryEntry(T("UngroupContainer"), Regroup, Ungroup));
-    }
-
-    private async Task SetSelectionLocksAsync(bool content, bool geometry, bool full)
-    {
-        if (!Auth.IsAdminAdmin || _selectedBlockIds.Count == 0) return;
-        var snapshots = _selectedBlockIds
-            .Select(id => ArrangeBlock(id))
-            .Where(block => block is not null)
-            .Select(block => new LockSnapshot(
-                block!.Id, block.SectionId,
-                block.Authoring.ContentLocked,
-                block.Authoring.GeometryLocked,
-                block.Authoring.FullLocked))
-            .ToList();
-        async Task<bool> Apply(bool useNew)
-        {
-            var updatedBlocks = new List<BlockModel>(snapshots.Count);
-            foreach (var snapshot in snapshots)
-            {
-                var dto = useNew
-                    ? new BlockAuthoringLockUpdateDto { ContentLocked = content, GeometryLocked = geometry, FullLocked = full }
-                    : new BlockAuthoringLockUpdateDto
-                    {
-                        ContentLocked = snapshot.ContentLocked,
-                        GeometryLocked = snapshot.GeometryLocked,
-                        FullLocked = snapshot.FullLocked
-                    };
-                var response = await BlockService.UpdateAuthoringLockAsync(Page.Id, snapshot.SectionId, snapshot.BlockId, dto);
-                if (!response.Success || response.Data is null) { Http.Toast(response.Message, response.StatusCode); return false; }
-                updatedBlocks.Add(response.Data);
-            }
-            foreach (var block in updatedBlocks)
-                _arrangeBlocks[block.Id] = block;
-            _visualStateVersion++;
-            await InvokeAsync(StateHasChanged);
-            return true;
-        }
-        if (await Apply(useNew: true))
-            PushHistory(new CanvasHistoryEntry(T("UpdateBlockLock"), () => Apply(false), () => Apply(true)));
     }
 
     private void PushHistory(CanvasHistoryEntry entry)
@@ -1799,17 +2042,148 @@
 
     // -- Section actions ------------------------------------------
 
+    private async Task EnterArrangeBlocks(string sectionId)
+    {
+        if (!CanModify || _arrangeBlocksActive)
+            return;
+
+        var section = Sections.FirstOrDefault(item => item.Id == sectionId);
+        if (section is null || !IsArrangeCompatible(section))
+            return;
+
+        _arrangeBlocksActive = true;
+        _arrangeReturnSectionId = section.Id;
+        _activeArrangeSectionId = section.Id;
+        _activeArrangeZoneId = null;
+        _activeArrangeZoneKind = string.Equals(section.Type, "canvas", StringComparison.OrdinalIgnoreCase)
+            ? "canvas"
+            : "column";
+        _activeArrangeColumnSlotId = null;
+        _pendingArrangeExit = false;
+        _pendingArrangeSelectionId = _editPanelSelectedBlockId;
+        _editPanelInitialTab = "blocks";
+        _selectedSection = null;
+        _restoreSectionEditorOnEdit = false;
+        ResetArrangeWorkspaceState(clearActiveSection: false);
+        await RefreshWorkspaceModeAsync();
+    }
+
+    private async Task DiscardSectionChangesAndEnterArrangeBlocks(string sectionId)
+    {
+        var response = await SectionService.GetByIdAsync(Page.Id, sectionId);
+        Http.Toast(response.Message, response.StatusCode);
+        if (!response.Success || response.Data is null)
+            return;
+
+        var index = Sections.FindIndex(section => section.Id == sectionId);
+        if (index >= 0)
+            Sections[index] = response.Data;
+        _selectedSection = response.Data;
+        await EnterArrangeBlocks(sectionId);
+    }
+
+    private async Task ExitArrangeBlocks()
+    {
+        if (!_arrangeBlocksActive)
+            return;
+
+        if (ArrangeAuthoringBusy)
+        {
+            _pendingArrangeExit = true;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await CompleteExitArrangeBlocksAsync();
+    }
+
+    private async Task CompleteExitArrangeBlocksAsync()
+    {
+        if (!_arrangeBlocksActive)
+            return;
+
+        var sectionId = _activeArrangeSectionId ?? _arrangeReturnSectionId;
+        _editPanelSelectedBlockId = _selectedBlockIds.FirstOrDefault() ?? _editPanelSelectedBlockId;
+        _arrangeBlocksActive = false;
+        _restoreSectionEditorOnEdit = false;
+        _editPanelInitialTab = "blocks";
+        _selectedSection = Sections.FirstOrDefault(item => item.Id == sectionId);
+        _arrangeReturnSectionId = null;
+        _pendingArrangeExit = false;
+        ResetArrangeWorkspaceState(clearActiveSection: true);
+        await RefreshWorkspaceModeAsync();
+    }
+
+    private async Task CompleteArrangeBusyStateAsync(bool commandSucceeded)
+    {
+        if (_pendingArrangeExit && !ArrangeAuthoringBusy)
+        {
+            if (commandSucceeded)
+            {
+                await CompleteExitArrangeBlocksAsync();
+                return;
+            }
+
+            _pendingArrangeExit = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ResetArrangeWorkspaceState(bool clearActiveSection)
+    {
+        _sectionPositions = new();
+        _blockPositions = new();
+        _zonePositions = new();
+        _iframeHeight = 2000;
+        _selectedBlockIds.Clear();
+        _showArrangeBlockWizard = false;
+        _arrangeBlocks.Clear();
+        _arrangeBlocksLoadedForPage = null;
+        _undoHistory.Clear();
+        _redoHistory.Clear();
+        _overlayInitialized = false;
+        _sortableInitialized = false;
+        _arrangeEditorInitialized = false;
+        if (clearActiveSection)
+        {
+            _activeArrangeSectionId = null;
+            _activeArrangeZoneId = null;
+            _activeArrangeZoneKind = null;
+            _activeArrangeColumnSlotId = null;
+        }
+    }
+
+    private async Task RefreshWorkspaceModeAsync()
+    {
+        _previewVersion++;
+        _currentPageId = Page.Id;
+        _currentPreviewUrl = PreviewUrl;
+        _currentLang = AdminLanguage;
+        _currentCanModify = CanModify;
+        _currentCanArrange = CanArrange;
+        await InvokeAsync(StateHasChanged);
+    }
+
     private void SelectSection(SectionModel section)
     {
         if (!CanModify)
             return;
 
+        _editPanelInitialTab = "style";
+        _editPanelSelectedBlockId = null;
         _selectedSection = section;
     }
 
     private static bool IsArrangeCompatible(SectionModel section) =>
         string.Equals(section.Type, "canvas", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(section.Type, "columns", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsArrangeScopeSection(string? sectionId) =>
+        !string.IsNullOrWhiteSpace(sectionId) &&
+        string.Equals(sectionId, ArrangeScopeSectionId, StringComparison.Ordinal);
 
     private string GetArrangeSectionLabel(SectionModel section) =>
         string.Equals(section.Type, "columns", StringComparison.OrdinalIgnoreCase)
@@ -1819,7 +2193,54 @@
     private void ClosePanel()
     {
         _selectedSection = null;
+        _editPanelInitialTab = "style";
+        _editPanelSelectedBlockId = null;
     }
+
+    private void OpenArrangeContentEditor(string blockId)
+    {
+        if (!CanArrange || ArrangeBlock(blockId) is not { } block || !IsArrangeScopeSection(block.SectionId))
+            return;
+
+        _selectedBlockIds.Clear();
+        _selectedBlockIds.Add(blockId);
+        _editPanelSelectedBlockId = blockId;
+        _arrangeContentEditBlockId = blockId;
+    }
+
+    private void CloseArrangeContentEditor() =>
+        _arrangeContentEditBlockId = null;
+
+    private Task OnArrangeContentEditorVisibilityChanged(bool visible)
+    {
+        if (!visible)
+            CloseArrangeContentEditor();
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleArrangeContentSaved()
+    {
+        var editedId = _arrangeContentEditBlockId;
+        if (string.IsNullOrWhiteSpace(editedId))
+            return;
+
+        await LoadArrangeBlocksAsync();
+        if (_arrangeBlocks.TryGetValue(editedId, out var block) && IsArrangeScopeSection(block.SectionId))
+        {
+            _selectedBlockIds.Clear();
+            _selectedBlockIds.Add(editedId);
+            _editPanelSelectedBlockId = editedId;
+        }
+        else
+        {
+            _arrangeContentEditBlockId = null;
+        }
+
+        await ReloadPreviewSafelyAsync();
+    }
+
+    private void HandleEditorActiveBlockChanged(string? blockId) =>
+        _editPanelSelectedBlockId = blockId;
 
     private async Task HandleSectionSaved()
     {
@@ -2011,13 +2432,6 @@
         double WidthPercent,
         double HeightPx,
         int ZIndex);
-
-    private sealed record LockSnapshot(
-        string BlockId,
-        string SectionId,
-        bool ContentLocked,
-        bool GeometryLocked,
-        bool FullLocked);
 
     private sealed record ArrangeCreateTarget(
         string SectionId,

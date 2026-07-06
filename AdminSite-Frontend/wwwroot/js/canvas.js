@@ -371,6 +371,72 @@ window.initBlockListSortable = (key, container, dotnet) => {
     window.__ezAdminSortables[key] = sortable;
 };
 
+window.destroyBlockSelectorSortables = root => {
+    if (!root || !Array.isArray(root.__blockSelectorSortables)) return;
+    root.__blockSelectorSortables.forEach(sortable => sortable?.destroy());
+    root.__blockSelectorSortables = [];
+};
+
+window.initBlockSelectorSortables = (root, dotnet) => {
+    if (!root || !dotnet || typeof Sortable === "undefined") return;
+    window.destroyBlockSelectorSortables(root);
+
+    const sortables = [];
+    root.querySelectorAll(".ez-block-selector__section").forEach(section => {
+        let originalChildren = [];
+        let originalPeerIds = [];
+        let activePeerKey = "";
+
+        const sortable = Sortable.create(section, {
+            handle: ".ez-block-selector__drag",
+            draggable: '.ez-block-selector__row[data-can-reorder="true"]',
+            dataIdAttr: "data-block-selector-id",
+            animation: 150,
+            chosenClass: "sortable-chosen",
+            ghostClass: "sortable-ghost",
+            dragClass: "sortable-drag",
+            onStart: event => {
+                originalChildren = [...section.children];
+                activePeerKey = event.item?.dataset.blockSelectorPeer || "";
+                originalPeerIds = [...section.querySelectorAll(".ez-block-selector__row")]
+                    .filter(item => item.dataset.blockSelectorPeer === activePeerKey)
+                    .map(item => item.dataset.blockSelectorId)
+                    .filter(Boolean);
+            },
+            onMove: event => {
+                const draggedPeer = event.dragged?.dataset.blockSelectorPeer || "";
+                const relatedPeer = event.related?.dataset.blockSelectorPeer || "";
+                return !!draggedPeer && draggedPeer === relatedPeer;
+            },
+            onEnd: event => {
+                const peerKey = event.item?.dataset.blockSelectorPeer || activePeerKey;
+                const sectionId = event.item?.dataset.blockSelectorSectionId || "";
+                const frontToBackIds = [...section.querySelectorAll(".ez-block-selector__row")]
+                    .filter(item => item.dataset.blockSelectorPeer === peerKey)
+                    .map(item => item.dataset.blockSelectorId)
+                    .filter(Boolean);
+                const changed = frontToBackIds.length === originalPeerIds.length &&
+                    frontToBackIds.some((id, index) => id !== originalPeerIds[index]);
+
+                if (!changed || !sectionId || !peerKey) {
+                    originalChildren.forEach(child => section.appendChild(child));
+                    return;
+                }
+
+                dotnet.invokeMethodAsync("OnBlockSelectorReordered", sectionId, peerKey, frontToBackIds)
+                    .then(saved => {
+                        if (saved === true) return;
+                        originalChildren.forEach(child => section.appendChild(child));
+                    })
+                    .catch(() => originalChildren.forEach(child => section.appendChild(child)));
+            }
+        });
+        sortables.push(sortable);
+    });
+
+    root.__blockSelectorSortables = sortables;
+};
+
 window.initFooterLinkSortables = (root, dotnet) => {
     if (!root || !dotnet || typeof Sortable === "undefined") return;
 
@@ -581,6 +647,40 @@ window.patchPreviewBlockLayout = function (blockId, x, y, w, h, leftPercent, top
     block.style.setProperty("--sc-block-width", `${exactWidth}%`);
     block.style.setProperty("--sc-block-top", `${exactTop}px`);
     block.style.setProperty("--sc-block-min-height", `${exactHeight}px`);
+    block.style.height = `${exactHeight}px`;
+    block.style.minHeight = "0px";
+    block.style.overflow = "hidden";
+
+    block.querySelectorAll([
+        ".sc-block-motion",
+        ".sc-block-rotation",
+        ".sc-block-visual",
+        ".sc-block",
+        ".sc-design-block",
+        ".sc-block-starter",
+        ".sc-card-block",
+        ".sc-metric-block",
+        ".sc-bullet-list-block",
+        ".sc-step-block",
+        ".sc-icon-block",
+        ".sc-container-block"
+    ].join(",")).forEach(element => {
+        element.style.height = "100%";
+        element.style.minHeight = "0px";
+        element.style.boxSizing = "border-box";
+    });
+
+    block.querySelectorAll([
+        ".sc-block-starter__tile",
+        ".sc-block-starter__form",
+        ".sc-block-starter__step",
+        ".sc-block-starter__media",
+        ".sc-block-starter__map",
+        ".sc-block-starter__container"
+    ].join(",")).forEach(element => {
+        element.style.minHeight = "0px";
+    });
+
     if ((block.getAttribute("data-block-type") || "").toLowerCase() === "container") {
         const containerBlock = block.querySelector(".sc-container-block");
         if (containerBlock) {

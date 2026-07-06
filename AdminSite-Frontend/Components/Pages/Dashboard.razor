@@ -97,7 +97,6 @@
                         OnDeletePage="RequestDeletePage"
                         OnPageStatusChanged="HandlePageStatusChanged"
                         EditMode="@IsEditMode"
-                        ArrangeMode="@IsArrangeMode"
                         CanEdit="@CanEditDashboard" />
             }
         </div>
@@ -343,17 +342,14 @@
 
     private bool CanEditDashboard => Auth.CanUsePageBuilder;
     private bool IsEditMode => _canvasMode == "edit";
-    private bool IsArrangeMode => _canvasMode == "arrange";
     private string ActiveModeLabel => _canvasMode switch
     {
         "edit" => T("EditMode"),
-        "arrange" => T("ArrangeMode"),
         _ => T("PreviewMode")
     };
     private string ActiveModeIcon => _canvasMode switch
     {
         "edit" => "fa-edit",
-        "arrange" => "fa-object-group",
         _ => "fa-eye"
     };
 
@@ -697,7 +693,7 @@
         if (mode != "preview" && !CanEditDashboard)
             return;
 
-        _canvasMode = mode is "edit" or "arrange" ? mode : "preview";
+        _canvasMode = mode == "edit" ? "edit" : "preview";
         _pageSortableInitialized = false;
         _childPageSortableInitialized = false;
         if (!IsEditMode)
@@ -713,7 +709,6 @@
         var next = _canvasMode switch
         {
             "preview" => "edit",
-            "edit" => "arrange",
             _ => "preview"
         };
 

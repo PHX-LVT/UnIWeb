@@ -166,6 +166,7 @@ public static class Program
     {
         var parent = WithBlockBase(new ContainerBlock
         {
+            PresetKey = ContainerPresetCatalog.GridKey,
             Title = Lang("Preset parent"),
             LayoutMode = "grid",
             Columns = 2,
@@ -335,6 +336,7 @@ public static class Program
     {
         var source = WithBlockBase(new ContainerBlock
         {
+            PresetKey = ContainerPresetCatalog.OrbitKey,
             Title = Lang("Contract container"),
             ContainerLayout = new ContainerLayoutSettings
             {
@@ -368,6 +370,8 @@ public static class Program
         Expect(roundTrip.Responsive.Mobile?.Mode == "compact-preserve", "Block contract BSON round-trip should preserve responsive settings.");
         Expect(roundTrip.Animation.Effect == "rise", "Block contract BSON round-trip should preserve animation settings.");
         var roundTripContainer = (ContainerBlock)roundTrip;
+        Expect(roundTripContainer.PresetKey == ContainerPresetCatalog.OrbitKey,
+            "Block contract BSON round-trip should preserve the Container preset key.");
         Expect(roundTripContainer.ContainerLayout.GeometryLocked, "Block contract BSON round-trip should preserve Container layout settings.");
         Expect(roundTripContainer.ContainerLayout.OrbitDirection == "counter-clockwise", "Block contract BSON round-trip should preserve orbit direction.");
         Expect(roundTripContainer.ContainerLayout.CompactRadius == 110, "Block contract BSON round-trip should preserve compact geometry.");
@@ -383,6 +387,7 @@ public static class Program
         legacyDocument.Remove(nameof(Block.Responsive));
         legacyDocument.Remove(nameof(Block.Animation));
         legacyDocument.Remove(nameof(ContainerBlock.ContainerLayout));
+        legacyDocument.Remove(nameof(ContainerBlock.PresetKey));
         legacyDocument[nameof(ContainerBlock.LayoutMode)] = "semicircle";
         legacyDocument[nameof(ContainerBlock.Columns)] = 4;
         legacyDocument[nameof(ContainerBlock.Gap)] = "small";
@@ -404,6 +409,7 @@ public static class Program
     {
         BlockUpdateDto source = new ContainerBlockUpdateDto
         {
+            PresetKey = ContainerPresetCatalog.OrbitKey,
             Title = Lang("DTO container"),
             Appearance = new BlockAppearanceDto
             {
@@ -482,6 +488,8 @@ public static class Program
         var result = JsonSerializer.Deserialize<BlockUpdateDto>(json) as ContainerBlockUpdateDto;
 
         Expect(result is not null, "Polymorphic Block DTO should round-trip as ContainerBlockUpdateDto.");
+        Expect(result?.PresetKey == ContainerPresetCatalog.OrbitKey,
+            "Block DTO should preserve the Container preset key.");
         Expect(result?.Appearance?.Shape == "circle", "Block DTO should preserve appearance settings.");
         Expect(result?.Appearance?.MediaFit == "contain", "Block DTO should preserve media-fit settings.");
         Expect(result?.Appearance?.InheritFromContainer == true, "Block DTO should preserve Container appearance inheritance.");
@@ -1330,6 +1338,7 @@ public static class Program
         });
         yield return WithBlockBase(new ContainerBlock
         {
+            PresetKey = ContainerPresetCatalog.OrbitKey,
             Title = Lang("Container"),
             LayoutMode = "orbit",
             Columns = 4,

@@ -36,6 +36,14 @@ public static class BlockStarterPresetCatalog
         {
             container.ContainerLayout ??= new ContainerLayoutSettingsDto();
             MergeContainer(container.ContainerLayout, preset.Container);
+            var resolvedKey = ContainerPresetCatalog.ResolveCreationKey(
+                container.PresetKey,
+                container.ContainerLayout.Mode ?? container.LayoutMode);
+            if (resolvedKey is not null && ContainerPresetCatalog.TryGetGoverned(resolvedKey, out var governed))
+            {
+                container.PresetKey = governed.Key;
+                ApplyGovernance(container.ContainerLayout, governed);
+            }
         }
     }
 
@@ -178,5 +186,18 @@ public static class BlockStarterPresetCatalog
         target.GeometryLocked ??= defaults.GeometryLocked;
         target.ShareAppearance ??= defaults.ShareAppearance;
         target.SharedAppearance ??= defaults.SharedAppearance;
+    }
+
+    private static void ApplyGovernance(
+        ContainerLayoutSettingsDto target,
+        ContainerPresetDefinition preset)
+    {
+        target.SchemaVersion = 3;
+        target.Purpose = preset.Purpose;
+        target.Mode = preset.LayoutMode;
+        target.Columns = preset.Columns;
+        target.MobileMode = preset.MobileMode;
+        if (preset.Purpose != "collection")
+            target.AllowedChildType = null;
     }
 }

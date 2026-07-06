@@ -187,6 +187,10 @@ namespace FullProject.Services
                 .Find(s => s.Id == sectionId).FirstOrDefaultAsync()
                 ?? throw new ArgumentException("Section not found");
 
+            ContainerPresetDefinition? containerPreset = null;
+            if (dto is ContainerBlockCreateDto containerCreate)
+                containerPreset = PrepareContainerPresetForCreation(containerCreate);
+
             Block block = dto switch
             {
                 TextBlockCreateDto t => new TextBlock
@@ -296,6 +300,7 @@ namespace FullProject.Services
                 },
                 ContainerBlockCreateDto container => new ContainerBlock
                 {
+                    PresetKey = containerPreset!.Key,
                     Title = SanitizeDictionary(container.Title),
                     ContainerLayout = BlockContractService.MergeContainerLayout(
                         null,
@@ -315,6 +320,7 @@ namespace FullProject.Services
             block.StableId = Guid.NewGuid().ToString();
             block.ColumnSlotId = dto.ColumnSlotId;
             block.ParentBlockId = string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId;
+            block.Authoring = MapAuthoring(dto.Authoring);
             Block? parentBlock = null;
             if (!string.IsNullOrWhiteSpace(block.ParentBlockId))
                 parentBlock = await GetByIdAsync(pageId, sectionId, block.ParentBlockId);
@@ -322,7 +328,15 @@ namespace FullProject.Services
                 throw new ArgumentException("The selected parent must be a Container in the same Page and Section.");
 
             if (parentBlock is ContainerBlock governedParent)
+            {
+                var existingChildren = await GetDirectChildrenAsync(governedParent);
+                if (!ContainerCapacityPolicy.CanOwn(BlockType(block)))
+                    throw new ArgumentException("Containers cannot own another Container. Add a normal content Block instead.");
+                EnforceContainerPresetChildType(governedParent, BlockType(block));
+                EnforceContainerCapacity(governedParent, existingChildren);
                 await EnforceCollectionChildTypeAsync(governedParent, BlockType(block));
+                AssignContainerPresetSlot(governedParent, block, existingChildren);
+            }
 
             block.BlockZone = parentBlock is null
                 ? ResolveBlockZone(section, dto.BlockZone, dto.ZoneId)
@@ -372,13 +386,63 @@ namespace FullProject.Services
             string pageId,
             string sectionId,
             string blockId,
-            ContainerLayoutSettingsDto? incoming)
+            ContainerLayoutSettingsDto? incoming,
+            string? requestedPresetKey)
         {
-            if (incoming is null) return null;
             var existing = await GetByIdAsync(pageId, sectionId, blockId);
             if (existing is not ContainerBlock container) return "Container not found.";
 
-            var purpose = NormalizeContainerPurpose(incoming.Purpose ?? container.ContainerLayout.Purpose);
+            var effectiveKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey);
+            if (!string.IsNullOrWhiteSpace(requestedPresetKey) &&
+                !string.Equals(requestedPresetKey, effectiveKey, StringComparison.Ordinal))
+            {
+                return "A Container's preset is fixed after creation. Create another Container to use a different preset.";
+            }
+            if (incoming is null) return null;
+
+            var children = (await GetBySectionAsync(pageId, sectionId))
+                .Where(block => block.ParentBlockId == blockId)
+                .ToList();
+
+            ContainerPresetDefinition? preset = null;
+            if (ContainerPresetCatalog.TryGetGoverned(container.PresetKey, out var governedPreset))
+            {
+                preset = governedPreset;
+                if (incoming.Mode is not null &&
+                    !string.Equals(incoming.Mode, preset.LayoutMode, StringComparison.Ordinal))
+                    return "The Container layout mode is governed by its preset and cannot be changed.";
+                if (incoming.Purpose is not null &&
+                    !string.Equals(incoming.Purpose, preset.Purpose, StringComparison.Ordinal))
+                    return "The Container purpose is governed by its preset and cannot be changed.";
+                if (incoming.Columns.HasValue && incoming.Columns.Value != preset.Columns)
+                    return "The Container column structure is governed by its preset and cannot be changed.";
+                if (incoming.MobileMode is not null &&
+                    !string.Equals(incoming.MobileMode, preset.MobileMode, StringComparison.Ordinal))
+                    return "The Container responsive behavior is governed by its preset and cannot be changed.";
+
+                var disallowedType = children.Select(BlockType)
+                    .FirstOrDefault(type => !preset.AllowedBlockTypes.Contains(type, StringComparer.Ordinal));
+                if (disallowedType is not null)
+                    return $"The {preset.DisplayName} preset does not allow {disallowedType} Blocks.";
+
+                incoming.SchemaVersion = 3;
+                incoming.Mode = preset.LayoutMode;
+                incoming.Purpose = preset.Purpose;
+                incoming.Columns = preset.Columns;
+                incoming.MobileMode = preset.MobileMode;
+            }
+
+            var requestedMode = preset?.LayoutMode ??
+                                ContainerCapacityPolicy.NormalizeMode(incoming.Mode ?? container.ContainerLayout.Mode);
+            var requestedColumns = preset?.Columns ??
+                                   Math.Clamp(incoming.Columns ?? container.ContainerLayout.Columns, 1, 6);
+            var capacity = preset?.MaximumChildren ??
+                           ContainerCapacityPolicy.MaxChildren(requestedMode, requestedColumns);
+            if (children.Count > capacity)
+                return $"The {requestedMode} Container supports at most {capacity} direct Blocks. Remove Blocks before changing this layout.";
+
+            var purpose = preset?.Purpose ??
+                          NormalizeContainerPurpose(incoming.Purpose ?? container.ContainerLayout.Purpose);
             if (purpose == "composition")
             {
                 incoming.Purpose = "composition";
@@ -386,9 +450,6 @@ namespace FullProject.Services
                 return null;
             }
 
-            var children = (await GetBySectionAsync(pageId, sectionId))
-                .Where(block => block.ParentBlockId == blockId)
-                .ToList();
             var childTypes = children.Select(BlockType).Distinct(StringComparer.Ordinal).ToList();
             if (childTypes.Count > 1)
                 return "A Collection Container can contain only one Block type. Remove mixed children before changing its purpose.";
@@ -434,20 +495,108 @@ namespace FullProject.Services
                     Builders<Block>.Filter.Eq("ContainerLayout.AllowedChildType", BsonNull.Value),
                     Builders<Block>.Filter.Eq("ContainerLayout.AllowedChildType", string.Empty),
                     Builders<Block>.Filter.Eq("ContainerLayout.AllowedChildType", lockType)));
+            var schemaVersion = ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out _) ? 3 : 2;
             var update = Builders<Block>.Update
-                .Set("ContainerLayout.SchemaVersion", 2)
+                .Set("ContainerLayout.SchemaVersion", schemaVersion)
                 .Set("ContainerLayout.AllowedChildType", lockType)
                 .Set(block => block.UpdatedAt, DateTime.UtcNow)
                 .Inc(block => block.Version, 1);
             var result = await _context.BlocksDraft.UpdateOneAsync(filter, update);
             if (result.MatchedCount == 0)
                 throw new ArgumentException("Another Block type locked this Collection. Refresh and try again.");
-            parent.ContainerLayout.SchemaVersion = 2;
+            parent.ContainerLayout.SchemaVersion = schemaVersion;
             parent.ContainerLayout.AllowedChildType = lockType;
         }
 
+        private static void EnforceContainerPresetChildType(ContainerBlock parent, string childType)
+        {
+            if (!ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out var preset)) return;
+            if (preset.AllowedBlockTypes.Contains(childType, StringComparer.Ordinal)) return;
+            throw new ArgumentException(
+                $"The {preset.DisplayName} Container preset does not allow {childType} Blocks.");
+        }
+
+        private async Task<List<Block>> GetDirectChildrenAsync(ContainerBlock parent) =>
+            await _context.BlocksDraft
+                .Find(block => block.PageStableId == parent.PageStableId &&
+                               block.SectionStableId == parent.SectionStableId &&
+                               block.ParentBlockId == parent.Id)
+                .ToListAsync();
+
+        private static void EnforceContainerCapacity(
+            ContainerBlock parent,
+            IReadOnlyCollection<Block> existingChildren)
+        {
+            var capacity = ContainerCapacityPolicy.MaxChildren(
+                parent.PresetKey,
+                parent.ContainerLayout.Mode,
+                parent.ContainerLayout.Columns);
+            if (existingChildren.Count >= capacity)
+                throw new ArgumentException(
+                    $"This {ContainerCapacityPolicy.NormalizeMode(parent.ContainerLayout.Mode)} Container is full ({capacity} Blocks maximum).");
+        }
+
+        private static void AssignContainerPresetSlot(
+            ContainerBlock parent,
+            Block child,
+            IReadOnlyCollection<Block> existingChildren)
+        {
+            if (!ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out var preset) ||
+                preset.Slots.Count == 0)
+                return;
+
+            var childType = BlockType(child);
+            var slot = ContainerCapacityPolicy.NextAvailableSlot(
+                parent.PresetKey,
+                existingChildren.Select(block => block.Authoring?.PresetSlotName),
+                childType);
+
+            if (slot is null)
+                throw new ArgumentException(
+                    $"The {preset.DisplayName} Container has no available slot for {childType} Blocks.");
+
+            child.Authoring ??= new BlockAuthoringPolicy();
+            child.Authoring.SchemaVersion = Math.Max(child.Authoring.SchemaVersion, 1);
+            child.Authoring.PresetSlotName = slot.Key;
+            child.Authoring.PresetSourceId = parent.PresetKey;
+        }
+
+        private static BlockAuthoringPolicy MapAuthoring(BlockAuthoringPolicyDto? dto) => new()
+        {
+            SchemaVersion = Math.Max(dto?.SchemaVersion ?? 1, 1),
+            ContentLocked = dto?.ContentLocked ?? false,
+            GeometryLocked = (dto?.GeometryLocked ?? false) || (dto?.FullLocked ?? false),
+            FullLocked = dto?.FullLocked ?? false,
+            PresetSlotName = null,
+            PresetSourceId = null
+        };
+
         private static string NormalizeContainerPurpose(string? value) =>
             string.Equals(value, "collection", StringComparison.Ordinal) ? "collection" : "composition";
+
+        private static ContainerPresetDefinition PrepareContainerPresetForCreation(
+            ContainerBlockCreateDto container)
+        {
+            var requestedMode = container.ContainerLayout?.Mode ?? container.LayoutMode;
+            var resolvedKey = ContainerPresetCatalog.ResolveCreationKey(container.PresetKey, requestedMode);
+            if (resolvedKey is null ||
+                !ContainerPresetCatalog.TryGetGoverned(resolvedKey, out var preset))
+            {
+                throw new ArgumentException(
+                    "Choose a supported Container preset. New legacy-freeform Containers cannot be created.");
+            }
+
+            container.PresetKey = preset.Key;
+            container.ContainerLayout ??= new ContainerLayoutSettingsDto();
+            container.ContainerLayout.SchemaVersion = 3;
+            container.ContainerLayout.Purpose = preset.Purpose;
+            container.ContainerLayout.Mode = preset.LayoutMode;
+            container.ContainerLayout.Columns = preset.Columns;
+            container.ContainerLayout.MobileMode = preset.MobileMode;
+            if (preset.Purpose != "collection")
+                container.ContainerLayout.AllowedChildType = null;
+            return preset;
+        }
 
         private static string BlockType(Block block) => block switch
         {
@@ -473,13 +622,13 @@ namespace FullProject.Services
             var existing = await GetByIdAsync(pageId, sectionId, blockId);
             if (existing is null) return null;
 
-            if (!string.IsNullOrWhiteSpace(dto.ParentBlockId) &&
-                !string.Equals(dto.ParentBlockId, existing.ParentBlockId, StringComparison.Ordinal))
+            if (dto.ParentBlockId is not null)
             {
-                var requestedParent = await GetByIdAsync(pageId, sectionId, dto.ParentBlockId);
-                if (requestedParent is not ContainerBlock containerParent)
-                    throw new ArgumentException("The selected parent must be a Container in the same Page and Section.");
-                await EnforceCollectionChildTypeAsync(containerParent, BlockType(existing));
+                var currentParentId = string.IsNullOrWhiteSpace(existing.ParentBlockId) ? null : existing.ParentBlockId;
+                var requestedParentId = string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId;
+                if (!string.Equals(currentParentId, requestedParentId, StringComparison.Ordinal))
+                    throw new ArgumentException(
+                        "A Block's Container membership is fixed after creation. Container-owned Blocks cannot be released or moved to another Container.");
             }
 
             var baseUpdates = new List<UpdateDefinition<Block>>
@@ -698,6 +847,16 @@ namespace FullProject.Services
             string? blockId,
             string? requestedParentId)
         {
+            if (!string.IsNullOrWhiteSpace(blockId) && requestedParentId is not null)
+            {
+                var existing = await GetByIdAsync(pageId, sectionId, blockId);
+                if (existing is null) return "Block not found.";
+                var currentParentId = string.IsNullOrWhiteSpace(existing.ParentBlockId) ? null : existing.ParentBlockId;
+                var normalizedParentId = string.IsNullOrWhiteSpace(requestedParentId) ? null : requestedParentId;
+                if (!string.Equals(currentParentId, normalizedParentId, StringComparison.Ordinal))
+                    return "A Block's Container membership is fixed after creation. Container-owned Blocks cannot be released or moved to another Container.";
+            }
+
             if (string.IsNullOrWhiteSpace(requestedParentId)) return null;
             if (!string.IsNullOrWhiteSpace(blockId) && requestedParentId == blockId)
                 return "A Block cannot be its own parent Container.";
@@ -1121,6 +1280,16 @@ namespace FullProject.Services
                     NormalizeBlockZone(block.BlockZone) != zone ||
                     NormalizeSlot(block.ColumnSlotId) != slot))
                 return false;
+
+            if (!string.IsNullOrWhiteSpace(parent))
+            {
+                var parentContainer = sectionBlocks.OfType<ContainerBlock>()
+                    .FirstOrDefault(container => container.Id == parent);
+                if (parentContainer is not null &&
+                    ContainerPresetCatalog.TryGetGoverned(parentContainer.PresetKey, out var preset) &&
+                    !preset.ChildOrderingAllowed)
+                    return false;
+            }
 
             var peerIds = sectionBlocks
                 .Where(block => NormalizeParent(block.ParentBlockId) == parent)

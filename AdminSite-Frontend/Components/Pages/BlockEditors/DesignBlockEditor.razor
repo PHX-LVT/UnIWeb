@@ -48,186 +48,6 @@
     </div>
 }
 
-@if (Block.Type == "container" && ShowAdvancedFields)
-{
-    <div class="container-governance-panel">
-        <div class="container-pattern-settings">
-            <label class="form-group">
-                <span class="form-label">@T("ContainerPurpose")</span>
-                <select class="form-control" @bind="_containerPurpose">
-                    <option value="collection">@T("Collection")</option>
-                    <option value="composition">@T("Composition")</option>
-                </select>
-            </label>
-            <div class="form-group">
-                <span class="form-label">@T("CollectionChildType")</span>
-                <div class="container-policy-value">
-                    @if (_containerPurpose == "composition")
-                    {
-                        <span>@T("MixedBlockTypes")</span>
-                    }
-                    else if (string.IsNullOrWhiteSpace(_allowedChildType))
-                    {
-                        <span>@T("LocksAfterFirstChild")</span>
-                    }
-                    else
-                    {
-                        <strong>@T(BlockTypeLabelKey(_allowedChildType))</strong><i class="fas fa-lock"></i>
-                    }
-                </div>
-            </div>
-        </div>
-        <p class="container-layout-note">@T(_containerPurpose == "collection" ? "CollectionPurposeHint" : "CompositionPurposeHint")</p>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-        <div class="form-group">
-            <label class="form-label">@T("ChildLayout")</label>
-            <select class="form-control" @bind="_layoutMode">
-                <option value="stack">@T("Stack")</option>
-                <option value="row">@T("Row")</option>
-                <option value="grid">@T("Grid")</option>
-                <option value="split">@T("Split")</option>
-                <option value="orbit">@T("Orbit")</option>
-                <option value="semicircle">@T("Semicircle")</option>
-                <option value="freeform">@T("Freeform")</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label class="form-label">@T("Gap")</label>
-            <DxComboBox Data="_gapOptions" @bind-Value="_gap" CssClass="w-100" />
-        </div>
-    </div>
-    <div class="container-pattern-settings container-pattern-settings--three">
-        <label class="form-group">
-            <span class="form-label">@T("AlignItems")</span>
-            <select class="form-control" @bind="_alignItems">
-                @foreach (var value in _alignOptions)
-                {
-                    <option value="@value">@T(value switch { "start" => "Start", "center" => "Center", "end" => "End", _ => "Stretch" })</option>
-                }
-            </select>
-        </label>
-        <label class="form-group">
-            <span class="form-label">@T("DistributeItems")</span>
-            <select class="form-control" @bind="_justifyContent">
-                @foreach (var value in _justifyOptions)
-                {
-                    <option value="@value">@T(value switch { "center" => "Center", "end" => "End", "between" => "SpaceBetween", "around" => "SpaceAround", "evenly" => "SpaceEvenly", _ => "Start" })</option>
-                }
-            </select>
-        </label>
-        <label class="form-group container-check-setting">
-            <input type="checkbox" @bind="_wrap" />
-            <span class="form-label">@T("WrapChildren")</span>
-        </label>
-    </div>
-    @if (_layoutMode == "grid")
-    {
-        <div class="container-pattern-settings">
-            <label class="form-group">
-                <span class="form-label">@T("ContainerColumns")</span>
-                <input class="form-control" type="number" min="1" max="6" @bind="_columns" />
-            </label>
-        </div>
-    }
-    else if (_layoutMode == "split")
-    {
-        <div class="container-layout-note">@T("SplitContainerHint")</div>
-    }
-    @if (_layoutMode == "orbit")
-    {
-        <div class="container-pattern-settings container-pattern-settings--three">
-            <label class="form-group">
-                <span class="form-label">@T("Radius")</span>
-                <input class="form-control" type="number" min="80" max="480" step="8" @bind="_orbitRadius" />
-            </label>
-            <label class="form-group">
-                <span class="form-label">@T("StartAngle")</span>
-                <input class="form-control" type="number" min="-360" max="360" step="5" @bind="_orbitStartAngle" />
-            </label>
-            <label class="form-group">
-                <span class="form-label">@T("EndAngle")</span>
-                <input class="form-control" type="number" min="-360" max="360" step="5" @bind="_orbitEndAngle" />
-            </label>
-        </div>
-        <div class="container-pattern-settings container-pattern-settings--three">
-            <label class="form-group">
-                <span class="form-label">@T("OrbitDirection")</span>
-                <select class="form-control" @bind="_orbitDirection">
-                    <option value="clockwise">@T("Clockwise")</option>
-                    <option value="counter-clockwise">@T("CounterClockwise")</option>
-                </select>
-            </label>
-            <label class="form-group">
-                <span class="form-label">@T("CompactRadius")</span>
-                <input class="form-control" type="number" min="60" max="220" step="4" @bind="_compactRadius" />
-            </label>
-            <label class="form-group">
-                <span class="form-label">@T("CompactChildWidth")</span>
-                <input class="form-control" type="number" min="72" max="180" step="4" @bind="_compactChildWidth" />
-            </label>
-        </div>
-    }
-    else if (_layoutMode == "semicircle")
-    {
-        <div class="container-pattern-settings container-pattern-settings--three">
-            <label class="form-group">
-                <span class="form-label">@T("Radius")</span>
-                <input class="form-control" type="number" min="80" max="480" step="8" @bind="_semicircleRadius" />
-            </label>
-            <label class="form-group">
-                <span class="form-label">@T("StartAngle")</span>
-                <input class="form-control" type="number" min="-360" max="360" step="5" @bind="_semicircleStartAngle" />
-            </label>
-            <label class="form-group">
-                <span class="form-label">@T("EndAngle")</span>
-                <input class="form-control" type="number" min="-360" max="360" step="5" @bind="_semicircleEndAngle" />
-            </label>
-        </div>
-    }
-
-    <div class="container-shared-appearance">
-        <label class="form-group container-check-setting">
-            <input type="checkbox" @bind="_shareAppearance" />
-            <span class="form-label">@T("ShareChildAppearance")</span>
-        </label>
-        @if (_shareAppearance)
-        {
-            <p class="container-layout-note">@T("ShareChildAppearanceHint")</p>
-            <div class="container-pattern-settings container-pattern-settings--three">
-                <label class="form-group">
-                    <span class="form-label">@T("BackgroundMode")</span>
-                    <select class="form-control" @bind="_sharedAppearance.BackgroundMode">
-                        <option value="none">@T("None")</option>
-                        <option value="color">@T("CustomColor")</option>
-                        <option value="theme-primary">@T("ThemePrimary")</option>
-                        <option value="theme-accent">@T("ThemeAccent")</option>
-                        <option value="theme-background">@T("ThemeBackground")</option>
-                    </select>
-                </label>
-                @if (_sharedAppearance.BackgroundMode == "color")
-                {
-                    <label class="form-group"><span class="form-label">@T("BackgroundColor")</span><input class="form-control" type="color" @bind="_sharedAppearance.BackgroundColor" /></label>
-                }
-                <label class="form-group"><span class="form-label">@T("TextColor")</span><input class="form-control" type="color" @bind="_sharedAppearance.TextColor" /></label>
-                <label class="form-group">
-                    <span class="form-label">@T("Padding")</span>
-                    <select class="form-control" @bind="_sharedAppearance.Padding">
-                        @foreach (var value in _gapOptions) { <option value="@value">@T(char.ToUpperInvariant(value[0]) + value[1..])</option> }
-                    </select>
-                </label>
-                <label class="form-group"><span class="form-label">@T("BorderWidth")</span><input class="form-control" type="number" min="0" max="20" @bind="_sharedAppearance.BorderWidth" /></label>
-                <label class="form-group">
-                    <span class="form-label">@T("BorderRadius")</span>
-                    <select class="form-control" @bind="_sharedAppearance.BorderRadius">
-                        @foreach (var value in new[] { "none", "small", "medium", "large", "pill", "circle" }) { <option value="@value">@T(char.ToUpperInvariant(value[0]) + value[1..])</option> }
-                    </select>
-                </label>
-            </div>
-        }
-    </div>
-}
-
 @if (Block.Type is "button" or "metric" or "icon")
 {
     <div class="form-group">
@@ -279,7 +99,7 @@
             <LangField @bind-Value="_buttonLabel" Languages="Languages" NullText="Learn More" />
         </div>
     }
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:.75rem">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem">
         <ButtonActionFields @bind-Action="_action"
                             @bind-Href="_href"
                             @bind-FormDefinitionId="_formDefinitionId"
@@ -287,13 +107,6 @@
                             ExternalActionValue="externalUrl"
                             DownloadActionValue="downloadFile"
                             AdminLanguage="AdminLanguage" />
-        @if (Block.Type == "button" && ShowAdvancedFields)
-        {
-            <div class="form-group">
-                <label class="form-label">@T("Style")</label>
-                <DxComboBox Data="_buttonStyles" @bind-Value="_style" CssClass="w-100" />
-            </div>
-        }
     </div>
 }
 
@@ -326,49 +139,12 @@
 </div>
 
 <style>
-    .container-pattern-settings {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: .75rem;
-    }
-
-    .container-pattern-settings--three {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
     .design-list-item {
         display: grid;
         grid-template-columns: 150px minmax(0, 1fr) 42px;
         gap: .5rem;
         align-items: start;
         margin-bottom: .5rem;
-    }
-
-    .container-layout-note {
-        margin: .4rem 0 .75rem;
-        color: var(--text-muted);
-        font-size: .82rem;
-        line-height: 1.45;
-    }
-
-    .container-governance-panel, .container-shared-appearance { margin-bottom:.85rem; padding:.8rem; border:1px solid var(--border); border-radius:9px; background:var(--bg); }
-    .container-policy-value { display:flex; min-height:38px; align-items:center; gap:.45rem; padding:.45rem .65rem; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text-muted); font-size:.8rem; }
-    .container-policy-value i { color:#b45309; }
-
-    .container-check-setting {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: .5rem;
-        min-height: 38px;
-        padding-top: 1.35rem;
-    }
-
-    @@media (max-width: 860px) {
-        .container-pattern-settings,
-        .container-pattern-settings--three {
-            grid-template-columns: 1fr;
-        }
     }
 </style>
 
@@ -378,7 +154,6 @@
     [Parameter] public string SectionId { get; set; } = string.Empty;
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
-    [Parameter] public bool ShowAdvancedFields { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private string _icon = string.Empty;
@@ -399,10 +174,6 @@
     private string? _suffix;
     private List<BulletListItemModel> _items = new();
     private bool _saving;
-    private List<string> _buttonStyles = new() { "filled", "outline", "ghost" };
-    private List<string> _gapOptions = new() { "none", "small", "medium", "large" };
-    private List<string> _alignOptions = new() { "stretch", "start", "center", "end" };
-    private List<string> _justifyOptions = new() { "start", "center", "end", "between", "around", "evenly" };
     private string _layoutMode = "stack";
     private int _columns = 2;
     private string _gap = "medium";

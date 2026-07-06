@@ -1,6 +1,6 @@
 # UIWEB CMS: Complete Project Handoff
 
-Last reconciled: 2026-07-03  
+Last reconciled: 2026-07-06
 Active workspace: `F:\0-Project\Test1\0-AdminSite-CompleteProject`  
 Active branch at reconciliation: `Indev3-Overhaul3`
 
@@ -27,6 +27,7 @@ Read the files in this order:
 6. [05-REFERENCES-AND-MIGRATION.md](05-REFERENCES-AND-MIGRATION.md)
 7. [06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md](06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md)
 8. [07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md](07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md)
+9. [08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md](08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md)
 
 ## 2. Source-Of-Truth Hierarchy
 
@@ -140,7 +141,7 @@ Still remaining from the original 17 phases:
 
 A second UX correction plan was agreed after real use showed that the Block Editor exposed too many raw controls. That full plan and its per-phase implementation status are in [07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md](07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md); underlying contracts alone are never evidence of UX completion.
 
-As of 2026-07-03, UX correction Phases 1-16 are implemented in the active worktree. The final Arrange correction batch also makes the Block dropdown the sole layer authority, keeps the toolbar to one row, adds persistent press-and-hold rotation, removes appearance iframe reloads, replaces raw Text Block HTML editing with localized visual editing, makes empty Container boundaries follow their outlines, simplifies locks to Content/Geometry, and adds graph-aware toolbar deletion. SharedComponents, AdminSite and API builds plus JavaScript/diff checks pass. Authenticated visual/runtime and broad workflow closure remain pending.
+As of 2026-07-06, the earlier UX correction phases and the newer ten-phase Block Editor redesign are implemented in the active worktree. The redesign now uses Preview/Edit as the only global modes, launches Arrange Blocks from a specific Section's Blocks tab, scopes the Block list to that Section, persists governed Container presets/slots, enforces containment, and gives Container deletion an explicit recursive warning. Phase 9 was completed through the user-approved no-data path: no bulk Test-2 migration was run because Test-2 contains no migration-worthy content, while legacy Containers remain compatible through `legacy-freeform`. See [08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md](08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md) for the phase-by-phase acceptance record.
 
 ## 9. User Collaboration Rules
 

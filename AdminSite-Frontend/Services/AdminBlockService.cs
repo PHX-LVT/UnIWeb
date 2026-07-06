@@ -48,9 +48,9 @@ namespace AdminSite.Services
             _http.PutAsync<object>($"{Base(pageId, sectionId)}/{blockId}/visibility",
                 new VisibilityRequest { Visible = visible });
 
-        public Task<ApiResponse<object>> ReorderAsync(string pageId, string sectionId, List<string> orderedIds) =>
+        public Task<ApiResponse<object>> ReorderAsync(string pageId, string sectionId, List<string> ordereidIds) =>
             _http.PutAsync<object>($"{Base(pageId, sectionId)}/reorder",
-                new ReorderRequest { OrderedIds = orderedIds });
+                new ReorderRequest { OrderedIds = ordereidIds });
 
         public Task<ApiResponse<BlockAuthoringOperationResponseDto>> UpdateLayoutsAsync(
             string pageId, string sectionId, BlockBulkLayoutUpdateDto dto) =>
@@ -60,15 +60,6 @@ namespace AdminSite.Services
             string pageId, string sectionId, IEnumerable<string> blockIds) =>
             _http.PostAsync<BlockAuthoringOperationResponseDto>($"{Base(pageId, sectionId)}/authoring/duplicate",
                 new BlockDuplicateRequestDto { BlockIds = blockIds.ToList() });
-
-        public Task<ApiResponse<BlockAuthoringOperationResponseDto>> GroupAsync(
-            string pageId, string sectionId, IEnumerable<string> blockIds, Dictionary<string, string> title) =>
-            _http.PostAsync<BlockAuthoringOperationResponseDto>($"{Base(pageId, sectionId)}/authoring/group",
-                new BlockGroupRequestDto { BlockIds = blockIds.ToList(), Title = title });
-
-        public Task<ApiResponse<BlockAuthoringOperationResponseDto>> UngroupAsync(
-            string pageId, string sectionId, string containerId) =>
-            _http.PostAsync<BlockAuthoringOperationResponseDto>($"{Base(pageId, sectionId)}/authoring/ungroup/{containerId}", new { });
 
         public Task<ApiResponse<object>> DeleteGraphsAsync(
             string pageId, string sectionId, IEnumerable<string> blockIds) =>

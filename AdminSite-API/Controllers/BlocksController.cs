@@ -144,7 +144,7 @@ namespace FullProject.Controllers
             if (dto is ContainerBlockUpdateDto containerDto)
             {
                 var policyError = await _service.PrepareContainerPolicyUpdateAsync(
-                    pageId, sectionId, blockId, containerDto.ContainerLayout);
+                    pageId, sectionId, blockId, containerDto.ContainerLayout, containerDto.PresetKey);
                 if (policyError is not null)
                     return BadRequest(ApiResult.BadRequest(policyError));
                 var diagramError = await _service.ValidateDiagramAnchorsAsync(
@@ -184,15 +184,10 @@ namespace FullProject.Controllers
         public async Task<IActionResult> Delete(string pageId, string sectionId, string blockId)
         {
             if (!CanUsePageBuilder) return Forbid();
-            var lockError = await _authoring.ValidateContentMutationAsync(pageId, sectionId, blockId);
-            if (lockError is not null)
-                return BadRequest(ApiResult.BadRequest(lockError));
-            var diagramError = await _service.ValidateDiagramDeletionAsync(pageId, sectionId, blockId);
-            if (diagramError is not null)
-                return BadRequest(ApiResult.BadRequest(diagramError));
-            var ok = await _service.DeleteAsync(pageId, sectionId, blockId);
-            if (!ok) return NotFound(ApiResult.NotFound("Block not found."));
-            return Ok(ApiResult.Ok("Block deleted."));
+            var error = await _authoring.DeleteGraphsAsync(pageId, sectionId, [blockId]);
+            if (error is not null)
+                return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok("Block graph deleted."));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId/visibility
@@ -251,37 +246,6 @@ namespace FullProject.Controllers
             {
                 BlockIds = blocks!.Select(block => block.Id).ToList()
             }, "Blocks duplicated."));
-        }
-
-        [HttpPost("authoring/group")]
-        public async Task<IActionResult> Group(
-            string pageId,
-            string sectionId,
-            [FromBody] BlockGroupRequestDto dto)
-        {
-            if (!CanUsePageBuilder) return Forbid();
-            var (container, error) = await _authoring.GroupAsync(pageId, sectionId, dto);
-            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
-            return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
-            {
-                ContainerId = container!.Id,
-                BlockIds = dto.BlockIds
-            }, "Blocks grouped."));
-        }
-
-        [HttpPost("authoring/ungroup/{containerId}")]
-        public async Task<IActionResult> Ungroup(
-            string pageId,
-            string sectionId,
-            string containerId)
-        {
-            if (!CanUsePageBuilder) return Forbid();
-            var (ids, error) = await _authoring.UngroupAsync(pageId, sectionId, containerId);
-            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
-            return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
-            {
-                BlockIds = ids!
-            }, "Container ungrouped."));
         }
 
         [HttpPost("authoring/delete-graphs")]
@@ -503,6 +467,7 @@ namespace FullProject.Controllers
                     dto.Description = icon.Description;
                     break;
                 case ContainerBlock container:
+                    dto.PresetKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey);
                     dto.Title = container.Title;
                     dto.ContainerLayout = BlockContractService.ToAdminContainerLayout(container.ContainerLayout);
                     dto.LayoutMode = container.LayoutMode;

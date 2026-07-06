@@ -18,6 +18,7 @@ public sealed record BlockStarterVariantDefinition(
     string TextAlign = "inherit",
     string Padding = "medium",
     string? ButtonStyle = null,
+    string? ContainerPresetKey = null,
     string? ContainerMode = null,
     int ContainerColumns = 2);
 
@@ -103,9 +104,13 @@ public static class BlockStarterVariantCatalog
             ],
             ["container"] =
             [
-                V("stack", "StarterStackCollection", "StarterStackCollectionHint", "container-stack", 8, 6, 8, containerMode: "stack"),
-                V("grid", "StarterGridCollection", "StarterGridCollectionHint", "container-grid", 10, 7, 10, containerMode: "grid", containerColumns: 2),
-                V("advanced", "StarterAdvancedComposition", "StarterAdvancedCompositionHint", "container-advanced", 10, 8, 10, containerMode: "freeform")
+                V("stack", "StarterStackCollection", "StarterStackCollectionHint", "container-stack", 8, 6, 8, containerPresetKey: ContainerPresetCatalog.StackKey, containerMode: "stack"),
+                V("row", "StarterRowCollection", "StarterRowCollectionHint", "container-row", 10, 5, 10, containerPresetKey: ContainerPresetCatalog.RowKey, containerMode: "row"),
+                V("grid", "StarterGridCollection", "StarterGridCollectionHint", "container-grid", 10, 7, 10, containerPresetKey: ContainerPresetCatalog.GridKey, containerMode: "grid", containerColumns: 2),
+                V("split", "StarterSplitContainer", "StarterSplitContainerHint", "container-split", 10, 6, 10, containerPresetKey: ContainerPresetCatalog.SplitKey, containerMode: "split"),
+                V("orbit", "StarterOrbitContainer", "StarterOrbitContainerHint", "container-orbit", 10, 8, 10, containerPresetKey: ContainerPresetCatalog.OrbitKey, containerMode: "orbit"),
+                V("semicircle", "StarterSemicircleContainer", "StarterSemicircleContainerHint", "container-semicircle", 10, 7, 10, containerPresetKey: ContainerPresetCatalog.SemicircleKey, containerMode: "semicircle"),
+                V("advanced", "StarterAdvancedComposition", "StarterAdvancedCompositionHint", "container-advanced", 10, 8, 10, containerPresetKey: ContainerPresetCatalog.AdvancedFreeformKey, containerMode: "freeform")
             ]
         };
 
@@ -165,27 +170,35 @@ public static class BlockStarterVariantCatalog
         "button" => new ButtonBlockCreateDto { Style = variant.ButtonStyle ?? "filled" },
         "map" => new MapBlockCreateDto(),
         "form" => new FormBlockCreateDto(),
-        "container" => new ContainerBlockCreateDto
+        "container" => CreateContainer(variant),
+        _ => new TextBlockCreateDto()
+    };
+
+    private static ContainerBlockCreateDto CreateContainer(BlockStarterVariantDefinition variant)
+    {
+        var key = variant.ContainerPresetKey ?? ContainerPresetCatalog.KeyForMode(variant.ContainerMode);
+        var preset = ContainerPresetCatalog.ForExisting(key);
+        return new ContainerBlockCreateDto
         {
+            PresetKey = preset.Key,
             ContainerLayout = new ContainerLayoutSettingsDto
             {
-                SchemaVersion = 2,
-                Purpose = variant.Key == "advanced" ? "composition" : "collection",
+                SchemaVersion = 3,
+                Purpose = preset.Purpose,
                 AllowedChildType = null,
-                Mode = variant.ContainerMode ?? "stack",
-                Columns = variant.ContainerColumns,
+                Mode = preset.LayoutMode,
+                Columns = preset.Columns,
                 Gap = "medium",
                 AlignItems = "stretch",
                 JustifyContent = "start",
                 Wrap = true,
-                MobileMode = "stack",
+                MobileMode = preset.MobileMode,
                 CompactRadius = 120,
                 CompactChildWidth = 120,
                 GeometryLocked = false
             }
-        },
-        _ => new TextBlockCreateDto()
-    };
+        };
+    }
 
     private static BlockStarterVariantDefinition V(
         string key,
@@ -203,7 +216,8 @@ public static class BlockStarterVariantCatalog
         string align = "inherit",
         string padding = "medium",
         string? buttonStyle = null,
+        string? containerPresetKey = null,
         string? containerMode = null,
         int containerColumns = 2) =>
-        new(key, label, description, preview, width, height, span, aspect, shape, background, border, shadow, align, padding, buttonStyle, containerMode, containerColumns);
+        new(key, label, description, preview, width, height, span, aspect, shape, background, border, shadow, align, padding, buttonStyle, containerPresetKey, containerMode, containerColumns);
 }

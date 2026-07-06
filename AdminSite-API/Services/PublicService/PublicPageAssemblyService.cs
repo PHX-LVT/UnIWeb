@@ -1,4 +1,5 @@
 using Contracts.Public;
+using Contracts.Admin;
 using Contracts.Forms;
 using FullProject.Models;
 using FullProject.Services.BlockServices;
@@ -1216,6 +1217,7 @@ namespace FullProject.Services.PublicService
                 ContainerBlock container => new PublicContainerBlockDto
                 {
                     Type = "container",
+                    PresetKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey),
                     Title = container.Title,
                     ContainerLayout = BlockContractService.ToPublicContainerLayout(container.ContainerLayout),
                     LayoutMode = container.LayoutMode,

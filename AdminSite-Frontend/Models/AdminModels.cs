@@ -486,6 +486,7 @@ namespace AdminSite.Models
         public string? Action { get; set; }
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
+        public string? PresetKey { get; set; }
         public string? LayoutMode { get; set; }
         public ContainerLayoutSettingsModel ContainerLayout { get; set; } = new();
         public int? Columns { get; set; }

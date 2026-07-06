@@ -168,20 +168,18 @@ The experiment established:
 
 It also exposed the issues that drove the UX correction plan: visible Container cards, blank starters, an overloaded editor, disconnected Block-list ordering and inconsistent Canvas scale. The correction implementation now addresses those issues; authenticated Test-2 acceptance remains the verification gate.
 
-## 3. Immediate Roadmap: Block UX Correction
+## 3. Immediate Roadmap: Block Editor Redesign
 
-The complete plan is in [07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md](07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md).
+The earlier correction plan is in [07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md](07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md). The newer Preview/Edit, Section-scoped Arrange and governed-Container direction is audited in [08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md](08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md).
 
-The standalone safety baseline was removed because current persisted Blocks exist only on Test-2. UX correction Phases 1-16 are implemented in the active worktree. The final Arrange correction additionally established a one-line static toolbar, dropdown-owned layer order, live non-reloading appearance patches, persistent rotation, visual-only Text Block editing, outline-owned empty Container sizing, two-toggle locks and graph-aware deletion. Authenticated runtime QA remains pending.
+The standalone safety baseline was removed because current persisted Blocks exist only on Test-2. The earlier UX correction phases and the newer ten-phase redesign are implemented in the active worktree. The redesign now has the canonical Container preset-key and named-slot contract, Section dirty-state guard before Arrange, one-owner control split, Section-scoped Block list, enforced containment and recursive Container deletion. Phase 9 used the user-approved no-data path: no bulk Test-2 migration was run, and compatibility is handled by `legacy-freeform` for old missing/unknown Container presets.
 
-Remaining execution order:
+Next execution order after the completed redesign:
 
-1. Authenticated Test-2 acceptance across Preview/Edit/Arrange.
-2. Draft/publish/reset/revision/clone/preset/import compatibility closure.
-3. Desktop/tablet/physical-phone and keyboard/focus acceptance.
-4. Reference preset library.
-5. Strict new Block type gate audit.
-6. Page-by-page HTML migration only after explicit approval.
+1. Use Test-2 for any future destructive Page Builder QA unless the user approves another Page.
+2. Continue the reference preset library and strict new Block type gate audit.
+3. Begin page-by-page HTML migration only after explicit approval.
+4. Keep desktop/tablet/physical-phone and keyboard/focus checks in the standard Page Builder acceptance pass for future UI changes.
 
 Do not begin page-wide HTML migration before creation UX, Container semantics and responsive behavior are understandable.
 
@@ -371,6 +369,7 @@ Potential future capabilities:
 
 ### 6.4 Visual Authoring Maturity
 
+- Advanced Block controls are intentionally postponed until after the Notification Overhaul. Do not revive the removed inline BlockEditor advanced panels; any return should be a designed modal with a new UX contract.
 - richer starter/preset library;
 - visual connector drawing;
 - focal-point media tools;

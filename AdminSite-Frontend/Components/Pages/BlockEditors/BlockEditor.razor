@@ -18,18 +18,27 @@ else
             @T("Blocks") (@_blocks.Count)
         </span>
         <button class="btn-admin btn-primary"
+                disabled="@(!AddTargetHasCapacity)"
+                title="@AddTargetTitle"
                 @onclick="TogglePicker">
             <i class="fas fa-plus"></i> @T("AddBlock")
         </button>
     </div>
 
-    <BlockCreationWizard Open="_showPicker"
-                         Busy="_creatingBlock"
-                         AdminLanguage="@AdminLanguage"
-                         AllowedTypes="@AddTargetAllowedTypes"
-                         ConstraintLabel="@AddTargetConstraintLabel"
-                         Confirmed="AddBlock"
-                         Cancelled="ClosePicker" />
+    @if (_showPicker)
+    {
+        <div class="ez-modal-overlay block-create-modal-overlay" @onclick="ClosePicker">
+            <div class="ez-modal block-create-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+                <BlockCreationWizard Open="true"
+                                     Busy="_creatingBlock"
+                                     AdminLanguage="@AdminLanguage"
+                                     AllowedTypes="@AddTargetAllowedTypes"
+                                     ConstraintLabel="@AddTargetConstraintLabel"
+                                     Confirmed="AddBlock"
+                                     Cancelled="ClosePicker" />
+            </div>
+        </div>
+    }
 
     @if (!_blocks.Any())
     {
@@ -52,34 +61,55 @@ else
                  data-block-parent="@NormalizeParent(block.ParentBlockId)"
                  data-block-zone="@NormalizeBlockZone(block.BlockZone)"
                  data-block-slot="@NormalizeSlot(block.ColumnSlotId)"
-                 data-block-sort-locked="@((block.Authoring.FullLocked || block.Authoring.GeometryLocked).ToString().ToLowerInvariant())"
+                 data-block-sort-locked="@((block.Authoring.FullLocked || block.Authoring.GeometryLocked || !PresetAllowsChildReorder(block)).ToString().ToLowerInvariant())"
                  style="--block-depth: @entry.Depth;">
             <div class="block-card @(block.Id == _activeBlockId ? "active" : "")">
                 <div class="block-card-header"
                      @onclick="() => ToggleBlock(block.Id)">
-                    <div style="display:flex;align-items:center;gap:.6rem">
-                        <i class="fas fa-grip-vertical text-muted block-card-drag"
-                           title="@T("DragToReorder")"></i>
+                    <div class="block-card-header__identity">
+                        @if (!UseArrangeWorkspace)
+                        {
+                            <i class="fas fa-grip-vertical text-muted block-card-drag"
+                               title="@T("DragToReorder")"></i>
+                        }
                         <span class="block-type-badge">
                             @BlockIcon(block.Type) @block.Type
                         </span>
+                        <strong class="block-card-name">@BlockDisplayName(block)</strong>
                         @if (!block.Visible)
                         {
-                            <span class="badge badge-draft">@T("Hidden")</span>
+                            <span class="block-state-badge block-state-badge--hidden" title="@T("Hidden")">
+                                <i class="fas fa-eye-slash"></i><span>@T("Hidden")</span>
+                            </span>
+                        }
+                        @if (block.Authoring.FullLocked || block.Authoring.ContentLocked)
+                        {
+                            <span class="block-state-badge block-state-badge--content-lock" title="@T("ContentLockedHint")">
+                                <i class="fas fa-lock"></i><span>@T("ContentLocked")</span>
+                            </span>
+                        }
+                        @if (block.Authoring.FullLocked || block.Authoring.GeometryLocked)
+                        {
+                            <span class="block-state-badge block-state-badge--geometry-lock" title="@T("GeometryLockedHint")">
+                                <i class="fas fa-vector-square"></i><span>@T("GeometryLockState")</span>
+                            </span>
                         }
                     </div>
-                    <div style="display:flex;align-items:center;gap:.4rem"
+                    <div class="block-card-header__actions"
                          @onclick:stopPropagation="true">
                         <button class="visibility-toggle
                                 @(block.Visible ? "visible" : "hidden")"
                                 disabled="@(block.Authoring.FullLocked || block.Authoring.ContentLocked)"
+                                title="@T(block.Visible ? "Hide" : "Show")"
+                                aria-label="@T(block.Visible ? "Hide" : "Show")"
                                 @onclick="() => ToggleVisibility(block)">
                             <i class="fas @(block.Visible
                                 ? "fa-eye" : "fa-eye-slash")"></i>
                         </button>
                         <button class="btn-admin btn-danger"
                                 style="padding:3px 8px"
-                                disabled="@(block.Authoring.FullLocked || block.Authoring.ContentLocked)"
+                                disabled="@(block.Authoring.FullLocked || block.Authoring.ContentLocked || IsRequiredContainerSlot(block))"
+                                title="@(IsRequiredContainerSlot(block) ? T("RequiredContainerSlotCannotDelete") : T("Delete"))"
                                 @onclick="() => _confirmDelete = block">
                             <i class="fas fa-trash"></i>
                         </button>
@@ -118,26 +148,6 @@ else
                                     </div>
                                 </div>
 
-                                <div class="block-focused-inspector__organization">
-                                    @if (_fullBlock.Type != "container")
-                                    {
-                                        <label>
-                                            <span>@T("ParentContainer")</span>
-                                            <select @bind="_parentBlockId" disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.GeometryLocked)">
-                                                <option value="">@T("TopLevel")</option>
-                                                @foreach (var container in ContainerOptions)
-                                                {
-                                                    <option value="@container.Id">@BlockDisplayName(container)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                    }
-                                    <div class="block-focused-inspector__path">
-                                        <span>@T("Hierarchy")</span>
-                                        <strong>@BlockHierarchyPath(_fullBlock)</strong>
-                                    </div>
-                                </div>
-
                                 @if (!string.IsNullOrWhiteSpace(_fullBlock.Authoring.PresetSlotName))
                                 {
                                     <div class="block-focused-inspector__preset">
@@ -146,6 +156,18 @@ else
                                     </div>
                                 }
 
+                                @if (UseArrangeWorkspace)
+                                {
+                                    <div class="block-focused-inspector__workspace-note" role="note">
+                                        <i class="fas fa-object-group"></i>
+                                        <span>
+                                            <strong>@T("Content")</strong>
+                                            <small>@T("BlockContentOnlyHint")</small>
+                                        </span>
+                                    </div>
+                                }
+                                else
+                                {
                                 <div class="block-focused-inspector__actions">
                                     <button type="button" class="btn-admin btn-ghost"
                                             disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked)"
@@ -153,23 +175,13 @@ else
                                         <i class="fas @(_fullBlock.Visible ? "fa-eye-slash" : "fa-eye")"></i>
                                         @T(_fullBlock.Visible ? "Hide" : "Show")
                                     </button>
-                                    @if (_fullBlock.Type != "container")
-                                    {
-                                        <button type="button" class="btn-admin btn-ghost"
-                                                disabled="@(_savingLayout || _fullBlock.Authoring.FullLocked || _fullBlock.Authoring.GeometryLocked)"
-                                                @onclick="SaveBlockLayout">
-                                            <i class="fas fa-sitemap"></i> @T("SaveOrganization")
-                                        </button>
-                                    }
-                                    <button type="button" class="btn-admin btn-ghost" @onclick="ToggleAdvancedInspector">
-                                        <i class="fas fa-sliders-h"></i> @T(_showAdvancedInspector ? "CloseAdvanced" : "Advanced")
-                                    </button>
                                     <button type="button" class="btn-admin btn-danger"
-                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked)"
+                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked || IsRequiredContainerSlot(_fullBlock))"
                                             @onclick="() => _confirmDelete = _fullBlock">
                                         <i class="fas fa-trash"></i> @T("Delete")
                                     </button>
                                 </div>
+                                }
 
                                 <details class="block-focused-inspector__governance">
                                     <summary><i class="fas fa-shield-alt"></i> @T("LocksGovernance")</summary>
@@ -187,480 +199,67 @@ else
                                 </details>
                             </div>
 
-                            @if (_showAdvancedInspector)
+                            @if (UseArrangeWorkspace && _fullBlock.Type == "container")
                             {
-                            <div class="block-layout-panel @((_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.GeometryLocked) ? "block-layout-panel--locked" : "")">
-                                <div class="block-layout-panel__title">@T("PlacementLayout")</div>
-                                @if (_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.GeometryLocked)
-                                {
-                                    <div class="block-layout-panel__lock-notice"><i class="fas fa-lock"></i> @T("GeometryLockedHint")</div>
-                                }
-                                <div class="block-layout-panel__grid">
-                                    @if (SupportsFreeformPositioning)
-                                    {
-                                        <label>
-                                            <span>@T("Positioning")</span>
-                                            <select @bind="_positionMode">
-                                                <option value="flow">@T("Flow")</option>
-                                                <option value="freeform">@T("Freeform")</option>
-                                            </select>
-                                        </label>
-                                    }
-                                    @if (ZoneOptions.Count > 1)
-                                    {
-                                        <label>
-                                            <span>@T("Zone")</span>
-                                            <select @bind="_blockZone">
-                                                @foreach (var option in ZoneOptions)
-                                                {
-                                                    <option value="@option">@option</option>
-                                                }
-                                            </select>
-                                        </label>
-                                    }
-                                    <label>
-                                        <span>@T("Width")</span>
-                                        <select @bind="_layoutWidth">
-                                            @foreach (var option in _widthOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    @if (UsesGridPlacement)
-                                    {
-                                        <label>
-                                            <span>@T("ColumnSpan")</span>
-                                            <input type="number" min="1" max="12" @bind="_layoutColumnSpan" />
-                                        </label>
-                                    }
-                                    @if (UsesVerticalAlignment)
-                                    {
-                                        <div class="block-layout-panel__icon-field">
-                                            <span>@T("VerticalAlignment")</span>
-                                            <div class="block-layout-panel__icon-options" role="group" aria-label="@T("VerticalAlignment")">
-                                                @foreach (var option in _alignOptions)
-                                                {
-                                                    <button type="button"
-                                                            class="@(option == _layoutAlign ? "is-active" : "")"
-                                                            title="@AlignmentLabel(option)"
-                                                            aria-label="@AlignmentLabel(option)"
-                                                            @onclick="() => _layoutAlign = option">
-                                                        <i class="fas @VerticalAlignmentIcon(option)"></i>
-                                                    </button>
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                    @if (UsesHorizontalAlignment)
-                                    {
-                                        <div class="block-layout-panel__icon-field">
-                                            <span>@T("HorizontalAlignment")</span>
-                                            <div class="block-layout-panel__icon-options" role="group" aria-label="@T("HorizontalAlignment")">
-                                                @foreach (var option in _justifyOptions)
-                                                {
-                                                    <button type="button"
-                                                            class="@(option == _layoutJustify ? "is-active" : "")"
-                                                            title="@AlignmentLabel(option)"
-                                                            aria-label="@AlignmentLabel(option)"
-                                                            @onclick="() => _layoutJustify = option">
-                                                        <i class="fas @HorizontalAlignmentIcon(option)"></i>
-                                                    </button>
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                                <p class="block-layout-panel__hint">
-                                    @(_positionMode == "freeform" ? T("ArrangeModeHint") : T("FlowModeHint"))
-                                </p>
-                                <details class="block-layout-panel__advanced">
-                                    <summary>@T("AdvancedLayout")</summary>
-                                    <div class="block-layout-panel__grid">
-                                        <div class="block-layout-panel__layer">
-                                            <label>
-                                                <span>@T("LayerOrder")</span>
-                                                <input type="number" min="0" max="1000" @bind="_layoutZIndex" />
-                                            </label>
-                                            <div class="block-layout-panel__layer-actions" aria-label="@T("LayerControls")">
-                                                <button type="button" title="@T("SendBackward")" @onclick="SendLayerBackward">
-                                                    <i class="fas fa-arrow-down"></i>
-                                                </button>
-                                                <button type="button" title="@T("BringForward")" @onclick="BringLayerForward">
-                                                    <i class="fas fa-arrow-up"></i>
-                                                </button>
-                                                <button type="button" title="@T("SendToBack")" @onclick="SendLayerToBack">
-                                                    <i class="fas fa-angle-double-down"></i>
-                                                </button>
-                                                <button type="button" title="@T("BringToFront")" @onclick="BringLayerToFront">
-                                                    <i class="fas fa-angle-double-up"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </details>
-                                @if (CanEditAdvancedResponsivePolicy)
-                                {
-                                <details class="block-layout-panel__advanced">
-                                    <summary>@T("ResponsiveBehavior")</summary>
-                                    <p class="block-layout-panel__hint">@T("ResponsiveBehaviorHint")</p>
-                                    <div class="block-layout-panel__responsive">
-                                        <div class="block-layout-panel__responsive-card">
-                                            <strong>@T("Tablet")</strong>
-                                            @if (!HasTabletOverride)
-                                            {
-                                                <div class="block-layout-panel__inherited">
-                                                    <span>@T("InheritedFromDesktop")</span>
-                                                    <button type="button" @onclick="EnableTabletOverride">@T("AddOverride")</button>
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                            <div class="block-layout-panel__override-head">
-                                                <span>@T("OverrideActive")</span>
-                                                <button type="button" @onclick="ResetTabletOverride">@T("ResetToInherited")</button>
-                                            </div>
-                                            <div class="block-layout-panel__grid">
-                                                <label>
-                                                    <span>@T("ResponsiveMode")</span>
-                                                    <select @bind="TabletResponsive.Mode">
-                                                        @foreach (var mode in _responsiveModeOptions)
-                                                        {
-                                                            <option value="@mode">@ResponsiveModeLabel(mode)</option>
-                                                        }
-                                                    </select>
-                                                </label>
-                                                <label>
-                                                    <span>@T("ResponsiveWidth")</span>
-                                                    <select @bind="TabletResponsive.Width">
-                                                        @foreach (var width in _responsiveWidthOptions)
-                                                        {
-                                                            <option value="@width">@WidthLabel(width)</option>
-                                                        }
-                                                    </select>
-                                                </label>
-                                            </div>
-                                            @if (TabletResponsive.Mode == "custom")
-                                            {
-                                                <div class="block-layout-panel__grid block-layout-panel__subgrid">
-                                                    @if (UsesGridPlacement)
-                                                    {
-                                                        <label>
-                                                            <span>@T("ColumnSpan")</span>
-                                                            <input type="number" min="1" max="12" @bind="TabletResponsive.ColumnSpan" />
-                                                        </label>
-                                                    }
-                                                    <label>
-                                                        <span>@T("LeftPercent")</span>
-                                                        <input type="number" min="0" max="100" step="1" @bind="TabletResponsive.LeftPercent" />
-                                                    </label>
-                                                    <label>
-                                                        <span>@T("TopPx")</span>
-                                                        <input type="number" min="0" max="10000" step="4" @bind="TabletResponsive.TopPx" />
-                                                    </label>
-                                                    <label>
-                                                        <span>@T("WidthPercent")</span>
-                                                        <input type="number" min="1" max="100" step="1" @bind="TabletResponsive.WidthPercent" />
-                                                    </label>
-                                                    <label>
-                                                        <span>@T("HeightPx")</span>
-                                                        <input type="number" min="24" max="10000" step="4" @bind="TabletResponsive.HeightPx" />
-                                                    </label>
-                                                </div>
-                                            }
-                                            }
-                                        </div>
-                                        <div class="block-layout-panel__responsive-card">
-                                            <strong>@T("Mobile")</strong>
-                                            @if (!HasMobileOverride)
-                                            {
-                                                <div class="block-layout-panel__inherited">
-                                                    <span>@T("InheritedFromDesktop")</span>
-                                                    <button type="button" @onclick="EnableMobileOverride">@T("AddOverride")</button>
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                            <div class="block-layout-panel__override-head">
-                                                <span>@T("OverrideActive")</span>
-                                                <button type="button" @onclick="ResetMobileOverride">@T("ResetToInherited")</button>
-                                            </div>
-                                            <div class="block-layout-panel__grid">
-                                                <label>
-                                                    <span>@T("ResponsiveMode")</span>
-                                                    <select @bind="MobileResponsive.Mode">
-                                                        @foreach (var mode in _responsiveModeOptions)
-                                                        {
-                                                            <option value="@mode">@ResponsiveModeLabel(mode)</option>
-                                                        }
-                                                    </select>
-                                                </label>
-                                                <label>
-                                                    <span>@T("ResponsiveWidth")</span>
-                                                    <select @bind="MobileResponsive.Width">
-                                                        @foreach (var width in _responsiveWidthOptions)
-                                                        {
-                                                            <option value="@width">@WidthLabel(width)</option>
-                                                        }
-                                                    </select>
-                                                </label>
-                                            </div>
-                                            @if (MobileResponsive.Mode == "custom")
-                                            {
-                                                <div class="block-layout-panel__grid block-layout-panel__subgrid">
-                                                    @if (UsesGridPlacement)
-                                                    {
-                                                        <label>
-                                                            <span>@T("ColumnSpan")</span>
-                                                            <input type="number" min="1" max="12" @bind="MobileResponsive.ColumnSpan" />
-                                                        </label>
-                                                    }
-                                                    <label>
-                                                        <span>@T("LeftPercent")</span>
-                                                        <input type="number" min="0" max="100" step="1" @bind="MobileResponsive.LeftPercent" />
-                                                    </label>
-                                                    <label>
-                                                        <span>@T("TopPx")</span>
-                                                        <input type="number" min="0" max="10000" step="4" @bind="MobileResponsive.TopPx" />
-                                                    </label>
-                                                    <label>
-                                                        <span>@T("WidthPercent")</span>
-                                                        <input type="number" min="1" max="100" step="1" @bind="MobileResponsive.WidthPercent" />
-                                                    </label>
-                                                    <label>
-                                                        <span>@T("HeightPx")</span>
-                                                        <input type="number" min="24" max="10000" step="4" @bind="MobileResponsive.HeightPx" />
-                                                    </label>
-                                                </div>
-                                            }
-                                            }
-                                        </div>
-                                    </div>
-                                    @if (_fullBlock.Type == "container")
-                                    {
-                                        <div class="block-layout-panel__grid block-layout-panel__subgrid">
-                                            <label>
-                                                <span>@T("ContainerMobileBehavior")</span>
-                                                <select @bind="ContainerLayout.MobileMode">
-                                                    @foreach (var mode in _containerMobileModeOptions)
-                                                    {
-                                                        <option value="@mode">@ResponsiveModeLabel(mode)</option>
-                                                    }
-                                                </select>
-                                            </label>
-                                            <label class="block-layout-panel__check">
-                                                <input type="checkbox" @bind="ContainerLayout.GeometryLocked" />
-                                                <span>@T("GeometryLocked")</span>
-                                            </label>
-                                        </div>
-                                    }
-                                </details>
-                                }
-                                else
-                                {
-                                    <div class="block-layout-panel__auto-responsive" role="note">
-                                        <i class="fas fa-mobile-alt" aria-hidden="true"></i>
+                                <section class="container-owned-manager">
+                                    <header>
                                         <span>
-                                            <strong>@T("AutomaticResponsivePolicy")</strong>
-                                            <small>@T("AutomaticResponsivePolicyHint")</small>
+                                            <strong>@T("ContainerOwnedBlocks")</strong>
+                                            <small>@T("ContainerOwnedBlocksHint")</small>
                                         </span>
+                                        <b>@AddTargetChildCount/@AddTargetCapacity</b>
+                                    </header>
+                                    <div class="container-owned-manager__capacity" aria-label="@string.Format(T("ContainerCapacityStatus"), AddTargetChildCount, AddTargetCapacity)">
+                                        <span style="width:@ContainerCapacityPercent%"></span>
                                     </div>
-                                }
-                                <details class="block-layout-panel__advanced">
-                                    <summary>@T("BlockAppearance")</summary>
-                                    <p class="block-layout-panel__hint">@T("BlockAppearanceHint")</p>
-                                    @if (ParentContainerForActive?.ContainerLayout?.ShareAppearance == true)
+                                    <div class="container-owned-manager__preset">
+                                        <span>
+                                            <strong>@ContainerPresetDisplayName</strong>
+                                            <small>@ContainerPresetPolicyLabel</small>
+                                        </span>
+                                        <b>@ContainerAvailableSlotsLabel</b>
+                                    </div>
+                                    @if (ContainerSlotStatuses.Count > 0)
                                     {
-                                        <label class="block-layout-panel__check block-layout-panel__inheritance">
-                                            <input type="checkbox" @bind="Appearance.InheritFromContainer" />
-                                            <span><strong>@T("InheritContainerAppearance")</strong><small>@T("InheritContainerAppearanceHint")</small></span>
-                                        </label>
+                                        <div class="container-owned-manager__slots" aria-label="@T("AvailableSlots")">
+                                            @foreach (var slot in ContainerSlotStatuses)
+                                            {
+                                                <span class="@(slot.Child is null ? "is-empty" : "is-filled") @(slot.Required ? "is-required" : null)"
+                                                      title="@SlotStatusTitle(slot)">
+                                                    <i class="fas @(slot.Child is null ? "fa-plus" : BlockIconClass(slot.Child.Type))"></i>
+                                                    <small>@slot.Label</small>
+                                                </span>
+                                            }
+                                        </div>
                                     }
-                                    @if (!string.IsNullOrWhiteSpace(_visualValidationMessage))
+                                    @if (ContainerChildren.Count == 0)
                                     {
-                                        <div class="block-layout-panel__error" role="alert">@_visualValidationMessage</div>
+                                        <p>@T("NoContainerBlocks")</p>
                                     }
-                                    <div class="block-layout-panel__section-actions">
-                                        <button type="button" @onclick="ResetAppearance">@T("ResetToDefault")</button>
-                                    </div>
-                                    <div class="block-layout-panel__grid">
-                                        <label>
-                                            <span>@T("BackgroundMode")</span>
-                                            <select @bind="Appearance.BackgroundMode">
-                                                @foreach (var mode in _backgroundModeOptions)
-                                                {
-                                                    <option value="@mode">@AppearanceOptionLabel(mode)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        @if (Appearance.BackgroundMode == "color")
-                                        {
-                                        <label>
-                                            <span>@T("BackgroundColor")</span>
-                                            <input type="text" placeholder="#ffffff" @bind="Appearance.BackgroundColor" />
-                                        </label>
-                                        }
-                                        @if (SupportsTextAppearance)
-                                        {
-                                            <label>
-                                                <span>@T("TextColor")</span>
-                                                <input type="text" placeholder="#0f172a" @bind="Appearance.TextColor" />
-                                            </label>
-                                            <label>
-                                                <span>@T("TextAlignment")</span>
-                                                <select @bind="Appearance.TextAlign">
-                                                    @foreach (var alignment in _textAlignOptions)
-                                                    {
-                                                        <option value="@alignment">@AppearanceOptionLabel(alignment)</option>
-                                                    }
-                                                </select>
-                                            </label>
-                                        }
-                                        <label>
-                                            <span>@T("Opacity")</span>
-                                            <input type="number" min="0" max="1" step="0.05" @bind="Appearance.Opacity" />
-                                        </label>
-                                        <label>
-                                            <span>@T("Shape")</span>
-                                            <select @bind="Appearance.Shape">
-                                                @foreach (var shape in _shapeOptions)
-                                                {
-                                                    <option value="@shape">@AppearanceOptionLabel(shape)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("BorderRadius")</span>
-                                            <select @bind="Appearance.BorderRadius">
-                                                @foreach (var radius in _appearanceRadiusOptions)
-                                                {
-                                                    <option value="@radius">@AppearanceOptionLabel(radius)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("Shadow")</span>
-                                            <select @bind="Appearance.Shadow">
-                                                @foreach (var shadow in _shadowOptions)
-                                                {
-                                                    <option value="@shadow">@AppearanceOptionLabel(shadow)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("Padding")</span>
-                                            <select @bind="Appearance.Padding">
-                                                @foreach (var spacing in _spaceOptions)
-                                                {
-                                                    <option value="@spacing">@AppearanceOptionLabel(spacing)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("Margin")</span>
-                                            <select @bind="Appearance.Margin">
-                                                @foreach (var spacing in _spaceOptions)
-                                                {
-                                                    <option value="@spacing">@AppearanceOptionLabel(spacing)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("BorderColor")</span>
-                                            <input type="text" placeholder="#d1d5db" @bind="Appearance.BorderColor" />
-                                        </label>
-                                        <label>
-                                            <span>@T("BorderWidth")</span>
-                                            <input type="number" min="0" max="20" @bind="Appearance.BorderWidth" />
-                                        </label>
-                                        <label>
-                                            <span>@T("BorderStyle")</span>
-                                            <select @bind="Appearance.BorderStyle">
-                                                @foreach (var style in _borderStyleOptions)
-                                                {
-                                                    <option value="@style">@AppearanceOptionLabel(style)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("AspectRatio")</span>
-                                            <select @bind="Appearance.AspectRatio">
-                                                @foreach (var ratio in _aspectRatioOptions)
-                                                {
-                                                    <option value="@ratio">@AppearanceOptionLabel(ratio)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        @if (SupportsMediaAppearance)
-                                        {
-                                            <label>
-                                                <span>@T("MediaFit")</span>
-                                                <select @bind="Appearance.MediaFit">
-                                                    <option value="cover">@T("Cover")</option>
-                                                    <option value="contain">@T("Contain")</option>
-                                                </select>
-                                            </label>
-                                            <label>
-                                                <span>@T("MediaPosition")</span>
-                                                <select @bind="Appearance.MediaPosition">
-                                                    @foreach (var position in _mediaPositionOptions)
-                                                    {
-                                                        <option value="@position">@AppearanceOptionLabel(position)</option>
-                                                    }
-                                                </select>
-                                            </label>
-                                        }
-                                        <label class="block-layout-panel__check">
-                                            <input type="checkbox" @bind="Appearance.Decorative" />
-                                            <span>@T("DecorativeBlock")</span>
-                                        </label>
-                                    </div>
-                                </details>
-                                @if (_fullBlock.Type == "container")
-                                {
-                                    <details class="block-layout-panel__advanced">
-                                        <summary>@T("DiagramComposition")</summary>
-                                        <p class="block-layout-panel__hint">@T("DiagramCompositionHint")</p>
-                                        <ContainerDiagramEditor Value="ContainerLayout.Diagram"
-                                                                Children="@ContainerChildren"
-                                                                Language="@AdminLanguage" />
-                                    </details>
-                                }
-                                <details class="block-layout-panel__advanced">
-                                    <summary>@T("BlockAnimation")</summary>
-                                    <p class="block-layout-panel__hint">@T("BlockAnimationHint")</p>
-                                    <BlockAnimationEditor Value="Animation"
-                                                          BlockId="@_fullBlock.Id"
-                                                          Language="@AdminLanguage"
-                                                          IsContainer="@(_fullBlock.Type == "container")"
-                                                          AllowContinuous="@Appearance.Decorative" />
-                                </details>
-                                <div class="block-layout-panel__actions">
-                                    <button type="button"
-                                            class="btn-admin btn-ghost"
-                                            title="@T("Undo")"
-                                            aria-label="@T("Undo")"
-                                            disabled="@(!CanUndoVisualChange)"
-                                            @onclick="UndoVisualChange">
-                                        <i class="fas fa-undo"></i>
+                                    else
+                                    {
+                                        <div class="container-owned-manager__list">
+                                            @foreach (var child in ContainerChildren)
+                                            {
+                                                <button type="button" @onclick="() => ToggleBlock(child.Id)">
+                                                    <i class="fas @BlockIconClass(child.Type)"></i>
+                                                    <span><strong>@BlockDisplayName(child)</strong><small>@ChildSummary(child)</small></span>
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                    <button type="button" class="btn-admin btn-primary"
+                                            disabled="@(!AddTargetHasCapacity)"
+                                            title="@AddTargetTitle"
+                                            @onclick="TogglePicker">
+                                        <i class="fas fa-plus"></i> @T("AddBlockToContainer")
                                     </button>
-                                    <button type="button"
-                                            class="btn-admin btn-ghost"
-                                            title="@T("Redo")"
-                                            aria-label="@T("Redo")"
-                                            disabled="@(!CanRedoVisualChange)"
-                                            @onclick="RedoVisualChange">
-                                        <i class="fas fa-redo"></i>
-                                    </button>
-                                    <button type="button"
-                                            class="btn-admin btn-primary"
-                                            disabled="@(_savingLayout || _fullBlock.Authoring.FullLocked || _fullBlock.Authoring.GeometryLocked)"
-                                            @onclick="SaveBlockLayout">
-                                        <i class="fas fa-save"></i> @(_savingLayout ? T("Saving") : T("SaveLayout"))
-                                    </button>
-                                </div>
-                            </div>
+                                </section>
                             }
+
+                            @* Replaced advanced BlockEditor controls were removed intentionally.
+                               A future Advanced modal system is postponed until after Notification Overhaul. *@
 
                             @if (_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked)
                             {
@@ -721,7 +320,6 @@ else
                                                        PageId="@PageId"
                                                        SectionId="@SectionId"
                                                        Languages="Languages"
-                                                       ShowAdvancedFields="_showAdvancedInspector"
                                                        OnSaved="HandleBlockSaved" />
                                     break;
                                 default:
@@ -740,6 +338,8 @@ else
 }
 
 <BlockDeleteDialog Block="_confirmDelete"
+                   DescendantCount="@DeleteDescendantCount"
+                   NestedContainerCount="@DeleteNestedContainerCount"
                    ConfirmTitle="@T("ConfirmDelete")"
                    CancelText="@T("Cancel")"
                    DeleteText="@T("Delete")"
@@ -831,6 +431,50 @@ else
         color: var(--primary);
         font-size: .9rem;
     }
+    .block-focused-inspector__workspace-note {
+        display: flex;
+        align-items: flex-start;
+        gap: .65rem;
+        padding: .7rem .75rem;
+        border: 1px solid #c7d2fe;
+        border-radius: 8px;
+        background: #eef2ff;
+        color: var(--primary);
+    }
+    .block-focused-inspector__workspace-note > i { margin-top: .12rem; }
+    .block-focused-inspector__workspace-note > span { display: grid; gap: .15rem; }
+    .block-focused-inspector__workspace-note strong { font-size: .76rem; }
+    .block-focused-inspector__workspace-note small { color: var(--text-muted); font-size: .7rem; line-height: 1.4; }
+    .block-create-modal { width:min(760px,calc(100vw - 32px)); max-height:min(760px,calc(100vh - 32px)); overflow:auto; padding:1rem; }
+    .block-create-modal .block-create-wizard { margin:0; box-shadow:none; }
+    .container-owned-manager { display:grid; gap:.75rem; margin:0 0 1rem; padding:.9rem; border:1px solid #c7d2fe; border-radius:10px; background:#f8faff; }
+    .container-owned-manager > header { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; }
+    .container-owned-manager > header > span { display:grid; gap:.15rem; }
+    .container-owned-manager > header strong { color:var(--text); font-size:.8rem; }
+    .container-owned-manager > header small,
+    .container-owned-manager > p { margin:0; color:var(--text-muted); font-size:.7rem; line-height:1.4; }
+    .container-owned-manager > header b { padding:.2rem .45rem; border-radius:999px; background:#e0e7ff; color:var(--primary); font-size:.68rem; }
+    .container-owned-manager__capacity { height:6px; overflow:hidden; border-radius:999px; background:#e2e8f0; }
+    .container-owned-manager__capacity span { display:block; height:100%; border-radius:inherit; background:var(--primary); }
+    .container-owned-manager__preset { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; padding:.65rem .7rem; border:1px solid #dbeafe; border-radius:8px; background:#fff; }
+    .container-owned-manager__preset span { display:grid; gap:.1rem; min-width:0; }
+    .container-owned-manager__preset strong { color:var(--text); font-size:.76rem; }
+    .container-owned-manager__preset small { color:var(--text-muted); font-size:.64rem; line-height:1.35; }
+    .container-owned-manager__preset b { flex:0 0 auto; color:var(--primary); font-size:.64rem; }
+    .container-owned-manager__slots { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem; }
+    .container-owned-manager__slots > span { display:grid; grid-template-columns:18px minmax(0,1fr); align-items:center; gap:.35rem; padding:.42rem .5rem; border:1px solid #bfdbfe; border-radius:7px; background:#eff6ff; color:#1d4ed8; }
+    .container-owned-manager__slots > span.is-filled { border-color:#bbf7d0; background:#f0fdf4; color:#15803d; }
+    .container-owned-manager__slots > span.is-required { box-shadow:inset 3px 0 0 #f59e0b; }
+    .container-owned-manager__slots i { text-align:center; font-size:.68rem; }
+    .container-owned-manager__slots small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.62rem; font-weight:700; }
+    .container-owned-manager__list { display:grid; gap:.35rem; }
+    .container-owned-manager__list > button { display:grid; grid-template-columns:22px minmax(0,1fr) 14px; align-items:center; gap:.45rem; padding:.5rem .6rem; border:1px solid var(--border); border-radius:7px; background:#fff; color:var(--text); text-align:left; cursor:pointer; }
+    .container-owned-manager__list > button:hover { border-color:var(--primary-light); background:#f8fafc; }
+    .container-owned-manager__list > button > i:first-child { color:var(--primary); text-align:center; }
+    .container-owned-manager__list > button > i:last-child { color:var(--text-muted); font-size:.6rem; }
+    .container-owned-manager__list span { display:grid; gap:.08rem; min-width:0; }
+    .container-owned-manager__list strong { overflow:hidden; font-size:.72rem; text-overflow:ellipsis; white-space:nowrap; }
+    .container-owned-manager__list small { color:var(--text-muted); font-size:.62rem; }
     .block-focused-inspector__badges {
         display: flex;
         flex-wrap: wrap;
@@ -1207,6 +851,58 @@ else
         align-items: center;
         gap: 5px;
     }
+    .block-card-name {
+        max-width: 170px;
+        overflow: hidden;
+        color: var(--text);
+        font-size: .78rem;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .block-card-header__identity,
+    .block-card-header__actions {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+    }
+    .block-card-header__identity {
+        min-width: 0;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+    }
+    .block-card-header__actions { flex: 0 0 auto; }
+    .block-state-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        padding: .2rem .38rem;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: .66rem;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+    }
+    .block-state-badge--hidden {
+        border-color: #cbd5e1;
+        background: #f8fafc;
+        color: #64748b;
+    }
+    .block-state-badge--content-lock {
+        border-color: #fde68a;
+        background: #fffbeb;
+        color: #92400e;
+    }
+    .block-state-badge--geometry-lock {
+        border-color: #c4b5fd;
+        background: #f5f3ff;
+        color: #6d28d9;
+    }
+    @@media (max-width: 760px) {
+        .block-state-badge span { display: none; }
+        .block-card-name { max-width: 120px; }
+    }
     .block-delete-dialog {
         background: var(--surface);
     }
@@ -1223,6 +919,21 @@ else
     .block-delete-dialog__body p {
         margin: 0;
     }
+    .block-delete-dialog__warning {
+        display: flex;
+        align-items: flex-start;
+        gap: .55rem;
+        margin-top: .8rem;
+        padding: .7rem .75rem;
+        border: 1px solid #fecaca;
+        border-radius: 7px;
+        background: #fff1f2;
+        color: #991b1b;
+        font-size: .76rem;
+        font-weight: 650;
+        line-height: 1.4;
+    }
+    .block-delete-dialog__warning i { margin-top: .15rem; }
     .block-delete-dialog__footer {
         display: flex;
         justify-content: flex-end;
@@ -1241,7 +952,10 @@ else
     [Parameter] public string       SectionId { get; set; } = string.Empty;
     [Parameter] public string?      SectionType { get; set; }
     [Parameter] public string?      SectionBlockLayoutMode { get; set; }
+    [Parameter] public bool         UseArrangeWorkspace { get; set; }
+    [Parameter] public string?      InitialBlockId { get; set; }
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback<string?> ActiveBlockChanged { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
 
     private List<BlockModel> _blocks     = new();
@@ -1254,7 +968,6 @@ else
     private bool             _reorderingBlock = false;
     private bool             _savingLayout = false;
     private bool             _savingGovernance = false;
-    private bool             _showAdvancedInspector = false;
     private string?          _visualValidationMessage;
     private string?          _visualHistoryBlockId;
     private BlockUpdateDto?  _savedVisualSnapshot;
@@ -1263,40 +976,100 @@ else
     private string?          _loadedPageId;
     private string?          _loadedSectionId;
     private string?          _loadedSlotId;
+    private string?          _loadedInitialBlockId;
     private ElementReference _blockListRef;
     private DotNetObjectReference<BlockEditor>? _dotNetRef;
     private bool _blockSortableInitialized;
     private IReadOnlyList<BlockListEntry> OrderedHierarchyBlocks => BuildHierarchy();
-    private List<BlockModel> ContainerOptions =>
-        _blocks
-            .Where(b => b.Type == "container" && b.Id != _activeBlockId)
-            .Where(b => NormalizeContainerPurpose(b.ContainerLayout?.Purpose) != "collection" ||
-                        string.IsNullOrWhiteSpace(b.ContainerLayout?.AllowedChildType) ||
-                        string.Equals(b.ContainerLayout.AllowedChildType, _fullBlock?.Type, StringComparison.Ordinal))
-            .OrderBy(b => b.Order)
-            .ThenBy(b => b.Id)
-            .ToList();
+    private int DeleteDescendantCount => _confirmDelete?.Type == "container"
+        ? OwnedDescendantIds(_confirmDelete.Id).Count
+        : 0;
+    private int DeleteNestedContainerCount => _confirmDelete?.Type == "container"
+        ? OwnedDescendantIds(_confirmDelete.Id)
+            .Select(id => _blocks.FirstOrDefault(block => block.Id == id))
+            .Count(block => block?.Type == "container")
+        : 0;
     private BlockModel? AddTargetContainer => _fullBlock?.Type == "container" ? _fullBlock : null;
-    private IReadOnlyCollection<string>? AddTargetAllowedTypes =>
-        NormalizeContainerPurpose(AddTargetContainer?.ContainerLayout?.Purpose) == "collection" &&
-        !string.IsNullOrWhiteSpace(AddTargetContainer?.ContainerLayout?.AllowedChildType)
-            ? new[] { AddTargetContainer.ContainerLayout.AllowedChildType! }
-            : null;
+    private int AddTargetChildCount => AddTargetContainer is null
+        ? 0
+        : _blocks.Count(block => block.ParentBlockId == AddTargetContainer.Id);
+    private int AddTargetCapacity => AddTargetContainer is null
+        ? int.MaxValue
+        : ContainerCapacityPolicy.MaxChildren(
+            AddTargetContainer.PresetKey,
+            AddTargetContainer.ContainerLayout?.Mode,
+            AddTargetContainer.ContainerLayout?.Columns);
+    private bool AddTargetHasCapacity => AddTargetContainer is null || AddTargetChildCount < AddTargetCapacity;
+    private int ContainerCapacityPercent => AddTargetCapacity is <= 0 or int.MaxValue
+        ? 0
+        : Math.Clamp((int)Math.Round(AddTargetChildCount * 100d / AddTargetCapacity), 0, 100);
+    private string AddTargetTitle => AddTargetHasCapacity
+        ? T("AddBlock")
+        : string.Format(T("ContainerCapacityReached"),
+            ContainerCapacityPolicy.NormalizeMode(AddTargetContainer?.ContainerLayout?.Mode),
+            AddTargetCapacity);
+    private IReadOnlyCollection<string>? AddTargetAllowedTypes
+    {
+        get
+        {
+            var target = AddTargetContainer;
+            if (target is null) return null;
+            var lockedType = target.ContainerLayout?.AllowedChildType;
+            return NormalizeContainerPurpose(target.ContainerLayout?.Purpose) == "collection" &&
+                   ContainerCapacityPolicy.CanOwn(lockedType)
+                ? new[] { lockedType! }
+                : ContainerCapacityPolicy.AllowedChildTypes(target.PresetKey);
+        }
+    }
     private string? AddTargetConstraintLabel
     {
         get
         {
             var target = AddTargetContainer;
-            if (target is null || NormalizeContainerPurpose(target.ContainerLayout?.Purpose) != "collection") return null;
-            return string.IsNullOrWhiteSpace(target.ContainerLayout?.AllowedChildType)
-                ? T("CollectionFirstChildLocksType")
-                : $"{T("CollectionAllowsOnly")} {T(BlockLabelKey(target.ContainerLayout.AllowedChildType))}.";
+            if (target is null) return null;
+            var messages = new List<string>
+            {
+                string.Format(T("ContainerPresetStatus"), ContainerPresetDisplayName),
+                string.Format(T("ContainerCapacityStatus"), AddTargetChildCount, AddTargetCapacity)
+            };
+            if (NextAddTargetSlot is not null)
+                messages.Add(string.Format(T("NextContainerSlot"), NextAddTargetSlot.DisplayName));
+            if (NormalizeContainerPurpose(target.ContainerLayout?.Purpose) == "collection")
+            {
+                messages.Add(string.IsNullOrWhiteSpace(target.ContainerLayout?.AllowedChildType)
+                    ? T("CollectionFirstChildLocksType")
+                    : $"{T("CollectionAllowsOnly")} {T(BlockLabelKey(target.ContainerLayout.AllowedChildType))}.");
+            }
+            return string.Join(" ", messages);
         }
     }
 
     private sealed record BlockListEntry(BlockModel Block, int Depth);
     private sealed record VisualHistoryEntry(BlockUpdateDto Before, BlockUpdateDto After);
+    private sealed record ContainerSlotStatus(string Key, string Label, bool Required, BlockModel? Child);
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private bool IsRequiredContainerSlot(BlockModel block)
+    {
+        if (string.IsNullOrWhiteSpace(block.ParentBlockId) ||
+            string.IsNullOrWhiteSpace(block.Authoring?.PresetSlotName))
+            return false;
+
+        var parent = _blocks.FirstOrDefault(candidate =>
+            candidate.Id == block.ParentBlockId && candidate.Type == "container");
+        return parent is not null &&
+               ContainerCapacityPolicy.IsRequiredSlot(parent.PresetKey, block.Authoring.PresetSlotName);
+    }
+
+    private bool PresetAllowsChildReorder(BlockModel block)
+    {
+        if (string.IsNullOrWhiteSpace(block.ParentBlockId)) return true;
+
+        var parent = _blocks.FirstOrDefault(candidate =>
+            candidate.Id == block.ParentBlockId && candidate.Type == "container");
+        return parent is null ||
+               !ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out var preset) ||
+               preset.ChildOrderingAllowed;
+    }
 
     private List<string> _widthOptions = new() { "auto", "full", "half", "third" };
     private List<string> _alignOptions = new() { "stretch", "start", "center", "end" };
@@ -1343,6 +1116,60 @@ else
         : _blocks.Where(block => string.Equals(block.ParentBlockId, _fullBlock.Id, StringComparison.Ordinal))
             .OrderBy(block => block.Order)
             .ToList();
+    private ContainerPresetDefinition? ActiveContainerPreset => AddTargetContainer is null
+        ? null
+        : ContainerPresetCatalog.ForExisting(AddTargetContainer.PresetKey);
+    private string ContainerPresetDisplayName => ActiveContainerPreset?.DisplayName ?? T("LegacyContainerPreset");
+    private string ContainerPresetPolicyLabel
+    {
+        get
+        {
+            var preset = ActiveContainerPreset;
+            if (preset is null) return string.Empty;
+            var ordering = T(preset.ChildOrderingAllowed ? "ContainerOrderingAllowed" : "ContainerOrderingFixed");
+            return $"{preset.LayoutMode} · {ordering}";
+        }
+    }
+    private IReadOnlyList<ContainerSlotStatus> ContainerSlotStatuses
+    {
+        get
+        {
+            var container = AddTargetContainer;
+            var preset = ActiveContainerPreset;
+            if (container is null || preset is null || preset.Slots.Count == 0)
+                return Array.Empty<ContainerSlotStatus>();
+
+            var childrenBySlot = ContainerChildren
+                .Where(child => !string.IsNullOrWhiteSpace(child.Authoring?.PresetSlotName))
+                .GroupBy(child => child.Authoring.PresetSlotName!, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.OrderBy(child => child.Order).First(), StringComparer.Ordinal);
+
+            return preset.Slots
+                .Select(slot => new ContainerSlotStatus(
+                    slot.Key,
+                    slot.DisplayName,
+                    slot.Required,
+                    childrenBySlot.TryGetValue(slot.Key, out var child) ? child : null))
+                .ToList();
+        }
+    }
+    private string ContainerAvailableSlotsLabel
+    {
+        get
+        {
+            var total = ContainerSlotStatuses.Count;
+            if (total == 0) return string.Format(T("ContainerCapacityStatus"), AddTargetChildCount, AddTargetCapacity);
+            var open = ContainerSlotStatuses.Count(slot => slot.Child is null);
+            return string.Format(T("ContainerAvailableSlots"), open, total);
+        }
+    }
+    private ContainerPresetSlotDefinition? NextAddTargetSlot =>
+        AddTargetContainer is null
+            ? null
+            : ContainerCapacityPolicy.NextAvailableSlot(
+                AddTargetContainer.PresetKey,
+                ContainerChildren.Select(child => child.Authoring?.PresetSlotName),
+                AddTargetAllowedTypes?.Count == 1 ? AddTargetAllowedTypes.First() : "text");
     private BlockModel? ParentContainerForActive => string.IsNullOrWhiteSpace(_fullBlock?.ParentBlockId)
         ? null
         : _blocks.FirstOrDefault(block => block.Id == _fullBlock.ParentBlockId && block.Type == "container");
@@ -1373,20 +1200,6 @@ else
                 _fullBlock.PositionMode = NormalizePositionMode(value);
         }
     }
-    private string _parentBlockId
-    {
-        get => _fullBlock?.ParentBlockId ?? string.Empty;
-        set
-        {
-            if (_fullBlock is null)
-                return;
-
-            _fullBlock.ParentBlockId = value ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(value))
-                _fullBlock.BlockZone = "default";
-        }
-    }
-
     private string _layoutWidth
     {
         get => EnsureLayout().Width ?? "auto";
@@ -1442,16 +1255,26 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedPageId != PageId || _loadedSectionId != SectionId || _loadedSlotId != SlotId)
+        var contextChanged = _loadedPageId != PageId || _loadedSectionId != SectionId || _loadedSlotId != SlotId;
+        var initialBlockChanged = _loadedInitialBlockId != InitialBlockId;
+        if (contextChanged)
         {
             _loadedPageId = PageId;
             _loadedSectionId = SectionId;
             _loadedSlotId = SlotId;
             _activeBlockId = null;
             _fullBlock = null;
-            _showAdvancedInspector = false;
             await ReloadBlocks();
         }
+
+        if ((contextChanged || initialBlockChanged) &&
+            !string.IsNullOrWhiteSpace(InitialBlockId) &&
+            _activeBlockId != InitialBlockId &&
+            _blocks.Any(block => block.Id == InitialBlockId))
+        {
+            await OpenBlock(InitialBlockId, notify: false);
+        }
+        _loadedInitialBlockId = InitialBlockId;
     }
 
   private async Task ReloadBlocks()
@@ -1473,23 +1296,38 @@ else
         {
             _activeBlockId = null;
             _fullBlock     = null;
-            _showAdvancedInspector = false;
+            await ActiveBlockChanged.InvokeAsync(null);
             return;
         }
 
+        await OpenBlock(blockId, notify: true);
+    }
+
+    private async Task OpenBlock(string blockId, bool notify)
+    {
         _activeBlockId = blockId;
         _fullBlock     = null;
-        _showAdvancedInspector = false;
 
         // Fetch full block so image/file base64 is included.
         await LoadFullBlock(blockId);
+        if (notify)
+            await ActiveBlockChanged.InvokeAsync(blockId);
     }
 
-    private void TogglePicker() => _showPicker = !_showPicker;
+    private void TogglePicker()
+    {
+        if (!AddTargetHasCapacity)
+        {
+            Http.Toast(AddTargetTitle, 400);
+            return;
+        }
+        _showPicker = !_showPicker;
+    }
     private void ClosePicker() => _showPicker = false;
 
     private async Task AddBlock(BlockStarterSelection selection)
     {
+        if (!AddTargetHasCapacity) return;
         _creatingBlock = true;
         try
         {
@@ -1550,8 +1388,6 @@ else
         await NotifyChangedAsync();
     }
 
-    private void ToggleAdvancedInspector() => _showAdvancedInspector = !_showAdvancedInspector;
-
     private async Task SaveGovernance()
     {
         if (_fullBlock is null || _savingGovernance || !Auth.IsAdminAdmin)
@@ -1588,14 +1424,17 @@ else
     private async Task ConfirmDelete()
     {
         if (_confirmDelete is null) return;
+        var deletingIds = OwnedDescendantIds(_confirmDelete.Id);
+        deletingIds.Add(_confirmDelete.Id);
         var res = await BlockService.DeleteAsync(PageId, SectionId, _confirmDelete.Id);
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success)
         {
-            if (_activeBlockId == _confirmDelete.Id)
+            if (_activeBlockId is not null && deletingIds.Contains(_activeBlockId))
             {
                 _activeBlockId = null;
                 _fullBlock     = null;
+                await ActiveBlockChanged.InvokeAsync(null);
             }
             await ReloadBlocks();
             await NotifyChangedAsync();
@@ -1604,6 +1443,22 @@ else
     }
 
     private void ClearDelete() => _confirmDelete = null;
+
+    private HashSet<string> OwnedDescendantIds(string containerId)
+    {
+        var pending = new Queue<string>([containerId]);
+        var descendants = new HashSet<string>(StringComparer.Ordinal);
+        while (pending.Count > 0)
+        {
+            var parentId = pending.Dequeue();
+            foreach (var child in _blocks.Where(block => block.ParentBlockId == parentId))
+            {
+                if (!descendants.Add(child.Id)) continue;
+                if (child.Type == "container") pending.Enqueue(child.Id);
+            }
+        }
+        return descendants;
+    }
 
     private IReadOnlyList<BlockListEntry> BuildHierarchy()
     {
@@ -1667,6 +1522,8 @@ else
             Http.Toast(T("GeometryLockedHint"), 400);
             return false;
         }
+        if (peers.Any(block => !PresetAllowsChildReorder(block)))
+            return false;
 
         _reorderingBlock = true;
         try
@@ -1761,7 +1618,7 @@ else
         if (firstRender)
             _dotNetRef = DotNetObjectReference.Create(this);
 
-        if (!_loading && _blocks.Count > 1 && !_blockSortableInitialized && _dotNetRef is not null)
+        if (!UseArrangeWorkspace && !_loading && _blocks.Count > 1 && !_blockSortableInitialized && _dotNetRef is not null)
         {
             await JS.InvokeVoidAsync("initBlockListSortable", BlockSortableKey, _blockListRef, _dotNetRef);
             _blockSortableInitialized = true;
@@ -2125,38 +1982,56 @@ else
 
     private string BlockDisplayName(BlockModel block)
     {
-        var title = LangValue(block.Title);
-        return string.IsNullOrWhiteSpace(title) ? $"Container {block.Order + 1}" : title;
+        var title = LangValue(block.Title)
+            ?? LangValue(block.Label)
+            ?? LangValue(block.StepLabel)
+            ?? LangValue(block.ButtonLabel)
+            ?? (!string.IsNullOrWhiteSpace(block.FileName) ? block.FileName : null)
+            ?? (!string.IsNullOrWhiteSpace(block.Asset?.FileName) ? block.Asset.FileName : null)
+            ?? LangValue(block.Caption)
+            ?? LangValue(block.AltText)
+            ?? block.Pins?.Select(pin => pin.Label).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        return string.IsNullOrWhiteSpace(title) ? $"{T("Untitled")} {BlockTypeOrdinal(block)}" : title;
     }
 
-    private string LangValue(Dictionary<string, string>? values)
+    private int BlockTypeOrdinal(BlockModel block)
+    {
+        var peers = _blocks
+            .Where(candidate => candidate.Type == block.Type)
+            .OrderBy(candidate => candidate.Order)
+            .ThenBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .ToList();
+        return Math.Max(0, peers.FindIndex(candidate => candidate.Id == block.Id)) + 1;
+    }
+
+    private string ChildSummary(BlockModel child)
+    {
+        var label = T(BlockLabelKey(child.Type));
+        if (string.IsNullOrWhiteSpace(child.Authoring?.PresetSlotName))
+            return label;
+
+        var parent = _blocks.FirstOrDefault(block => block.Id == child.ParentBlockId && block.Type == "container");
+        var slotName = ContainerCapacityPolicy.SlotDisplayName(parent?.PresetKey, child.Authoring.PresetSlotName);
+        return string.IsNullOrWhiteSpace(slotName) ? label : $"{label} · {slotName}";
+    }
+
+    private string SlotStatusTitle(ContainerSlotStatus slot) =>
+        slot.Child is null
+            ? string.Format(T("ContainerSlotAvailable"), slot.Label)
+            : string.Format(T("ContainerSlotFilled"), slot.Label, BlockDisplayName(slot.Child));
+
+    private string? LangValue(Dictionary<string, string>? values)
     {
         if (values is null || values.Count == 0)
-            return string.Empty;
+            return null;
 
         if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
 
-        return values.TryGetValue("en", out var en) ? en : values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
-    }
+        if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
+            return en;
 
-    private string BlockHierarchyPath(BlockModel block)
-    {
-        var segments = new Stack<string>();
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var parentId = block.ParentBlockId;
-        while (!string.IsNullOrWhiteSpace(parentId) && visited.Add(parentId))
-        {
-            var parent = _blocks.FirstOrDefault(candidate => candidate.Id == parentId);
-            if (parent is null)
-                break;
-            segments.Push(BlockDisplayName(parent));
-            parentId = parent.ParentBlockId;
-        }
-
-        return segments.Count == 0
-            ? T("TopLevel")
-            : $"{T("TopLevel")} / {string.Join(" / ", segments)}";
+        return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
     }
 
     private static string BlockLabelKey(string type) => type switch

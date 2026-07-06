@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Contracts.Admin;
 
 namespace Contracts.Public
 {
@@ -145,6 +146,7 @@ namespace Contracts.Public
 
     public class PublicContainerBlockDto : PublicBlockDto
     {
+        public string PresetKey { get; set; } = ContainerPresetCatalog.LegacyFreeformKey;
         public Dictionary<string, string>? Title { get; set; }
         public PublicContainerLayoutSettingsDto ContainerLayout { get; set; } = new();
         public string? LayoutMode { get; set; }

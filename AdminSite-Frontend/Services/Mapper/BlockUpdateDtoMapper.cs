@@ -153,6 +153,7 @@ public static class BlockUpdateDtoMapper
             },
             "container" => new ContainerBlockUpdateDto
             {
+                PresetKey = block.PresetKey,
                 Title = block.Title ?? new(),
                 Visible = block.Visible,
                 Layout = layout

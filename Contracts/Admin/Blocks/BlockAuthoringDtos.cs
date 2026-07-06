@@ -26,12 +26,6 @@ public sealed class BlockDuplicateRequestDto
     public List<string> BlockIds { get; set; } = new();
 }
 
-public sealed class BlockGroupRequestDto
-{
-    public List<string> BlockIds { get; set; } = new();
-    public Dictionary<string, string> Title { get; set; } = new();
-}
-
 public sealed class BlockAuthoringLockUpdateDto
 {
     public bool ContentLocked { get; set; }
@@ -42,7 +36,6 @@ public sealed class BlockAuthoringLockUpdateDto
 public sealed class BlockAuthoringOperationResponseDto
 {
     public List<string> BlockIds { get; set; } = new();
-    public string? ContainerId { get; set; }
 }
 
 public sealed class CanvasPresetEditableSlotDto

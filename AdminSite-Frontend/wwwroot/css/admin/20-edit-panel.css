@@ -113,6 +113,56 @@
     font-weight: 600;
 }
 
+.ez-blocks-tab-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .75rem;
+    padding: .75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.ez-blocks-tab-actions > div {
+    min-width: 0;
+    display: grid;
+    gap: .15rem;
+}
+
+.ez-blocks-tab-actions strong { color: var(--text); font-size: .78rem; }
+.ez-blocks-tab-actions span { color: var(--text-muted); font-size: .68rem; line-height: 1.35; }
+.ez-blocks-tab-actions .btn-admin { flex: 0 0 auto; }
+
+.block-arrange-guard {
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+    padding: 1.1rem;
+}
+
+.block-arrange-guard header {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    color: #9a3412;
+}
+
+.block-arrange-guard p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: .84rem;
+    line-height: 1.5;
+}
+
+.block-arrange-guard footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+    padding-top: .25rem;
+}
+
 .ez-editor-note,
 .ez-empty-state {
     padding: .75rem .85rem;

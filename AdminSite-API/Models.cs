@@ -1002,6 +1002,8 @@ namespace FullProject.Models
     [BsonDiscriminator("container")]
     public class ContainerBlock : Block
     {
+        [BsonIgnoreIfNull]
+        public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public ContainerLayoutSettings ContainerLayout { get; set; } = new();
 

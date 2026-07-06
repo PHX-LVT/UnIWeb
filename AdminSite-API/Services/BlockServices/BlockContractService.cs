@@ -243,7 +243,7 @@ public static class BlockContractService
 
         return new ContainerLayoutSettings
         {
-            SchemaVersion = 2,
+            SchemaVersion = Math.Max(2, Math.Max(current.SchemaVersion, incoming?.SchemaVersion ?? 0)),
             Purpose = purpose,
             AllowedChildType = purpose == "collection" && !isNewContainer
                 ? NullableChoice(incoming?.AllowedChildType ?? current.AllowedChildType, BlockTypes)

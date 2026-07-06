@@ -11,6 +11,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @using Contracts.Forms
+@using Contracts.Admin
 @using Contracts.Public
 @using SharedComponents
 @using SharedComponents.Helpers
@@ -626,6 +627,9 @@ else
             },
             "container" => new PublicContainerBlockDto
             {
+                PresetKey = string.IsNullOrWhiteSpace(b.PresetKey)
+                    ? ContainerPresetCatalog.LegacyFreeformKey
+                    : b.PresetKey,
                 Title = b.Title,
                 ContainerLayout = MapContainerLayout(b.ContainerLayout),
                 LayoutMode = b.LayoutMode,

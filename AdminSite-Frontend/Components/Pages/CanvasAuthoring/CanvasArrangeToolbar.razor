@@ -1,13 +1,16 @@
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
-@implements IDisposable
+@implements IAsyncDisposable
 
 @if (Visible)
 {
     <div class="ez-canvas-authoring-shell">
         <div class="ez-canvas-authoring" role="toolbar" aria-label="@T("CanvasAuthoringTools")">
-            <button type="button" class="ez-canvas-authoring__add" disabled="@Busy" @onclick="AddRequested">
+            <button type="button" class="ez-canvas-authoring__add" disabled="@(Busy || !CanAdd)" title="@AddTitle" @onclick="AddRequested">
                 <i class="fas fa-plus"></i><span>@T("AddBlock")</span>
+            </button>
+            <button type="button" class="ez-canvas-authoring__done" @onclick="DoneRequested">
+                <i class="fas fa-arrow-left"></i><span>@T("DoneArranging")</span>
             </button>
 
             <div class="ez-block-selector">
@@ -34,31 +37,35 @@
                                 }
                             </nav>
                         }
-                        <div class="ez-block-selector__list">
-                            @if (!FilteredItems.Any())
+                        <div class="ez-block-selector__list" @ref="_selectorListRef">
+                            @if (BlockItems.Count == 0)
+                            {
+                                <div class="ez-block-selector__empty">@T("SectionHasNoBlocksArrange")</div>
+                            }
+                            else if (!FilteredItems.Any())
                             {
                                 <div class="ez-block-selector__empty">@T("NoMatchingBlocks")</div>
                             }
-                            @foreach (var sectionGroup in FilteredItems.GroupBy(item => new { item.SectionId, item.SectionLabel }))
+                            else
                             {
                                 <div class="ez-block-selector__section">
-                                    <button type="button" @onclick="() => SelectSection(sectionGroup.Key.SectionId)">
+                                    <div class="ez-block-selector__section-label">
                                         <i class="fas fa-border-all"></i>
-                                        <span>@sectionGroup.Key.SectionLabel</span>
-                                    </button>
+                                        <span>@ActiveSectionLabel</span>
+                                    </div>
                                     <div class="ez-block-selector__layer-guide" aria-hidden="true">
                                         <span><i class="fas fa-arrow-up"></i>@T("Frontmost")</span>
                                         <span>@T("Backmost")<i class="fas fa-arrow-down"></i></span>
                                     </div>
-                                    @foreach (var item in sectionGroup)
+                                    @foreach (var item in FilteredItems)
                                     {
-                                        <div class="ez-block-selector__row @(SelectedIds.Contains(item.Id) ? "is-selected" : null) @(item.Locked ? "is-locked" : null)"
+                                        <div @key="item.Id"
+                                             class="ez-block-selector__row @(SelectedIds.Contains(item.Id) ? "is-selected" : null) @(item.Locked ? "is-locked" : null)"
                                              style="--block-selector-depth:@item.Depth"
-                                             draggable="@item.CanReorder"
-                                             @ondragstart="() => StartDrag(item)"
-                                             @ondragend="EndDrag"
-                                             @ondragover:preventDefault="true"
-                                             @ondrop="() => DropOn(item)">
+                                             data-block-selector-id="@item.Id"
+                                             data-block-selector-peer="@item.PeerKey"
+                                             data-block-selector-section-id="@item.SectionId"
+                                             data-can-reorder="@(item.CanReorder && string.IsNullOrWhiteSpace(_search) ? "true" : "false")">
                                             <span class="ez-block-selector__drag" title="@T("DragToReorder")"><i class="fas fa-grip-vertical"></i></span>
                                             <button type="button" class="ez-block-selector__select" @onclick="() => SelectBlock(item.Id)">
                                                 <i class="fas @BlockIcon(item.Type)"></i>
@@ -80,7 +87,7 @@
                 @PanelTool("fill", "fa-fill-drip", "Fill", CanVisualEdit)
                 @PanelTool("border", "fa-border-style", "Border", CanVisualEdit)
                 @PanelTool("animation", "fa-film", "Animation", CanVisualEdit)
-                @PanelTool("more", "fa-sliders-h", "More", CanEditPrecise)
+                @PanelTool("more", "fa-sliders-h", "More", CanVisualEdit)
             </div>
             <div class="ez-canvas-authoring__group ez-canvas-authoring__group--rotation">
                 <button type="button"
@@ -108,27 +115,13 @@
                     <i class="fas fa-redo-alt"></i>
                 </button>
             </div>
-            <div class="ez-canvas-authoring__group">
+            <div class="ez-canvas-authoring__group ez-canvas-authoring__group--actions">
                 @Tool("duplicate", "fa-copy", "Duplicate", HasSelection)
-                @if (CanGroup)
-                {
-                    @Tool("group", "fa-object-group", "GroupIntoContainer", true)
-                }
-                else if (CanUngroup)
-                {
-                    @Tool("ungroup", "fa-object-ungroup", "UngroupContainer", true)
-                }
+                <button type="button" class="ez-canvas-authoring__tool ez-canvas-authoring__tool--delete" disabled="@(!CanDelete)"
+                        title="@T("DeleteBlock")" @onclick="OpenDeleteConfirmation">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
-            @if (CanManageLocks)
-            {
-                <div class="ez-canvas-authoring__group ez-canvas-authoring__group--visual">
-                    @PanelTool("locks", "fa-shield-alt", "LocksGovernance", HasSelection)
-                </div>
-            }
-            <button type="button" class="ez-canvas-authoring__delete" disabled="@(!CanDelete)"
-                    title="@T("DeleteBlock")" @onclick="OpenDeleteConfirmation">
-                <i class="fas fa-trash"></i>
-            </button>
         </div>
 
         @if (_activePanel is not null && VisualState is not null)
@@ -284,19 +277,6 @@
                                 </details>
                             </div>
                         }
-                        else if (_activePanel == "locks")
-                        {
-                            <div class="ez-canvas-lock-panel">
-                                <label>
-                                    <input type="checkbox" @bind="_contentLocked" />
-                                    <span><strong>@T("ContentLocked")</strong><small>@T("ContentLockedHint")</small></span>
-                                </label>
-                                <label>
-                                    <input type="checkbox" @bind="_geometryLocked" />
-                                    <span><strong>@T("GeometryLocked")</strong><small>@T("GeometryLockedHint")</small></span>
-                                </label>
-                            </div>
-                        }
                         else
                         {
                             <div class="ez-canvas-visual-panel__grid ez-canvas-visual-panel__grid--more">
@@ -304,10 +284,6 @@
                                 <label><span>@T("Shadow")</span><select @bind="_shadow">@foreach (var value in ShadowOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
                                 <label><span>@T("TextAlignment")</span><select @bind="_textAlign">@foreach (var value in TextAlignOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
                                 <label><span>@T("Padding")</span><select @bind="_padding">@foreach (var value in SpacingOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
-                                <label><span>@T("LeftPercent")</span><input type="number" min="0" max="100" step=".1" @bind="_leftPercent" /></label>
-                                <label><span>@T("TopPx")</span><input type="number" min="0" max="10000" step="1" @bind="_topPx" /></label>
-                                <label><span>@T("WidthPercent")</span><input type="number" min="1" max="100" step=".1" @bind="_widthPercent" /></label>
-                                <label><span>@T("HeightPx")</span><input type="number" min="24" max="10000" step="1" @bind="_heightPx" /></label>
                             </div>
                         }
                         <footer>
@@ -331,10 +307,17 @@
                          @onclick:stopPropagation="true">
                     <header><strong id="ez-canvas-delete-title">@T("ConfirmDelete")</strong></header>
                     <p>@DeleteConfirmationText</p>
+                    @if (DeleteNestedContainerCount > 0)
+                    {
+                        <p class="ez-canvas-delete-modal__warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            @string.Format(T("DeleteNestedContainersWarning"), DeleteNestedContainerCount)
+                        </p>
+                    }
                     <footer>
                         <button type="button" class="btn-admin btn-ghost" @onclick="CloseDeleteConfirmation">@T("Cancel")</button>
                         <button type="button" class="btn-admin btn-danger" disabled="@Busy" @onclick="ConfirmDeleteSelection">
-                            <i class="fas fa-trash"></i> @T("Delete")
+                            <i class="fas fa-trash"></i> @T(DeletingContainer ? "DeleteContainerAndBlocks" : "Delete")
                         </button>
                     </footer>
                 </section>
@@ -352,27 +335,25 @@
     [Parameter] public IReadOnlyList<CanvasBlockSelectorItem> BlockItems { get; set; } = Array.Empty<CanvasBlockSelectorItem>();
     [Parameter] public CanvasBlockVisualState? VisualState { get; set; }
     [Parameter] public bool CanVisualEdit { get; set; }
-    [Parameter] public bool CanEditPrecise { get; set; }
-    [Parameter] public bool CanGroup { get; set; }
-    [Parameter] public bool CanUngroup { get; set; }
     [Parameter] public bool CanStaggerSelection { get; set; }
     [Parameter] public bool CanContinuousSelection { get; set; }
-    [Parameter] public bool CanManageLocks { get; set; }
     [Parameter] public bool CanDelete { get; set; }
-    [Parameter] public bool SelectionContentLocked { get; set; }
-    [Parameter] public bool SelectionGeometryLocked { get; set; }
+    [Parameter] public bool DeletingContainer { get; set; }
+    [Parameter] public int DeleteDescendantCount { get; set; }
+    [Parameter] public int DeleteNestedContainerCount { get; set; }
     [Parameter] public bool Busy { get; set; }
+    [Parameter] public bool CanAdd { get; set; } = true;
+    [Parameter] public string AddTitle { get; set; } = string.Empty;
     [Parameter] public IReadOnlyList<CanvasBreadcrumbItem> Breadcrumbs { get; set; } = Array.Empty<CanvasBreadcrumbItem>();
     [Parameter] public EventCallback AddRequested { get; set; }
+    [Parameter] public EventCallback DoneRequested { get; set; }
     [Parameter] public EventCallback<string> BlockSelected { get; set; }
-    [Parameter] public EventCallback<string> SectionSelected { get; set; }
-    [Parameter] public EventCallback<CanvasBlockReorderRequest> BlocksReordered { get; set; }
+    [Parameter] public Func<CanvasBlockReorderRequest, Task<bool>>? BlocksReordered { get; set; }
     [Parameter] public EventCallback<CanvasBlockVisualUpdate> VisualChanged { get; set; }
     [Parameter] public EventCallback<string> ShapePreviewChanged { get; set; }
     [Parameter] public EventCallback VisualPreviewCancelled { get; set; }
     [Parameter] public EventCallback<double> RotationPreviewChanged { get; set; }
     [Parameter] public EventCallback<double> RotationCommitted { get; set; }
-    [Parameter] public EventCallback<CanvasBlockLockUpdate> LocksChanged { get; set; }
     [Parameter] public EventCallback DeleteRequested { get; set; }
     [Parameter] public EventCallback<string> Command { get; set; }
     [Parameter] public EventCallback<string> BreadcrumbSelected { get; set; }
@@ -410,7 +391,9 @@
     ];
     private bool _selectorOpen;
     private string _search = string.Empty;
-    private string? _dragBlockId;
+    private ElementReference _selectorListRef;
+    private DotNetObjectReference<CanvasArrangeToolbar>? _selfReference;
+    private bool _selectorSortableNeedsInit;
     private string? _activePanel;
     private string? _loadedVisualKey;
     private string _shape = "rectangle";
@@ -433,17 +416,10 @@
     private string _shadow = "none";
     private string _textAlign = "inherit";
     private string _padding = "none";
-    private double _leftPercent;
-    private double _topPx;
-    private double _widthPercent = 33.333;
-    private double _heightPx = 96;
-    private int _zIndex = 1;
     private CancellationTokenSource? _rotationHoldCts;
     private bool _rotationPointerActive;
     private int _rotationDirection;
     private double _rotationDelta;
-    private bool _contentLocked;
-    private bool _geometryLocked;
     private bool _deleteConfirmOpen;
 
     private bool HasSelection => SelectionCount > 0;
@@ -452,10 +428,14 @@
         : BlockItems.Where(item => item.Label.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
                                    item.Type.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
                                    item.SectionLabel.Contains(_search, StringComparison.OrdinalIgnoreCase));
-    private string PanelLabelKey => _activePanel switch { "shape" => "Shape", "fill" => "Fill", "border" => "Border", "animation" => "Animation", "locks" => "LocksGovernance", _ => "More" };
-    private string DeleteConfirmationText => SelectionCount == 1
-        ? string.Format(T("DeleteSelectedBlockPrompt"), SelectedLabel)
-        : string.Format(T("DeleteSelectedBlocksPrompt"), SelectionCount);
+    private string PanelLabelKey => _activePanel switch { "shape" => "Shape", "fill" => "Fill", "border" => "Border", "animation" => "Animation", _ => "More" };
+    private string DeleteConfirmationText => DeletingContainer && SelectionCount == 1
+        ? DeleteDescendantCount > 0
+            ? string.Format(T("DeleteContainerGraphPrompt"), DeleteDescendantCount)
+            : T("DeleteEmptyContainerPrompt")
+        : SelectionCount == 1
+            ? string.Format(T("DeleteSelectedBlockPrompt"), SelectedLabel)
+            : string.Format(T("DeleteSelectedBlocksPrompt"), SelectionCount);
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string ActiveTimingPresetKey =>
         TimingPresets.FirstOrDefault(preset =>
@@ -464,6 +444,9 @@
 
     protected override void OnParametersSet()
     {
+        if (_selectorOpen)
+            _selectorSortableNeedsInit = true;
+
         if (VisualState is null || VisualState.SelectionKey == _loadedVisualKey) return;
         _loadedVisualKey = VisualState.SelectionKey;
         _shape = VisualState.Shape;
@@ -486,46 +469,69 @@
         _shadow = VisualState.Shadow;
         _textAlign = VisualState.TextAlign;
         _padding = VisualState.Padding;
-        _leftPercent = VisualState.LeftPercent;
-        _topPx = VisualState.TopPx;
-        _widthPercent = VisualState.WidthPercent;
-        _heightPx = VisualState.HeightPx;
-        _zIndex = VisualState.ZIndex;
-        _contentLocked = SelectionContentLocked;
-        _geometryLocked = SelectionGeometryLocked;
     }
 
-    private void ToggleSelector() { _selectorOpen = !_selectorOpen; if (!_selectorOpen) _search = string.Empty; }
-    private void UpdateSearch(ChangeEventArgs args) => _search = args.Value?.ToString() ?? string.Empty;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _selfReference = DotNetObjectReference.Create(this);
+
+        if (!_selectorOpen || !_selectorSortableNeedsInit || _selfReference is null)
+            return;
+
+        _selectorSortableNeedsInit = false;
+        try
+        {
+            await JS.InvokeVoidAsync("initBlockSelectorSortables", _selectorListRef, _selfReference);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private void ToggleSelector()
+    {
+        _selectorOpen = !_selectorOpen;
+        _selectorSortableNeedsInit = _selectorOpen;
+        if (!_selectorOpen) _search = string.Empty;
+    }
+
+    private void UpdateSearch(ChangeEventArgs args)
+    {
+        _search = args.Value?.ToString() ?? string.Empty;
+        _selectorSortableNeedsInit = true;
+    }
     private void HandleSelectorKey(KeyboardEventArgs args) { if (args.Key == "Escape") ToggleSelector(); }
     private async Task SelectBlock(string id) { _selectorOpen = false; _search = string.Empty; await BlockSelected.InvokeAsync(id); }
-    private async Task SelectSection(string id) { _selectorOpen = false; _search = string.Empty; await SectionSelected.InvokeAsync(id); }
-    private void StartDrag(CanvasBlockSelectorItem item) { if (item.CanReorder) _dragBlockId = item.Id; }
-    private void EndDrag() => _dragBlockId = null;
-    private async Task DropOn(CanvasBlockSelectorItem target)
+    [JSInvokable]
+    public async Task<bool> OnBlockSelectorReordered(string sectionId, string peerKey, string[] frontToBackIds)
     {
-        if (_dragBlockId is null || _dragBlockId == target.Id) return;
-        var source = BlockItems.FirstOrDefault(item => item.Id == _dragBlockId);
-        if (source is null || source.PeerKey != target.PeerKey || source.Locked || target.Locked) return;
-        var frontToBack = BlockItems.Where(item => item.PeerKey == target.PeerKey).OrderByDescending(item => item.Order).Select(item => item.Id).ToList();
-        frontToBack.Remove(source.Id);
-        var targetIndex = frontToBack.IndexOf(target.Id);
-        frontToBack.Insert(Math.Max(targetIndex, 0), source.Id);
-        _dragBlockId = null;
-        frontToBack.Reverse();
-        await BlocksReordered.InvokeAsync(new CanvasBlockReorderRequest(target.SectionId, frontToBack));
+        if (!_selectorOpen || !string.IsNullOrWhiteSpace(_search) || BlocksReordered is null)
+            return false;
+
+        var peers = BlockItems
+            .Where(item => item.SectionId == sectionId && item.PeerKey == peerKey)
+            .OrderByDescending(item => item.Order)
+            .ToList();
+        if (peers.Count < 2 || peers.Any(item => !item.CanReorder))
+            return false;
+
+        var expectedIds = peers.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        if (frontToBackIds.Length != peers.Count ||
+            frontToBackIds.Distinct(StringComparer.Ordinal).Count() != peers.Count ||
+            frontToBackIds.Any(id => !expectedIds.Contains(id)))
+            return false;
+
+        var backToFrontIds = frontToBackIds.Reverse().ToArray();
+        var saved = await BlocksReordered(new CanvasBlockReorderRequest(sectionId, backToFrontIds));
+        if (!saved)
+            _selectorSortableNeedsInit = true;
+        return saved;
     }
 
     private async Task OpenPanel(string panel)
     {
-        if (panel == "locks")
-        {
-            if (!CanManageLocks || !HasSelection) return;
-        }
-        else if ((panel == "more" && !CanEditPrecise) || (panel != "more" && !CanVisualEdit))
-        {
-            return;
-        }
+        if (!CanVisualEdit) return;
         _selectorOpen = false;
         if (_activePanel == panel)
         {
@@ -552,21 +558,12 @@
             _animationEffect, _animationTrigger, Math.Clamp(_durationMs, 0, 5000), Math.Clamp(_delayMs, 0, 5000),
             _animationEasing, _playOnce, CanStaggerSelection ? Math.Clamp(_staggerMs, 0, 2000) : 0,
             CanContinuousSelection ? _continuousEffect : "none",
-            Math.Clamp(_opacity, 0, 1), _shadow, _textAlign, _padding,
-            Math.Clamp(_leftPercent, 0, 100), Math.Clamp(_topPx, 0, 10000),
-            Math.Clamp(_widthPercent, 1, 100), Math.Clamp(_heightPx, 24, 10000), Math.Clamp(_zIndex, 0, 1000),
-            _activePanel == "more"));
+            Math.Clamp(_opacity, 0, 1), _shadow, _textAlign, _padding));
         _activePanel = null;
     }
 
     private async Task ApplyActivePanel()
     {
-        if (_activePanel == "locks")
-        {
-            await LocksChanged.InvokeAsync(new CanvasBlockLockUpdate(_contentLocked, _geometryLocked));
-            _activePanel = null;
-            return;
-        }
         await ApplyVisualChanges();
     }
 
@@ -688,16 +685,26 @@
     public sealed record CanvasBreadcrumbItem(string Id, string Label);
     public sealed record CanvasBlockSelectorItem(string Id, string SectionId, string SectionLabel, string Label, string Type, int Depth, int Order, string PeerKey, bool Visible, bool Locked, bool CanReorder);
     public sealed record CanvasBlockReorderRequest(string SectionId, IReadOnlyList<string> OrderedIds);
-    public sealed record CanvasBlockLockUpdate(bool ContentLocked, bool GeometryLocked);
     private sealed record AnimationEffectCard(string Value, string LabelKey, string HintKey, string PreviewClass);
     private sealed record TimingPreset(string Key, string LabelKey, string HintKey, int DurationMs, string Easing);
     private sealed record EasingOption(string Value, string LabelKey);
-    public sealed record CanvasBlockVisualState(string SelectionKey, string Shape, string BackgroundMode, string? BackgroundColor, string? TextColor, int BorderWidth, string BorderStyle, string? BorderColor, string BorderRadius, string AnimationEffect, string AnimationTrigger, int DurationMs, int DelayMs, string AnimationEasing, bool PlayOnce, int StaggerMs, string ContinuousEffect, double Opacity, string Shadow, string TextAlign, string Padding, double LeftPercent, double TopPx, double WidthPercent, double HeightPx, int ZIndex);
-    public sealed record CanvasBlockVisualUpdate(string Scope, string Shape, string BackgroundMode, string? BackgroundColor, string? TextColor, int BorderWidth, string BorderStyle, string? BorderColor, string BorderRadius, string AnimationEffect, string AnimationTrigger, int DurationMs, int DelayMs, string AnimationEasing, bool PlayOnce, int StaggerMs, string ContinuousEffect, double Opacity, string Shadow, string TextAlign, string Padding, double LeftPercent, double TopPx, double WidthPercent, double HeightPx, int ZIndex, bool ApplyPreciseLayout);
+    public sealed record CanvasBlockVisualState(string SelectionKey, string Shape, string BackgroundMode, string? BackgroundColor, string? TextColor, int BorderWidth, string BorderStyle, string? BorderColor, string BorderRadius, string AnimationEffect, string AnimationTrigger, int DurationMs, int DelayMs, string AnimationEasing, bool PlayOnce, int StaggerMs, string ContinuousEffect, double Opacity, string Shadow, string TextAlign, string Padding);
+    public sealed record CanvasBlockVisualUpdate(string Scope, string Shape, string BackgroundMode, string? BackgroundColor, string? TextColor, int BorderWidth, string BorderStyle, string? BorderColor, string BorderRadius, string AnimationEffect, string AnimationTrigger, int DurationMs, int DelayMs, string AnimationEasing, bool PlayOnce, int StaggerMs, string ContinuousEffect, double Opacity, string Shadow, string TextAlign, string Padding);
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _rotationHoldCts?.Cancel();
         _rotationHoldCts?.Dispose();
+        if (_selectorOpen)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("destroyBlockSelectorSortables", _selectorListRef);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+        _selfReference?.Dispose();
     }
 }

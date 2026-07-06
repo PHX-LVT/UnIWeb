@@ -220,6 +220,13 @@
     pointer-events: none;
 }
 
+.sc-authoring-preview .sc-section-blocks--freeform .sc-block-frame .sc-block-starter,
+.sc-authoring-preview .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-block-starter {
+    height: 100%;
+    min-height: 0;
+    padding: clamp(6px, 3%, 20px);
+}
+
 .sc-authoring-preview .sc-block-starter strong,
 .sc-authoring-preview .sc-block-starter span {
     font: inherit;
@@ -309,6 +316,15 @@
     align-items: center;
     justify-content: center;
     gap: 14px;
+}
+
+.sc-authoring-preview .sc-section-blocks--freeform .sc-block-starter__tile,
+.sc-authoring-preview .sc-section-blocks--freeform .sc-block-starter__form,
+.sc-authoring-preview .sc-section-blocks--freeform .sc-block-starter__step,
+.sc-authoring-preview .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-block-starter__tile,
+.sc-authoring-preview .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-block-starter__form,
+.sc-authoring-preview .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-block-starter__step {
+    min-height: 0;
 }
 
 .sc-authoring-preview .sc-block-starter__tile i {
@@ -509,7 +525,9 @@
     left: var(--sc-block-left, 0%);
     top: var(--sc-block-top, 0);
     width: var(--sc-block-width, 33.3333%);
-    min-height: var(--sc-block-min-height, 96px);
+    height: var(--sc-block-min-height, 96px);
+    min-height: 0;
+    overflow: hidden;
 }
 
 .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame {
@@ -517,7 +535,20 @@
     left: var(--sc-block-left, 0%);
     top: var(--sc-block-top, 0);
     width: var(--sc-block-width, 33.3333%);
-    min-height: var(--sc-block-min-height, 96px);
+    height: var(--sc-block-min-height, 96px);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sc-section-blocks--freeform .sc-block-frame--position-freeform > *,
+.sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame > *,
+.sc-section-blocks--freeform .sc-block-frame--position-freeform .sc-block,
+.sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-block,
+.sc-section-blocks--freeform .sc-block-frame--position-freeform .sc-design-block,
+.sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-design-block {
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
 }
 
 .sc-section-blocks--freeform .sc-block-frame--position-flow {
@@ -779,6 +810,13 @@
     padding: 24px;
 }
 
+.sc-section-blocks--freeform .sc-step-block,
+.sc-section-blocks--freeform.sc-section-blocks--force-freeform .sc-step-block {
+    align-items: center;
+    gap: clamp(8px, 4%, 18px);
+    padding: clamp(8px, 4%, 24px);
+}
+
 .sc-step-block__marker,
 .sc-icon-block__icon {
     width: 56px;
@@ -791,6 +829,12 @@
     background: rgba(229, 192, 118, 0.12);
     border: 1px solid rgba(229, 192, 118, 0.55);
     font-weight: 800;
+}
+
+.sc-section-blocks--freeform .sc-step-block__marker,
+.sc-section-blocks--freeform.sc-section-blocks--force-freeform .sc-step-block__marker {
+    width: clamp(32px, 18%, 56px);
+    height: clamp(32px, 18%, 56px);
 }
 
 .sc-icon-block {

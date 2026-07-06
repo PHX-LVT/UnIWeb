@@ -975,6 +975,7 @@ public class ColumnSlotResponseDto
 
     public class ContainerBlockCreateDto : BlockCreateDto
     {
+        public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
         public string? LayoutMode { get; set; }
@@ -1116,6 +1117,7 @@ public class ColumnSlotResponseDto
 
     public class ContainerBlockUpdateDto : BlockUpdateDto
     {
+        public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
         public string? LayoutMode { get; set; }
@@ -1258,6 +1260,7 @@ public class ColumnSlotResponseDto
         public string? Action { get; set; }
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
+        public string? PresetKey { get; set; }
         public string? LayoutMode { get; set; }
         public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
         public int? Columns { get; set; }
