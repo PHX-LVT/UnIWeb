@@ -1,0 +1,145 @@
+<div class="sc-block sc-block-starter sc-block-starter--@NormalizedType"
+     data-starter-preset-version="1"
+     aria-label="@Label("StarterBlock")">
+    @switch (NormalizedType)
+    {
+        case "text":
+            <div class="sc-block-starter__copy">
+                <strong>@Label("Heading")</strong>
+                <span></span><span></span><span class="is-short"></span>
+            </div>
+            break;
+        case "bullet-list":
+            <div class="sc-block-starter__list">
+                @for (var index = 0; index < 3; index++)
+                {
+                    <span><i class="fas fa-check"></i><b></b></span>
+                }
+            </div>
+            break;
+        case "image":
+            <div class="sc-block-starter__media"><i class="fas fa-image"></i><span>@Label("ChooseImage")</span></div>
+            break;
+        case "video":
+            <div class="sc-block-starter__media"><i class="fas fa-play-circle"></i><span>@Label("ChooseVideo")</span></div>
+            break;
+        case "file":
+            <div class="sc-block-starter__tile"><i class="fas fa-file-alt"></i><span>@Label("ChooseFile")</span></div>
+            break;
+        case "card":
+            <div class="sc-block-starter__card-media"><i class="fas fa-image"></i></div>
+            <div class="sc-block-starter__copy"><strong>@Label("CardTitle")</strong><span></span><em>@Label("Action")</em></div>
+            break;
+        case "metric":
+            <div class="sc-block-starter__metric">00</div>
+            <strong>@Label("MetricLabel")</strong>
+            <span class="sc-block-starter__line"></span>
+            break;
+        case "step":
+            <div class="sc-block-starter__step"><b>01</b><span><strong>@Label("StepTitle")</strong><i></i><i></i></span></div>
+            break;
+        case "icon":
+            <i class="fas fa-star sc-block-starter__icon"></i>
+            <strong>@Label("IconLabel")</strong>
+            <span class="sc-block-starter__line"></span>
+            break;
+        case "button":
+            <span class="sc-btn sc-btn--filled sc-block-starter__button">@Label("ButtonLabel")</span>
+            break;
+        case "map":
+            <div class="sc-block-starter__map"><i class="fas fa-map-marker-alt"></i><span>@Label("MapArea")</span></div>
+            break;
+        case "form":
+            <div class="sc-block-starter__form"><i class="fas fa-wpforms"></i><strong>@Label("ChooseForm")</strong></div>
+            break;
+        case "container":
+            <div class="sc-block-starter__container"><i class="fas fa-layer-group"></i><span>@Label("ContainerBoundary")</span></div>
+            break;
+    }
+</div>
+
+@code {
+    [Parameter] public string Type { get; set; } = "text";
+    [Parameter] public string Lang { get; set; } = "en";
+
+    private string NormalizedType => Type switch
+    {
+        "bullet-list" => "bullet-list",
+        "image" => "image",
+        "video" => "video",
+        "file" => "file",
+        "card" => "card",
+        "metric" => "metric",
+        "step" => "step",
+        "icon" => "icon",
+        "button" => "button",
+        "map" => "map",
+        "form" => "form",
+        "container" => "container",
+        _ => "text"
+    };
+
+    private string Label(string key)
+    {
+        var language = (Lang ?? "en").Trim().ToLowerInvariant();
+        if (language.StartsWith("vi", StringComparison.Ordinal))
+        {
+            return key switch
+            {
+                "Heading" => "Tiêu đề",
+                "ChooseImage" => "Chọn hình ảnh",
+                "ChooseVideo" => "Chọn video",
+                "ChooseFile" => "Chọn tệp",
+                "CardTitle" => "Tiêu đề thẻ",
+                "Action" => "Hành động",
+                "MetricLabel" => "Nhãn chỉ số",
+                "StepTitle" => "Tiêu đề bước",
+                "IconLabel" => "Nhãn biểu tượng",
+                "ButtonLabel" => "Nút hành động",
+                "MapArea" => "Khu vực bản đồ",
+                "ChooseForm" => "Chọn định nghĩa biểu mẫu",
+                "ContainerBoundary" => "Ranh giới Container",
+                _ => "Block mẫu"
+            };
+        }
+
+        if (language.StartsWith("zh", StringComparison.Ordinal))
+        {
+            return key switch
+            {
+                "Heading" => "标题",
+                "ChooseImage" => "选择图片",
+                "ChooseVideo" => "选择视频",
+                "ChooseFile" => "选择文件",
+                "CardTitle" => "卡片标题",
+                "Action" => "操作",
+                "MetricLabel" => "指标标签",
+                "StepTitle" => "步骤标题",
+                "IconLabel" => "图标标签",
+                "ButtonLabel" => "操作按钮",
+                "MapArea" => "地图区域",
+                "ChooseForm" => "选择表单定义",
+                "ContainerBoundary" => "Container 边界",
+                _ => "起始区块"
+            };
+        }
+
+        return key switch
+        {
+            "Heading" => "Heading",
+            "ChooseImage" => "Choose image",
+            "ChooseVideo" => "Choose video",
+            "ChooseFile" => "Choose file",
+            "CardTitle" => "Card title",
+            "Action" => "Action",
+            "MetricLabel" => "Metric label",
+            "StepTitle" => "Step title",
+            "IconLabel" => "Icon label",
+            "ButtonLabel" => "Call to action",
+            "MapArea" => "Map area",
+            "ChooseForm" => "Choose Form Definition",
+            "ContainerBoundary" => "Container boundary",
+            _ => "Starter Block"
+        };
+    }
+}

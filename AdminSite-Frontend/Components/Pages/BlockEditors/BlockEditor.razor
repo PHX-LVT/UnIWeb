@@ -1,6 +1,8 @@
 ﻿@inject AdminBlockService BlockService
 @inject IHttpService Http
-@implements IDisposable
+@inject IJSRuntime JS
+@inject AdminAuthService Auth
+@implements IAsyncDisposable
 
 @if (_loading)
 {
@@ -16,6 +18,8 @@ else
             @T("Blocks") (@_blocks.Count)
         </span>
         <button class="btn-admin btn-primary"
+                disabled="@(!AddTargetHasCapacity)"
+                title="@AddTargetTitle"
                 @onclick="TogglePicker">
             <i class="fas fa-plus"></i> @T("AddBlock")
         </button>
@@ -23,34 +27,16 @@ else
 
     @if (_showPicker)
     {
-        <div class="block-picker">
-            <div class="block-picker__header">
-                <div>
-                    <strong>@T("AddBlock")</strong>
-                    <span>@T("ChooseBlock")</span>
-                </div>
-                <button class="btn-admin btn-ghost"
-                        @onclick="() => _showPicker = false">
-                    <i class="fas fa-times"></i>
-                </button>
+        <div class="ez-modal-overlay block-create-modal-overlay" @onclick="ClosePicker">
+            <div class="ez-modal block-create-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+                <BlockCreationWizard Open="true"
+                                     Busy="_creatingBlock"
+                                     AdminLanguage="@AdminLanguage"
+                                     AllowedTypes="@AddTargetAllowedTypes"
+                                     ConstraintLabel="@AddTargetConstraintLabel"
+                                     Confirmed="AddBlock"
+                                     Cancelled="ClosePicker" />
             </div>
-
-            @foreach (var group in _blockGroups)
-            {
-                <div class="block-picker__group">@group.Title</div>
-                <div class="block-picker__grid">
-                    @foreach (var t in group.Types)
-                    {
-                        <button class="block-picker__card"
-                                @onclick="() => AddBlock(t.Key)"
-                                disabled="@_creatingBlock">
-                            <i class="fas @t.Value.Icon"></i>
-                            <span>@t.Value.Label</span>
-                            <small>@t.Value.Desc</small>
-                        </button>
-                    }
-                </div>
-            }
         </div>
     }
 
@@ -65,54 +51,75 @@ else
     }
     else
     {
-        @foreach (var block in OrderedBlocks)
+        <div class="block-sort-list" @ref="_blockListRef">
+        @foreach (var entry in RootBlockEntries)
         {
-            <div class="block-card @(block.Id == _activeBlockId ? "active" : "")">
+            var block = entry.Block;
+            <div class="block-sort-item @(entry.Depth > 0 ? "block-sort-item--nested" : "")"
+                 @key="block.Id"
+                 data-block-sort-id="@block.Id"
+                 data-block-parent="@NormalizeParent(block.ParentBlockId)"
+                 data-block-zone="@NormalizeBlockZone(block.BlockZone)"
+                 data-block-slot="@NormalizeSlot(block.ColumnSlotId)"
+                 data-block-sort-locked="@((block.Authoring.FullLocked || block.Authoring.GeometryLocked || !PresetAllowsChildReorder(block)).ToString().ToLowerInvariant())"
+                 style="--block-depth: @entry.Depth;">
+            <div class="block-card @(block.Id == _activePanelBlockId ? "active" : "")">
                 <div class="block-card-header"
                      @onclick="() => ToggleBlock(block.Id)">
-                    <div style="display:flex;align-items:center;gap:.6rem">
-                        <i class="fas fa-grip-vertical text-muted"
-                           style="cursor:grab;font-size:.8rem"></i>
+                    <div class="block-card-header__identity">
+                        @if (!UseArrangeWorkspace)
+                        {
+                            <i class="fas fa-grip-vertical text-muted block-card-drag"
+                               title="@T("DragToReorder")"></i>
+                        }
                         <span class="block-type-badge">
                             @BlockIcon(block.Type) @block.Type
                         </span>
+                        <strong class="block-card-name">@BlockDisplayName(block)</strong>
                         @if (!block.Visible)
                         {
-                            <span class="badge badge-draft">@T("Hidden")</span>
+                            <span class="block-state-badge block-state-badge--hidden" title="@T("Hidden")">
+                                <i class="fas fa-eye-slash"></i><span>@T("Hidden")</span>
+                            </span>
+                        }
+                        @if (block.Authoring.FullLocked || block.Authoring.ContentLocked)
+                        {
+                            <span class="block-state-badge block-state-badge--content-lock" title="@T("ContentLockedHint")">
+                                <i class="fas fa-lock"></i><span>@T("ContentLocked")</span>
+                            </span>
+                        }
+                        @if (block.Authoring.FullLocked || block.Authoring.GeometryLocked)
+                        {
+                            <span class="block-state-badge block-state-badge--geometry-lock" title="@T("GeometryLockedHint")">
+                                <i class="fas fa-vector-square"></i><span>@T("GeometryLockState")</span>
+                            </span>
                         }
                     </div>
-                    <div style="display:flex;align-items:center;gap:.4rem"
+                    <div class="block-card-header__actions"
                          @onclick:stopPropagation="true">
-                        <button class="block-reorder-btn"
-                                title="@T("MoveUp")"
-                                disabled="@(_reorderingBlock || !CanMoveBlock(block, -1))"
-                                @onclick="() => MoveBlock(block, -1)">
-                            <i class="fas fa-arrow-up"></i>
-                        </button>
-                        <button class="block-reorder-btn"
-                                title="@T("MoveDown")"
-                                disabled="@(_reorderingBlock || !CanMoveBlock(block, 1))"
-                                @onclick="() => MoveBlock(block, 1)">
-                            <i class="fas fa-arrow-down"></i>
-                        </button>
                         <button class="visibility-toggle
                                 @(block.Visible ? "visible" : "hidden")"
+                                disabled="@(block.Authoring.FullLocked || block.Authoring.ContentLocked)"
+                                title="@T(block.Visible ? "Hide" : "Show")"
+                                aria-label="@T(block.Visible ? "Hide" : "Show")"
                                 @onclick="() => ToggleVisibility(block)">
                             <i class="fas @(block.Visible
                                 ? "fa-eye" : "fa-eye-slash")"></i>
                         </button>
                         <button class="btn-admin btn-danger"
                                 style="padding:3px 8px"
+                                disabled="@(block.Authoring.FullLocked || block.Authoring.ContentLocked || IsRequiredContainerSlot(block))"
+                                title="@(IsRequiredContainerSlot(block) ? T("RequiredContainerSlotCannotDelete") : T("Delete"))"
                                 @onclick="() => _confirmDelete = block">
                             <i class="fas fa-trash"></i>
                         </button>
-                        <i class="fas @(block.Id == _activeBlockId
+                        <i class="fas @(block.Id == _activePanelBlockId
                             ? "fa-chevron-up" : "fa-chevron-down")"
                            style="color:var(--text-muted);font-size:.8rem"></i>
                     </div>
                 </div>
 
-                @if (block.Id == _activeBlockId)
+                @if (block.Id == _activePanelBlockId)
                 {
                     <div class="block-card-body">
                         @if (_fullBlock is null)
@@ -123,142 +130,128 @@ else
                         }
                         else
                         {
-                            <div class="block-layout-panel">
-                                <div class="block-layout-panel__title">@T("PlacementLayout")</div>
-                                <div class="block-layout-panel__grid">
-                                    @if (SupportsFreeformPositioning)
-                                    {
-                                        <label>
-                                            <span>@T("Positioning")</span>
-                                            <select @bind="_positionMode">
-                                                <option value="flow">@T("Flow")</option>
-                                                <option value="freeform">@T("Freeform")</option>
-                                            </select>
-                                        </label>
-                                    }
-                                    <label>
-                                        <span>@T("Zone")</span>
-                                        <select @bind="_blockZone">
-                                            @foreach (var option in ZoneOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    @if (ContainerOptions.Any() && _fullBlock.Type != "container")
-                                    {
-                                        <label>
-                                            <span>@T("ParentContainer")</span>
-                                            <select @bind="_parentBlockId">
-                                                <option value="">@T("None")</option>
-                                                @foreach (var container in ContainerOptions)
-                                                {
-                                                    <option value="@container.Id">@BlockDisplayName(container)</option>
-                                                }
-                                            </select>
-                                        </label>
-                                    }
-                                    <label>
-                                        <span>@T("Width")</span>
-                                        <select @bind="_layoutWidth">
-                                            @foreach (var option in _widthOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    <label>
-                                        <span>@T("ColumnSpan")</span>
-                                        <input type="number" min="1" max="12" @bind="_layoutColumnSpan" />
-                                    </label>
-                                    <label>
-                                        <span>@T("Align")</span>
-                                        <select @bind="_layoutAlign">
-                                            @foreach (var option in _alignOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                    <label>
-                                        <span>@T("Justify")</span>
-                                        <select @bind="_layoutJustify">
-                                            @foreach (var option in _justifyOptions)
-                                            {
-                                                <option value="@option">@option</option>
-                                            }
-                                        </select>
-                                    </label>
-                                </div>
-                                <p class="block-layout-panel__hint">
-                                    @(_positionMode == "freeform" ? T("ArrangeModeHint") : T("FlowModeHint"))
-                                </p>
-                                <details class="block-layout-panel__advanced">
-                                    <summary>@T("AdvancedLayout")</summary>
-                                    <div class="block-layout-panel__grid">
-                                        <label>
-                                            <span>@T("Padding")</span>
-                                            <select @bind="_layoutPadding">
-                                                @foreach (var option in _spaceOptions)
-                                                {
-                                                    <option value="@option">@option</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("Margin")</span>
-                                            <select @bind="_layoutMargin">
-                                                @foreach (var option in _spaceOptions)
-                                                {
-                                                    <option value="@option">@option</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <label>
-                                            <span>@T("BackgroundColor")</span>
-                                            <input type="text" placeholder="#ffffff" @bind="_layoutBackgroundColor" />
-                                        </label>
-                                        <label>
-                                            <span>@T("BorderRadius")</span>
-                                            <select @bind="_layoutBorderRadius">
-                                                @foreach (var option in _radiusOptions)
-                                                {
-                                                    <option value="@option">@option</option>
-                                                }
-                                            </select>
-                                        </label>
-                                        <div class="block-layout-panel__layer">
-                                            <label>
-                                                <span>@T("LayerOrder")</span>
-                                                <input type="number" min="0" max="1000" @bind="_layoutZIndex" />
-                                            </label>
-                                            <div class="block-layout-panel__layer-actions" aria-label="@T("LayerControls")">
-                                                <button type="button" title="@T("SendBackward")" @onclick="SendLayerBackward">
-                                                    <i class="fas fa-arrow-down"></i>
-                                                </button>
-                                                <button type="button" title="@T("BringForward")" @onclick="BringLayerForward">
-                                                    <i class="fas fa-arrow-up"></i>
-                                                </button>
-                                                <button type="button" title="@T("SendToBack")" @onclick="SendLayerToBack">
-                                                    <i class="fas fa-angle-double-down"></i>
-                                                </button>
-                                                <button type="button" title="@T("BringToFront")" @onclick="BringLayerToFront">
-                                                    <i class="fas fa-angle-double-up"></i>
-                                                </button>
-                                            </div>
-                                        </div>
+                            <div class="block-focused-inspector">
+                                <div class="block-focused-inspector__head">
+                                    <div>
+                                        <span>@T("BlockInspector")</span>
+                                        <strong><i class="fas @BlockIconClass(_fullBlock.Type)"></i> @T(BlockLabelKey(_fullBlock.Type))</strong>
                                     </div>
-                                </details>
-                                <div class="block-layout-panel__actions">
-                                    <button type="button"
-                                            class="btn-admin btn-primary"
-                                            disabled="@_savingLayout"
-                                            @onclick="SaveBlockLayout">
-                                        <i class="fas fa-save"></i> @(_savingLayout ? T("Saving") : T("SaveLayout"))
+                                    <div class="block-focused-inspector__badges">
+                                        <span class="@(_fullBlock.Visible ? "is-visible" : "is-hidden")">
+                                            <i class="fas @(_fullBlock.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                                            @T(_fullBlock.Visible ? "Visible" : "Hidden")
+                                        </span>
+                                        @if (_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked || _fullBlock.Authoring.GeometryLocked)
+                                        {
+                                            <span class="is-locked"><i class="fas fa-lock"></i> @T("Governed")</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(_fullBlock.Authoring.PresetSlotName))
+                                {
+                                    <div class="block-focused-inspector__preset">
+                                        <i class="fas fa-shield-alt"></i>
+                                        <span>@T("PresetSlot"): <strong>@_fullBlock.Authoring.PresetSlotName</strong></span>
+                                    </div>
+                                }
+
+                                @if (!UseArrangeWorkspace)
+                                {
+                                <div class="block-focused-inspector__actions">
+                                    <button type="button" class="btn-admin btn-ghost"
+                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked)"
+                                            @onclick="ToggleSelectedVisibility">
+                                        <i class="fas @(_fullBlock.Visible ? "fa-eye-slash" : "fa-eye")"></i>
+                                        @T(_fullBlock.Visible ? "Hide" : "Show")
+                                    </button>
+                                    <button type="button" class="btn-admin btn-danger"
+                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked || IsRequiredContainerSlot(_fullBlock))"
+                                            @onclick="() => _confirmDelete = _fullBlock">
+                                        <i class="fas fa-trash"></i> @T("Delete")
                                     </button>
                                 </div>
+                                }
+
+                                <details class="block-focused-inspector__governance">
+                                    <summary><i class="fas fa-shield-alt"></i> @T("LocksGovernance")</summary>
+                                    <div class="block-focused-inspector__lock-grid">
+                                        <label><input type="checkbox" @bind="_fullBlock.Authoring.ContentLocked" disabled="@(!Auth.IsAdminAdmin)" /> @T("ContentLocked")</label>
+                                        <label><input type="checkbox" @bind="_fullBlock.Authoring.GeometryLocked" disabled="@(!Auth.IsAdminAdmin)" /> @T("GeometryLocked")</label>
+                                    </div>
+                                </details>
                             </div>
 
+                            @if (UseArrangeWorkspace && AddTargetContainer is not null)
+                            {
+                                <section class="container-owned-manager">
+                                    <header>
+                                        <span>
+                                            <strong>@T("ContainerOwnedBlocks")</strong>
+                                            <small>@T("ContainerOwnedBlocksHint")</small>
+                                        </span>
+                                        <b>@AddTargetChildCount/@AddTargetCapacity</b>
+                                    </header>
+                                    <div class="container-owned-manager__capacity" aria-label="@string.Format(T("ContainerCapacityStatus"), AddTargetChildCount, AddTargetCapacity)">
+                                        <span style="width:@ContainerCapacityPercent%"></span>
+                                    </div>
+                                    <div class="container-owned-manager__preset">
+                                        <span>
+                                            <strong>@ContainerPresetDisplayName</strong>
+                                            <small>@ContainerPresetPolicyLabel</small>
+                                        </span>
+                                        <b>@ContainerAvailableSlotsLabel</b>
+                                    </div>
+                                    @if (ContainerSlotStatuses.Count > 0)
+                                    {
+                                        <div class="container-owned-manager__slots" aria-label="@T("AvailableSlots")">
+                                            @foreach (var slot in ContainerSlotStatuses)
+                                            {
+                                                <span class="@(slot.Child is null ? "is-empty" : "is-filled") @(slot.Required ? "is-required" : null)"
+                                                      title="@SlotStatusTitle(slot)">
+                                                    <i class="fas @(slot.Child is null ? "fa-plus" : BlockIconClass(slot.Child.Type))"></i>
+                                                    <small>@slot.Label</small>
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                    @if (ContainerChildren.Count == 0)
+                                    {
+                                        <p>@T("NoContainerBlocks")</p>
+                                    }
+                                    else
+                                    {
+                                        <div class="container-owned-manager__list">
+                                            @foreach (var child in ContainerChildren)
+                                            {
+                                                <button type="button"
+                                                        class="@(child.Id == _activeBlockId ? "is-active" : null)"
+                                                        @onclick="() => ToggleBlock(child.Id)">
+                                                    <i class="fas @BlockIconClass(child.Type)"></i>
+                                                    <span><strong>@BlockDisplayName(child)</strong><small>@ChildSummary(child)</small></span>
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                    <button type="button" class="btn-admin btn-primary"
+                                            disabled="@(!AddTargetHasCapacity)"
+                                            title="@AddTargetTitle"
+                                            @onclick="TogglePicker">
+                                        <i class="fas fa-plus"></i> @T("AddBlockToContainer")
+                                    </button>
+                                </section>
+                            }
+
+                            @* Replaced advanced BlockEditor controls were removed intentionally.
+                               A future Advanced modal system is postponed until after Notification Overhaul. *@
+
+                            @if (_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked)
+                            {
+                                <div class="block-layout-panel__lock-notice"><i class="fas fa-lock"></i> @T("ContentLockedHint")</div>
+                            }
+                            else
+                            {
                             @switch (_fullBlock.Type)
                             {
                                 case "text":
@@ -279,6 +272,7 @@ else
                                     <VideoBlockEditor Block="_fullBlock"
                                                       PageId="@PageId"
                                                       SectionId="@SectionId"
+                                                      Languages="Languages"
                                                       OnSaved="HandleBlockSaved" />
                                     break;
                                 case "file":
@@ -317,15 +311,20 @@ else
                                     <p class="text-muted">@T("UnknownBlockType")</p>
                                     break;
                             }
+                            }
                         }
                     </div>
                 }
             </div>
+            </div>
         }
+        </div>
     }
 }
 
 <BlockDeleteDialog Block="_confirmDelete"
+                   DescendantCount="@DeleteDescendantCount"
+                   NestedContainerCount="@DeleteNestedContainerCount"
                    ConfirmTitle="@T("ConfirmDelete")"
                    CancelText="@T("Cancel")"
                    DeleteText="@T("Delete")"
@@ -333,15 +332,41 @@ else
                    OnConfirm="ConfirmDelete" />
 
 <style>
+    .block-sort-list {
+        display: grid;
+        gap: .5rem;
+    }
+    .block-sort-item {
+        min-width: 0;
+        margin-left: calc(var(--block-depth, 0) * 18px);
+    }
+    .block-sort-item--nested {
+        position: relative;
+    }
+    .block-sort-item--nested::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: -10px;
+        border-left: 2px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+    }
     .block-card {
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 6px;
-        margin-bottom: .5rem;
+        margin-bottom: 0;
         overflow: hidden;
         transition: border-color .15s;
     }
     .block-card.active { border-color: var(--primary-light); }
+    .block-card-drag {
+        padding: .25rem;
+        font-size: .8rem;
+        cursor: grab;
+        touch-action: none;
+    }
+    .block-card-drag:active { cursor: grabbing; }
     .block-card-header {
         display: flex;
         align-items: center;
@@ -355,6 +380,172 @@ else
         padding: 1rem;
         border-top: 1px solid var(--border);
         background: #fafbfd;
+    }
+    .block-focused-inspector {
+        display: grid;
+        gap: .8rem;
+        margin-bottom: 1rem;
+        padding: .9rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #fff;
+    }
+    .block-focused-inspector__head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .75rem;
+    }
+    .block-focused-inspector__head > div:first-child {
+        display: grid;
+        gap: .18rem;
+    }
+    .block-focused-inspector__head > div:first-child > span,
+    .block-focused-inspector__organization label > span,
+    .block-focused-inspector__path > span {
+        color: var(--text-muted);
+        font-size: .68rem;
+        font-weight: 750;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .block-focused-inspector__head strong {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        color: var(--primary);
+        font-size: .9rem;
+    }
+    .block-focused-inspector__workspace-note {
+        display: flex;
+        align-items: flex-start;
+        gap: .65rem;
+        padding: .7rem .75rem;
+        border: 1px solid #c7d2fe;
+        border-radius: 8px;
+        background: #eef2ff;
+        color: var(--primary);
+    }
+    .block-focused-inspector__workspace-note > i { margin-top: .12rem; }
+    .block-focused-inspector__workspace-note > span { display: grid; gap: .15rem; }
+    .block-focused-inspector__workspace-note strong { font-size: .76rem; }
+    .block-focused-inspector__workspace-note small { color: var(--text-muted); font-size: .7rem; line-height: 1.4; }
+    .block-create-modal { width:min(760px,calc(100vw - 32px)); max-height:min(760px,calc(100vh - 32px)); overflow:auto; padding:1rem; }
+    .block-create-modal .block-create-wizard { margin:0; box-shadow:none; }
+    .container-owned-manager { display:grid; gap:.75rem; margin:0 0 1rem; padding:.9rem; border:1px solid #c7d2fe; border-radius:10px; background:#f8faff; }
+    .container-owned-manager > header { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; }
+    .container-owned-manager > header > span { display:grid; gap:.15rem; }
+    .container-owned-manager > header strong { color:var(--text); font-size:.8rem; }
+    .container-owned-manager > header small,
+    .container-owned-manager > p { margin:0; color:var(--text-muted); font-size:.7rem; line-height:1.4; }
+    .container-owned-manager > header b { padding:.2rem .45rem; border-radius:999px; background:#e0e7ff; color:var(--primary); font-size:.68rem; }
+    .container-owned-manager__capacity { height:6px; overflow:hidden; border-radius:999px; background:#e2e8f0; }
+    .container-owned-manager__capacity span { display:block; height:100%; border-radius:inherit; background:var(--primary); }
+    .container-owned-manager__preset { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; padding:.65rem .7rem; border:1px solid #dbeafe; border-radius:8px; background:#fff; }
+    .container-owned-manager__preset span { display:grid; gap:.1rem; min-width:0; }
+    .container-owned-manager__preset strong { color:var(--text); font-size:.76rem; }
+    .container-owned-manager__preset small { color:var(--text-muted); font-size:.64rem; line-height:1.35; }
+    .container-owned-manager__preset b { flex:0 0 auto; color:var(--primary); font-size:.64rem; }
+    .container-owned-manager__slots { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem; }
+    .container-owned-manager__slots > span { display:grid; grid-template-columns:18px minmax(0,1fr); align-items:center; gap:.35rem; padding:.42rem .5rem; border:1px solid #bfdbfe; border-radius:7px; background:#eff6ff; color:#1d4ed8; }
+    .container-owned-manager__slots > span.is-filled { border-color:#bbf7d0; background:#f0fdf4; color:#15803d; }
+    .container-owned-manager__slots > span.is-required { box-shadow:inset 3px 0 0 #f59e0b; }
+    .container-owned-manager__slots i { text-align:center; font-size:.68rem; }
+    .container-owned-manager__slots small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.62rem; font-weight:700; }
+    .container-owned-manager__list { display:grid; gap:.35rem; }
+    .container-owned-manager__list > button { display:grid; grid-template-columns:22px minmax(0,1fr) 14px; align-items:center; gap:.45rem; padding:.5rem .6rem; border:1px solid var(--border); border-radius:7px; background:#fff; color:var(--text); text-align:left; cursor:pointer; }
+    .container-owned-manager__list > button:hover { border-color:var(--primary-light); background:#f8fafc; }
+    .container-owned-manager__list > button.is-active { border-color:var(--primary); background:#eef2ff; box-shadow:0 0 0 1px rgba(67,56,202,.12); }
+    .container-owned-manager__list > button > i:first-child { color:var(--primary); text-align:center; }
+    .container-owned-manager__list > button > i:last-child { color:var(--text-muted); font-size:.6rem; }
+    .container-owned-manager__list span { display:grid; gap:.08rem; min-width:0; }
+    .container-owned-manager__list strong { overflow:hidden; font-size:.72rem; text-overflow:ellipsis; white-space:nowrap; }
+    .container-owned-manager__list small { color:var(--text-muted); font-size:.62rem; }
+    .block-focused-inspector__badges {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: .35rem;
+    }
+    .block-focused-inspector__badges > span {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .25rem .45rem;
+        border-radius: 999px;
+        background: #eef2f7;
+        color: var(--text-muted);
+        font-size: .65rem;
+        font-weight: 750;
+    }
+    .block-focused-inspector__badges .is-visible { background: #eaf8ef; color: #18753c; }
+    .block-focused-inspector__badges .is-hidden { background: #fff4e5; color: #9a5b00; }
+    .block-focused-inspector__badges .is-locked { background: #f2edff; color: #6240a5; }
+    .block-focused-inspector__organization {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: .65rem;
+    }
+    .block-focused-inspector__organization label,
+    .block-focused-inspector__path {
+        display: grid;
+        gap: .28rem;
+    }
+    .block-focused-inspector__organization select {
+        min-height: 36px;
+        padding: .3rem .5rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text);
+    }
+    .block-focused-inspector__path strong {
+        min-height: 36px;
+        display: flex;
+        align-items: center;
+        padding: .3rem .55rem;
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--text);
+        font-size: .74rem;
+    }
+    .block-focused-inspector__preset {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .55rem .65rem;
+        border-radius: 7px;
+        background: #f2edff;
+        color: #6240a5;
+        font-size: .72rem;
+    }
+    .block-focused-inspector__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+    }
+    .block-focused-inspector__governance {
+        padding-top: .65rem;
+        border-top: 1px solid var(--border);
+    }
+    .block-focused-inspector__governance summary {
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: .72rem;
+        font-weight: 750;
+    }
+    .block-focused-inspector__lock-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .65rem 1rem;
+        margin: .7rem 0;
+    }
+    .block-focused-inspector__lock-grid label {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        color: var(--text-muted);
+        font-size: .72rem;
     }
     .block-layout-panel {
         border: 1px solid var(--border);
@@ -390,6 +581,146 @@ else
         padding: .25rem .45rem;
         color: var(--text);
         background: #fff;
+    }
+    .block-layout-panel__icon-field {
+        display: grid;
+        align-content: start;
+        gap: .35rem;
+    }
+    .block-layout-panel__icon-field > span {
+        color: var(--text-muted);
+        font-size: .7rem;
+        font-weight: 700;
+    }
+    .block-layout-panel__icon-options {
+        display: inline-flex;
+        width: fit-content;
+        padding: 2px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+    }
+    .block-layout-panel__icon-options button {
+        width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+    }
+    .block-layout-panel__icon-options button:hover,
+    .block-layout-panel__icon-options button.is-active {
+        background: #eef2ff;
+        color: var(--primary);
+    }
+    .block-layout-panel__responsive {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+        margin-top: .65rem;
+    }
+    .block-layout-panel__responsive-card {
+        padding: .75rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fafbfd;
+    }
+    .block-layout-panel__responsive-card > strong {
+        display: block;
+        margin-bottom: .65rem;
+        color: var(--text);
+        font-size: .8rem;
+    }
+    .block-layout-panel__auto-responsive {
+        display: flex;
+        align-items: flex-start;
+        gap: .6rem;
+        margin: .65rem 0;
+        padding: .7rem .78rem;
+        border: 1px solid #bfdbfe;
+        border-radius: 8px;
+        background: #eff6ff;
+        color: #1e40af;
+        font-size: .74rem;
+        line-height: 1.45;
+    }
+    .block-layout-panel__auto-responsive i {
+        margin-top: .12rem;
+    }
+    .block-layout-panel__auto-responsive strong,
+    .block-layout-panel__auto-responsive small {
+        display: block;
+    }
+    .block-layout-panel__auto-responsive small {
+        margin-top: .12rem;
+        color: #2563eb;
+    }
+    .block-layout-panel__inherited,
+    .block-layout-panel__override-head,
+    .block-layout-panel__section-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+        margin-bottom: .65rem;
+        color: var(--text-muted);
+        font-size: .72rem;
+    }
+    .block-layout-panel__error {
+        margin: .55rem 0;
+        padding: .55rem .65rem;
+        border: 1px solid #dc2626;
+        border-radius: 6px;
+        background: #fef2f2;
+        color: #991b1b;
+        font-size: .74rem;
+        line-height: 1.4;
+    }
+    .block-layout-panel__lock-notice {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        margin: .55rem 0;
+        padding: .55rem .65rem;
+        border: 1px solid #f59e0b;
+        border-radius: 6px;
+        color: #92400e;
+        background: #fffbeb;
+        font-size: .74rem;
+    }
+    .block-layout-panel--locked .block-layout-panel__grid,
+    .block-layout-panel--locked .block-layout-panel__advanced,
+    .block-layout-panel--locked .block-layout-panel__section-actions {
+        pointer-events: none;
+        opacity: .58;
+    }
+    .block-layout-panel__inherited button,
+    .block-layout-panel__override-head button,
+    .block-layout-panel__section-actions button {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: .3rem .5rem;
+        color: var(--primary);
+        background: #fff;
+        cursor: pointer;
+    }
+    .block-layout-panel__section-actions {
+        justify-content: flex-end;
+    }
+    .block-layout-panel__subgrid {
+        margin-top: .65rem;
+    }
+    .block-layout-panel__check {
+        justify-content: center;
+        min-height: 34px;
+    }
+    .block-layout-panel__check input {
+        min-height: 0;
+        margin: 0;
     }
     .block-layout-panel__layer {
         display: flex;
@@ -436,6 +767,44 @@ else
         justify-content: flex-end;
         margin-top: .75rem;
     }
+    .block-media-actions,
+    .block-source-toggle {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .5rem;
+    }
+    .block-media-selection {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: .75rem;
+        padding: .7rem;
+        margin-bottom: .7rem;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: #fff;
+    }
+    .block-media-selection > i { color: var(--primary); font-size: 1.4rem; }
+    .block-media-selection strong,
+    .block-media-selection span { display: block; overflow-wrap: anywhere; }
+    .block-media-selection span { color: var(--text-muted); font-size: .75rem; }
+    .block-media-settings {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: .75rem;
+    }
+    .block-media-settings--checks { margin: .75rem 0; }
+    .block-video-preview { margin: .75rem 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 7px; background: #111; }
+    .block-video-preview video,
+    .block-video-preview iframe { width: 100%; height: 100%; border: 0; object-fit: contain; }
+    .block-map-pin { padding: .75rem; margin-bottom: .65rem; border: 1px solid var(--border); border-radius: 7px; background: #fff; }
+    .block-map-pin__header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .6rem; }
+    @@media (max-width: 860px) {
+        .block-layout-panel__responsive {
+            grid-template-columns: 1fr;
+        }
+    }
     .block-reorder-btn {
         width: 28px;
         height: 28px;
@@ -468,84 +837,57 @@ else
         align-items: center;
         gap: 5px;
     }
-    .block-picker {
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: var(--surface);
-        padding: .875rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 10px 28px rgba(15, 23, 42, .08);
-    }
-    .block-picker__header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: .75rem;
-        margin-bottom: .875rem;
-    }
-    .block-picker__header strong {
-        display: block;
-        font-size: .9rem;
+    .block-card-name {
+        max-width: 170px;
+        overflow: hidden;
         color: var(--text);
-    }
-    .block-picker__header span {
-        display: block;
         font-size: .78rem;
-        color: var(--text-muted);
-        margin-top: 2px;
-    }
-    .block-picker__grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-        gap: .625rem;
-        margin-bottom: .875rem;
-    }
-    .block-picker__group {
-        margin: .875rem 0 .5rem;
-        color: var(--primary);
-        font-size: .76rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: .08em;
-    }
-    .block-picker__card {
-        min-height: 112px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: .875rem .625rem;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: #fff;
-        color: var(--text);
-        text-align: center;
-        cursor: pointer;
-        font-family: inherit;
-        transition: border-color .15s, background .15s, transform .15s;
-    }
-    .block-picker__card:hover:not(:disabled) {
-        border-color: var(--primary);
-        background: #f0f4ff;
-        transform: translateY(-1px);
-    }
-    .block-picker__card:disabled {
-        cursor: wait;
-        opacity: .65;
-    }
-    .block-picker__card i {
-        font-size: 1.35rem;
-        color: var(--primary-light);
-    }
-    .block-picker__card span {
-        font-size: .83rem;
         font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
-    .block-picker__card small {
-        font-size: .72rem;
-        line-height: 1.35;
-        color: var(--text-muted);
+    .block-card-header__identity,
+    .block-card-header__actions {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+    }
+    .block-card-header__identity {
+        min-width: 0;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+    }
+    .block-card-header__actions { flex: 0 0 auto; }
+    .block-state-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        padding: .2rem .38rem;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: .66rem;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+    }
+    .block-state-badge--hidden {
+        border-color: #cbd5e1;
+        background: #f8fafc;
+        color: #64748b;
+    }
+    .block-state-badge--content-lock {
+        border-color: #fde68a;
+        background: #fffbeb;
+        color: #92400e;
+    }
+    .block-state-badge--geometry-lock {
+        border-color: #c4b5fd;
+        background: #f5f3ff;
+        color: #6d28d9;
+    }
+    @@media (max-width: 760px) {
+        .block-state-badge span { display: none; }
+        .block-card-name { max-width: 120px; }
     }
     .block-delete-dialog {
         background: var(--surface);
@@ -563,6 +905,21 @@ else
     .block-delete-dialog__body p {
         margin: 0;
     }
+    .block-delete-dialog__warning {
+        display: flex;
+        align-items: flex-start;
+        gap: .55rem;
+        margin-top: .8rem;
+        padding: .7rem .75rem;
+        border: 1px solid #fecaca;
+        border-radius: 7px;
+        background: #fff1f2;
+        color: #991b1b;
+        font-size: .76rem;
+        font-weight: 650;
+        line-height: 1.4;
+    }
+    .block-delete-dialog__warning i { margin-top: .15rem; }
     .block-delete-dialog__footer {
         display: flex;
         justify-content: flex-end;
@@ -580,40 +937,228 @@ else
     [Parameter] public string       PageId    { get; set; } = string.Empty;
     [Parameter] public string       SectionId { get; set; } = string.Empty;
     [Parameter] public string?      SectionType { get; set; }
+    [Parameter] public string?      SectionBlockLayoutMode { get; set; }
+    [Parameter] public bool         UseArrangeWorkspace { get; set; }
+    [Parameter] public string?      InitialBlockId { get; set; }
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public EventCallback<string?> ActiveBlockChanged { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
 
     private List<BlockModel> _blocks     = new();
     private BlockModel?      _fullBlock;
     private string?          _activeBlockId;
+    private string?          _activePanelBlockId;
     private BlockModel?      _confirmDelete;
     private bool             _loading    = true;
     private bool             _showPicker = false;
     private bool             _creatingBlock = false;
     private bool             _reorderingBlock = false;
     private bool             _savingLayout = false;
+    private string?          _visualValidationMessage;
+    private string?          _visualHistoryBlockId;
+    private BlockUpdateDto?  _savedVisualSnapshot;
+    private readonly Stack<VisualHistoryEntry> _visualUndoHistory = new();
+    private readonly Stack<VisualHistoryEntry> _visualRedoHistory = new();
     private string?          _loadedPageId;
     private string?          _loadedSectionId;
     private string?          _loadedSlotId;
-    private List<BlockModel> OrderedBlocks =>
-        _blocks.OrderBy(b => b.Order).ThenBy(b => b.Id).ToList();
-    private List<BlockModel> ContainerOptions =>
-        _blocks
-            .Where(b => b.Type == "container" && b.Id != _activeBlockId)
-            .OrderBy(b => b.Order)
-            .ThenBy(b => b.Id)
-            .ToList();
+    private string?          _loadedInitialBlockId;
+    private ElementReference _blockListRef;
+    private DotNetObjectReference<BlockEditor>? _dotNetRef;
+    private bool _blockSortableInitialized;
+    private IReadOnlyList<BlockListEntry> RootBlockEntries => BuildRootEntries();
+    private int DeleteDescendantCount => _confirmDelete?.Type == "container"
+        ? OwnedDescendantIds(_confirmDelete.Id).Count
+        : 0;
+    private int DeleteNestedContainerCount => _confirmDelete?.Type == "container"
+        ? OwnedDescendantIds(_confirmDelete.Id)
+            .Select(id => _blocks.FirstOrDefault(block => block.Id == id))
+            .Count(block => block?.Type == "container")
+        : 0;
+    private BlockModel? AddTargetContainer => _fullBlock?.Type == "container" ? _fullBlock : ParentContainerForActive;
+    private int AddTargetChildCount => AddTargetContainer is null
+        ? 0
+        : _blocks.Count(block => block.ParentBlockId == AddTargetContainer.Id);
+    private int AddTargetCapacity => AddTargetContainer is null
+        ? int.MaxValue
+        : ContainerCapacityPolicy.MaxChildren(
+            AddTargetContainer.PresetKey,
+            AddTargetContainer.ContainerLayout?.Mode,
+            AddTargetContainer.ContainerLayout?.Columns);
+    private bool AddTargetHasCapacity => AddTargetContainer is null || AddTargetChildCount < AddTargetCapacity;
+    private int ContainerCapacityPercent => AddTargetCapacity is <= 0 or int.MaxValue
+        ? 0
+        : Math.Clamp((int)Math.Round(AddTargetChildCount * 100d / AddTargetCapacity), 0, 100);
+    private string AddTargetTitle => AddTargetHasCapacity
+        ? T("AddBlock")
+        : string.Format(T("ContainerCapacityReached"),
+            ContainerCapacityPolicy.NormalizeMode(AddTargetContainer?.ContainerLayout?.Mode),
+            AddTargetCapacity);
+    private IReadOnlyCollection<string>? AddTargetAllowedTypes
+    {
+        get
+        {
+            var target = AddTargetContainer;
+            if (target is null) return null;
+            var lockedType = target.ContainerLayout?.AllowedChildType;
+            return NormalizeContainerPurpose(target.ContainerLayout?.Purpose) == "collection" &&
+                   ContainerCapacityPolicy.CanOwn(lockedType)
+                ? new[] { lockedType! }
+                : ContainerCapacityPolicy.AllowedChildTypes(target.PresetKey);
+        }
+    }
+    private string? AddTargetConstraintLabel
+    {
+        get
+        {
+            var target = AddTargetContainer;
+            if (target is null) return null;
+            var messages = new List<string>
+            {
+                string.Format(T("ContainerPresetStatus"), ContainerPresetDisplayName),
+                string.Format(T("ContainerCapacityStatus"), AddTargetChildCount, AddTargetCapacity)
+            };
+            if (NextAddTargetSlot is not null)
+                messages.Add(string.Format(T("NextContainerSlot"), NextAddTargetSlot.DisplayName));
+            if (NormalizeContainerPurpose(target.ContainerLayout?.Purpose) == "collection")
+            {
+                messages.Add(string.IsNullOrWhiteSpace(target.ContainerLayout?.AllowedChildType)
+                    ? T("CollectionFirstChildLocksType")
+                    : $"{T("CollectionAllowsOnly")} {T(BlockLabelKey(target.ContainerLayout.AllowedChildType))}.");
+            }
+            return string.Join(" ", messages);
+        }
+    }
 
-    private record BlockTypeMeta(string Label, string Icon, string Desc);
-    private record BlockTypeGroup(string Title, Dictionary<string, BlockTypeMeta> Types);
+    private sealed record BlockListEntry(BlockModel Block, int Depth);
+    private sealed record VisualHistoryEntry(BlockUpdateDto Before, BlockUpdateDto After);
+    private sealed record ContainerSlotStatus(string Key, string Label, bool Required, BlockModel? Child);
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private bool IsRequiredContainerSlot(BlockModel block)
+    {
+        if (string.IsNullOrWhiteSpace(block.ParentBlockId) ||
+            string.IsNullOrWhiteSpace(block.Authoring?.PresetSlotName))
+            return false;
+
+        var parent = _blocks.FirstOrDefault(candidate =>
+            candidate.Id == block.ParentBlockId && candidate.Type == "container");
+        return parent is not null &&
+               ContainerCapacityPolicy.IsRequiredSlot(parent.PresetKey, block.Authoring.PresetSlotName);
+    }
+
+    private bool PresetAllowsChildReorder(BlockModel block)
+    {
+        if (string.IsNullOrWhiteSpace(block.ParentBlockId)) return true;
+
+        var parent = _blocks.FirstOrDefault(candidate =>
+            candidate.Id == block.ParentBlockId && candidate.Type == "container");
+        return parent is null ||
+               !ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out var preset) ||
+               preset.ChildOrderingAllowed;
+    }
 
     private List<string> _widthOptions = new() { "auto", "full", "half", "third" };
     private List<string> _alignOptions = new() { "stretch", "start", "center", "end" };
     private List<string> _justifyOptions = new() { "start", "center", "end" };
     private List<string> _spaceOptions = new() { "none", "small", "medium", "large" };
-    private List<string> _radiusOptions = new() { "none", "small", "medium", "large" };
+    private List<string> _appearanceRadiusOptions = new() { "none", "small", "medium", "large", "pill", "circle" };
+    private List<string> _responsiveModeOptions = new() { "inherit", "custom", "hide" };
+    private List<string> _containerMobileModeOptions = new() { "stack", "compact-preserve", "horizontal-scroll", "custom", "hide" };
+    private List<string> _responsiveWidthOptions = new() { "inherit", "auto", "full", "half", "third", "custom" };
+    private List<string> _borderStyleOptions = new() { "solid", "dashed", "dotted", "none" };
+    private List<string> _shadowOptions = new() { "none", "small", "medium", "large" };
+    private List<string> _shapeOptions = new() { "rectangle", "rounded", "pill", "circle", "ellipse", "decorative" };
+    private List<string> _backgroundModeOptions = new() { "none", "color", "theme-primary", "theme-accent", "theme-background" };
+    private List<string> _textAlignOptions = new() { "inherit", "left", "center", "right" };
+    private List<string> _aspectRatioOptions = new() { "auto", "square", "landscape", "widescreen", "portrait" };
+    private List<string> _mediaPositionOptions = new() { "center", "top", "bottom", "left", "right" };
     private bool SupportsFreeformPositioning => SectionType is "canvas" or "columns";
+    private bool SupportsMediaAppearance => _fullBlock?.Type is "image" or "video" or "card";
+    private bool SupportsTextAppearance => _fullBlock?.Type is not ("image" or "video" or "file" or "map");
+    private string ActiveLayoutMode
+    {
+        get
+        {
+            var parent = !string.IsNullOrWhiteSpace(_fullBlock?.ParentBlockId)
+                ? _blocks.FirstOrDefault(block => block.Id == _fullBlock.ParentBlockId && block.Type == "container")
+                : null;
+            return NormalizeBlockLayoutMode(parent?.ContainerLayout?.Mode ?? parent?.LayoutMode ?? SectionBlockLayoutMode);
+        }
+    }
+    private bool UsesGridPlacement => ActiveLayoutMode is "grid" or "split";
+    private bool UsesVerticalAlignment => ActiveLayoutMode is "grid" or "split" or "row";
+    private bool UsesHorizontalAlignment => ActiveLayoutMode is "grid" or "split";
+    private bool HasTabletOverride => _fullBlock?.Responsive?.Tablet is not null;
+    private bool HasMobileOverride => _fullBlock?.Responsive?.Mobile is not null;
+    private bool IsPresetResponsivePolicyContext =>
+        !string.IsNullOrWhiteSpace(_fullBlock?.Authoring?.PresetSourceId) ||
+        !string.IsNullOrWhiteSpace(_fullBlock?.Authoring?.PresetSlotName);
+    private bool CanEditAdvancedResponsivePolicy => Auth.IsAdminAdmin || IsPresetResponsivePolicyContext;
+    private bool VisualEditingLocked => _fullBlock is null || _fullBlock.Authoring.FullLocked || _fullBlock.Authoring.GeometryLocked;
+    private bool CanUndoVisualChange => !_savingLayout && !VisualEditingLocked && _visualUndoHistory.Count > 0;
+    private bool CanRedoVisualChange => !_savingLayout && !VisualEditingLocked && _visualRedoHistory.Count > 0;
+    private IReadOnlyList<BlockModel> ContainerChildren => AddTargetContainer is null
+        ? Array.Empty<BlockModel>()
+        : _blocks.Where(block => string.Equals(block.ParentBlockId, AddTargetContainer.Id, StringComparison.Ordinal))
+            .OrderBy(block => block.Order)
+            .ToList();
+    private ContainerPresetDefinition? ActiveContainerPreset => AddTargetContainer is null
+        ? null
+        : ContainerPresetCatalog.ForExisting(AddTargetContainer.PresetKey);
+    private string ContainerPresetDisplayName => ActiveContainerPreset?.DisplayName ?? T("LegacyContainerPreset");
+    private string ContainerPresetPolicyLabel
+    {
+        get
+        {
+            var preset = ActiveContainerPreset;
+            if (preset is null) return string.Empty;
+            var ordering = T(preset.ChildOrderingAllowed ? "ContainerOrderingAllowed" : "ContainerOrderingFixed");
+            return $"{preset.LayoutMode} · {ordering}";
+        }
+    }
+    private IReadOnlyList<ContainerSlotStatus> ContainerSlotStatuses
+    {
+        get
+        {
+            var container = AddTargetContainer;
+            var preset = ActiveContainerPreset;
+            if (container is null || preset is null || preset.Slots.Count == 0)
+                return Array.Empty<ContainerSlotStatus>();
+
+            var childrenBySlot = ContainerChildren
+                .Where(child => !string.IsNullOrWhiteSpace(child.Authoring?.PresetSlotName))
+                .GroupBy(child => child.Authoring.PresetSlotName!, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.OrderBy(child => child.Order).First(), StringComparer.Ordinal);
+
+            return preset.Slots
+                .Select(slot => new ContainerSlotStatus(
+                    slot.Key,
+                    slot.DisplayName,
+                    slot.Required,
+                    childrenBySlot.TryGetValue(slot.Key, out var child) ? child : null))
+                .ToList();
+        }
+    }
+    private string ContainerAvailableSlotsLabel
+    {
+        get
+        {
+            var total = ContainerSlotStatuses.Count;
+            if (total == 0) return string.Format(T("ContainerCapacityStatus"), AddTargetChildCount, AddTargetCapacity);
+            var open = ContainerSlotStatuses.Count(slot => slot.Child is null);
+            return string.Format(T("ContainerAvailableSlots"), open, total);
+        }
+    }
+    private ContainerPresetSlotDefinition? NextAddTargetSlot =>
+        AddTargetContainer is null
+            ? null
+            : ContainerCapacityPolicy.NextAvailableSlot(
+                AddTargetContainer.PresetKey,
+                ContainerChildren.Select(child => child.Authoring?.PresetSlotName),
+                AddTargetAllowedTypes?.Count == 1 ? AddTargetAllowedTypes.First() : "text");
+    private BlockModel? ParentContainerForActive => string.IsNullOrWhiteSpace(_fullBlock?.ParentBlockId)
+        ? null
+        : _blocks.FirstOrDefault(block => block.Id == _fullBlock.ParentBlockId && block.Type == "container");
     private List<string> ZoneOptions => SectionType switch
     {
         "canvas" => new() { "canvas" },
@@ -641,20 +1186,6 @@ else
                 _fullBlock.PositionMode = NormalizePositionMode(value);
         }
     }
-    private string _parentBlockId
-    {
-        get => _fullBlock?.ParentBlockId ?? string.Empty;
-        set
-        {
-            if (_fullBlock is null)
-                return;
-
-            _fullBlock.ParentBlockId = value ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(value))
-                _fullBlock.BlockZone = "default";
-        }
-    }
-
     private string _layoutWidth
     {
         get => EnsureLayout().Width ?? "auto";
@@ -675,63 +1206,31 @@ else
         get => EnsureLayout().Justify ?? "start";
         set => EnsureLayout().Justify = value;
     }
-    private string _layoutPadding
-    {
-        get => EnsureLayout().Padding ?? "none";
-        set => EnsureLayout().Padding = value;
-    }
-    private string _layoutMargin
-    {
-        get => EnsureLayout().Margin ?? "none";
-        set => EnsureLayout().Margin = value;
-    }
-    private string _layoutBackgroundColor
-    {
-        get => EnsureLayout().BackgroundColor ?? string.Empty;
-        set => EnsureLayout().BackgroundColor = value;
-    }
-    private string _layoutBorderRadius
-    {
-        get => EnsureLayout().BorderRadius ?? "none";
-        set => EnsureLayout().BorderRadius = value;
-    }
     private int _layoutZIndex
     {
         get => Math.Clamp(EnsureLayout().ZIndex ?? 1, 0, 1000);
         set => EnsureLayout().ZIndex = Math.Clamp(value, 0, 1000);
     }
-    private List<BlockTypeGroup> _blockGroups = new()
-    {
-        new("Content Blocks", new()
-        {
-            ["text"]  = new("Text",  "fa-font",        "Multilingual title and rich content"),
-            ["image"] = new("Image", "fa-image",        "Single image with alt text"),
-            ["video"] = new("Video", "fa-play-circle",  "YouTube or Vimeo embed"),
-            ["file"]  = new("File",  "fa-file-alt",     "Downloadable PDF or document"),
-            ["map"]   = new("Map",   "fa-map-marker-alt","Interactive map with pins"),
-            ["form"]  = new("Form",  "fa-wpforms",      "Dynamic form with submissions"),
-        }),
-        new("Design Blocks", new()
-        {
-            ["card"] = new("Card", "fa-id-card", "Image, title, text, and optional link"),
-            ["button"] = new("Button", "fa-hand-pointer", "Standalone call-to-action"),
-            ["metric"] = new("Metric", "fa-chart-line", "Large number with supporting label"),
-            ["bullet-list"] = new("Bullet List", "fa-list-check", "Checklist or value list"),
-            ["step"] = new("Step", "fa-shoe-prints", "Process step with marker"),
-            ["icon"] = new("Icon", "fa-icons", "Icon with label and short text"),
-        }),
-        new("Structure Blocks", new()
-        {
-            ["container"] = new("Container", "fa-layer-group", "Nested layout area for grouped blocks"),
-        })
-    };
-     private CancellationTokenSource _cts = new();
+    private BlockAppearanceModel Appearance => EnsureAppearance();
+    private BlockAnimationSettingsModel Animation => EnsureAnimation();
+    private BlockResponsiveOverrideModel TabletResponsive => EnsureResponsiveOverride(isTablet: true);
+    private BlockResponsiveOverrideModel MobileResponsive => EnsureResponsiveOverride(isTablet: false);
+    private ContainerLayoutSettingsModel ContainerLayout => EnsureContainerLayout();
+    private readonly CancellationTokenSource _cts = new();
 
-public void Dispose()
-{
-    _cts.Cancel();
-    _cts.Dispose();
-}
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        try
+        {
+            await JS.InvokeVoidAsync("disposeAdminSortable", BlockSortableKey);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        _dotNetRef?.Dispose();
+    }
     protected override async Task OnInitializedAsync()
     {
         if (_loadedSectionId is null)
@@ -742,20 +1241,33 @@ public void Dispose()
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedPageId != PageId || _loadedSectionId != SectionId || _loadedSlotId != SlotId)
+        var contextChanged = _loadedPageId != PageId || _loadedSectionId != SectionId || _loadedSlotId != SlotId;
+        var initialBlockChanged = _loadedInitialBlockId != InitialBlockId;
+        if (contextChanged)
         {
             _loadedPageId = PageId;
             _loadedSectionId = SectionId;
             _loadedSlotId = SlotId;
             _activeBlockId = null;
+            _activePanelBlockId = null;
             _fullBlock = null;
             await ReloadBlocks();
         }
+
+        if ((contextChanged || initialBlockChanged) &&
+            !string.IsNullOrWhiteSpace(InitialBlockId) &&
+            _activeBlockId != InitialBlockId &&
+            _blocks.Any(block => block.Id == InitialBlockId))
+        {
+            await OpenBlock(InitialBlockId, notify: false);
+        }
+        _loadedInitialBlockId = InitialBlockId;
     }
 
   private async Task ReloadBlocks()
 {
     _loading = true;
+    _blockSortableInitialized = false;
     var res = await BlockService.GetAllAsync(PageId, SectionId);
     _blocks = res.Data ?? new();
 
@@ -765,33 +1277,75 @@ public void Dispose()
     _loading = false;
 }
 
+    private string? ResolvePanelBlockId(string? blockId)
+    {
+        if (string.IsNullOrWhiteSpace(blockId))
+            return null;
+
+        var byId = _blocks.ToDictionary(block => block.Id, StringComparer.Ordinal);
+        if (!byId.TryGetValue(blockId, out var current))
+            return blockId;
+
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (!string.IsNullOrWhiteSpace(current.ParentBlockId) && visited.Add(current.Id))
+        {
+            if (!byId.TryGetValue(current.ParentBlockId, out var parent))
+                break;
+            current = parent;
+        }
+
+        return current.Id;
+    }
+
     private async Task ToggleBlock(string blockId)
     {
         if (_activeBlockId == blockId)
         {
             _activeBlockId = null;
+            _activePanelBlockId = null;
             _fullBlock     = null;
+            await ActiveBlockChanged.InvokeAsync(null);
             return;
         }
 
+        await OpenBlock(blockId, notify: true);
+    }
+
+    private async Task OpenBlock(string blockId, bool notify)
+    {
         _activeBlockId = blockId;
+        _activePanelBlockId = ResolvePanelBlockId(blockId);
         _fullBlock     = null;
 
         // Fetch full block so image/file base64 is included.
         await LoadFullBlock(blockId);
+        if (notify)
+            await ActiveBlockChanged.InvokeAsync(blockId);
     }
 
-    private void TogglePicker() => _showPicker = !_showPicker;
-
-    private async Task AddBlock(string type)
+    private void TogglePicker()
     {
+        if (!AddTargetHasCapacity)
+        {
+            Http.Toast(AddTargetTitle, 400);
+            return;
+        }
+        _showPicker = !_showPicker;
+    }
+    private void ClosePicker() => _showPicker = false;
+
+    private async Task AddBlock(BlockStarterSelection selection)
+    {
+        if (!AddTargetHasCapacity) return;
         _creatingBlock = true;
         try
         {
+            var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey);
+            dto.ParentBlockId = AddTargetContainer?.Id;
             // Use slotted create only when SlotId is set.
             var res = string.IsNullOrEmpty(SlotId)
-                ? await BlockService.CreateAsync(PageId, SectionId, type)
-                : await BlockService.CreateInSlotAsync(PageId, SectionId, SlotId, type);
+                ? await BlockService.CreateAsync(PageId, SectionId, dto)
+                : await BlockService.CreateInSlotAsync(PageId, SectionId, SlotId, dto);
 
             Http.Toast(res.Message, res.StatusCode);
             if (!res.Success)
@@ -825,17 +1379,39 @@ public void Dispose()
         }
     }
 
+    private async Task ToggleSelectedVisibility()
+    {
+        if (_fullBlock is null)
+            return;
+
+        var visible = !_fullBlock.Visible;
+        var res = await BlockService.SetVisibilityAsync(PageId, SectionId, _fullBlock.Id, visible);
+        Http.Toast(res.Message, res.StatusCode);
+        if (!res.Success)
+            return;
+
+        _fullBlock.Visible = visible;
+        var listBlock = _blocks.FirstOrDefault(block => block.Id == _fullBlock.Id);
+        if (listBlock is not null)
+            listBlock.Visible = visible;
+        await NotifyChangedAsync();
+    }
+
     private async Task ConfirmDelete()
     {
         if (_confirmDelete is null) return;
+        var deletingIds = OwnedDescendantIds(_confirmDelete.Id);
+        deletingIds.Add(_confirmDelete.Id);
         var res = await BlockService.DeleteAsync(PageId, SectionId, _confirmDelete.Id);
         Http.Toast(res.Message, res.StatusCode);
         if (res.Success)
         {
-            if (_activeBlockId == _confirmDelete.Id)
+            if (_activeBlockId is not null && deletingIds.Contains(_activeBlockId))
             {
                 _activeBlockId = null;
+                _activePanelBlockId = null;
                 _fullBlock     = null;
+                await ActiveBlockChanged.InvokeAsync(null);
             }
             await ReloadBlocks();
             await NotifyChangedAsync();
@@ -845,62 +1421,89 @@ public void Dispose()
 
     private void ClearDelete() => _confirmDelete = null;
 
-    private bool CanMoveBlock(BlockModel block, int direction)
+    private HashSet<string> OwnedDescendantIds(string containerId)
     {
-        var ordered = OrderedPeerBlocks(block);
-        var index = ordered.FindIndex(b => b.Id == block.Id);
-        var target = index + direction;
-        return index >= 0 && target >= 0 && target < ordered.Count;
+        var pending = new Queue<string>([containerId]);
+        var descendants = new HashSet<string>(StringComparer.Ordinal);
+        while (pending.Count > 0)
+        {
+            var parentId = pending.Dequeue();
+            foreach (var child in _blocks.Where(block => block.ParentBlockId == parentId))
+            {
+                if (!descendants.Add(child.Id)) continue;
+                if (child.Type == "container") pending.Enqueue(child.Id);
+            }
+        }
+        return descendants;
     }
 
-    private async Task MoveBlock(BlockModel block, int direction)
+    private IReadOnlyList<BlockListEntry> BuildRootEntries()
     {
-        if (_reorderingBlock || !CanMoveBlock(block, direction))
-        {
-            return;
-        }
+        var blockIds = _blocks.Select(block => block.Id).ToHashSet(StringComparer.Ordinal);
+        return _blocks
+            .Where(block => string.IsNullOrWhiteSpace(block.ParentBlockId) || !blockIds.Contains(block.ParentBlockId))
+            .OrderBy(block => block.Order)
+            .ThenBy(block => NormalizeBlockZone(block.BlockZone), StringComparer.Ordinal)
+            .ThenBy(block => block.Id, StringComparer.Ordinal)
+            .Select(block => new BlockListEntry(block, 0))
+            .ToList();
+    }
 
-        var activeBlockId = _activeBlockId;
-        var ordered = OrderedPeerBlocks(block);
-        var index = ordered.FindIndex(b => b.Id == block.Id);
-        var target = index + direction;
-        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+    [JSInvokable]
+    public async Task<bool> OnBlocksReordered(
+        string parentId,
+        string zone,
+        string slotId,
+        List<string> orderedIds)
+    {
+        if (_reorderingBlock) return false;
+
+        var cleanIds = orderedIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var peers = _blocks
+            .Where(block => NormalizeParent(block.ParentBlockId) == NormalizeParent(parentId))
+            .Where(block => NormalizeBlockZone(block.BlockZone) == NormalizeBlockZone(zone))
+            .Where(block => NormalizeSlot(block.ColumnSlotId) == NormalizeSlot(slotId))
+            .ToList();
+        if (cleanIds.Count != peers.Count ||
+            !cleanIds.ToHashSet(StringComparer.Ordinal).SetEquals(peers.Select(block => block.Id)))
+            return false;
+        if (peers.Any(block => block.Authoring.FullLocked || block.Authoring.GeometryLocked))
+        {
+            Http.Toast(T("GeometryLockedHint"), 400);
+            return false;
+        }
+        if (peers.Any(block => !PresetAllowsChildReorder(block)))
+            return false;
 
         _reorderingBlock = true;
         try
         {
-            var res = await BlockService.ReorderAsync(
-                PageId,
-                SectionId,
-                ordered.Select(b => b.Id).ToList());
-
-            Http.Toast(res.Message, res.StatusCode);
+            var res = await BlockService.ReorderAsync(PageId, SectionId, cleanIds);
             if (!res.Success)
             {
-                return;
+                Http.Toast(res.Message, res.StatusCode);
+                await ReloadBlocks();
+                await InvokeAsync(StateHasChanged);
+                return false;
             }
 
-            await ReloadBlocks();
-            await RestoreActiveBlock(activeBlockId);
+            for (var index = 0; index < cleanIds.Count; index++)
+            {
+                var block = peers.First(candidate => candidate.Id == cleanIds[index]);
+                block.Order = index;
+            }
+            _blockSortableInitialized = false;
+            await InvokeAsync(StateHasChanged);
             await NotifyChangedAsync();
+            return true;
         }
         finally
         {
             _reorderingBlock = false;
         }
-    }
-
-    private List<BlockModel> OrderedPeerBlocks(BlockModel block)
-    {
-        var parent = NormalizeParent(block.ParentBlockId);
-        var zone = NormalizeBlockZone(block.BlockZone);
-
-        return _blocks
-            .Where(b => NormalizeParent(b.ParentBlockId) == parent)
-            .Where(b => NormalizeBlockZone(b.BlockZone) == zone)
-            .OrderBy(b => b.Order)
-            .ThenBy(b => b.Id)
-            .ToList();
     }
 
     private async Task NotifyChangedAsync()
@@ -925,27 +1528,118 @@ public void Dispose()
             _blocks.Any(b => b.Id == activeBlockId))
         {
             _activeBlockId = activeBlockId;
+            _activePanelBlockId = ResolvePanelBlockId(activeBlockId);
             await LoadFullBlock(activeBlockId);
             return;
         }
 
         _activeBlockId = null;
+        _activePanelBlockId = null;
         _fullBlock = null;
     }
 
-    private async Task LoadFullBlock(string blockId)
+    private async Task LoadFullBlock(string blockId, bool preserveVisualHistory = false)
     {
         var res = await BlockService.GetByIdAsync(PageId, SectionId, blockId);
         _fullBlock = res.Data;
         if (_fullBlock is not null)
+        {
             _fullBlock.Layout ??= new BlockLayoutModel();
+            _fullBlock.Appearance ??= new BlockAppearanceModel();
+            _fullBlock.Responsive ??= new BlockResponsiveSettingsModel();
+            _fullBlock.Animation ??= new BlockAnimationSettingsModel();
+            _fullBlock.ContainerLayout ??= new ContainerLayoutSettingsModel();
+            _fullBlock.ContainerLayout.Diagram ??= new ContainerDiagramSettingsModel();
+            if (_fullBlock.Authoring.FullLocked)
+            {
+                _fullBlock.Authoring.ContentLocked = true;
+                _fullBlock.Authoring.GeometryLocked = true;
+                _fullBlock.Authoring.FullLocked = false;
+            }
+
+            if (!preserveVisualHistory || !string.Equals(_visualHistoryBlockId, blockId, StringComparison.Ordinal))
+            {
+                _visualUndoHistory.Clear();
+                _visualRedoHistory.Clear();
+            }
+
+            _visualHistoryBlockId = blockId;
+            _savedVisualSnapshot = CloneUpdateDto(BlockUpdateDtoMapper.Build(_fullBlock));
+        }
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _dotNetRef = DotNetObjectReference.Create(this);
+
+        if (!UseArrangeWorkspace && !_loading && _blocks.Count > 1 && !_blockSortableInitialized && _dotNetRef is not null)
+        {
+            await JS.InvokeVoidAsync("initBlockListSortable", BlockSortableKey, _blockListRef, _dotNetRef);
+            _blockSortableInitialized = true;
+        }
+    }
+
+    private string BlockSortableKey => $"block-list-{SectionId}-{SlotId ?? "all"}";
 
     private BlockLayoutModel EnsureLayout()
     {
         _fullBlock ??= new BlockModel();
         _fullBlock.Layout ??= new BlockLayoutModel();
         return _fullBlock.Layout;
+    }
+
+    private BlockAppearanceModel EnsureAppearance()
+    {
+        _fullBlock ??= new BlockModel();
+        _fullBlock.Appearance ??= new BlockAppearanceModel();
+        return _fullBlock.Appearance;
+    }
+
+    private BlockResponsiveSettingsModel EnsureResponsive()
+    {
+        _fullBlock ??= new BlockModel();
+        _fullBlock.Responsive ??= new BlockResponsiveSettingsModel();
+        return _fullBlock.Responsive;
+    }
+
+    private BlockAnimationSettingsModel EnsureAnimation()
+    {
+        _fullBlock ??= new BlockModel();
+        _fullBlock.Animation ??= new BlockAnimationSettingsModel();
+        return _fullBlock.Animation;
+    }
+
+    private void EnableTabletOverride() => EnsureResponsive().Tablet = new BlockResponsiveOverrideModel();
+    private void EnableMobileOverride() => EnsureResponsive().Mobile = new BlockResponsiveOverrideModel();
+    private void ResetTabletOverride() => EnsureResponsive().Tablet = null;
+    private void ResetMobileOverride() => EnsureResponsive().Mobile = null;
+
+    private void ResetAppearance()
+    {
+        if (_fullBlock is null) return;
+        _fullBlock.Appearance = new BlockAppearanceModel { SchemaVersion = 2 };
+        _visualValidationMessage = null;
+    }
+
+    private BlockResponsiveOverrideModel EnsureResponsiveOverride(bool isTablet)
+    {
+        var responsive = EnsureResponsive();
+        if (isTablet)
+        {
+            responsive.Tablet ??= new BlockResponsiveOverrideModel();
+            return responsive.Tablet;
+        }
+
+        responsive.Mobile ??= new BlockResponsiveOverrideModel();
+        return responsive.Mobile;
+    }
+
+    private ContainerLayoutSettingsModel EnsureContainerLayout()
+    {
+        _fullBlock ??= new BlockModel();
+        _fullBlock.ContainerLayout ??= new ContainerLayoutSettingsModel();
+        return _fullBlock.ContainerLayout;
     }
 
     private void BringLayerForward() => _layoutZIndex = Math.Min(1000, _layoutZIndex + 1);
@@ -976,15 +1670,35 @@ public void Dispose()
         if (_fullBlock is null || _savingLayout)
             return;
 
+        if (!ValidateVisualSettings(out var validationMessage))
+        {
+            _visualValidationMessage = validationMessage;
+            Http.Toast(validationMessage, 400);
+            return;
+        }
+
+        _visualValidationMessage = null;
+
         _savingLayout = true;
         try
         {
-            var dto = BlockUpdateDtoMapper.Build(_fullBlock);
+            var before = CloneUpdateDto(_savedVisualSnapshot ?? BlockUpdateDtoMapper.Build(_fullBlock));
+            var dto = CloneUpdateDto(BlockUpdateDtoMapper.Build(_fullBlock));
             var res = await BlockService.UpdateAsync(PageId, SectionId, _fullBlock.Id, dto);
             Http.Toast(res.Message, res.StatusCode);
             if (res.Success)
             {
-                await HandleBlockSaved();
+                if (!UpdateDtosEqual(before, dto))
+                {
+                    _visualUndoHistory.Push(new VisualHistoryEntry(before, CloneUpdateDto(dto)));
+                    _visualRedoHistory.Clear();
+                }
+
+                _savedVisualSnapshot = CloneUpdateDto(dto);
+                var blockId = _fullBlock.Id;
+                await ReloadBlocks();
+                await LoadFullBlock(blockId, preserveVisualHistory: true);
+                await NotifyChangedAsync();
             }
         }
         finally
@@ -993,31 +1707,322 @@ public void Dispose()
         }
     }
 
+    private Task UndoVisualChange() => ApplyVisualHistoryAsync(undo: true);
+
+    private Task RedoVisualChange() => ApplyVisualHistoryAsync(undo: false);
+
+    private async Task ApplyVisualHistoryAsync(bool undo)
+    {
+        if (_fullBlock is null || _savingLayout || VisualEditingLocked)
+            return;
+
+        var source = undo ? _visualUndoHistory : _visualRedoHistory;
+        if (source.Count == 0)
+            return;
+
+        var entry = source.Peek();
+        var target = CloneUpdateDto(undo ? entry.Before : entry.After);
+        _savingLayout = true;
+        try
+        {
+            var blockId = _fullBlock.Id;
+            var res = await BlockService.UpdateAsync(PageId, SectionId, blockId, target);
+            if (!res.Success)
+            {
+                Http.Toast(res.Message, res.StatusCode);
+                return;
+            }
+
+            source.Pop();
+            (undo ? _visualRedoHistory : _visualUndoHistory).Push(entry);
+            _savedVisualSnapshot = CloneUpdateDto(target);
+            await ReloadBlocks();
+            await LoadFullBlock(blockId, preserveVisualHistory: true);
+            await NotifyChangedAsync();
+        }
+        finally
+        {
+            _savingLayout = false;
+        }
+    }
+
+    private static BlockUpdateDto CloneUpdateDto(BlockUpdateDto source)
+    {
+        var type = source.GetType();
+        var json = System.Text.Json.JsonSerializer.Serialize(source, type);
+        return (BlockUpdateDto)(System.Text.Json.JsonSerializer.Deserialize(json, type)
+            ?? throw new InvalidOperationException("Could not clone the Block update snapshot."));
+    }
+
+    private static bool UpdateDtosEqual(BlockUpdateDto left, BlockUpdateDto right)
+    {
+        var leftJson = System.Text.Json.JsonSerializer.Serialize(left, left.GetType());
+        var rightJson = System.Text.Json.JsonSerializer.Serialize(right, right.GetType());
+        return string.Equals(leftJson, rightJson, StringComparison.Ordinal);
+    }
+
+    private bool ValidateVisualSettings(out string message)
+    {
+        message = string.Empty;
+        if (_fullBlock is null) return true;
+
+        foreach (var color in new[] { Appearance.BackgroundColor, Appearance.TextColor, Appearance.BorderColor })
+        {
+            if (!IsValidColor(color))
+            {
+                message = T("InvalidBlockColor");
+                return false;
+            }
+        }
+
+        if (Appearance.Shape == "circle" && Appearance.AspectRatio != "square")
+        {
+            message = T("CircleRequiresSquareRatio");
+            return false;
+        }
+
+        if (_fullBlock.Type == "image" && !Appearance.Decorative &&
+            !(_fullBlock.AltText?.Values.Any(value => !string.IsNullOrWhiteSpace(value)) ?? false))
+        {
+            message = T("ImageAltTextRequired");
+            return false;
+        }
+
+        if (TryContrastRatio(Appearance.BackgroundColor, Appearance.TextColor, out var ratio) && ratio < 4.5)
+        {
+            message = T("BlockColorContrastTooLow");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsValidColor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), "^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?$");
+    }
+
+    private static bool TryContrastRatio(string? background, string? foreground, out double ratio)
+    {
+        ratio = 0;
+        if (!TryLuminance(background, out var backgroundLuminance) || !TryLuminance(foreground, out var foregroundLuminance))
+            return false;
+        var lighter = Math.Max(backgroundLuminance, foregroundLuminance);
+        var darker = Math.Min(backgroundLuminance, foregroundLuminance);
+        ratio = (lighter + 0.05) / (darker + 0.05);
+        return true;
+    }
+
+    private static bool TryLuminance(string? color, out double luminance)
+    {
+        luminance = 0;
+        if (string.IsNullOrWhiteSpace(color)) return false;
+        var hex = color.TrimStart('#');
+        if (hex.Length == 3) hex = string.Concat(hex.Select(character => $"{character}{character}"));
+        if (hex.Length is not 6 and not 8 || !int.TryParse(hex[..6], System.Globalization.NumberStyles.HexNumber, null, out var rgb))
+            return false;
+        var channels = new[] { (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255 }
+            .Select(channel => channel / 255d)
+            .Select(channel => channel <= 0.03928 ? channel / 12.92 : Math.Pow((channel + 0.055) / 1.055, 2.4))
+            .ToArray();
+        luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+        return true;
+    }
+
     private static string NormalizeBlockZone(string? zone) =>
         string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();
+
+    private static string NormalizeContainerPurpose(string? value) =>
+        value == "collection" ? "collection" : "composition";
 
     private static string NormalizePositionMode(string? mode) =>
         string.Equals(mode, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
 
+    private static string NormalizeBlockLayoutMode(string? mode) => mode switch
+    {
+        "grid" => "grid",
+        "split" => "split",
+        "row" => "row",
+        "freeform" => "freeform",
+        "orbit" => "orbit",
+        "semicircle" => "semicircle",
+        _ => "stack"
+    };
+
+    private string AlignmentLabel(string value) => value switch
+    {
+        "stretch" => T("Stretch"),
+        "center" => T("Center"),
+        "end" => T("End"),
+        _ => T("Start")
+    };
+
+    private static string VerticalAlignmentIcon(string value) => value switch
+    {
+        "stretch" => "fa-arrows-alt-v",
+        "center" => "fa-align-center",
+        "end" => "fa-arrow-down",
+        _ => "fa-arrow-up"
+    };
+
+    private static string HorizontalAlignmentIcon(string value) => value switch
+    {
+        "center" => "fa-align-center",
+        "end" => "fa-align-right",
+        _ => "fa-align-left"
+    };
+
+    private string ResponsiveModeLabel(string mode) => mode switch
+    {
+        "inherit" => T("Inherit"),
+        "stack" => T("Stack"),
+        "compact-preserve" => T("PreserveLayout"),
+        "horizontal-scroll" => T("HorizontalScroll"),
+        "custom" => T("Custom"),
+        "hide" => T("Hide"),
+        _ => mode
+    };
+
+    private string WidthLabel(string width) => width switch
+    {
+        "inherit" => T("Inherit"),
+        "auto" => T("Auto"),
+        "full" => T("Full"),
+        "half" => T("Half"),
+        "third" => T("Third"),
+        "custom" => T("Custom"),
+        _ => width
+    };
+
+    private string AppearanceOptionLabel(string value) => value switch
+    {
+        "none" => T("None"),
+        "small" => T("Small"),
+        "medium" => T("Medium"),
+        "large" => T("Large"),
+        "rectangle" => T("Rectangle"),
+        "rounded" => T("Rounded"),
+        "pill" => T("Pill"),
+        "circle" => T("Circle"),
+        "ellipse" => T("Ellipse"),
+        "decorative" => T("Decorative"),
+        "solid" => T("Solid"),
+        "dashed" => T("Dashed"),
+        "dotted" => T("Dotted"),
+        "color" => T("CustomColor"),
+        "theme-primary" => T("ThemePrimary"),
+        "theme-accent" => T("ThemeAccent"),
+        "theme-background" => T("ThemeBackground"),
+        "inherit" => T("Inherit"),
+        "left" => T("Left"),
+        "center" => T("Center"),
+        "right" => T("Right"),
+        "auto" => T("Auto"),
+        "square" => T("Square"),
+        "landscape" => T("Landscape"),
+        "widescreen" => T("Widescreen"),
+        "portrait" => T("Portrait"),
+        "top" => T("Top"),
+        "bottom" => T("Bottom"),
+        _ => value
+    };
+
     private static string NormalizeParent(string? parentBlockId) =>
         string.IsNullOrWhiteSpace(parentBlockId) ? string.Empty : parentBlockId;
 
+    private static string NormalizeSlot(string? columnSlotId) =>
+        string.IsNullOrWhiteSpace(columnSlotId) ? string.Empty : columnSlotId;
+
     private string BlockDisplayName(BlockModel block)
     {
-        var title = LangValue(block.Title);
-        return string.IsNullOrWhiteSpace(title) ? $"Container {block.Order + 1}" : title;
+        var title = LangValue(block.Title)
+            ?? LangValue(block.Label)
+            ?? LangValue(block.StepLabel)
+            ?? LangValue(block.ButtonLabel)
+            ?? (!string.IsNullOrWhiteSpace(block.FileName) ? block.FileName : null)
+            ?? (!string.IsNullOrWhiteSpace(block.Asset?.FileName) ? block.Asset.FileName : null)
+            ?? LangValue(block.Caption)
+            ?? LangValue(block.AltText)
+            ?? block.Pins?.Select(pin => pin.Label).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        return string.IsNullOrWhiteSpace(title) ? $"{T("Untitled")} {BlockTypeOrdinal(block)}" : title;
     }
 
-    private string LangValue(Dictionary<string, string>? values)
+    private int BlockTypeOrdinal(BlockModel block)
+    {
+        var peers = _blocks
+            .Where(candidate => candidate.Type == block.Type)
+            .OrderBy(candidate => candidate.Order)
+            .ThenBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .ToList();
+        return Math.Max(0, peers.FindIndex(candidate => candidate.Id == block.Id)) + 1;
+    }
+
+    private string ChildSummary(BlockModel child)
+    {
+        var label = T(BlockLabelKey(child.Type));
+        if (string.IsNullOrWhiteSpace(child.Authoring?.PresetSlotName))
+            return label;
+
+        var parent = _blocks.FirstOrDefault(block => block.Id == child.ParentBlockId && block.Type == "container");
+        var slotName = ContainerCapacityPolicy.SlotDisplayName(parent?.PresetKey, child.Authoring.PresetSlotName);
+        return string.IsNullOrWhiteSpace(slotName) ? label : $"{label} · {slotName}";
+    }
+
+    private string SlotStatusTitle(ContainerSlotStatus slot) =>
+        slot.Child is null
+            ? string.Format(T("ContainerSlotAvailable"), slot.Label)
+            : string.Format(T("ContainerSlotFilled"), slot.Label, BlockDisplayName(slot.Child));
+
+    private string? LangValue(Dictionary<string, string>? values)
     {
         if (values is null || values.Count == 0)
-            return string.Empty;
+            return null;
 
         if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
 
-        return values.TryGetValue("en", out var en) ? en : values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+        if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
+            return en;
+
+        return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
     }
+
+    private static string BlockLabelKey(string type) => type switch
+    {
+        "bullet-list" => "BulletList",
+        "image" => "Image",
+        "video" => "Video",
+        "file" => "File",
+        "card" => "Card",
+        "metric" => "Metric",
+        "step" => "Step",
+        "icon" => "Icon",
+        "button" => "Button",
+        "map" => "Map",
+        "form" => "Form",
+        "container" => "Container",
+        _ => "Text"
+    };
+
+    private static string BlockIconClass(string type) => type switch
+    {
+        "text" => "fa-font",
+        "bullet-list" => "fa-list-check",
+        "image" => "fa-image",
+        "video" => "fa-play-circle",
+        "file" => "fa-file-alt",
+        "card" => "fa-id-card",
+        "metric" => "fa-chart-line",
+        "step" => "fa-shoe-prints",
+        "icon" => "fa-icons",
+        "button" => "fa-hand-pointer",
+        "map" => "fa-map-marker-alt",
+        "form" => "fa-wpforms",
+        "container" => "fa-layer-group",
+        _ => "fa-cube"
+    };
 
     private static string BlockIcon(string type) => type switch
     {

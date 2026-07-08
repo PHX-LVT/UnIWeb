@@ -1,0 +1,710 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@if (Visible)
+{
+    <div class="ez-canvas-authoring-shell">
+        <div class="ez-canvas-authoring" role="toolbar" aria-label="@T("CanvasAuthoringTools")">
+            <button type="button" class="ez-canvas-authoring__add" disabled="@(Busy || !CanAdd)" title="@AddTitle" @onclick="AddRequested">
+                <i class="fas fa-plus"></i><span>@T("AddBlock")</span>
+            </button>
+            <button type="button" class="ez-canvas-authoring__done" @onclick="DoneRequested">
+                <i class="fas fa-arrow-left"></i><span>@T("DoneArranging")</span>
+            </button>
+
+            <div class="ez-block-selector">
+                <button type="button" class="ez-block-selector__trigger" aria-expanded="@_selectorOpen" @onclick="ToggleSelector">
+                    <i class="fas fa-layer-group"></i>
+                    <span>@(HasSelection ? SelectedLabel : T("SelectBlock"))</span>
+                    @if (SelectionCount > 1) { <b>@SelectionCount</b> }
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                @if (_selectorOpen)
+                {
+                    <div class="ez-block-selector__menu" @onkeydown="HandleSelectorKey" @onkeydown:stopPropagation="true">
+                        <label class="ez-block-selector__search">
+                            <i class="fas fa-search"></i>
+                            <input value="@_search" @oninput="UpdateSearch" placeholder="@T("SearchBlocks")" autofocus />
+                        </label>
+                        @if (Breadcrumbs.Count > 0)
+                        {
+                            <nav class="ez-block-selector__breadcrumbs" aria-label="@T("ContainerBreadcrumbs")">
+                                @foreach (var item in Breadcrumbs)
+                                {
+                                    <button type="button" @onclick="() => BreadcrumbSelected.InvokeAsync(item.Id)">@item.Label</button>
+                                    @if (item != Breadcrumbs[^1]) { <i class="fas fa-chevron-right"></i> }
+                                }
+                            </nav>
+                        }
+                        <div class="ez-block-selector__list" @ref="_selectorListRef">
+                            @if (BlockItems.Count == 0)
+                            {
+                                <div class="ez-block-selector__empty">@T("SectionHasNoBlocksArrange")</div>
+                            }
+                            else if (!FilteredItems.Any())
+                            {
+                                <div class="ez-block-selector__empty">@T("NoMatchingBlocks")</div>
+                            }
+                            else
+                            {
+                                <div class="ez-block-selector__section">
+                                    <div class="ez-block-selector__section-label">
+                                        <i class="fas fa-border-all"></i>
+                                        <span>@ActiveSectionLabel</span>
+                                    </div>
+                                    <div class="ez-block-selector__layer-guide" aria-hidden="true">
+                                        <span><i class="fas fa-arrow-up"></i>@T("Frontmost")</span>
+                                        <span>@T("Backmost")<i class="fas fa-arrow-down"></i></span>
+                                    </div>
+                                    @foreach (var item in FilteredItems)
+                                    {
+                                        <div @key="item.Id"
+                                             class="ez-block-selector__row @(SelectedIds.Contains(item.Id) ? "is-selected" : null) @(item.Locked ? "is-locked" : null)"
+                                             style="--block-selector-depth:@item.Depth"
+                                             data-block-selector-id="@item.Id"
+                                             data-block-selector-peer="@item.PeerKey"
+                                             data-block-selector-section-id="@item.SectionId"
+                                             data-can-reorder="@(item.CanReorder && string.IsNullOrWhiteSpace(_search) ? "true" : "false")">
+                                            <span class="ez-block-selector__drag" title="@T("DragToReorder")"><i class="fas fa-grip-vertical"></i></span>
+                                            <button type="button" class="ez-block-selector__select" @onclick="() => SelectBlock(item.Id)">
+                                                <i class="fas @BlockIcon(item.Type)"></i>
+                                                <span>@item.Label</span>
+                                            </button>
+                                            @if (!item.Visible) { <i class="fas fa-eye-slash" title="@T("Hidden")"></i> }
+                                            @if (item.Locked) { <i class="fas fa-lock" title="@T("GeometryLocked")"></i> }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="ez-canvas-authoring__group ez-canvas-authoring__group--visual">
+                @PanelTool("shape", "fa-shapes", "Shape", CanVisualEdit)
+                @PanelTool("fill", "fa-fill-drip", "Fill", CanVisualEdit)
+                @PanelTool("border", "fa-border-style", "Border", CanVisualEdit)
+                @PanelTool("animation", "fa-film", "Animation", CanVisualEdit)
+                @PanelTool("more", "fa-sliders-h", "More", CanVisualEdit)
+            </div>
+            <div class="ez-canvas-authoring__group ez-canvas-authoring__group--rotation">
+                <button type="button"
+                        class="ez-canvas-authoring__tool"
+                        disabled="@(!CanVisualEdit)"
+                        title="@T("RotateLeft")"
+                        @onpointerdown="() => StartRotation(-1)"
+                        @onpointerdown:preventDefault="true"
+                        @onpointerup="FinishRotation"
+                        @onpointercancel="FinishRotation"
+                        @onpointerleave="FinishRotation"
+                        @onkeydown="eventArgs => RotateFromKeyboard(eventArgs, -1)">
+                    <i class="fas fa-undo-alt"></i>
+                </button>
+                <button type="button"
+                        class="ez-canvas-authoring__tool"
+                        disabled="@(!CanVisualEdit)"
+                        title="@T("RotateRight")"
+                        @onpointerdown="() => StartRotation(1)"
+                        @onpointerdown:preventDefault="true"
+                        @onpointerup="FinishRotation"
+                        @onpointercancel="FinishRotation"
+                        @onpointerleave="FinishRotation"
+                        @onkeydown="eventArgs => RotateFromKeyboard(eventArgs, 1)">
+                    <i class="fas fa-redo-alt"></i>
+                </button>
+            </div>
+            <div class="ez-canvas-authoring__group ez-canvas-authoring__group--actions">
+                @Tool("duplicate", "fa-copy", "Duplicate", HasSelection)
+                <button type="button" class="ez-canvas-authoring__tool ez-canvas-authoring__tool--delete" disabled="@(!CanDelete)"
+                        title="@T("DeleteBlock")" @onclick="OpenDeleteConfirmation">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+
+        @if (_activePanel is not null && VisualState is not null)
+        {
+            <div class="ez-modal-overlay ez-canvas-visual-modal-overlay" @onclick="ClosePanel">
+                <section class="ez-modal ez-canvas-visual-modal"
+                         role="dialog"
+                         aria-modal="true"
+                         aria-labelledby="ez-canvas-visual-modal-title"
+                         @onclick:stopPropagation="true">
+                    <div class="ez-canvas-visual-panel">
+                        <header><strong id="ez-canvas-visual-modal-title">@T(PanelLabelKey)</strong><button type="button" @onclick="ClosePanel"><i class="fas fa-times"></i></button></header>
+                        @if (_activePanel == "shape")
+                        {
+                            <div class="ez-canvas-visual-panel__choices">
+                                @foreach (var value in ShapeOptions)
+                                {
+                                    <button type="button"
+                                            class="@(_shape == value ? "is-active" : null)"
+                                            aria-pressed="@(_shape == value)"
+                                            title="@T(OptionLabel(value))"
+                                            @onclick="() => SelectShape(value)">
+                                        <span class="ez-shape-swatch ez-shape-swatch--@value"></span>@T(OptionLabel(value))
+                                    </button>
+                                }
+                            </div>
+                            @if (_shape == "circle")
+                            {
+                                <p class="ez-canvas-visual-panel__hint" role="status">
+                                    <i class="fas fa-info-circle"></i>@T("CircleRequiresSquareRatio")
+                                </p>
+                            }
+                        }
+                        else if (_activePanel == "fill")
+                        {
+                            <div class="ez-canvas-visual-panel__grid">
+                                <label><span>@T("Fill")</span><select @bind="_backgroundMode">@foreach (var value in BackgroundOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
+                                @if (_backgroundMode == "color") { <label><span>@T("BackgroundColor")</span><input type="color" @bind="_backgroundColor" /></label> }
+                                <label><span>@T("TextColor")</span><input type="color" @bind="_textColor" /></label>
+                            </div>
+                        }
+                        else if (_activePanel == "border")
+                        {
+                            <div class="ez-canvas-visual-panel__grid">
+                                <label><span>@T("BorderWidth")</span><input type="number" min="0" max="20" @bind="_borderWidth" /></label>
+                                <label><span>@T("BorderStyle")</span><select @bind="_borderStyle">@foreach (var value in BorderStyles) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
+                                <label><span>@T("BorderColor")</span><input type="color" @bind="_borderColor" /></label>
+                                <label><span>@T("BorderRadius")</span><select @bind="_borderRadius">@foreach (var value in RadiusOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
+                            </div>
+                        }
+                        else if (_activePanel == "animation")
+                        {
+                            <div class="block-motion-editor block-motion-editor--toolbar">
+                                <p class="block-motion-editor__hint">@T("AnimationCardPickerHint")</p>
+                                <div class="block-motion-effects" role="radiogroup" aria-label="@T("AnimationEffect")">
+                                    @foreach (var effect in AnimationEffectCards)
+                                    {
+                                        <button type="button"
+                                                class="block-motion-card @(_animationEffect == effect.Value ? "is-active" : null)"
+                                                aria-pressed="@(_animationEffect == effect.Value)"
+                                                @onclick="() => SelectAnimationEffect(effect.Value)">
+                                            <span class="block-motion-card__preview block-motion-card__preview--@effect.PreviewClass" aria-hidden="true">
+                                                <span></span>
+                                            </span>
+                                            <strong>@T(effect.LabelKey)</strong>
+                                            <small>@T(effect.HintKey)</small>
+                                        </button>
+                                    }
+                                </div>
+
+                                <div class="block-motion-timing">
+                                    <span>@T("AnimationTiming")</span>
+                                    <div class="block-motion-preset-row" role="group" aria-label="@T("AnimationTiming")">
+                                        @foreach (var preset in TimingPresets)
+                                        {
+                                            <button type="button"
+                                                    class="@(ActiveTimingPresetKey == preset.Key ? "is-active" : null)"
+                                                    title="@T(preset.HintKey)"
+                                                    @onclick="() => SelectTimingPreset(preset)">
+                                                <strong>@T(preset.LabelKey)</strong>
+                                                <small>@T(preset.HintKey)</small>
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="block-motion-actions">
+                                    <button type="button" class="btn-admin btn-ghost" disabled="@(!HasSelection)" @onclick="ReplaySelected">
+                                        <i class="fas fa-redo"></i> @T("ReplaySelected")
+                                    </button>
+                                </div>
+
+                                <p class="block-motion-editor__safety">
+                                    <i class="fas fa-universal-access"></i>
+                                    @T("ReducedMotionAlwaysRespected")
+                                </p>
+
+                                <details class="block-motion-advanced">
+                                    <summary>@T("AdvancedTiming")</summary>
+                                    <div class="ez-canvas-visual-panel__grid">
+                                        <label>
+                                            <span>@T("AnimationTrigger")</span>
+                                            <select @bind="_animationTrigger">
+                                                <option value="enter-viewport">@T("EnterViewport")</option>
+                                                <option value="load">@T("OnLoad")</option>
+                                            </select>
+                                        </label>
+                                        <label><span>@T("DurationMs")</span><input type="number" min="0" max="5000" step="50" @bind="_durationMs" /></label>
+                                        <label><span>@T("DelayMs")</span><input type="number" min="0" max="5000" step="50" @bind="_delayMs" /></label>
+                                        <label>
+                                            <span>@T("Easing")</span>
+                                            <select @bind="_animationEasing">
+                                                @foreach (var easing in EasingOptions)
+                                                {
+                                                    <option value="@easing.Value">@T(easing.LabelKey)</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <label class="block-layout-panel__check">
+                                            <input type="checkbox" @bind="_playOnce" />
+                                            <span>@T("PlayOnce")</span>
+                                        </label>
+                                        @if (CanStaggerSelection)
+                                        {
+                                            <label>
+                                                <span>@T("ChildStaggerMs")</span>
+                                                <input type="number" min="0" max="2000" step="25" @bind="_staggerMs" />
+                                            </label>
+                                        }
+                                        else
+                                        {
+                                            <p class="block-motion-editor__hint block-motion-editor__hint--inline">
+                                                <i class="fas fa-layer-group"></i>@T("ContainerStaggerOnlyHint")
+                                            </p>
+                                        }
+                                        @if (CanContinuousSelection)
+                                        {
+                                            <label>
+                                                <span>@T("ContinuousMotion")</span>
+                                                <select @bind="_continuousEffect">
+                                                    <option value="none">@T("None")</option>
+                                                    <option value="rotate-slow">@T("SlowRotation")</option>
+                                                </select>
+                                            </label>
+                                        }
+                                        else
+                                        {
+                                            <p class="block-motion-editor__hint block-motion-editor__hint--inline">
+                                                <i class="fas fa-sparkles"></i>@T("DecorativeContinuousOnlyHint")
+                                            </p>
+                                        }
+                                    </div>
+                                </details>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ez-canvas-visual-panel__grid ez-canvas-visual-panel__grid--more">
+                                <label><span>@T("Opacity")</span><input type="number" min="0" max="1" step="0.05" @bind="_opacity" /></label>
+                                <label><span>@T("Shadow")</span><select @bind="_shadow">@foreach (var value in ShadowOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
+                                <label><span>@T("TextAlignment")</span><select @bind="_textAlign">@foreach (var value in TextAlignOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
+                                <label><span>@T("Padding")</span><select @bind="_padding">@foreach (var value in SpacingOptions) { <option value="@value">@T(OptionLabel(value))</option> }</select></label>
+                            </div>
+                        }
+                        <footer>
+                            <button type="button" class="btn-admin btn-ghost" @onclick="ClosePanel">@T("Cancel")</button>
+                            <button type="button" class="btn-admin btn-primary" disabled="@Busy" @onclick="ApplyActivePanel">
+                                <i class="fas fa-check"></i> @T("Apply")
+                            </button>
+                        </footer>
+                    </div>
+                </section>
+            </div>
+        }
+
+        @if (_deleteConfirmOpen)
+        {
+            <div class="ez-modal-overlay ez-canvas-delete-modal-overlay" @onclick="CloseDeleteConfirmation">
+                <section class="ez-modal ez-canvas-delete-modal"
+                         role="alertdialog"
+                         aria-modal="true"
+                         aria-labelledby="ez-canvas-delete-title"
+                         @onclick:stopPropagation="true">
+                    <header><strong id="ez-canvas-delete-title">@T("ConfirmDelete")</strong></header>
+                    <p>@DeleteConfirmationText</p>
+                    @if (DeleteNestedContainerCount > 0)
+                    {
+                        <p class="ez-canvas-delete-modal__warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            @string.Format(T("DeleteNestedContainersWarning"), DeleteNestedContainerCount)
+                        </p>
+                    }
+                    <footer>
+                        <button type="button" class="btn-admin btn-ghost" @onclick="CloseDeleteConfirmation">@T("Cancel")</button>
+                        <button type="button" class="btn-admin btn-danger" disabled="@Busy" @onclick="ConfirmDeleteSelection">
+                            <i class="fas fa-trash"></i> @T(DeletingContainer ? "DeleteContainerAndBlocks" : "Delete")
+                        </button>
+                    </footer>
+                </section>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public int SelectionCount { get; set; }
+    [Parameter] public string SelectedLabel { get; set; } = string.Empty;
+    [Parameter] public string ActiveSectionLabel { get; set; } = string.Empty;
+    [Parameter] public IReadOnlySet<string> SelectedIds { get; set; } = new HashSet<string>();
+    [Parameter] public IReadOnlyList<CanvasBlockSelectorItem> BlockItems { get; set; } = Array.Empty<CanvasBlockSelectorItem>();
+    [Parameter] public CanvasBlockVisualState? VisualState { get; set; }
+    [Parameter] public bool CanVisualEdit { get; set; }
+    [Parameter] public bool CanStaggerSelection { get; set; }
+    [Parameter] public bool CanContinuousSelection { get; set; }
+    [Parameter] public bool CanDelete { get; set; }
+    [Parameter] public bool DeletingContainer { get; set; }
+    [Parameter] public int DeleteDescendantCount { get; set; }
+    [Parameter] public int DeleteNestedContainerCount { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public bool CanAdd { get; set; } = true;
+    [Parameter] public string AddTitle { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<CanvasBreadcrumbItem> Breadcrumbs { get; set; } = Array.Empty<CanvasBreadcrumbItem>();
+    [Parameter] public EventCallback AddRequested { get; set; }
+    [Parameter] public EventCallback DoneRequested { get; set; }
+    [Parameter] public EventCallback<string> BlockSelected { get; set; }
+    [Parameter] public Func<CanvasBlockReorderRequest, Task<bool>>? BlocksReordered { get; set; }
+    [Parameter] public EventCallback<CanvasBlockVisualUpdate> VisualChanged { get; set; }
+    [Parameter] public EventCallback<string> ShapePreviewChanged { get; set; }
+    [Parameter] public EventCallback VisualPreviewCancelled { get; set; }
+    [Parameter] public EventCallback<double> RotationPreviewChanged { get; set; }
+    [Parameter] public EventCallback<double> RotationCommitted { get; set; }
+    [Parameter] public EventCallback DeleteRequested { get; set; }
+    [Parameter] public EventCallback<string> Command { get; set; }
+    [Parameter] public EventCallback<string> BreadcrumbSelected { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private static readonly string[] ShapeOptions = ["rectangle", "rounded", "pill", "circle", "ellipse"];
+    private static readonly string[] BackgroundOptions = ["none", "color", "theme-primary", "theme-accent", "theme-background"];
+    private static readonly string[] BorderStyles = ["solid", "dashed", "dotted", "none"];
+    private static readonly string[] RadiusOptions = ["none", "small", "medium", "large", "pill", "circle"];
+    private static readonly string[] ShadowOptions = ["none", "small", "medium", "large"];
+    private static readonly string[] TextAlignOptions = ["inherit", "left", "center", "right"];
+    private static readonly string[] SpacingOptions = ["none", "small", "medium", "large"];
+    private static readonly IReadOnlyList<AnimationEffectCard> AnimationEffectCards =
+    [
+        new("none", "None", "AnimationEffectNoneHint", "none"),
+        new("fade", "Fade", "AnimationEffectFadeHint", "fade"),
+        new("rise", "Rise", "AnimationEffectRiseHint", "rise"),
+        new("fall", "Fall", "AnimationEffectFallHint", "fall"),
+        new("slide", "Slide", "AnimationEffectSlideHint", "slide"),
+        new("scale", "Scale", "AnimationEffectScaleHint", "scale")
+    ];
+    private static readonly IReadOnlyList<TimingPreset> TimingPresets =
+    [
+        new("slow", "Slow", "AnimationTimingSlowHint", 900, "ease-out"),
+        new("normal", "Normal", "AnimationTimingNormalHint", 500, "ease-out"),
+        new("fast", "Fast", "AnimationTimingFastHint", 250, "ease-out")
+    ];
+    private static readonly IReadOnlyList<EasingOption> EasingOptions =
+    [
+        new("linear", "Linear"),
+        new("ease", "Ease"),
+        new("ease-in", "EaseIn"),
+        new("ease-out", "EaseOut"),
+        new("ease-in-out", "EaseInOut")
+    ];
+    private bool _selectorOpen;
+    private string _search = string.Empty;
+    private ElementReference _selectorListRef;
+    private DotNetObjectReference<CanvasArrangeToolbar>? _selfReference;
+    private bool _selectorSortableNeedsInit;
+    private string? _activePanel;
+    private string? _loadedVisualKey;
+    private string _shape = "rectangle";
+    private string _backgroundMode = "none";
+    private string _backgroundColor = "#ffffff";
+    private string _textColor = "#0f172a";
+    private int _borderWidth;
+    private string _borderStyle = "solid";
+    private string _borderColor = "#d1d5db";
+    private string _borderRadius = "none";
+    private string _animationEffect = "none";
+    private string _animationTrigger = "enter-viewport";
+    private string _animationEasing = "ease-out";
+    private int _durationMs = 500;
+    private int _delayMs;
+    private bool _playOnce = true;
+    private int _staggerMs;
+    private string _continuousEffect = "none";
+    private double _opacity = 1;
+    private string _shadow = "none";
+    private string _textAlign = "inherit";
+    private string _padding = "none";
+    private CancellationTokenSource? _rotationHoldCts;
+    private bool _rotationPointerActive;
+    private int _rotationDirection;
+    private double _rotationDelta;
+    private bool _deleteConfirmOpen;
+
+    private bool HasSelection => SelectionCount > 0;
+    private IEnumerable<CanvasBlockSelectorItem> FilteredItems => string.IsNullOrWhiteSpace(_search)
+        ? BlockItems
+        : BlockItems.Where(item => item.Label.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                                   item.Type.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                                   item.SectionLabel.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    private string PanelLabelKey => _activePanel switch { "shape" => "Shape", "fill" => "Fill", "border" => "Border", "animation" => "Animation", _ => "More" };
+    private string DeleteConfirmationText => DeletingContainer && SelectionCount == 1
+        ? DeleteDescendantCount > 0
+            ? string.Format(T("DeleteContainerGraphPrompt"), DeleteDescendantCount)
+            : T("DeleteEmptyContainerPrompt")
+        : SelectionCount == 1
+            ? string.Format(T("DeleteSelectedBlockPrompt"), SelectedLabel)
+            : string.Format(T("DeleteSelectedBlocksPrompt"), SelectionCount);
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string ActiveTimingPresetKey =>
+        TimingPresets.FirstOrDefault(preset =>
+            _durationMs == preset.DurationMs &&
+            string.Equals(_animationEasing, preset.Easing, StringComparison.OrdinalIgnoreCase))?.Key ?? "custom";
+
+    protected override void OnParametersSet()
+    {
+        if (_selectorOpen)
+            _selectorSortableNeedsInit = true;
+
+        if (VisualState is null || VisualState.SelectionKey == _loadedVisualKey) return;
+        _loadedVisualKey = VisualState.SelectionKey;
+        _shape = VisualState.Shape;
+        _backgroundMode = VisualState.BackgroundMode;
+        _backgroundColor = ColorOrDefault(VisualState.BackgroundColor, "#ffffff");
+        _textColor = ColorOrDefault(VisualState.TextColor, "#0f172a");
+        _borderWidth = VisualState.BorderWidth;
+        _borderStyle = VisualState.BorderStyle;
+        _borderColor = ColorOrDefault(VisualState.BorderColor, "#d1d5db");
+        _borderRadius = VisualState.BorderRadius;
+        _animationEffect = NormalizeAnimationEffect(VisualState.AnimationEffect);
+        _animationTrigger = VisualState.AnimationTrigger;
+        _durationMs = VisualState.DurationMs;
+        _delayMs = VisualState.DelayMs;
+        _animationEasing = VisualState.AnimationEasing;
+        _playOnce = VisualState.PlayOnce;
+        _staggerMs = VisualState.StaggerMs;
+        _continuousEffect = VisualState.ContinuousEffect;
+        _opacity = VisualState.Opacity;
+        _shadow = VisualState.Shadow;
+        _textAlign = VisualState.TextAlign;
+        _padding = VisualState.Padding;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _selfReference = DotNetObjectReference.Create(this);
+
+        if (!_selectorOpen || !_selectorSortableNeedsInit || _selfReference is null)
+            return;
+
+        _selectorSortableNeedsInit = false;
+        try
+        {
+            await JS.InvokeVoidAsync("initBlockSelectorSortables", _selectorListRef, _selfReference);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private void ToggleSelector()
+    {
+        _selectorOpen = !_selectorOpen;
+        _selectorSortableNeedsInit = _selectorOpen;
+        if (!_selectorOpen) _search = string.Empty;
+    }
+
+    private void UpdateSearch(ChangeEventArgs args)
+    {
+        _search = args.Value?.ToString() ?? string.Empty;
+        _selectorSortableNeedsInit = true;
+    }
+    private void HandleSelectorKey(KeyboardEventArgs args) { if (args.Key == "Escape") ToggleSelector(); }
+    private async Task SelectBlock(string id) { _selectorOpen = false; _search = string.Empty; await BlockSelected.InvokeAsync(id); }
+    [JSInvokable]
+    public async Task<bool> OnBlockSelectorReordered(string sectionId, string peerKey, string[] frontToBackIds)
+    {
+        if (!_selectorOpen || !string.IsNullOrWhiteSpace(_search) || BlocksReordered is null)
+            return false;
+
+        var peers = BlockItems
+            .Where(item => item.SectionId == sectionId && item.PeerKey == peerKey)
+            .OrderByDescending(item => item.Order)
+            .ToList();
+        if (peers.Count < 2 || peers.Any(item => !item.CanReorder))
+            return false;
+
+        var expectedIds = peers.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        if (frontToBackIds.Length != peers.Count ||
+            frontToBackIds.Distinct(StringComparer.Ordinal).Count() != peers.Count ||
+            frontToBackIds.Any(id => !expectedIds.Contains(id)))
+            return false;
+
+        var backToFrontIds = frontToBackIds.Reverse().ToArray();
+        var saved = await BlocksReordered(new CanvasBlockReorderRequest(sectionId, backToFrontIds));
+        if (!saved)
+            _selectorSortableNeedsInit = true;
+        return saved;
+    }
+
+    private async Task OpenPanel(string panel)
+    {
+        if (!CanVisualEdit) return;
+        _selectorOpen = false;
+        if (_activePanel == panel)
+        {
+            _activePanel = null;
+            await VisualPreviewCancelled.InvokeAsync();
+            return;
+        }
+        if (_activePanel is not null)
+            await VisualPreviewCancelled.InvokeAsync();
+        _activePanel = panel;
+    }
+    private async Task ClosePanel()
+    {
+        _activePanel = null;
+        await VisualPreviewCancelled.InvokeAsync();
+    }
+    private async Task ApplyVisualChanges()
+    {
+        if (VisualState is null) return;
+        await VisualChanged.InvokeAsync(new CanvasBlockVisualUpdate(
+            _activePanel ?? "more",
+            _shape, _backgroundMode, _backgroundMode == "color" ? _backgroundColor : null, _textColor,
+            Math.Clamp(_borderWidth, 0, 20), _borderStyle, _borderColor, _borderRadius,
+            _animationEffect, _animationTrigger, Math.Clamp(_durationMs, 0, 5000), Math.Clamp(_delayMs, 0, 5000),
+            _animationEasing, _playOnce, CanStaggerSelection ? Math.Clamp(_staggerMs, 0, 2000) : 0,
+            CanContinuousSelection ? _continuousEffect : "none",
+            Math.Clamp(_opacity, 0, 1), _shadow, _textAlign, _padding));
+        _activePanel = null;
+    }
+
+    private async Task ApplyActivePanel()
+    {
+        await ApplyVisualChanges();
+    }
+
+    private void OpenDeleteConfirmation()
+    {
+        if (CanDelete) _deleteConfirmOpen = true;
+    }
+
+    private void CloseDeleteConfirmation() => _deleteConfirmOpen = false;
+
+    private async Task ConfirmDeleteSelection()
+    {
+        if (!CanDelete) return;
+        await DeleteRequested.InvokeAsync();
+        _deleteConfirmOpen = false;
+    }
+
+    private void SelectAnimationEffect(string value) => _animationEffect = NormalizeAnimationEffect(value);
+
+    private async Task SelectShape(string value)
+    {
+        _shape = ShapeOptions.Contains(value, StringComparer.Ordinal) ? value : "rectangle";
+        await ShapePreviewChanged.InvokeAsync(_shape);
+    }
+
+    private async Task StartRotation(int direction)
+    {
+        if (!CanVisualEdit || _rotationPointerActive) return;
+        _rotationPointerActive = true;
+        _rotationDirection = direction < 0 ? -1 : 1;
+        _rotationDelta = _rotationDirection * 5d;
+        _rotationHoldCts = new CancellationTokenSource();
+        await RotationPreviewChanged.InvokeAsync(_rotationDelta);
+        _ = ContinueRotationAsync(_rotationHoldCts.Token);
+    }
+
+    private async Task ContinueRotationAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(250, cancellationToken);
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(50, cancellationToken);
+                _rotationDelta += _rotationDirection * 3d;
+                await InvokeAsync(() => RotationPreviewChanged.InvokeAsync(_rotationDelta));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task FinishRotation()
+    {
+        if (!_rotationPointerActive) return;
+        _rotationPointerActive = false;
+        _rotationHoldCts?.Cancel();
+        _rotationHoldCts?.Dispose();
+        _rotationHoldCts = null;
+        var delta = _rotationDelta;
+        _rotationDelta = 0;
+        if (Math.Abs(delta) > 0.001)
+            await RotationCommitted.InvokeAsync(delta);
+    }
+
+    private async Task RotateFromKeyboard(KeyboardEventArgs eventArgs, int direction)
+    {
+        if (eventArgs.Key is not ("Enter" or " ") || !CanVisualEdit || _rotationPointerActive) return;
+        var delta = direction < 0 ? -5d : 5d;
+        await RotationPreviewChanged.InvokeAsync(delta);
+        await RotationCommitted.InvokeAsync(delta);
+    }
+
+    private void SelectTimingPreset(TimingPreset preset)
+    {
+        _durationMs = preset.DurationMs;
+        _animationEasing = preset.Easing;
+    }
+
+    private async Task ReplaySelected()
+    {
+        if (!HasSelection) return;
+        try
+        {
+            await JS.InvokeVoidAsync("replayPreviewBlockAnimations", SelectedIds.ToArray());
+        }
+        catch
+        {
+        }
+    }
+
+    private RenderFragment Tool(string command, string icon, string labelKey, bool enabled) => @<button type="button" class="ez-canvas-authoring__tool" disabled="@(!enabled)" title="@T(labelKey)" @onclick="() => Command.InvokeAsync(command)"><i class="fas @icon"></i></button>;
+    private RenderFragment PanelTool(string panel, string icon, string labelKey, bool enabled) => @<button type="button" class="ez-canvas-authoring__tool @(_activePanel == panel ? "is-active" : null)" disabled="@(!enabled)" title="@T(labelKey)" @onclick="() => OpenPanel(panel)"><i class="fas @icon"></i><span>@T(labelKey)</span></button>;
+    private static string ColorOrDefault(string? value, string fallback) => !string.IsNullOrWhiteSpace(value) && value.StartsWith('#') && value.Length is 4 or 7 ? value : fallback;
+    private static string OptionLabel(string value) => value switch
+    {
+        "theme-primary" => "ThemePrimary", "theme-accent" => "ThemeAccent", "theme-background" => "ThemeBackground",
+        "slide-left" => "SlideLeft", "slide-right" => "SlideRight", "ease-out" => "EaseOut",
+        _ => char.ToUpperInvariant(value[0]) + value[1..]
+    };
+    private static string NormalizeAnimationEffect(string? value) => value switch
+    {
+        "fade" => "fade",
+        "rise" => "rise",
+        "fall" => "fall",
+        "slide" or "slide-left" or "slide-right" => "slide",
+        "scale" => "scale",
+        _ => "none"
+    };
+    private static string BlockIcon(string type) => type switch
+    {
+        "text" => "fa-font", "bullet-list" => "fa-list-check", "image" => "fa-image", "video" => "fa-play-circle",
+        "file" => "fa-file-alt", "card" => "fa-id-card", "metric" => "fa-chart-line", "step" => "fa-shoe-prints",
+        "icon" => "fa-icons", "button" => "fa-hand-pointer", "map" => "fa-map-marker-alt", "form" => "fa-wpforms",
+        "container" => "fa-layer-group", _ => "fa-cube"
+    };
+
+    public sealed record CanvasBreadcrumbItem(string Id, string Label);
+    public sealed record CanvasBlockSelectorItem(string Id, string SectionId, string SectionLabel, string Label, string Type, int Depth, int Order, string PeerKey, bool Visible, bool Locked, bool CanReorder);
+    public sealed record CanvasBlockReorderRequest(string SectionId, IReadOnlyList<string> OrderedIds);
+    private sealed record AnimationEffectCard(string Value, string LabelKey, string HintKey, string PreviewClass);
+    private sealed record TimingPreset(string Key, string LabelKey, string HintKey, int DurationMs, string Easing);
+    private sealed record EasingOption(string Value, string LabelKey);
+    public sealed record CanvasBlockVisualState(string SelectionKey, string Shape, string BackgroundMode, string? BackgroundColor, string? TextColor, int BorderWidth, string BorderStyle, string? BorderColor, string BorderRadius, string AnimationEffect, string AnimationTrigger, int DurationMs, int DelayMs, string AnimationEasing, bool PlayOnce, int StaggerMs, string ContinuousEffect, double Opacity, string Shadow, string TextAlign, string Padding);
+    public sealed record CanvasBlockVisualUpdate(string Scope, string Shape, string BackgroundMode, string? BackgroundColor, string? TextColor, int BorderWidth, string BorderStyle, string? BorderColor, string BorderRadius, string AnimationEffect, string AnimationTrigger, int DurationMs, int DelayMs, string AnimationEasing, bool PlayOnce, int StaggerMs, string ContinuousEffect, double Opacity, string Shadow, string TextAlign, string Padding);
+
+    public async ValueTask DisposeAsync()
+    {
+        _rotationHoldCts?.Cancel();
+        _rotationHoldCts?.Dispose();
+        if (_selectorOpen)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("destroyBlockSelectorSortables", _selectorListRef);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+        _selfReference?.Dispose();
+    }
+}

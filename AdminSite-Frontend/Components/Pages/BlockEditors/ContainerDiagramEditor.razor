@@ -1,0 +1,479 @@
+@using System.Globalization
+
+<div class="block-contract-editor block-diagram-editor">
+    <label class="block-layout-panel__check block-contract-editor__toggle">
+        <input type="checkbox" @bind="Value.Enabled" />
+        <span>@T("EnableDiagramLayer")</span>
+    </label>
+
+    @if (Value.Enabled)
+    {
+        <div class="block-diagram-editor__section">
+            <div class="block-contract-editor__header">
+                <div>
+                    <strong>@T("DecorativeLayers")</strong>
+                    <p>@T("DiagramDecorationHint")</p>
+                </div>
+            </div>
+
+            <div class="block-diagram-presets" role="list" aria-label="@T("DiagramDecorationPresets")">
+                @foreach (var preset in DecorationPresets)
+                {
+                    <button type="button"
+                            class="block-diagram-preset-card"
+                            @onclick="() => AddDecoration(preset.Kind)">
+                        <span class="block-diagram-preset-card__preview block-diagram-preset-card__preview--@preset.Kind"></span>
+                        <strong>@T(preset.LabelKey)</strong>
+                        <small>@T(preset.HintKey)</small>
+                    </button>
+                }
+            </div>
+
+            @if (Value.Decorations.Count == 0)
+            {
+                <p class="block-diagram-editor__empty">@T("DiagramNoDecorations")</p>
+            }
+
+            @foreach (var item in Value.Decorations)
+            {
+                <div class="block-contract-item block-diagram-item" @key="item">
+                    <div class="block-contract-item__title">
+                        <div>
+                            <strong>@DecorationLabel(item.Kind)</strong>
+                            <small>@DecorationSummary(item)</small>
+                        </div>
+                        <button type="button" class="block-contract-item__remove" title="@T("Remove")" @onclick="() => Value.Decorations.Remove(item)">
+                            <i class="fas fa-trash" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <details class="block-motion-advanced block-diagram-advanced">
+                        <summary>@T("AdvancedDiagramSettings")</summary>
+                        <div class="block-layout-panel__grid">
+                            <label>
+                                <span>@T("DecorationType")</span>
+                                <select @bind="item.Kind">
+                                    <option value="ring">@T("Ring")</option>
+                                    <option value="orbit">@T("Orbit")</option>
+                                    <option value="arc">@T("Arc")</option>
+                                    <option value="divider">@T("Divider")</option>
+                                    <option value="process-line">@T("ProcessLine")</option>
+                                    <option value="line">@T("Line")</option>
+                                </select>
+                            </label>
+                            @if (DecorationUsesAnchors(item.Kind))
+                            {
+                                <DiagramAnchorEditor Label="@T("StartAnchor")" @bind-Value="item.FromAnchor" Children="Children" Language="Language" />
+                                <DiagramAnchorEditor Label="@T("EndAnchor")" @bind-Value="item.ToAnchor" Children="Children" Language="Language" />
+                            }
+                            else
+                            {
+                                <label><span>@T("RadiusPercent")</span><input type="number" min="5" max="50" step="1" @bind="item.RadiusPercent" /></label>
+                                @if (item.Kind == "arc")
+                                {
+                                    <label><span>@T("StartAngle")</span><input type="number" min="-360" max="360" @bind="item.StartAngle" /></label>
+                                    <label><span>@T("EndAngle")</span><input type="number" min="-360" max="360" @bind="item.EndAngle" /></label>
+                                }
+                            }
+                            <DiagramStrokeEditor @bind-ColorMode="item.ColorMode"
+                                                 @bind-Color="item.Color"
+                                                 @bind-Width="item.Width"
+                                                 @bind-StrokeStyle="item.Style"
+                                                 @bind-Opacity="item.Opacity"
+                                                 Language="Language" />
+                        </div>
+                    </details>
+                </div>
+            }
+        </div>
+
+        <div class="block-diagram-editor__section">
+            <div class="block-contract-editor__header">
+                <div>
+                    <strong>@T("Connectors")</strong>
+                    <p>@T("DiagramConnectorHint")</p>
+                </div>
+                <button type="button" @onclick="AddConnector">@T("AddConnector")</button>
+            </div>
+
+            @if (Children.Count == 0)
+            {
+                <p class="block-diagram-editor__empty">@T("DiagramNeedsChildBlocks")</p>
+            }
+            else if (Value.Connectors.Count == 0)
+            {
+                <p class="block-diagram-editor__empty">@T("DiagramNoConnectors")</p>
+            }
+
+            @foreach (var item in Value.Connectors)
+            {
+                <div class="block-contract-item block-diagram-item" @key="item">
+                    <div class="block-contract-item__title">
+                        <div>
+                            <strong>@T("Connector")</strong>
+                            <small>@ConnectorSummary(item)</small>
+                        </div>
+                        <button type="button" class="block-contract-item__remove" title="@T("Remove")" @onclick="() => RemoveConnector(item)">
+                            <i class="fas fa-trash" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <div class="block-diagram-connector-builder">
+                        <div class="block-diagram-endpoints" role="group" aria-label="@T("ConnectorEndpointMode")">
+                            <button type="button"
+                                    class="@EndpointButtonClass(item, AnchorFrom)"
+                                    @onclick="() => SetConnectorPicker(item, AnchorFrom)">
+                                <span>@T("StartAnchor")</span>
+                                <strong>@AnchorLabel(item.FromAnchor)</strong>
+                            </button>
+                            <button type="button"
+                                    class="@EndpointButtonClass(item, AnchorTo)"
+                                    @onclick="() => SetConnectorPicker(item, AnchorTo)">
+                                <span>@T("EndAnchor")</span>
+                                <strong>@AnchorLabel(item.ToAnchor)</strong>
+                            </button>
+                        </div>
+
+                        <div class="block-diagram-preview" aria-label="@T("ConnectorPreview")">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                                <path class="block-diagram-preview__connector"
+                                      d="@ConnectorPreviewPath(item)"
+                                      marker-end="@PreviewMarkerEnd(item)" />
+                                <defs>
+                                    <marker id="@PreviewMarkerId(item)"
+                                            viewBox="0 0 10 10"
+                                            refX="8"
+                                            refY="5"
+                                            markerWidth="5"
+                                            markerHeight="5"
+                                            orient="auto-start-reverse">
+                                        <path d="M 0 0 L 10 5 L 0 10 z" />
+                                    </marker>
+                                </defs>
+                            </svg>
+
+                            <button type="button"
+                                    class="@AnchorCardClass(item, AnchorCenter)"
+                                    style="@CenterPreviewStyle"
+                                    title="@T("ContainerCenter")"
+                                    @onclick="() => PickConnectorAnchor(item, AnchorCenter)">
+                                <span>•</span>
+                                <small>@T("ContainerCenter")</small>
+                            </button>
+
+                            @foreach (var child in OrderedChildren)
+                            {
+                                var anchor = AnchorValue(child);
+                                <button type="button"
+                                        class="@AnchorCardClass(item, anchor)"
+                                        style="@ChildPreviewStyle(child)"
+                                        title="@ChildDisplayName(child)"
+                                        @onclick="() => PickConnectorAnchor(item, anchor)">
+                                    <span>@(ChildOrdinal(child))</span>
+                                    <small>@ChildDisplayName(child)</small>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <details class="block-motion-advanced block-diagram-advanced">
+                        <summary>@T("AdvancedConnectorSettings")</summary>
+                        <div class="block-layout-panel__grid">
+                            <label>
+                                <span>@T("ConnectorRouting")</span>
+                                <select @bind="item.Routing">
+                                    <option value="straight">@T("Straight")</option>
+                                    <option value="curve">@T("Curve")</option>
+                                </select>
+                            </label>
+                            <DiagramStrokeEditor @bind-ColorMode="item.ColorMode"
+                                                 @bind-Color="item.Color"
+                                                 @bind-Width="item.Width"
+                                                 @bind-StrokeStyle="item.Style"
+                                                 @bind-Opacity="item.Opacity"
+                                                 Language="Language" />
+                            <label class="block-layout-panel__check">
+                                <input type="checkbox" @bind="item.ArrowEnd" />
+                                <span>@T("ArrowEnd")</span>
+                            </label>
+                        </div>
+                    </details>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private const string AnchorCenter = "center";
+    private const string AnchorFrom = "from";
+    private const string AnchorTo = "to";
+    private const string CenterPreviewStyle = "--diagram-x: 50%; --diagram-y: 52%;";
+
+    [Parameter, EditorRequired] public ContainerDiagramSettingsModel Value { get; set; } = default!;
+    [Parameter] public IReadOnlyList<BlockModel> Children { get; set; } = Array.Empty<BlockModel>();
+    [Parameter] public string Language { get; set; } = "en";
+
+    private string? _activeConnectorId;
+    private string _activeAnchorSide = AnchorFrom;
+
+    private static readonly IReadOnlyList<DiagramPreset> DecorationPresets =
+    [
+        new("ring", "Ring", "DiagramRingPresetHint"),
+        new("orbit", "Orbit", "DiagramOrbitPresetHint"),
+        new("arc", "Arc", "DiagramArcPresetHint"),
+        new("divider", "Divider", "DiagramDividerPresetHint"),
+        new("process-line", "ProcessLine", "DiagramProcessLinePresetHint")
+    ];
+
+    private IReadOnlyList<BlockModel> OrderedChildren =>
+        Children.OrderBy(child => child.Order).ThenBy(child => child.Id, StringComparer.Ordinal).ToList();
+
+    private string T(string key) => AdminUiLocalizer.T(key, Language);
+
+    private void AddDecoration(string kind)
+    {
+        var anchors = OrderedChildren.Select(AnchorValue).Where(anchor => anchor != "center").ToList();
+        var decoration = new ContainerDecorationSettingsModel
+        {
+            Id = $"decoration-{Guid.NewGuid():N}",
+            Kind = kind,
+            FromAnchor = "center",
+            ToAnchor = "center",
+            RadiusPercent = kind switch
+            {
+                "orbit" => 42,
+                "arc" => 36,
+                _ => 35
+            },
+            StartAngle = kind == "arc" ? 205 : 0,
+            EndAngle = kind == "arc" ? 335 : 360,
+            Style = kind == "orbit" ? "dashed" : "solid",
+            Opacity = kind switch
+            {
+                "divider" => 0.45,
+                "process-line" => 0.55,
+                _ => 0.35
+            }
+        };
+
+        if (kind == "process-line")
+        {
+            decoration.FromAnchor = anchors.FirstOrDefault() ?? "center";
+            decoration.ToAnchor = anchors.Skip(1).FirstOrDefault() ?? anchors.FirstOrDefault() ?? "center";
+        }
+
+        Value.Decorations.Add(decoration);
+    }
+
+    private void AddConnector()
+    {
+        var anchors = OrderedChildren.Select(AnchorValue).Where(anchor => anchor != "center").ToList();
+        var connector = new ContainerConnectorSettingsModel
+        {
+            Id = $"connector-{Guid.NewGuid():N}",
+            FromAnchor = anchors.FirstOrDefault() ?? "center",
+            ToAnchor = anchors.Skip(1).FirstOrDefault() ?? anchors.FirstOrDefault() ?? "center",
+            ArrowEnd = true
+        };
+        Value.Connectors.Add(connector);
+        SetConnectorPicker(connector, AnchorFrom);
+    }
+
+    private void RemoveConnector(ContainerConnectorSettingsModel item)
+    {
+        Value.Connectors.Remove(item);
+        if (_activeConnectorId == item.Id)
+        {
+            _activeConnectorId = null;
+            _activeAnchorSide = AnchorFrom;
+        }
+    }
+
+    private void SetConnectorPicker(ContainerConnectorSettingsModel item, string side)
+    {
+        _activeConnectorId = item.Id;
+        _activeAnchorSide = side == AnchorTo ? AnchorTo : AnchorFrom;
+    }
+
+    private void PickConnectorAnchor(ContainerConnectorSettingsModel item, string anchor)
+    {
+        if (_activeConnectorId != item.Id)
+        {
+            SetConnectorPicker(item, AnchorFrom);
+        }
+
+        if (_activeAnchorSide == AnchorTo)
+        {
+            item.ToAnchor = anchor;
+            _activeAnchorSide = AnchorFrom;
+        }
+        else
+        {
+            item.FromAnchor = anchor;
+            _activeAnchorSide = AnchorTo;
+        }
+    }
+
+    private string EndpointButtonClass(ContainerConnectorSettingsModel item, string side) =>
+        $"block-diagram-endpoints__button{(IsPicking(item, side) ? " is-active" : string.Empty)}";
+
+    private bool IsPicking(ContainerConnectorSettingsModel item, string side) =>
+        _activeConnectorId == item.Id && _activeAnchorSide == side;
+
+    private string AnchorCardClass(ContainerConnectorSettingsModel item, string anchor)
+    {
+        var classes = "block-diagram-anchor-card";
+        if (item.FromAnchor == anchor) classes += " is-start";
+        if (item.ToAnchor == anchor) classes += " is-end";
+        if (_activeConnectorId == item.Id &&
+            ((_activeAnchorSide == AnchorFrom && item.FromAnchor == anchor) ||
+             (_activeAnchorSide == AnchorTo && item.ToAnchor == anchor)))
+            classes += " is-pick-target";
+        return classes;
+    }
+
+    private string ChildPreviewStyle(BlockModel child)
+    {
+        var point = PreviewPointFor(AnchorValue(child));
+        return $"--diagram-x: {Number(point.X)}%; --diagram-y: {Number(point.Y)}%;";
+    }
+
+    private string ConnectorPreviewPath(ContainerConnectorSettingsModel item)
+    {
+        var from = PreviewPointFor(item.FromAnchor);
+        var to = PreviewPointFor(item.ToAnchor);
+        if (Math.Abs(from.X - to.X) < 0.01 && Math.Abs(from.Y - to.Y) < 0.01)
+        {
+            return $"M {Number(from.X - 5)} {Number(from.Y)} C {Number(from.X - 5)} {Number(from.Y - 10)} {Number(from.X + 5)} {Number(from.Y - 10)} {Number(from.X + 5)} {Number(from.Y)}";
+        }
+
+        if (item.Routing == "curve")
+        {
+            var midX = (from.X + to.X) / 2;
+            var midY = Math.Min(from.Y, to.Y) - 18;
+            return $"M {Number(from.X)} {Number(from.Y)} Q {Number(midX)} {Number(midY)} {Number(to.X)} {Number(to.Y)}";
+        }
+
+        return $"M {Number(from.X)} {Number(from.Y)} L {Number(to.X)} {Number(to.Y)}";
+    }
+
+    private PreviewPoint PreviewPointFor(string? anchor)
+    {
+        if (string.IsNullOrWhiteSpace(anchor) || anchor == "center")
+            return new PreviewPoint(50, 52);
+
+        var children = OrderedChildren;
+        var index = children.ToList().FindIndex(child => AnchorValue(child) == anchor);
+        if (index < 0) return new PreviewPoint(50, 52);
+        if (children.Count == 1) return new PreviewPoint(50, 52);
+
+        var x = 14 + (72d * index / Math.Max(children.Count - 1, 1));
+        var y = index % 2 == 0 ? 34 : 70;
+        return new PreviewPoint(x, y);
+    }
+
+    private string PreviewMarkerId(ContainerConnectorSettingsModel item) =>
+        $"block-diagram-preview-arrow-{SanitizeId(item.Id)}";
+
+    private string? PreviewMarkerEnd(ContainerConnectorSettingsModel item) =>
+        item.ArrowEnd ? $"url(#{PreviewMarkerId(item)})" : null;
+
+    private string ConnectorSummary(ContainerConnectorSettingsModel item) =>
+        $"{AnchorLabel(item.FromAnchor)} → {AnchorLabel(item.ToAnchor)}";
+
+    private string DecorationSummary(ContainerDecorationSettingsModel item) => item.Kind switch
+    {
+        "arc" => string.Format(CultureInfo.InvariantCulture, "{0}% · {1}°–{2}°", item.RadiusPercent, item.StartAngle, item.EndAngle),
+        "process-line" or "line" => $"{AnchorLabel(item.FromAnchor)} → {AnchorLabel(item.ToAnchor)}",
+        "divider" => T("HorizontalDivider"),
+        "orbit" => string.Format(CultureInfo.InvariantCulture, "{0}% · {1}", item.RadiusPercent, T("Dashed")),
+        _ => string.Format(CultureInfo.InvariantCulture, "{0}%", item.RadiusPercent)
+    };
+
+    private string DecorationLabel(string? kind) => kind switch
+    {
+        "orbit" => T("Orbit"),
+        "arc" => T("Arc"),
+        "divider" => T("Divider"),
+        "process-line" => T("ProcessLine"),
+        "line" => T("Line"),
+        _ => T("Ring")
+    };
+
+    private static bool DecorationUsesAnchors(string? kind) =>
+        kind is "line" or "process-line" or "divider";
+
+    private string AnchorLabel(string? anchor)
+    {
+        if (string.IsNullOrWhiteSpace(anchor) || anchor == "center") return T("ContainerCenter");
+        var child = Children.FirstOrDefault(item => AnchorValue(item) == anchor);
+        return child is null ? T("MissingBlockAnchor") : ChildDisplayName(child);
+    }
+
+    private string ChildDisplayName(BlockModel child)
+    {
+        var title = LangValue(child.Title)
+            ?? LangValue(child.Label)
+            ?? LangValue(child.StepLabel)
+            ?? LangValue(child.ButtonLabel)
+            ?? (!string.IsNullOrWhiteSpace(child.FileName) ? child.FileName : null)
+            ?? (!string.IsNullOrWhiteSpace(child.Asset?.FileName) ? child.Asset.FileName : null)
+            ?? LangValue(child.Caption)
+            ?? LangValue(child.AltText)
+            ?? child.Pins?.Select(pin => pin.Label).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        if (!string.IsNullOrWhiteSpace(title)) return title;
+
+        return $"{T(BlockTypeKey(child.Type))} {ChildOrdinal(child)}";
+    }
+
+    private int ChildOrdinal(BlockModel child)
+    {
+        var children = OrderedChildren;
+        var index = children.ToList().FindIndex(item => item.Id == child.Id);
+        return Math.Max(index, 0) + 1;
+    }
+
+    private string? LangValue(Dictionary<string, string>? values)
+    {
+        if (values is null || values.Count == 0) return null;
+        if (values.TryGetValue(Language, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english))
+            return english;
+        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private static string AnchorValue(BlockModel child) =>
+        string.IsNullOrWhiteSpace(child.StableId) ? "center" : child.StableId;
+
+    private static string BlockTypeKey(string? type) => type switch
+    {
+        "text" => "TextBlock",
+        "image" => "ImageBlock",
+        "video" => "VideoBlock",
+        "file" => "FileBlock",
+        "map" => "MapBlock",
+        "form" => "FormBlock",
+        "card" => "CardBlock",
+        "button" => "ButtonBlock",
+        "metric" => "MetricBlock",
+        "bullet-list" => "BulletListBlock",
+        "step" => "StepBlock",
+        "icon" => "IconBlock",
+        "container" => "ContainerBlock",
+        _ => "Block"
+    };
+
+    private static string Number(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    private static string SanitizeId(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Guid.NewGuid().ToString("N");
+        var sanitized = new string(value.Where(char.IsLetterOrDigit).ToArray());
+        return string.IsNullOrWhiteSpace(sanitized) ? Guid.NewGuid().ToString("N") : sanitized;
+    }
+
+    private sealed record DiagramPreset(string Kind, string LabelKey, string HintKey);
+    private readonly record struct PreviewPoint(double X, double Y);
+}

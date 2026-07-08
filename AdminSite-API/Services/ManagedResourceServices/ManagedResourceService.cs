@@ -215,6 +215,7 @@ namespace FullProject.Services
             updated += await PropagateSectionReplacementAsync(_context.SectionsPublished, resource, oldUrl);
             updated += await PropagateBlockReplacementAsync(_context.BlocksDraft, resource, oldUrl);
             updated += await PropagateBlockReplacementAsync(_context.BlocksPublished, resource, oldUrl);
+            updated += await PropagateSectionPresetReplacementAsync(resource, oldUrl);
             updated += await PropagateBrandingReplacementAsync(resource, oldUrl);
             return updated;
         }
@@ -316,6 +317,51 @@ namespace FullProject.Services
 
                 brand.LogoUrl = resource.Url;
                 await _context.Branding.ReplaceOneAsync(b => b.Id == brand.Id, brand);
+                updated++;
+            }
+
+            return updated;
+        }
+
+        private async Task<int> PropagateSectionPresetReplacementAsync(ManagedResource resource, string oldUrl)
+        {
+            if (string.IsNullOrWhiteSpace(oldUrl)) return 0;
+
+            var presets = await _context.SectionPresets.Find(SectionPresetReplacementFilter(oldUrl)).ToListAsync();
+            var updated = 0;
+            foreach (var preset in presets)
+            {
+                var changed = false;
+                if (ManagedResourceReferenceHelper.SameUrl(preset.ThumbnailUrl, oldUrl))
+                {
+                    preset.ThumbnailUrl = ThumbnailReplacementUrl(resource);
+                    changed = true;
+                }
+                if (preset.Section is not null && ReplaceSectionReferences(preset.Section, resource, oldUrl))
+                {
+                    preset.Style = preset.Section.Style;
+                    changed = true;
+                }
+                else
+                {
+                    if (ManagedResourceReferenceHelper.SameUrl(preset.Style.BackgroundImageUrl, oldUrl))
+                    {
+                        preset.Style.BackgroundImageUrl = resource.Url;
+                        changed = true;
+                    }
+                    if (ManagedResourceReferenceHelper.SameUrl(preset.Style.BackgroundVideoUrl, oldUrl))
+                    {
+                        preset.Style.BackgroundVideoUrl = resource.Url;
+                        changed = true;
+                    }
+                }
+
+                foreach (var block in preset.Blocks)
+                    changed |= ReplaceBlockReferences(block, resource, oldUrl);
+
+                if (!changed) continue;
+                preset.UpdatedAt = DateTime.UtcNow;
+                await _context.SectionPresets.ReplaceOneAsync(item => item.Id == preset.Id, preset);
                 updated++;
             }
 
@@ -478,6 +524,21 @@ namespace FullProject.Services
 
         private static FilterDefinition<Block> BlockReplacementFilter(string oldUrl) =>
             ManagedResourceReferenceHelper.BlockUrlFilter([oldUrl]);
+
+        private static FilterDefinition<SectionPreset> SectionPresetReplacementFilter(string oldUrl) =>
+            Builders<SectionPreset>.Filter.Or(
+                Builders<SectionPreset>.Filter.Eq(preset => preset.ThumbnailUrl, oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundImageUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundVideoUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Style.BackgroundImageUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Style.BackgroundVideoUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Blocks.ImageUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Blocks.FileUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Blocks.EmbedUrl", oldUrl));
 
         private static string ThumbnailReplacementUrl(ManagedResource resource) =>
             string.Equals(resource.Kind, "image", StringComparison.OrdinalIgnoreCase)

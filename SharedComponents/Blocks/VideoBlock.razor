@@ -3,10 +3,20 @@
 
 <div class="sc-block sc-block--video">
     <div class="sc-video-wrap">
-        @if (!string.IsNullOrWhiteSpace(_embedUrl))
+        @if (IsUploadedVideo && !string.IsNullOrWhiteSpace(Block.Asset.Url))
+        {
+            <video src="@Block.Asset.Url"
+                   title="@TitleText"
+                   controls="@Block.ShowControls"
+                   autoplay="@Block.Autoplay"
+                   muted="@(Block.Autoplay || Block.Muted)"
+                   loop="@Block.Loop"
+                   playsinline></video>
+        }
+        else if (!string.IsNullOrWhiteSpace(_embedUrl))
         {
             <iframe src="@_embedUrl"
-                    title="Embedded video"
+                    title="@TitleText"
                     frameborder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                     allowfullscreen></iframe>
@@ -19,9 +29,11 @@
     [Parameter] public string Lang { get; set; } = "en";
 
     private string? _embedUrl;
+    private bool IsUploadedVideo => string.Equals(Block.SourceType, "upload", StringComparison.OrdinalIgnoreCase);
+    private string TitleText => StyleHelper.Lang(Block.Title, Lang) is { Length: > 0 } value ? value : "Video";
 
     protected override void OnParametersSet()
     {
-        _embedUrl = VideoUrlHelper.ToEmbedUrl(Block.EmbedUrl);
+        _embedUrl = IsUploadedVideo ? null : VideoUrlHelper.ToEmbedUrl(Block.EmbedUrl);
     }
 }

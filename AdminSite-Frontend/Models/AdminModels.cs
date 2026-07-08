@@ -453,6 +453,7 @@ namespace AdminSite.Models
     public class BlockModel
     {
         public string Id { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
         public string PageId { get; set; } = string.Empty;
         public string SectionId { get; set; } = string.Empty;
@@ -463,6 +464,10 @@ namespace AdminSite.Models
         public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutModel? Layout { get; set; }
+        public BlockAppearanceModel Appearance { get; set; } = new();
+        public BlockResponsiveSettingsModel Responsive { get; set; } = new();
+        public BlockAnimationSettingsModel Animation { get; set; } = new();
+        public BlockAuthoringPolicyModel Authoring { get; set; } = new();
         public List<BlockButtonModel> Buttons { get; set; } = new();
 
 
@@ -481,7 +486,9 @@ namespace AdminSite.Models
         public string? Action { get; set; }
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
+        public string? PresetKey { get; set; }
         public string? LayoutMode { get; set; }
+        public ContainerLayoutSettingsModel ContainerLayout { get; set; } = new();
         public int? Columns { get; set; }
         public string? Gap { get; set; }
         public int? OrbitRadius { get; set; }
@@ -492,7 +499,12 @@ namespace AdminSite.Models
 
         // Image
         public string? ImageUrl { get; set; }
+        public BlockAssetReferenceModel Asset { get; set; } = new();
         public Dictionary<string, string>? AltText { get; set; }
+        public Dictionary<string, string>? Caption { get; set; }
+        public bool OpenInLightbox { get; set; }
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
         public List<BulletListItemModel>? BulletItems { get; set; }
 
         [JsonIgnore]
@@ -504,6 +516,11 @@ namespace AdminSite.Models
 
         // Video
         public string? EmbedUrl { get; set; }
+        public string SourceType { get; set; } = "youtube";
+        public bool ShowControls { get; set; } = true;
+        public bool Autoplay { get; set; }
+        public bool Muted { get; set; }
+        public bool Loop { get; set; }
 
         // File
         public string? FileUrl { get; set; }
@@ -515,6 +532,7 @@ namespace AdminSite.Models
             set => FileName = value;
         }
         public string? FileType { get; set; }
+        public string OpenBehavior { get; set; } = "open";
 
         // Map
         public double? CenterLat { get; set; }
@@ -1068,26 +1086,43 @@ namespace AdminSite.Models
         public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
     }
-    public class CanvasSectionPresetModel
+    public class SectionPresetModel
     {
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public Dictionary<string, string> PreviewText { get; set; } = new();
+        public string SectionType { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string ThumbnailBackground { get; set; } = "#f3f4f6";
+        public string SummaryLabel { get; set; } = string.Empty;
+        public string IconClass { get; set; } = "fa-layer-group";
+        public string VisualKey { get; set; } = "section";
+        public int ItemCount { get; set; }
         public int BlockCount { get; set; }
         public int SchemaVersion { get; set; }
+        public bool IsCompatible { get; set; } = true;
+        public string? CompatibilityMessage { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
 
-    public class CanvasSectionPresetCreateRequest
+    public class SectionPresetCreateRequest
     {
         public string PageId { get; set; } = string.Empty;
         public string SectionId { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
     }
 
-    public class CanvasSectionPresetApplyRequest
+    public class SectionPresetApplyRequest
     {
         public string PageId { get; set; } = string.Empty;
+    }
+
+    public class SectionPresetApplyResultModel
+    {
+        public string SectionId { get; set; } = string.Empty;
     }
 }
 

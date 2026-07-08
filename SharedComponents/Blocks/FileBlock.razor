@@ -5,9 +5,12 @@
     @if (!string.IsNullOrEmpty(Block.FileUrl))
     {
         <a href="@Block.FileUrl"
-               download="@Block.Filename"
+               download="@(Downloads ? Block.Filename : null)"
+               target="@(Downloads ? null : "_blank")"
+               rel="@(Downloads ? null : "noopener")"
+               data-sc-download="@(Downloads ? "true" : null)"
                class="sc-file-link">
-            <i class="fas fa-file-download"></i>
+            <i class="@FileIcon" aria-hidden="true"></i>
             @Block.Filename
         </a>
     }
@@ -23,4 +26,13 @@
 @code {
     [Parameter, EditorRequired] public PublicFileBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
+    private bool Downloads => string.Equals(Block.OpenBehavior, "download", StringComparison.OrdinalIgnoreCase);
+    private string FileIcon => (Block.FileType ?? string.Empty).ToLowerInvariant() switch
+    {
+        var value when value.Contains("pdf") => "fas fa-file-pdf",
+        var value when value.Contains("word") => "fas fa-file-word",
+        var value when value.Contains("excel") || value.Contains("spreadsheet") => "fas fa-file-excel",
+        var value when value.Contains("powerpoint") || value.Contains("presentation") => "fas fa-file-powerpoint",
+        _ => Downloads ? "fas fa-file-download" : "fas fa-file"
+    };
 }

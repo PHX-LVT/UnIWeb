@@ -64,7 +64,7 @@
                                 aria-invalid="@HasError(key)"
                                 @onchange="eventArgs => SetField(field, eventArgs.Value)">
                             <option value="">@placeholder</option>
-                            @foreach (var option in field.Options.OrderBy(item => item.Order))
+                            @foreach (var option in (field.Options ?? new()).OrderBy(item => item.Order))
                             {
                                 <option value="@option.Value">@StyleHelper.Lang(option.Label, Lang)</option>
                             }
@@ -219,7 +219,7 @@
             field.Type,
             _data.GetValueOrDefault(key),
             field.Required,
-            field.Options.Select(option => option.Value).ToList());
+            (field.Options ?? new()).Select(option => option.Value).ToList());
 
         if (error == FormInputValidationError.None)
         {

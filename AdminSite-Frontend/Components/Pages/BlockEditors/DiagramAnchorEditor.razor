@@ -1,0 +1,64 @@
+<label>
+    <span>@Label</span>
+    <select value="@Value" @onchange="ChangeValue">
+        <option value="center">@T("ContainerCenter")</option>
+        @foreach (var child in Children.OrderBy(child => child.Order))
+        {
+            <option value="@AnchorValue(child)">@ChildDisplayName(child)</option>
+        }
+    </select>
+</label>
+
+@code {
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Value { get; set; } = "center";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<BlockModel> Children { get; set; } = Array.Empty<BlockModel>();
+    [Parameter] public string Language { get; set; } = "en";
+
+    private string T(string key) => AdminUiLocalizer.T(key, Language);
+    private Task ChangeValue(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString() ?? "center");
+    private static string AnchorValue(BlockModel child) =>
+        string.IsNullOrWhiteSpace(child.StableId) ? "center" : child.StableId;
+
+    private string ChildDisplayName(BlockModel child)
+    {
+        var title = LangValue(child.Title)
+            ?? LangValue(child.Label)
+            ?? LangValue(child.StepLabel)
+            ?? LangValue(child.ButtonLabel)
+            ?? (!string.IsNullOrWhiteSpace(child.FileName) ? child.FileName : null)
+            ?? (!string.IsNullOrWhiteSpace(child.Asset?.FileName) ? child.Asset.FileName : null)
+            ?? LangValue(child.Caption)
+            ?? LangValue(child.AltText)
+            ?? child.Pins?.Select(pin => pin.Label).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        if (!string.IsNullOrWhiteSpace(title)) return title;
+
+        var peers = Children
+            .Where(candidate => candidate.Type == child.Type)
+            .OrderBy(candidate => candidate.Order)
+            .ThenBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .ToList();
+        var ordinal = Math.Max(0, peers.FindIndex(candidate => candidate.Id == child.Id)) + 1;
+        return $"{T(BlockTypeKey(child.Type))} {ordinal}";
+    }
+
+    private string? LangValue(Dictionary<string, string>? values)
+    {
+        if (values is null || values.Count == 0) return null;
+        if (values.TryGetValue(Language, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english))
+            return english;
+        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private static string BlockTypeKey(string? type) => type switch
+    {
+        "text" => "TextBlock", "image" => "ImageBlock", "video" => "VideoBlock",
+        "file" => "FileBlock", "map" => "MapBlock", "form" => "FormBlock",
+        "card" => "CardBlock", "button" => "ButtonBlock", "metric" => "MetricBlock",
+        "bullet-list" => "BulletListBlock", "step" => "StepBlock", "icon" => "IconBlock",
+        "container" => "ContainerBlock", _ => "Block"
+    };
+}

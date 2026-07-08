@@ -5,6 +5,18 @@
 @inject NavigationManager Nav
 
 <div class="login-page">
+    <video class="login-page__video"
+           autoplay
+           muted
+           loop
+           playsinline
+           preload="metadata"
+           aria-hidden="true"
+           tabindex="-1">
+        <source src="/media/login-background.mp4" type="video/mp4" />
+    </video>
+    <div class="login-page__overlay" aria-hidden="true"></div>
+
     <div class="login-card">
         <div class="login-header">
             <h1>AdminSite PageBuilder</h1>

@@ -48,13 +48,15 @@ namespace FullProject.Controllers
                 return Forbid();
 
             var inferredKind = ManagedResourceService.InferKindFromUpload(file.FileName, file.ContentType);
-            var allowsSectionBackgroundVideo = string.Equals(folder, "section-backgrounds", StringComparison.OrdinalIgnoreCase) &&
-                                                string.Equals(inferredKind, "video", StringComparison.OrdinalIgnoreCase);
-            if (allowsSectionBackgroundVideo)
+            var allowsPageBuilderVideo =
+                (string.Equals(folder, "section-backgrounds", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(folder, "video-blocks", StringComparison.OrdinalIgnoreCase)) &&
+                string.Equals(inferredKind, "video", StringComparison.OrdinalIgnoreCase);
+            if (allowsPageBuilderVideo)
             {
                 var resourceSettings = await _siteSettings.GetResourceLibrarySettingsAsync();
                 if (file.Length > resourceSettings.MaxVideoBytes)
-                    return UnprocessableEntity(ApiResult.BadRequest($"Video backgrounds must be {resourceSettings.MaxVideoBytes / 1024 / 1024}MB or smaller."));
+                    return UnprocessableEntity(ApiResult.BadRequest($"Video must be {resourceSettings.MaxVideoBytes / 1024 / 1024}MB or smaller."));
                 if (file.Length > _settings.MaxUploadBytes)
                     return UnprocessableEntity(ApiResult.BadRequest($"Storage is configured for uploads up to {_settings.MaxUploadBytes / 1024 / 1024}MB. Ask an Admin to raise the storage cap."));
                 if (!UploadSecurityPolicy.IsAllowedManagedResourceUpload(file.FileName, file.ContentType, "video", resourceSettings))
@@ -70,7 +72,7 @@ namespace FullProject.Controllers
 
             await using (var validationStream = file.OpenReadStream())
             {
-                var signatureOk = allowsSectionBackgroundVideo
+                var signatureOk = allowsPageBuilderVideo
                     ? await UploadSecurityPolicy.HasAllowedManagedResourceSignatureAsync(validationStream, file.FileName, file.ContentType, "video", HttpContext.RequestAborted)
                     : await UploadSecurityPolicy.HasAllowedSignatureAsync(validationStream, file.FileName, file.ContentType, HttpContext.RequestAborted);
                 if (!signatureOk)
@@ -108,7 +110,7 @@ namespace FullProject.Controllers
                     AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageContent),
 
                 "sections" or "blocks" or "hero" or "gallery" or "carousel" or "showcase" or "list-items" or
-                "section-backgrounds" or "image-blocks" or "file-blocks" or "card-blocks" =>
+                "section-backgrounds" or "image-blocks" or "video-blocks" or "file-blocks" or "card-blocks" =>
                     AdminAuthorization.HasPermission(User, AdminPermissionKeys.PageBuilder),
 
                 "uploads" =>

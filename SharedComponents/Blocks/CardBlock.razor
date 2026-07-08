@@ -16,9 +16,15 @@
         }
         <h3>@StyleHelper.Lang(Block.Title, Lang)</h3>
         <p>@StyleHelper.Lang(Block.Description, Lang)</p>
-        @if (!string.IsNullOrWhiteSpace(Block.Href))
+        @if (HasAction)
         {
-            <ActionButton CssClass="sc-btn sc-btn--outline" Action="@Block.Action" FormDefinitionId="@Block.FormDefinitionId" Href="@Block.Href">
+            <ActionButton CssClass="sc-btn sc-btn--outline"
+                          Action="@Block.Action"
+                          FormDefinitionId="@Block.FormDefinitionId"
+                          Href="@Block.Href"
+                          Target="@Target"
+                          Rel="@Rel"
+                          Download="@Downloads">
                 @StyleHelper.Lang(Block.ButtonLabel, Lang)
             </ActionButton>
         }
@@ -28,4 +34,11 @@
 @code {
     [Parameter, EditorRequired] public PublicCardBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
+    private bool OpensForm => string.Equals(Block.Action, "openForm", StringComparison.OrdinalIgnoreCase);
+    private bool Downloads => string.Equals(Block.Action, "downloadFile", StringComparison.OrdinalIgnoreCase);
+    private bool IsExternal => string.Equals(Block.Action, "externalUrl", StringComparison.OrdinalIgnoreCase);
+    private bool HasAction => !string.IsNullOrWhiteSpace(StyleHelper.Lang(Block.ButtonLabel, Lang)) &&
+        (OpensForm ? !string.IsNullOrWhiteSpace(Block.FormDefinitionId) : !string.IsNullOrWhiteSpace(Block.Href));
+    private string? Target => IsExternal ? "_blank" : null;
+    private string? Rel => IsExternal ? "noopener noreferrer" : null;
 }

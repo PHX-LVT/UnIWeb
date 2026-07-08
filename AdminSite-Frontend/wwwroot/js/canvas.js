@@ -88,7 +88,9 @@ window.contentRichTextEditor = (() => {
         const style = window.getComputedStyle(element);
         const fontSize = Math.round(Number.parseFloat(style.fontSize || "16")) || 16;
         const color = rgbToHex(style.color) || "#0f3460";
-        entry.dotnet.invokeMethodAsync("OnFormatChanged", fontSize, color).catch(() => {});
+        const formatElement = element.closest?.("h2,h3,p") || element;
+        const blockFormat = ["H2", "H3"].includes(formatElement.tagName) ? formatElement.tagName.toLowerCase() : "p";
+        entry.dotnet.invokeMethodAsync("OnFormatChanged", fontSize, color, blockFormat).catch(() => {});
     };
 
     return {
@@ -106,11 +108,19 @@ window.contentRichTextEditor = (() => {
                 rememberSelection(entry);
                 reportFormat(entry);
             };
+            const onPaste = (event) => {
+                event.preventDefault();
+                const text = event.clipboardData?.getData("text/plain") || "";
+                restoreSelection(editors[id]);
+                document.execCommand("insertText", false, text);
+                onInput();
+            };
             element.addEventListener("input", onInput);
             element.addEventListener("mouseup", onSelectionChange);
             element.addEventListener("keyup", onSelectionChange);
             element.addEventListener("focus", onSelectionChange);
-            editors[id] = { el: element, dotnet, onInput, onSelectionChange, range: null };
+            element.addEventListener("paste", onPaste);
+            editors[id] = { el: element, dotnet, onInput, onSelectionChange, onPaste, range: null };
             setTimeout(() => reportFormat(editors[id]), 0);
         },
         setValue(id, value) {
@@ -160,6 +170,18 @@ window.contentRichTextEditor = (() => {
             rememberSelection(entry);
             reportFormat(entry);
         },
+        setBlockFormat(id, format) {
+            const entry = editors[id];
+            if (!entry) return;
+            const safeFormat = ["p", "h2", "h3"].includes(String(format || "").toLowerCase())
+                ? String(format).toLowerCase()
+                : "p";
+            restoreSelection(entry);
+            document.execCommand("formatBlock", false, safeFormat);
+            entry.onInput();
+            rememberSelection(entry);
+            reportFormat(entry);
+        },
         setColor(id, color) {
             const entry = editors[id];
             if (!entry || !/^#[0-9a-f]{6}$/i.test(color || "")) return;
@@ -192,6 +214,7 @@ window.contentRichTextEditor = (() => {
             entry.el.removeEventListener("mouseup", entry.onSelectionChange);
             entry.el.removeEventListener("keyup", entry.onSelectionChange);
             entry.el.removeEventListener("focus", entry.onSelectionChange);
+            entry.el.removeEventListener("paste", entry.onPaste);
             delete editors[id];
         }
     };
@@ -301,6 +324,117 @@ window.initAdminSortable = (key, container, dotnet, methodName, idAttribute, han
             }
         }
     });
+};
+
+window.initBlockListSortable = (key, container, dotnet) => {
+    if (!key || !container || !dotnet || typeof Sortable === "undefined") return;
+
+    window.__ezAdminSortables = window.__ezAdminSortables || {};
+    if (window.__ezAdminSortables[key]) {
+        window.__ezAdminSortables[key].destroy();
+        window.__ezAdminSortables[key] = null;
+    }
+
+    let originalOrder = [];
+    const sortable = Sortable.create(container, {
+        handle: ".block-card-drag",
+        draggable: ".block-sort-item",
+        dataIdAttr: "data-block-sort-id",
+        animation: 150,
+        onStart: () => {
+            originalOrder = sortable.toArray();
+        },
+        onMove: event => event.dragged?.dataset.blockSortLocked !== "true",
+        onEnd: event => {
+            if (event.oldIndex === event.newIndex) return;
+            const moved = event.item;
+            const parentId = moved.dataset.blockParent || "";
+            const zone = moved.dataset.blockZone || "default";
+            const slotId = moved.dataset.blockSlot || "";
+            const peerIds = [...container.children]
+                .filter(item =>
+                    item.dataset.blockParent === parentId &&
+                    (item.dataset.blockZone || "default") === zone &&
+                    (item.dataset.blockSlot || "") === slotId)
+                .map(item => item.dataset.blockSortId)
+                .filter(Boolean);
+
+            dotnet.invokeMethodAsync("OnBlocksReordered", parentId, zone, slotId, peerIds)
+                .then(saved => {
+                    if (saved !== false) return;
+                    sortable.sort(originalOrder);
+                })
+                .catch(() => sortable.sort(originalOrder));
+        }
+    });
+
+    window.__ezAdminSortables[key] = sortable;
+};
+
+window.destroyBlockSelectorSortables = root => {
+    if (!root || !Array.isArray(root.__blockSelectorSortables)) return;
+    root.__blockSelectorSortables.forEach(sortable => sortable?.destroy());
+    root.__blockSelectorSortables = [];
+};
+
+window.initBlockSelectorSortables = (root, dotnet) => {
+    if (!root || !dotnet || typeof Sortable === "undefined") return;
+    window.destroyBlockSelectorSortables(root);
+
+    const sortables = [];
+    root.querySelectorAll(".ez-block-selector__section").forEach(section => {
+        let originalChildren = [];
+        let originalPeerIds = [];
+        let activePeerKey = "";
+
+        const sortable = Sortable.create(section, {
+            handle: ".ez-block-selector__drag",
+            draggable: '.ez-block-selector__row[data-can-reorder="true"]',
+            dataIdAttr: "data-block-selector-id",
+            animation: 150,
+            chosenClass: "sortable-chosen",
+            ghostClass: "sortable-ghost",
+            dragClass: "sortable-drag",
+            onStart: event => {
+                originalChildren = [...section.children];
+                activePeerKey = event.item?.dataset.blockSelectorPeer || "";
+                originalPeerIds = [...section.querySelectorAll(".ez-block-selector__row")]
+                    .filter(item => item.dataset.blockSelectorPeer === activePeerKey)
+                    .map(item => item.dataset.blockSelectorId)
+                    .filter(Boolean);
+            },
+            onMove: event => {
+                const draggedPeer = event.dragged?.dataset.blockSelectorPeer || "";
+                const relatedPeer = event.related?.dataset.blockSelectorPeer || "";
+                return !!draggedPeer && draggedPeer === relatedPeer;
+            },
+            onEnd: event => {
+                const peerKey = event.item?.dataset.blockSelectorPeer || activePeerKey;
+                const sectionId = event.item?.dataset.blockSelectorSectionId || "";
+                const frontToBackIds = [...section.querySelectorAll(".ez-block-selector__row")]
+                    .filter(item => item.dataset.blockSelectorPeer === peerKey)
+                    .map(item => item.dataset.blockSelectorId)
+                    .filter(Boolean);
+                const changed = frontToBackIds.length === originalPeerIds.length &&
+                    frontToBackIds.some((id, index) => id !== originalPeerIds[index]);
+
+                if (!changed || !sectionId || !peerKey) {
+                    originalChildren.forEach(child => section.appendChild(child));
+                    return;
+                }
+
+                dotnet.invokeMethodAsync("OnBlockSelectorReordered", sectionId, peerKey, frontToBackIds)
+                    .then(saved => {
+                        if (saved === true) return;
+                        originalChildren.forEach(child => section.appendChild(child));
+                    })
+                    .catch(() => originalChildren.forEach(child => section.appendChild(child)));
+            }
+        });
+        sortables.push(sortable);
+    });
+
+    root.__blockSelectorSortables = sortables;
 };
 
 window.initFooterLinkSortables = (root, dotnet) => {
@@ -418,6 +552,10 @@ window.initCanvasOverlay = function (dotNetRef) {
 };
 
 window.disposeCanvasOverlay = function () {
+    if (window.__ezCanvasAuthoringKeyHandler) {
+        window.removeEventListener("keydown", window.__ezCanvasAuthoringKeyHandler);
+        window.__ezCanvasAuthoringKeyHandler = null;
+    }
     if (window.__ezSectionSortable) {
         window.__ezSectionSortable.destroy();
         window.__ezSectionSortable = null;
@@ -443,6 +581,21 @@ window.disposeCanvasOverlay = function () {
 window.reloadPreviewIframe = function () {
     const iframe = document.getElementById("ez-preview-iframe");
     if (iframe) iframe.src = iframe.src;
+};
+
+window.replayPreviewBlockAnimations = function (blockIds) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (!iframe || !iframe.contentWindow) return;
+
+    const ids = Array.isArray(blockIds)
+        ? blockIds
+        : (blockIds ? [blockIds] : []);
+    if (!ids.length) return;
+
+    const api = iframe.contentWindow.scBlockAnimations;
+    if (api && typeof api.replayBlock === "function") {
+        ids.forEach(id => api.replayBlock(id));
+    }
 };
 
 window.applyPreviewThemeCss = function (css) {
@@ -473,7 +626,7 @@ window.applyPreviewThemeCss = function (css) {
     window.__ezCanvasRequestPositions?.();
 };
 
-window.patchPreviewBlockLayout = function (blockId, x, y, w, h, leftPercent, topPx, widthPercent, heightPx, zIndex) {
+window.patchPreviewBlockLayout = function (blockId, x, y, w, h, leftPercent, topPx, widthPercent, heightPx, zIndex, requestPositions = true) {
     const iframe = document.getElementById("ez-preview-iframe");
     if (!iframe || !iframe.contentDocument || !blockId) return;
 
@@ -494,8 +647,211 @@ window.patchPreviewBlockLayout = function (blockId, x, y, w, h, leftPercent, top
     block.style.setProperty("--sc-block-width", `${exactWidth}%`);
     block.style.setProperty("--sc-block-top", `${exactTop}px`);
     block.style.setProperty("--sc-block-min-height", `${exactHeight}px`);
-    if (Number.isFinite(Number(zIndex))) block.style.zIndex = `${Math.min(Math.max(Number.parseInt(zIndex, 10), 0), 1000)}`;
+    block.style.height = `${exactHeight}px`;
+    block.style.minHeight = "0px";
+    block.style.overflow = "hidden";
+
+    block.querySelectorAll([
+        ".sc-block-motion",
+        ".sc-block-rotation",
+        ".sc-block-visual",
+        ".sc-block",
+        ".sc-design-block",
+        ".sc-block-starter",
+        ".sc-card-block",
+        ".sc-metric-block",
+        ".sc-bullet-list-block",
+        ".sc-step-block",
+        ".sc-icon-block",
+        ".sc-container-block"
+    ].join(",")).forEach(element => {
+        element.style.height = "100%";
+        element.style.minHeight = "0px";
+        element.style.boxSizing = "border-box";
+    });
+
+    block.querySelectorAll([
+        ".sc-block-starter__tile",
+        ".sc-block-starter__form",
+        ".sc-block-starter__step",
+        ".sc-block-starter__media",
+        ".sc-block-starter__map",
+        ".sc-block-starter__container"
+    ].join(",")).forEach(element => {
+        element.style.minHeight = "0px";
+    });
+
+    if ((block.getAttribute("data-block-type") || "").toLowerCase() === "container") {
+        const containerBlock = block.querySelector(".sc-container-block");
+        if (containerBlock) {
+            containerBlock.style.height = "100%";
+            Array.from(containerBlock.children).forEach(child => {
+                if (!child.classList || !child.classList.contains("sc-section-blocks")) return;
+                child.style.minHeight = "0px";
+                child.style.removeProperty("height");
+                if (child.classList.contains("sc-section-blocks--freeform")) {
+                    child.style.setProperty("--sc-freeform-min-height", "0px");
+                    child.style.setProperty("--sc-mobile-freeform-min-height", "0px");
+                }
+            });
+        }
+
+        const starter = block.querySelector(".sc-block-starter--container");
+        if (starter) {
+            starter.style.height = "100%";
+            starter.style.minHeight = "0px";
+            starter.style.padding = "0px";
+        }
+
+        const starterBoundary = block.querySelector(".sc-block-starter__container");
+        if (starterBoundary) {
+            starterBoundary.style.height = "100%";
+            starterBoundary.style.minHeight = "0px";
+        }
+    }
+    if (zIndex !== null && zIndex !== undefined && Number.isFinite(Number(zIndex))) {
+        block.style.zIndex = `${Math.min(Math.max(Number.parseInt(zIndex, 10), 0), 1000)}`;
+    }
+    if (requestPositions) window.__ezCanvasRequestPositions?.();
+};
+
+window.patchPreviewBlockVisual = function (blockId, appearance, animation, layout, requestPositions = true) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (!iframe || !iframe.contentDocument || !blockId) return;
+
+    const frame = [...iframe.contentDocument.querySelectorAll("[data-block-id]")]
+        .find(item => item.getAttribute("data-block-id") === blockId);
+    if (!frame) return;
+
+    const visual = frame.querySelector(".sc-block-visual");
+    const motion = frame.querySelector(".sc-block-motion");
+    const overlay = [...document.querySelectorAll(".ez-freeform-block-overlay[data-block-id]")]
+        .find(item => item.getAttribute("data-block-id") === blockId);
+    const replaceClass = (element, prefix, value) => {
+        if (!element) return;
+        [...element.classList].filter(name => name.startsWith(prefix)).forEach(name => element.classList.remove(name));
+        if (value) element.classList.add(`${prefix}${value}`);
+    };
+    const setOrRemove = (element, property, value) => {
+        if (!element) return;
+        if (value === null || value === undefined || value === "") element.style.removeProperty(property);
+        else element.style.setProperty(property, String(value));
+    };
+
+    appearance = appearance || {};
+    animation = animation || {};
+    layout = layout || {};
+    const shape = appearance.shape || "rectangle";
+    const aspectRatio = appearance.aspectRatio || "auto";
+    const backgroundMode = appearance.backgroundMode || "none";
+    const borderRadius = appearance.borderRadius || "none";
+
+    replaceClass(frame, "sc-block-frame--shape-", shape);
+    replaceClass(frame, "sc-block-frame--aspect-", aspectRatio);
+    frame.dataset.blockShape = shape;
+    if (visual) {
+        replaceClass(visual, "sc-block-visual--shape-", shape);
+        replaceClass(visual, "sc-block-visual--background-", backgroundMode);
+        replaceClass(visual, "sc-block-visual--radius-", borderRadius);
+        replaceClass(visual, "sc-block-visual--shadow-", appearance.shadow || "none");
+        replaceClass(visual, "sc-block-visual--text-", appearance.textAlign || "inherit");
+        replaceClass(visual, "sc-block-visual--pad-", appearance.padding || "none");
+        setOrRemove(visual, "background-color", backgroundMode === "color" ? appearance.backgroundColor : null);
+        setOrRemove(visual, "color", appearance.textColor);
+        setOrRemove(visual, "opacity", Number(appearance.opacity) < 1 ? appearance.opacity : null);
+        const borderWidth = Math.max(0, Math.min(20, Number.parseInt(appearance.borderWidth, 10) || 0));
+        const borderStyle = appearance.borderStyle || "solid";
+        if (borderWidth > 0 && borderStyle !== "none") {
+            setOrRemove(visual, "border-width", `${borderWidth}px`);
+            setOrRemove(visual, "border-style", borderStyle);
+            setOrRemove(visual, "border-color", appearance.borderColor || "currentColor");
+        } else {
+            setOrRemove(visual, "border-width", null);
+            setOrRemove(visual, "border-style", null);
+            setOrRemove(visual, "border-color", null);
+        }
+    }
+    const rotation = Number.isFinite(Number(appearance.rotationDeg)) ? Number(appearance.rotationDeg) : 0;
+    const rotationLayer = frame.querySelector(".sc-block-rotation");
+    if (rotationLayer) rotationLayer.style.setProperty("--sc-block-rotation", `${rotation}deg`);
+    if (motion) {
+        replaceClass(motion, "sc-block-motion--", animation.effect || "none");
+        replaceClass(motion, "sc-block-motion--continuous-", animation.continuousEffect || "none");
+        motion.dataset.scAnimation = animation.effect || "none";
+        motion.dataset.scAnimationTrigger = animation.trigger || "enter-viewport";
+        motion.dataset.scAnimationOnce = String(animation.playOnce !== false);
+        motion.dataset.scAnimationReduced = "true";
+        motion.dataset.scContinuousMotion = animation.continuousEffect || "none";
+        setOrRemove(motion, "--sc-motion-duration", `${Math.max(0, Number.parseInt(animation.durationMs, 10) || 0)}ms`);
+        setOrRemove(motion, "--sc-motion-delay", `${Math.max(0, Number.parseInt(animation.delayMs, 10) || 0)}ms`);
+        setOrRemove(motion, "--sc-motion-easing", animation.easing || "ease-out");
+    }
+    if (overlay) {
+        replaceClass(overlay, "ez-freeform-block-overlay--shape-", shape);
+        replaceClass(overlay, "ez-freeform-block-overlay--radius-", borderRadius);
+        overlay.dataset.blockShape = shape;
+        overlay.dataset.blockRadius = borderRadius;
+        overlay.dataset.blockRotation = String(rotation);
+        overlay.style.setProperty("--ez-block-rotation", `${rotation}deg`);
+    }
+
+    window.patchPreviewBlockLayout(
+        blockId,
+        layout.x,
+        layout.y,
+        layout.w,
+        layout.h,
+        layout.leftPercent,
+        layout.topPx,
+        layout.widthPercent,
+        layout.heightPx,
+        layout.zIndex,
+        false);
+    if (requestPositions) window.__ezCanvasRequestPositions?.();
+};
+
+window.previewBlockShape = function (blockIds, shape) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (!iframe || !iframe.contentDocument) return;
+    const ids = new Set(Array.isArray(blockIds) ? blockIds : [blockIds]);
+    const safeShape = ["rectangle", "rounded", "pill", "circle", "ellipse"].includes(shape) ? shape : "rectangle";
+    const replaceClass = (element, prefix, value) => {
+        if (!element) return;
+        [...element.classList].filter(name => name.startsWith(prefix)).forEach(name => element.classList.remove(name));
+        element.classList.add(`${prefix}${value}`);
+    };
+    [...iframe.contentDocument.querySelectorAll("[data-block-id]")]
+        .filter(frame => ids.has(frame.getAttribute("data-block-id")))
+        .forEach(frame => {
+            replaceClass(frame, "sc-block-frame--shape-", safeShape);
+            if (safeShape === "circle") replaceClass(frame, "sc-block-frame--aspect-", "square");
+            frame.dataset.blockShape = safeShape;
+            replaceClass(frame.querySelector(".sc-block-visual"), "sc-block-visual--shape-", safeShape);
+        });
+    [...document.querySelectorAll(".ez-freeform-block-overlay[data-block-id]")]
+        .filter(overlay => ids.has(overlay.getAttribute("data-block-id")))
+        .forEach(overlay => {
+            replaceClass(overlay, "ez-freeform-block-overlay--shape-", safeShape);
+            overlay.dataset.blockShape = safeShape;
+        });
     window.__ezCanvasRequestPositions?.();
+};
+
+window.previewBlockRotation = function (items) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (!iframe || !iframe.contentDocument || !Array.isArray(items)) return;
+    const rotations = new Map(items.map(item => [item.id, Number.isFinite(Number(item.rotationDeg)) ? Number(item.rotationDeg) : 0]));
+    [...iframe.contentDocument.querySelectorAll("[data-block-id]")].forEach(frame => {
+        const id = frame.getAttribute("data-block-id");
+        if (!rotations.has(id)) return;
+        frame.querySelector(".sc-block-rotation")?.style.setProperty("--sc-block-rotation", `${rotations.get(id)}deg`);
+    });
+    [...document.querySelectorAll(".ez-freeform-block-overlay[data-block-id]")].forEach(overlay => {
+        const id = overlay.getAttribute("data-block-id");
+        if (!rotations.has(id)) return;
+        overlay.dataset.blockRotation = String(rotations.get(id));
+        overlay.style.setProperty("--ez-block-rotation", `${rotations.get(id)}deg`);
+    });
 };
 
 window.initFreeformBlockEditor = function (container, dotnet, scale) {
@@ -503,6 +859,25 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
 
     container.__ezFreeformDotNet = dotnet;
     container.__ezFreeformScale = scale || 1;
+
+    if (window.__ezCanvasAuthoringKeyHandler) {
+        window.removeEventListener("keydown", window.__ezCanvasAuthoringKeyHandler);
+    }
+    window.__ezCanvasAuthoringKeyHandler = function (event) {
+        const target = event.target;
+        const isEditing = target && (target.matches?.("input,textarea,select") || target.isContentEditable);
+        if (event.key === "Escape") {
+            container.__ezFreeformDotNet?.invokeMethodAsync("ClearArrangeSelection").catch(() => {});
+            return;
+        }
+        if (isEditing || (!event.ctrlKey && !event.metaKey)) return;
+        const key = String(event.key || "").toLowerCase();
+        if (key !== "z" && key !== "y") return;
+        event.preventDefault();
+        const undo = key === "z" && !event.shiftKey;
+        container.__ezFreeformDotNet?.invokeMethodAsync("RunCanvasHistory", undo).catch(() => {});
+    };
+    window.addEventListener("keydown", window.__ezCanvasAuthoringKeyHandler);
 
     if (container.__ezFreeformInitialized) return;
     container.__ezFreeformInitialized = true;
@@ -564,6 +939,7 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
         block.setPointerCapture?.(event.pointerId);
 
         const mode = handle.classList.contains("ez-freeform-block-resize") ? "resize" : "drag";
+        const constrainToCircle = block.dataset.blockShape === "circle";
         const containerRect = container.getBoundingClientRect();
         const renderedScale = container.offsetWidth > 0
             ? containerRect.width / container.offsetWidth
@@ -581,6 +957,26 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             sectionWidth: Math.max(parseFloat(block.dataset.sectionWidth || "1"), 1),
             sectionHeight: Math.max(parseFloat(block.dataset.sectionHeight || "1"), 1)
         };
+
+        const groupBlocks = mode === "drag" && block.classList.contains("ez-freeform-block-overlay--selected")
+            ? [...container.querySelectorAll(".ez-freeform-block-overlay--selected")]
+                .filter(item =>
+                    item.dataset.sectionId === block.dataset.sectionId &&
+                    item.dataset.geometryLocked !== "true" &&
+                    item.dataset.sectionLeft === block.dataset.sectionLeft &&
+                    item.dataset.sectionTop === block.dataset.sectionTop &&
+                    item.dataset.sectionWidth === block.dataset.sectionWidth &&
+                    item.dataset.sectionHeight === block.dataset.sectionHeight)
+            : [block];
+        const groupStarts = groupBlocks.map(item => ({
+            element: item,
+            blockId: item.dataset.blockId,
+            sectionId: item.dataset.sectionId,
+            left: parseFloat(item.style.left || "0"),
+            top: parseFloat(item.style.top || "0"),
+            width: parseFloat(item.style.width || "0"),
+            height: parseFloat(item.style.height || "0")
+        }));
 
         if (start.width <= 0 || start.height <= 0 || start.sectionWidth <= 1 || start.sectionHeight <= 1) return;
 
@@ -626,15 +1022,54 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             return Math.min(Math.max(value, min), max);
         }
 
+        function syncPreviewBlock(blockId, left, top, width, height) {
+            if (!blockId) return;
+            const leftPercent = clamp((left - start.sectionLeft) / start.sectionWidth * 100, 0, 100);
+            const topPx = clamp(top - start.sectionTop, 0, Math.max(0, start.sectionHeight - height));
+            const widthPercent = clamp(width / start.sectionWidth * 100, 1, 100);
+            const heightPx = clamp(height, 24, start.sectionHeight);
+            window.patchPreviewBlockLayout(
+                blockId,
+                0,
+                0,
+                1,
+                1,
+                leftPercent,
+                topPx,
+                widthPercent,
+                heightPx,
+                null,
+                false);
+        }
+
+        function restorePreviewBlocks() {
+            groupStarts.forEach(item =>
+                syncPreviewBlock(item.blockId, item.left, item.top, item.width, item.height));
+        }
+
         function move(e) {
-            const dx = (e.clientX - start.x) / scale;
-            const dy = (e.clientY - start.y) / scale;
+            const screenDx = (e.clientX - start.x) / scale;
+            const screenDy = (e.clientY - start.y) / scale;
+            const rotationRad = (Number.parseFloat(block.dataset.blockRotation || "0") || 0) * Math.PI / 180;
+            const dx = mode === "resize"
+                ? screenDx * Math.cos(rotationRad) + screenDy * Math.sin(rotationRad)
+                : screenDx;
+            const dy = mode === "resize"
+                ? -screenDx * Math.sin(rotationRad) + screenDy * Math.cos(rotationRad)
+                : screenDy;
 
             if (mode === "resize") {
                 const availableWidth = Math.max(start.sectionWidth / 12, start.sectionWidth - (start.left - start.sectionLeft));
                 const availableHeight = Math.max(48, start.sectionHeight - (start.top - start.sectionTop));
-                let width = clamp(start.width + dx, start.sectionWidth / 12, availableWidth);
-                let height = clamp(start.height + dy, 48, availableHeight);
+                const maximumCircleSize = Math.min(availableWidth, availableHeight);
+                const minimumCircleSize = Math.min(Math.max(48, start.sectionWidth / 12), maximumCircleSize);
+                const circleDelta = Math.abs(dx) >= Math.abs(dy) ? dx : dy;
+                let width = constrainToCircle
+                    ? clamp((start.width + start.height) / 2 + circleDelta, minimumCircleSize, maximumCircleSize)
+                    : clamp(start.width + dx, start.sectionWidth / 12, availableWidth);
+                let height = constrainToCircle
+                    ? width
+                    : clamp(start.height + dy, 48, availableHeight);
 
                 const rightCandidates = [
                     { value: bounds.right, guide: bounds.right },
@@ -657,13 +1092,44 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
                 const snapX = nearestSnap(start.left + width, rightCandidates);
                 const snapY = nearestSnap(start.top + height, bottomCandidates);
 
-                if (snapX) width = clamp(snapX.value - start.left, start.sectionWidth / 12, availableWidth);
-                if (snapY) height = clamp(snapY.value - start.top, 48, availableHeight);
-                snapX ? showGuide("x", snapX.guide, bounds) : hideGuide("x");
-                snapY ? showGuide("y", snapY.guide, bounds) : hideGuide("y");
+                if (constrainToCircle && (snapX || snapY)) {
+                    const snapXSize = snapX ? clamp(snapX.value - start.left, minimumCircleSize, maximumCircleSize) : null;
+                    const snapYSize = snapY ? clamp(snapY.value - start.top, minimumCircleSize, maximumCircleSize) : null;
+                    const useX = snapXSize !== null && (snapYSize === null || Math.abs(snapXSize - width) <= Math.abs(snapYSize - width));
+                    const size = useX ? snapXSize : snapYSize;
+                    width = size;
+                    height = size;
+                    useX && snapX ? showGuide("x", snapX.guide, bounds) : hideGuide("x");
+                    !useX && snapY ? showGuide("y", snapY.guide, bounds) : hideGuide("y");
+                } else {
+                    if (snapX) width = clamp(snapX.value - start.left, start.sectionWidth / 12, availableWidth);
+                    if (snapY) height = clamp(snapY.value - start.top, 48, availableHeight);
+                    snapX ? showGuide("x", snapX.guide, bounds) : hideGuide("x");
+                    snapY ? showGuide("y", snapY.guide, bounds) : hideGuide("y");
+                }
 
                 block.style.width = `${width}px`;
                 block.style.height = `${height}px`;
+                syncPreviewBlock(block.dataset.blockId, start.left, start.top, width, height);
+                return;
+            }
+
+            if (groupStarts.length > 1) {
+                const groupLeft = Math.min(...groupStarts.map(item => item.left));
+                const groupTop = Math.min(...groupStarts.map(item => item.top));
+                const groupRight = Math.max(...groupStarts.map(item => item.left + item.width));
+                const groupBottom = Math.max(...groupStarts.map(item => item.top + item.height));
+                const boundedDx = clamp(dx, bounds.left - groupLeft, bounds.right - groupRight);
+                const boundedDy = clamp(dy, bounds.top - groupTop, bounds.bottom - groupBottom);
+                groupStarts.forEach(item => {
+                    const left = item.left + boundedDx;
+                    const top = item.top + boundedDy;
+                    item.element.style.left = `${left}px`;
+                    item.element.style.top = `${top}px`;
+                    syncPreviewBlock(item.blockId, left, top, item.width, item.height);
+                });
+                hideGuide("x");
+                hideGuide("y");
                 return;
             }
 
@@ -707,6 +1173,7 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
 
             block.style.left = `${left}px`;
             block.style.top = `${top}px`;
+            syncPreviewBlock(block.dataset.blockId, left, top, width, height);
         }
 
         function finish() {
@@ -717,6 +1184,46 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             document.body.classList.remove("ez-arranging-block");
             hideGuide("x");
             hideGuide("y");
+
+            if (groupStarts.length > 1) {
+                const mutations = groupStarts.map(item => {
+                    const left = parseFloat(item.element.style.left || `${item.left}`);
+                    const top = parseFloat(item.element.style.top || `${item.top}`);
+                    return {
+                        blockId: item.blockId,
+                        sectionId: item.sectionId,
+                        x: clamp(Math.round((left - start.sectionLeft) / start.sectionWidth * 12), 0, 11),
+                        y: clamp(Math.round((top - start.sectionTop) / 48), 0, 60),
+                        w: clamp(Math.round(item.width / start.sectionWidth * 12), 1, 12),
+                        h: clamp(Math.round(item.height / 48), 1, 40),
+                        leftPercent: clamp((left - start.sectionLeft) / start.sectionWidth * 100, 0, 100),
+                        topPx: clamp(top - start.sectionTop, 0, start.sectionHeight - item.height),
+                        widthPercent: clamp(item.width / start.sectionWidth * 100, 1, 100),
+                        heightPx: clamp(item.height, 24, start.sectionHeight)
+                    };
+                });
+                const changed = groupStarts.some(item =>
+                    Math.abs(parseFloat(item.element.style.left || `${item.left}`) - item.left) >= 0.5 ||
+                    Math.abs(parseFloat(item.element.style.top || `${item.top}`) - item.top) >= 0.5);
+                if (!changed) return;
+                container.__ezFreeformDotNet.invokeMethodAsync("SaveFreeformBlockLayouts", mutations)
+                    .then(saved => {
+                        if (saved !== false) return;
+                        groupStarts.forEach(item => {
+                            item.element.style.left = `${item.left}px`;
+                            item.element.style.top = `${item.top}px`;
+                        });
+                        restorePreviewBlocks();
+                    })
+                    .catch(() => {
+                        groupStarts.forEach(item => {
+                            item.element.style.left = `${item.left}px`;
+                            item.element.style.top = `${item.top}px`;
+                        });
+                        restorePreviewBlocks();
+                    });
+                return;
+            }
 
             const left = parseFloat(block.style.left || `${start.left}`);
             const top = parseFloat(block.style.top || `${start.top}`);
@@ -762,12 +1269,14 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
                     block.style.top = `${start.top}px`;
                     block.style.width = `${start.width}px`;
                     block.style.height = `${start.height}px`;
+                    restorePreviewBlocks();
                 })
                 .catch(() => {
                     block.style.left = `${start.left}px`;
                     block.style.top = `${start.top}px`;
                     block.style.width = `${start.width}px`;
                     block.style.height = `${start.height}px`;
+                    restorePreviewBlocks();
                 });
         }
 
@@ -784,4 +1293,39 @@ window.scrollAdminPageTabs = (container, direction) => {
         left: (direction < 0 ? -1 : 1) * amount,
         behavior: "smooth"
     });
+};
+
+window.revealAdminPageTab = (container, pageId) => {
+    if (!container || !pageId) return;
+
+    const reveal = () => {
+        const id = String(pageId);
+        const target = Array.from(container.querySelectorAll("[data-root-page-id]"))
+            .find(tab => tab.getAttribute("data-root-page-id") === id);
+        if (!target) return;
+
+        const containerRect = container.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const edgePadding = 8;
+        let nextScrollLeft = container.scrollLeft;
+
+        if (targetRect.left < containerRect.left + edgePadding) {
+            nextScrollLeft -= (containerRect.left + edgePadding) - targetRect.left;
+        } else if (targetRect.right > containerRect.right - edgePadding) {
+            nextScrollLeft += targetRect.right - (containerRect.right - edgePadding);
+        } else {
+            return;
+        }
+
+        const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+        nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, nextScrollLeft));
+        if (Math.abs(nextScrollLeft - container.scrollLeft) < 1) return;
+
+        container.scrollTo({
+            left: nextScrollLeft,
+            behavior: "smooth"
+        });
+    };
+
+    requestAnimationFrame(() => requestAnimationFrame(reveal));
 };

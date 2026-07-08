@@ -20,7 +20,7 @@ public static class AdminAuthorization
     public static bool CanUsePageBuilder(ClaimsPrincipal user) =>
         HasPermission(user, AdminPermissionKeys.PageBuilder);
 
-    private static bool IsAdminAdmin(ClaimsPrincipal user) =>
+    public static bool IsAdminAdmin(ClaimsPrincipal user) =>
         string.Equals(user.FindFirst(ClaimTypes.Role)?.Value, AdminRole.AdminAdmin.ToString(), StringComparison.OrdinalIgnoreCase) ||
         string.Equals(user.FindFirst("role")?.Value, AdminRole.AdminAdmin.ToString(), StringComparison.OrdinalIgnoreCase);
 

@@ -1,5 +1,6 @@
 ﻿@inject AdminBlockService BlockService
 @inject IHttpService Http
+@inject AdminLanguageService AdminLanguageState
 @using Contracts.Admin
 
 <div class="form-group">
@@ -9,7 +10,10 @@
 
 <div class="form-group">
     <label class="form-label">@T("Content")</label>
-    <LangField @bind-Value="_content" Languages="Languages" Multiline="true" />
+    <ContentRichTextEditor @key="ActiveLanguage"
+                           Value="@ActiveContent"
+                           ValueChanged="SetActiveContent"
+                           Placeholder="@T("Content")" />
 </div>
 
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
@@ -28,6 +32,7 @@
     private Dictionary<string, string> _title = new();
     private Dictionary<string, string> _content = new();
     private bool _saving;
+    private BlockModel? _loadedBlock;
 
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
@@ -35,8 +40,29 @@
 
     protected override void OnParametersSet()
     {
+        if (ReferenceEquals(_loadedBlock, Block)) return;
+        _loadedBlock = Block;
         _title = new(Block.Title ?? new());
         _content = new(Block.Content ?? new());
+    }
+
+    private string ActiveLanguage =>
+        Languages.Contains(AdminLanguage, StringComparer.OrdinalIgnoreCase)
+            ? AdminLanguage
+            : Languages.Contains(AdminLanguageState.FallbackLanguage, StringComparer.OrdinalIgnoreCase)
+                ? AdminLanguageState.FallbackLanguage
+                : Languages.FirstOrDefault() ?? "en";
+
+    private string ActiveContent =>
+        _content.TryGetValue(ActiveLanguage, out var value) ? value : string.Empty;
+
+    private Task SetActiveContent(string value)
+    {
+        _content = new Dictionary<string, string>(_content)
+        {
+            [ActiveLanguage] = value ?? string.Empty
+        };
+        return Task.CompletedTask;
     }
 
     private async Task Save()
@@ -48,7 +74,8 @@
             {
                 Title = _title,
                 Content = _content,
-                Visible = Block.Visible
+                Visible = Block.Visible,
+                Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
             Http.Toast(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();

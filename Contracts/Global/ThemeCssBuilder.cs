@@ -25,6 +25,8 @@ namespace Contracts.Global
             var buttonText = Size(theme.ButtonTextSize, "15px");
             var spacingScale = Number(theme.SpacingScale, "1");
             var motionDuration = Motion(theme.AnimationsEnabled, theme.AnimationSpeed);
+            var motionEnabled = theme.AnimationsEnabled &&
+                !string.Equals(theme.AnimationSpeed, "off", StringComparison.OrdinalIgnoreCase);
             var headerText = ContrastText(primary);
 
             var sectionPad = $"calc(120px * {spacingScale})";
@@ -53,6 +55,7 @@ namespace Contracts.Global
             css.AppendLine($"    --theme-button-padding-y: calc(12px * {buttonScale});");
             css.AppendLine($"    --theme-button-padding-x: calc(22px * {buttonScale});");
             css.AppendLine($"    --theme-motion-duration: {motionDuration};");
+            css.AppendLine($"    --theme-motion-play-state: {(motionEnabled ? "running" : "paused")};");
             css.AppendLine($"    --theme-spacing-scale: {spacingScale};");
             css.AppendLine($"    --theme-section-padding-y: {sectionPad};");
             css.AppendLine($"    --theme-section-padding-sm: {padSmall};");

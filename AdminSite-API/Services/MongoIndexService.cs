@@ -23,6 +23,7 @@ namespace FullProject.Services
             await EnsureSectionIndexesAsync("sections_published");
             await EnsureBlockIndexesAsync("blocks_draft");
             await EnsureBlockIndexesAsync("blocks_published");
+            await EnsureSectionPresetIndexesAsync();
             await EnsureContentIndexesAsync();
             await EnsureManagedResourceIndexesAsync();
             await EnsureUserIndexesAsync();
@@ -84,6 +85,19 @@ namespace FullProject.Services
                         .Ascending(b => b.BlockZone)
                         .Ascending(b => b.Order))
             });
+        }
+
+        private async Task EnsureSectionPresetIndexesAsync()
+        {
+            var presets = _database.GetCollection<SectionPreset>("canvas_section_presets");
+            await EnsureIndexAsync(presets,
+                Builders<SectionPreset>.IndexKeys.Descending(preset => preset.UpdatedAt),
+                IndexOptions("ix_section_presets_updated"));
+            await EnsureIndexAsync(presets,
+                Builders<SectionPreset>.IndexKeys
+                    .Ascending(preset => preset.SectionType)
+                    .Descending(preset => preset.UpdatedAt),
+                IndexOptions("ix_section_presets_type_updated"));
         }
 
         private async Task EnsureContentIndexesAsync()

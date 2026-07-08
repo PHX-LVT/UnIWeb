@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Contracts.Admin;
 
 namespace Contracts.Public
 {
@@ -19,6 +20,7 @@ namespace Contracts.Public
     public abstract class PublicBlockDto
     {
         public string Id { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
         public int Order { get; set; }
         public bool Visible { get; set; }
@@ -28,6 +30,9 @@ namespace Contracts.Public
         public string PositionMode { get; set; } = "flow";
         public string? ParentBlockId { get; set; }
         public PublicBlockLayoutDto Layout { get; set; } = new();
+        public PublicBlockAppearanceDto Appearance { get; set; } = new();
+        public PublicBlockResponsiveSettingsDto Responsive { get; set; } = new();
+        public PublicBlockAnimationSettingsDto Animation { get; set; } = new();
     }
 
     public class PublicTextBlockDto : PublicBlockDto
@@ -38,20 +43,34 @@ namespace Contracts.Public
 
     public class PublicImageBlockDto : PublicBlockDto
     {
+        public PublicBlockAssetReferenceDto Asset { get; set; } = new();
         public string? ImageUrl { get; set; }
         public Dictionary<string, string>? AltText { get; set; }
+        public Dictionary<string, string>? Caption { get; set; }
+        public bool OpenInLightbox { get; set; }
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
     }
 
     public class PublicVideoBlockDto : PublicBlockDto
     {
+        public PublicBlockAssetReferenceDto Asset { get; set; } = new();
         public string? EmbedUrl { get; set; }
+        public string SourceType { get; set; } = "youtube";
+        public Dictionary<string, string>? Title { get; set; }
+        public bool ShowControls { get; set; } = true;
+        public bool Autoplay { get; set; }
+        public bool Muted { get; set; }
+        public bool Loop { get; set; }
     }
 
     public class PublicFileBlockDto : PublicBlockDto
     {
+        public PublicBlockAssetReferenceDto Asset { get; set; } = new();
         public string? FileUrl { get; set; }
         public string? Filename { get; set; }
         public string? FileType { get; set; }
+        public string OpenBehavior { get; set; } = "open";
     }
 
     public class PublicMapBlockDto : PublicBlockDto
@@ -78,6 +97,7 @@ namespace Contracts.Public
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
+        public PublicBlockAssetReferenceDto Asset { get; set; } = new();
         public Dictionary<string, string>? ButtonLabel { get; set; }
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -126,7 +146,9 @@ namespace Contracts.Public
 
     public class PublicContainerBlockDto : PublicBlockDto
     {
+        public string PresetKey { get; set; } = ContainerPresetCatalog.LegacyFreeformKey;
         public Dictionary<string, string>? Title { get; set; }
+        public PublicContainerLayoutSettingsDto ContainerLayout { get; set; } = new();
         public string? LayoutMode { get; set; }
         public int? Columns { get; set; }
         public string? Gap { get; set; }

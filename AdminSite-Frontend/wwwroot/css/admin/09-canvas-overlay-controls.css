@@ -14,6 +14,12 @@
     opacity: 1;
 }
 
+.ez-arrange-section--active {
+    outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
 .ez-section-btn {
     display: inline-flex;
     align-items: center;
@@ -95,11 +101,53 @@
 
 .ez-freeform-block-overlay {
     box-sizing: border-box;
+    overflow: visible;
     border: 1px solid #111;
     background: rgba(229, 192, 118, .08);
     color: #001a33;
     pointer-events: auto;
     touch-action: none;
+    transform: rotate(var(--ez-block-rotation, 0deg));
+    transform-origin: center;
+}
+
+.ez-freeform-block-overlay--radius-small { border-radius: 6px; }
+.ez-freeform-block-overlay--radius-medium { border-radius: 10px; }
+.ez-freeform-block-overlay--radius-large { border-radius: 16px; }
+.ez-freeform-block-overlay--radius-pill { border-radius: 999px; }
+.ez-freeform-block-overlay--radius-circle { border-radius: 50%; }
+
+.ez-freeform-block-overlay--shape-rounded { border-radius: 14px; }
+.ez-freeform-block-overlay--shape-pill { border-radius: 999px; }
+.ez-freeform-block-overlay--shape-circle,
+.ez-freeform-block-overlay--shape-ellipse { border-radius: 50%; }
+
+.ez-freeform-block-overlay--container {
+    border-width: 2px;
+    border-style: dashed;
+    border-color: #2563eb;
+    background: rgba(37, 99, 235, .035);
+}
+
+.ez-freeform-container-policy {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: calc(100% - 12px);
+    padding: 3px 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(239, 246, 255, .94);
+    color: #1d4ed8;
+    font-size: .64rem;
+    font-weight: 750;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
 .ez-freeform-block-overlay--editing {
@@ -135,6 +183,17 @@ body.ez-arranging-block {
         );
 }
 
+.ez-arrange-section--target {
+    border-color: rgba(15, 52, 96, .32);
+    background-color: rgba(255, 255, 255, .08);
+}
+
+.ez-arrange-section--target:hover,
+.ez-arrange-zone-overlay:hover {
+    border-color: var(--primary);
+    background-color: rgba(49, 86, 163, .08);
+}
+
 .ez-arrange-section__label {
     position: absolute;
     top: 8px;
@@ -153,6 +212,11 @@ body.ez-arranging-block {
     box-sizing: border-box;
     border: 2px dashed #111;
     background: rgba(229, 192, 118, .055);
+}
+
+.ez-arrange-zone-overlay--active {
+    border-color: var(--primary);
+    background: rgba(49, 86, 163, .1);
 }
 
 .ez-arrange-zone-overlay__label {
@@ -190,10 +254,6 @@ body.ez-arranging-block {
     background: rgba(229, 192, 118, .12);
 }
 
-.ez-freeform-block-overlay--readonly .ez-freeform-block-label {
-    left: 0;
-}
-
 .ez-freeform-block-handle {
     position: absolute;
     top: -28px;
@@ -212,13 +272,27 @@ body.ez-arranging-block {
     font-size: .75rem;
 }
 
-.ez-freeform-block-label {
+.ez-freeform-block-titlebar {
     position: absolute;
     top: -28px;
     left: 32px;
     height: 28px;
+    display: inline-flex;
+    align-items: center;
+    max-width: calc(100% - 32px);
+}
+
+.ez-freeform-block-titlebar--readonly {
+    left: 0;
+    max-width: 100%;
+}
+
+.ez-freeform-block-label {
+    min-width: 0;
+    max-width: 220px;
+    height: 28px;
     padding: 0 8px;
-    border-radius: 4px 4px 0 0;
+    border-radius: 4px 0 0 0;
     background: rgba(0, 26, 51, .88);
     color: #fff;
     display: inline-flex;
@@ -226,7 +300,34 @@ body.ez-arranging-block {
     font-size: .68rem;
     font-weight: 700;
     text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     pointer-events: none;
+}
+
+.ez-freeform-block-edit {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-left: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 0 4px 0 0;
+    background: rgba(0, 26, 51, .94);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: .7rem;
+}
+
+.ez-freeform-block-edit:hover:not(:disabled) {
+    background: var(--primary);
+}
+
+.ez-freeform-block-edit:disabled {
+    cursor: not-allowed;
+    opacity: .48;
 }
 
 .ez-freeform-block-resize {
@@ -241,4 +342,52 @@ body.ez-arranging-block {
     box-shadow: 0 0 0 1px rgba(0, 26, 51, .28);
     cursor: nwse-resize;
     touch-action: none;
+}
+
+.ez-arrange-content-window__body {
+    padding: 0;
+}
+
+.ez-arrange-content-editor {
+    display: flex;
+    max-height: calc(100vh - 96px);
+    flex-direction: column;
+    background: #fff;
+}
+
+.ez-arrange-content-editor__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .8rem;
+    padding: .9rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.ez-arrange-content-editor__header span {
+    display: grid;
+    gap: .15rem;
+    min-width: 0;
+}
+
+.ez-arrange-content-editor__header strong {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ez-arrange-content-editor__header small {
+    color: var(--text-muted);
+    font-size: .76rem;
+}
+
+.ez-arrange-content-editor__body {
+    min-height: 0;
+    overflow: auto;
+    padding: 1rem;
 }

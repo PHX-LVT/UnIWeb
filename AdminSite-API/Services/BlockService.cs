@@ -5,6 +5,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
 using FullProject.Services.AssetService;
+using FullProject.Services.BlockServices;
 using SharedComponents.Helpers;
 
 namespace FullProject.Services
@@ -73,6 +74,109 @@ namespace FullProject.Services
                            b.Id == blockId)
                 .FirstOrDefaultAsync();
         }
+
+        public async Task<string?> ValidateDiagramAnchorsAsync(
+            string pageId,
+            string sectionId,
+            string containerId,
+            ContainerDiagramSettingsDto? diagram)
+        {
+            if (diagram?.Enabled != true) return null;
+            var blocks = await GetBySectionAsync(pageId, sectionId);
+            var validAnchors = blocks
+                .Where(block => string.Equals(block.ParentBlockId, containerId, StringComparison.Ordinal))
+                .Select(block => block.StableId)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToHashSet(StringComparer.Ordinal);
+            var requestedAnchors = (diagram.Decorations ?? new())
+                .SelectMany(item => new[] { item.FromAnchor, item.ToAnchor })
+                .Concat((diagram.Connectors ?? new()).SelectMany(item => new[] { item.FromAnchor, item.ToAnchor }))
+                .Where(value => !string.IsNullOrWhiteSpace(value) && value != "center")
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal);
+            var missing = requestedAnchors.Where(anchor => !validAnchors.Contains(anchor)).ToList();
+            return missing.Count == 0
+                ? null
+                : "Diagram connectors must reference children of the current Container.";
+        }
+
+        public async Task<string?> ValidateDiagramDeletionAsync(string pageId, string sectionId, string blockId)
+        {
+            var block = await GetByIdAsync(pageId, sectionId, blockId);
+            if (block is null || string.IsNullOrWhiteSpace(block.ParentBlockId)) return null;
+            var parent = await GetByIdAsync(pageId, sectionId, block.ParentBlockId);
+            if (parent is not ContainerBlock container || container.ContainerLayout.Diagram?.Enabled != true)
+                return null;
+            var anchor = block.StableId;
+            var isReferenced = container.ContainerLayout.Diagram.Decorations.Any(item =>
+                    item.FromAnchor == anchor || item.ToAnchor == anchor) ||
+                container.ContainerLayout.Diagram.Connectors.Any(item =>
+                    item.FromAnchor == anchor || item.ToAnchor == anchor);
+            return isReferenced
+                ? "Remove diagram connectors that reference this Block before deleting it."
+                : null;
+        }
+
+        public async Task<string?> ValidateFunctionalReferencesAsync(object dto, bool requireComplete)
+        {
+            var formIds = new HashSet<string>(StringComparer.Ordinal);
+            string? actionError = null;
+
+            switch (dto)
+            {
+                case FormBlockCreateDto form when !string.IsNullOrWhiteSpace(form.FormDefinitionId):
+                    formIds.Add(form.FormDefinitionId);
+                    break;
+                case FormBlockUpdateDto form:
+                    if (string.IsNullOrWhiteSpace(form.FormDefinitionId))
+                    {
+                        if (requireComplete) return "Choose an active Form Definition for the Form Block.";
+                    }
+                    else formIds.Add(form.FormDefinitionId);
+                    break;
+                case ButtonBlockCreateDto button:
+                    actionError = ValidateAction(button.Action, button.Href, button.FormDefinitionId, requireComplete);
+                    AddFormReference(button.Action, button.FormDefinitionId, formIds);
+                    break;
+                case ButtonBlockUpdateDto button:
+                    actionError = ValidateAction(button.Action, button.Href, button.FormDefinitionId, requireComplete);
+                    AddFormReference(button.Action, button.FormDefinitionId, formIds);
+                    break;
+                case CardBlockCreateDto card:
+                    var createCardHasAction = card.ButtonLabel.Values.Any(value => !string.IsNullOrWhiteSpace(value));
+                    actionError = ValidateAction(card.Action, card.Href, card.FormDefinitionId, requireComplete && createCardHasAction);
+                    AddFormReference(card.Action, card.FormDefinitionId, formIds);
+                    break;
+                case CardBlockUpdateDto card:
+                    var updateCardHasAction = card.ButtonLabel.Values.Any(value => !string.IsNullOrWhiteSpace(value));
+                    actionError = ValidateAction(card.Action, card.Href, card.FormDefinitionId, requireComplete && updateCardHasAction);
+                    AddFormReference(card.Action, card.FormDefinitionId, formIds);
+                    break;
+            }
+
+            if (actionError is not null) return actionError;
+
+            var buttons = dto switch
+            {
+                BlockCreateDto create => create.Buttons,
+                BlockUpdateDto update => update.Buttons ?? new(),
+                _ => new List<BlockButtonDto>()
+            };
+            foreach (var button in buttons.Where(button => button.Visible))
+            {
+                var error = ValidateAction(button.Action, button.Href, button.FormDefinitionId, requireComplete);
+                if (error is not null) return error;
+                if (button.Action == BlockButtonAction.OpenForm && !string.IsNullOrWhiteSpace(button.FormDefinitionId))
+                    formIds.Add(button.FormDefinitionId);
+            }
+
+            if (formIds.Count == 0) return null;
+            var activeCount = await _context.FormDefinitions
+                .CountDocumentsAsync(form => formIds.Contains(form.Id) && form.Active);
+            return activeCount == formIds.Count
+                ? null
+                : "Every Form action must reference an active Form Definition.";
+        }
         public async Task<Block> CreateAsync(string pageId, string sectionId, BlockCreateDto dto)
         {
             // Fetch page and section to get their StableIds
@@ -83,9 +187,9 @@ namespace FullProject.Services
                 .Find(s => s.Id == sectionId).FirstOrDefaultAsync()
                 ?? throw new ArgumentException("Section not found");
 
-            var count = await _context.BlocksDraft.CountDocumentsAsync(
-                b => b.PageStableId == page.StableId &&
-                     b.SectionStableId == section.StableId);
+            ContainerPresetDefinition? containerPreset = null;
+            if (dto is ContainerBlockCreateDto containerCreate)
+                containerPreset = PrepareContainerPresetForCreation(containerCreate);
 
             Block block = dto switch
             {
@@ -96,19 +200,28 @@ namespace FullProject.Services
                 },
                 ImageBlockCreateDto img => new ImageBlock
                 {
-                    ImageUrl = img.ImageUrl,
-                    AltText = img.AltText
+                    Asset = BlockAssetMetadataService.ToModel(img.Asset),
+                    AltText = SanitizeDictionary(img.AltText),
+                    Caption = SanitizeDictionary(img.Caption),
+                    OpenInLightbox = img.OpenInLightbox,
+                    FocalPointX = Math.Clamp(img.FocalPointX, 0, 100),
+                    FocalPointY = Math.Clamp(img.FocalPointY, 0, 100)
                 },
                 VideoBlockCreateDto v => new VideoBlock
                 {
-                    EmbedUrl = CleanVideoUrl(v.EmbedUrl) ?? string.Empty,
-                    Title = v.Title
+                    Asset = BlockAssetMetadataService.ToModel(v.Asset),
+                    SourceType = NormalizeVideoSourceType(v.SourceType),
+                    Title = SanitizeDictionary(v.Title),
+                    ShowControls = v.ShowControls,
+                    Autoplay = v.Autoplay,
+                    Muted = v.Autoplay || v.Muted,
+                    Loop = v.Loop
                 },
                 FileBlockCreateDto f => new FileBlock
                 {
-                    FileUrl = f.FileUrl,
+                    Asset = BlockAssetMetadataService.ToModel(f.Asset),
                     Filename = f.Filename,
-                    FileType = f.FileType
+                    OpenBehavior = NormalizeFileOpenBehavior(f.OpenBehavior)
                 },
                 MapBlockCreateDto m => new MapBlock
                 {
@@ -144,18 +257,18 @@ namespace FullProject.Services
                     Icon = card.Icon,
                     Title = card.Title,
                     Description = SanitizeDictionary(card.Description),
-                    ImageUrl = card.ImageUrl,
+                    Asset = BlockAssetMetadataService.ToModel(card.Asset),
                     ButtonLabel = card.ButtonLabel,
                     Href = CleanUrl(card.Href),
-                    Action = card.Action,
-                    FormDefinitionId = card.FormDefinitionId
+                    Action = NormalizeBlockAction(card.Action),
+                    FormDefinitionId = IsOpenFormAction(card.Action) ? card.FormDefinitionId : null
                 },
                 ButtonBlockCreateDto button => new ButtonBlock
                 {
                     Label = button.Label,
                     Href = CleanUrl(button.Href),
-                    Action = button.Action,
-                    FormDefinitionId = button.FormDefinitionId,
+                    Action = NormalizeBlockAction(button.Action),
+                    FormDefinitionId = IsOpenFormAction(button.Action) ? button.FormDefinitionId : null,
                     Style = NormalizeButtonStyle(button.Style)
                 },
                 MetricBlockCreateDto metric => new MetricBlock
@@ -187,31 +300,79 @@ namespace FullProject.Services
                 },
                 ContainerBlockCreateDto container => new ContainerBlock
                 {
+                    PresetKey = containerPreset!.Key,
                     Title = SanitizeDictionary(container.Title),
-                    LayoutMode = NormalizeContainerLayout(container.LayoutMode),
-                    Columns = Math.Clamp(container.Columns, 1, 6),
-                    Gap = NormalizeBlockGap(container.Gap),
-                    OrbitRadius = Math.Clamp(container.OrbitRadius, 80, 480),
-                    OrbitStartAngle = Math.Clamp(container.OrbitStartAngle, -360, 360),
-                    SemicircleRadius = Math.Clamp(container.SemicircleRadius, 80, 480),
-                    SemicircleStartAngle = Math.Clamp(container.SemicircleStartAngle, -360, 360),
-                    SemicircleEndAngle = Math.Clamp(container.SemicircleEndAngle, -360, 360)
+                    ContainerLayout = BlockContractService.MergeContainerLayout(
+                        null,
+                        container.ContainerLayout,
+                        container.LayoutMode,
+                        container.Columns,
+                        container.Gap,
+                        container.OrbitRadius,
+                        container.OrbitStartAngle,
+                        container.SemicircleRadius,
+                        container.SemicircleStartAngle,
+                        container.SemicircleEndAngle)
                 },
                 _ => throw new ArgumentException("Unknown block type")
             };
 
             block.StableId = Guid.NewGuid().ToString();
             block.ColumnSlotId = dto.ColumnSlotId;
-            block.BlockZone = ResolveBlockZone(section, dto.BlockZone, dto.ZoneId);
-            block.PositionMode = ResolvePositionMode(section, dto.PositionMode);
             block.ParentBlockId = string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId;
+            block.Authoring = MapAuthoring(dto.Authoring);
+            Block? parentBlock = null;
+            if (!string.IsNullOrWhiteSpace(block.ParentBlockId))
+                parentBlock = await GetByIdAsync(pageId, sectionId, block.ParentBlockId);
+            if (!string.IsNullOrWhiteSpace(block.ParentBlockId) && parentBlock is not ContainerBlock)
+                throw new ArgumentException("The selected parent must be a Container in the same Page and Section.");
+
+            if (parentBlock is ContainerBlock governedParent)
+            {
+                var existingChildren = await GetDirectChildrenAsync(governedParent);
+                if (!ContainerCapacityPolicy.CanOwn(BlockType(block)))
+                    throw new ArgumentException("Containers cannot own another Container. Add a normal content Block instead.");
+                EnforceContainerPresetChildType(governedParent, BlockType(block));
+                EnforceContainerCapacity(governedParent, existingChildren);
+                await EnforceCollectionChildTypeAsync(governedParent, BlockType(block));
+                AssignContainerPresetSlot(governedParent, block, existingChildren);
+            }
+
+            block.BlockZone = parentBlock is null
+                ? ResolveBlockZone(section, dto.BlockZone, dto.ZoneId)
+                : "default";
+            block.PositionMode = !string.IsNullOrWhiteSpace(dto.PositionMode)
+                ? NormalizePositionMode(dto.PositionMode)
+                : parentBlock is ContainerBlock parentContainer
+                    ? NormalizeContainerLayout(parentContainer.ContainerLayout.Mode) == "freeform" ? "freeform" : "flow"
+                    : ResolvePositionMode(section, null);
             block.PageStableId = page.StableId;       // â† GUID
             block.SectionStableId = section.StableId; // â† GUID
             block.Visible = dto.Visible;
-            block.Order = (int)count;
             block.Layout = MapLayout(dto.Layout);
+            block.Appearance = BlockContractService.MergeAppearance(null, dto.Appearance, dto.Layout);
+            if (parentBlock is ContainerBlock)
+                block.Appearance.InheritFromContainer = dto.Appearance?.InheritFromContainer ?? true;
+            block.Responsive = BlockContractService.MergeResponsive(null, dto.Responsive);
+            block.Animation = BlockContractService.MergeAnimation(null, dto.Animation);
+
+            var sectionBlocks = await _context.BlocksDraft
+                .Find(candidate => candidate.PageStableId == page.StableId &&
+                                   candidate.SectionStableId == section.StableId)
+                .ToListAsync();
+            var peerBlocks = sectionBlocks
+                .Where(candidate => NormalizeParent(candidate.ParentBlockId) == NormalizeParent(block.ParentBlockId))
+                .Where(candidate => NormalizeBlockZone(candidate.BlockZone) == NormalizeBlockZone(block.BlockZone))
+                .Where(candidate => NormalizeSlot(candidate.ColumnSlotId) == NormalizeSlot(block.ColumnSlotId))
+                .ToList();
+            block.Order = peerBlocks.Select(candidate => candidate.Order).DefaultIfEmpty(-1).Max() + 1;
+
+            ApplyDefaultFreeformPlacement(block, section, parentBlock, peerBlocks.Count, dto.Layout);
             if (dto.Layout?.ZIndex is null && dto.Layout?.ZOrder is null)
-                block.Layout.ZIndex = Math.Clamp((int)count + 1, 1, 1000);
+                block.Layout.ZIndex = Math.Clamp(
+                    peerBlocks.Select(candidate => candidate.Layout?.ZIndex ?? 1).DefaultIfEmpty(0).Max() + 1,
+                    1,
+                    1000);
             block.Version = 1;
             block.CreatedAt = DateTime.UtcNow;
             block.UpdatedAt = DateTime.UtcNow;
@@ -221,11 +382,254 @@ namespace FullProject.Services
             return block;
         }
 
+        public async Task<string?> PrepareContainerPolicyUpdateAsync(
+            string pageId,
+            string sectionId,
+            string blockId,
+            ContainerLayoutSettingsDto? incoming,
+            string? requestedPresetKey)
+        {
+            var existing = await GetByIdAsync(pageId, sectionId, blockId);
+            if (existing is not ContainerBlock container) return "Container not found.";
+
+            var effectiveKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey);
+            if (!string.IsNullOrWhiteSpace(requestedPresetKey) &&
+                !string.Equals(requestedPresetKey, effectiveKey, StringComparison.Ordinal))
+            {
+                return "A Container's preset is fixed after creation. Create another Container to use a different preset.";
+            }
+            if (incoming is null) return null;
+
+            var children = (await GetBySectionAsync(pageId, sectionId))
+                .Where(block => block.ParentBlockId == blockId)
+                .ToList();
+
+            ContainerPresetDefinition? preset = null;
+            if (ContainerPresetCatalog.TryGetGoverned(container.PresetKey, out var governedPreset))
+            {
+                preset = governedPreset;
+                if (incoming.Mode is not null &&
+                    !string.Equals(incoming.Mode, preset.LayoutMode, StringComparison.Ordinal))
+                    return "The Container layout mode is governed by its preset and cannot be changed.";
+                if (incoming.Purpose is not null &&
+                    !string.Equals(incoming.Purpose, preset.Purpose, StringComparison.Ordinal))
+                    return "The Container purpose is governed by its preset and cannot be changed.";
+                if (incoming.Columns.HasValue && incoming.Columns.Value != preset.Columns)
+                    return "The Container column structure is governed by its preset and cannot be changed.";
+                if (incoming.MobileMode is not null &&
+                    !string.Equals(incoming.MobileMode, preset.MobileMode, StringComparison.Ordinal))
+                    return "The Container responsive behavior is governed by its preset and cannot be changed.";
+
+                var disallowedType = children.Select(BlockType)
+                    .FirstOrDefault(type => !preset.AllowedBlockTypes.Contains(type, StringComparer.Ordinal));
+                if (disallowedType is not null)
+                    return $"The {preset.DisplayName} preset does not allow {disallowedType} Blocks.";
+
+                incoming.SchemaVersion = 3;
+                incoming.Mode = preset.LayoutMode;
+                incoming.Purpose = preset.Purpose;
+                incoming.Columns = preset.Columns;
+                incoming.MobileMode = preset.MobileMode;
+            }
+
+            var requestedMode = preset?.LayoutMode ??
+                                ContainerCapacityPolicy.NormalizeMode(incoming.Mode ?? container.ContainerLayout.Mode);
+            var requestedColumns = preset?.Columns ??
+                                   Math.Clamp(incoming.Columns ?? container.ContainerLayout.Columns, 1, 6);
+            var capacity = preset?.MaximumChildren ??
+                           ContainerCapacityPolicy.MaxChildren(requestedMode, requestedColumns);
+            if (children.Count > capacity)
+                return $"The {requestedMode} Container supports at most {capacity} direct Blocks. Remove Blocks before changing this layout.";
+
+            var purpose = preset?.Purpose ??
+                          NormalizeContainerPurpose(incoming.Purpose ?? container.ContainerLayout.Purpose);
+            if (purpose == "composition")
+            {
+                incoming.Purpose = "composition";
+                incoming.AllowedChildType = null;
+                return null;
+            }
+
+            var childTypes = children.Select(BlockType).Distinct(StringComparer.Ordinal).ToList();
+            if (childTypes.Count > 1)
+                return "A Collection Container can contain only one Block type. Remove mixed children before changing its purpose.";
+
+            var lockedType = childTypes.FirstOrDefault() ?? container.ContainerLayout.AllowedChildType;
+            if (!string.IsNullOrWhiteSpace(incoming.AllowedChildType) &&
+                !string.IsNullOrWhiteSpace(lockedType) &&
+                !string.Equals(incoming.AllowedChildType, lockedType, StringComparison.Ordinal))
+                return "Collection child type is locked after the first child is added.";
+
+            incoming.Purpose = "collection";
+            incoming.AllowedChildType = lockedType;
+            return null;
+        }
+
+        private async Task EnforceCollectionChildTypeAsync(ContainerBlock parent, string childType)
+        {
+            if (NormalizeContainerPurpose(parent.ContainerLayout.Purpose) != "collection") return;
+            var allowedType = parent.ContainerLayout.AllowedChildType;
+            if (string.IsNullOrWhiteSpace(allowedType))
+            {
+                var existingChildTypes = (await _context.BlocksDraft
+                        .Find(block => block.PageStableId == parent.PageStableId &&
+                                       block.SectionStableId == parent.SectionStableId &&
+                                       block.ParentBlockId == parent.Id)
+                        .ToListAsync())
+                    .Select(BlockType)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                if (existingChildTypes.Count > 1)
+                    throw new ArgumentException("This Collection already contains mixed Block types and must be changed to Composition.");
+                allowedType = existingChildTypes.FirstOrDefault();
+            }
+            if (!string.IsNullOrWhiteSpace(allowedType) &&
+                !string.Equals(allowedType, childType, StringComparison.Ordinal))
+                throw new ArgumentException($"This Collection accepts only {allowedType} Blocks.");
+
+            if (!string.IsNullOrWhiteSpace(parent.ContainerLayout.AllowedChildType)) return;
+            var lockType = allowedType ?? childType;
+            var filter = Builders<Block>.Filter.And(
+                Builders<Block>.Filter.Eq(block => block.Id, parent.Id),
+                Builders<Block>.Filter.Or(
+                    Builders<Block>.Filter.Eq("ContainerLayout.AllowedChildType", BsonNull.Value),
+                    Builders<Block>.Filter.Eq("ContainerLayout.AllowedChildType", string.Empty),
+                    Builders<Block>.Filter.Eq("ContainerLayout.AllowedChildType", lockType)));
+            var schemaVersion = ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out _) ? 3 : 2;
+            var update = Builders<Block>.Update
+                .Set("ContainerLayout.SchemaVersion", schemaVersion)
+                .Set("ContainerLayout.AllowedChildType", lockType)
+                .Set(block => block.UpdatedAt, DateTime.UtcNow)
+                .Inc(block => block.Version, 1);
+            var result = await _context.BlocksDraft.UpdateOneAsync(filter, update);
+            if (result.MatchedCount == 0)
+                throw new ArgumentException("Another Block type locked this Collection. Refresh and try again.");
+            parent.ContainerLayout.SchemaVersion = schemaVersion;
+            parent.ContainerLayout.AllowedChildType = lockType;
+        }
+
+        private static void EnforceContainerPresetChildType(ContainerBlock parent, string childType)
+        {
+            if (!ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out var preset)) return;
+            if (preset.AllowedBlockTypes.Contains(childType, StringComparer.Ordinal)) return;
+            throw new ArgumentException(
+                $"The {preset.DisplayName} Container preset does not allow {childType} Blocks.");
+        }
+
+        private async Task<List<Block>> GetDirectChildrenAsync(ContainerBlock parent) =>
+            await _context.BlocksDraft
+                .Find(block => block.PageStableId == parent.PageStableId &&
+                               block.SectionStableId == parent.SectionStableId &&
+                               block.ParentBlockId == parent.Id)
+                .ToListAsync();
+
+        private static void EnforceContainerCapacity(
+            ContainerBlock parent,
+            IReadOnlyCollection<Block> existingChildren)
+        {
+            var capacity = ContainerCapacityPolicy.MaxChildren(
+                parent.PresetKey,
+                parent.ContainerLayout.Mode,
+                parent.ContainerLayout.Columns);
+            if (existingChildren.Count >= capacity)
+                throw new ArgumentException(
+                    $"This {ContainerCapacityPolicy.NormalizeMode(parent.ContainerLayout.Mode)} Container is full ({capacity} Blocks maximum).");
+        }
+
+        private static void AssignContainerPresetSlot(
+            ContainerBlock parent,
+            Block child,
+            IReadOnlyCollection<Block> existingChildren)
+        {
+            if (!ContainerPresetCatalog.TryGetGoverned(parent.PresetKey, out var preset) ||
+                preset.Slots.Count == 0)
+                return;
+
+            var childType = BlockType(child);
+            var slot = ContainerCapacityPolicy.NextAvailableSlot(
+                parent.PresetKey,
+                existingChildren.Select(block => block.Authoring?.PresetSlotName),
+                childType);
+
+            if (slot is null)
+                throw new ArgumentException(
+                    $"The {preset.DisplayName} Container has no available slot for {childType} Blocks.");
+
+            child.Authoring ??= new BlockAuthoringPolicy();
+            child.Authoring.SchemaVersion = Math.Max(child.Authoring.SchemaVersion, 1);
+            child.Authoring.PresetSlotName = slot.Key;
+            child.Authoring.PresetSourceId = parent.PresetKey;
+        }
+
+        private static BlockAuthoringPolicy MapAuthoring(BlockAuthoringPolicyDto? dto) => new()
+        {
+            SchemaVersion = Math.Max(dto?.SchemaVersion ?? 1, 1),
+            ContentLocked = dto?.ContentLocked ?? false,
+            GeometryLocked = (dto?.GeometryLocked ?? false) || (dto?.FullLocked ?? false),
+            FullLocked = dto?.FullLocked ?? false,
+            PresetSlotName = null,
+            PresetSourceId = null
+        };
+
+        private static string NormalizeContainerPurpose(string? value) =>
+            string.Equals(value, "collection", StringComparison.Ordinal) ? "collection" : "composition";
+
+        private static ContainerPresetDefinition PrepareContainerPresetForCreation(
+            ContainerBlockCreateDto container)
+        {
+            var requestedMode = container.ContainerLayout?.Mode ?? container.LayoutMode;
+            var resolvedKey = ContainerPresetCatalog.ResolveCreationKey(container.PresetKey, requestedMode);
+            if (resolvedKey is null ||
+                !ContainerPresetCatalog.TryGetGoverned(resolvedKey, out var preset))
+            {
+                throw new ArgumentException(
+                    "Choose a supported Container preset. New legacy-freeform Containers cannot be created.");
+            }
+
+            container.PresetKey = preset.Key;
+            container.ContainerLayout ??= new ContainerLayoutSettingsDto();
+            container.ContainerLayout.SchemaVersion = 3;
+            container.ContainerLayout.Purpose = preset.Purpose;
+            container.ContainerLayout.Mode = preset.LayoutMode;
+            container.ContainerLayout.Columns = preset.Columns;
+            container.ContainerLayout.MobileMode = preset.MobileMode;
+            if (preset.Purpose != "collection")
+                container.ContainerLayout.AllowedChildType = null;
+            return preset;
+        }
+
+        private static string BlockType(Block block) => block switch
+        {
+            TextBlock => "text",
+            ImageBlock => "image",
+            VideoBlock => "video",
+            FileBlock => "file",
+            MapBlock => "map",
+            FormBlock => "form",
+            CardBlock => "card",
+            ButtonBlock => "button",
+            MetricBlock => "metric",
+            BulletListBlock => "bullet-list",
+            StepBlock => "step",
+            IconBlock => "icon",
+            ContainerBlock => "container",
+            _ => "text"
+        };
+
         public async Task<Block?> UpdateAsync(string pageId, string sectionId,
             string blockId, BlockUpdateDto dto)
         {
             var existing = await GetByIdAsync(pageId, sectionId, blockId);
             if (existing is null) return null;
+
+            if (dto.ParentBlockId is not null)
+            {
+                var currentParentId = string.IsNullOrWhiteSpace(existing.ParentBlockId) ? null : existing.ParentBlockId;
+                var requestedParentId = string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId;
+                if (!string.Equals(currentParentId, requestedParentId, StringComparison.Ordinal))
+                    throw new ArgumentException(
+                        "A Block's Container membership is fixed after creation. Container-owned Blocks cannot be released or moved to another Container.");
+            }
 
             var baseUpdates = new List<UpdateDefinition<Block>>
             {
@@ -247,6 +651,15 @@ namespace FullProject.Services
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.ParentBlockId, string.IsNullOrWhiteSpace(dto.ParentBlockId) ? null : dto.ParentBlockId));
             if (dto.Layout is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Layout, MapLayout(dto.Layout)));
+            if (dto.Appearance is not null || dto.Layout is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.Appearance,
+                    BlockContractService.MergeAppearance(existing.Appearance, dto.Appearance, dto.Layout)));
+            if (dto.Responsive is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.Responsive,
+                    BlockContractService.MergeResponsive(existing.Responsive, dto.Responsive)));
+            if (dto.Animation is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.Animation,
+                    BlockContractService.MergeAnimation(existing.Animation, dto.Animation)));
 
             var baseUpdate = Builders<Block>.Update.Combine(baseUpdates);
 
@@ -264,26 +677,34 @@ namespace FullProject.Services
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
-                                .Set(b => ((ImageBlock)b).ImageUrl, imgDto.ImageUrl)
-                                .Set(b => ((ImageBlock)b).AltText, imgDto.AltText)));
+                                .Set(b => ((ImageBlock)b).Asset, BlockAssetMetadataService.ToModel(imgDto.Asset))
+                                .Set(b => ((ImageBlock)b).AltText, SanitizeDictionary(imgDto.AltText))
+                                .Set(b => ((ImageBlock)b).Caption, SanitizeDictionary(imgDto.Caption))
+                                .Set(b => ((ImageBlock)b).OpenInLightbox, imgDto.OpenInLightbox)
+                                .Set(b => ((ImageBlock)b).FocalPointX, Math.Clamp(imgDto.FocalPointX, 0, 100))
+                                .Set(b => ((ImageBlock)b).FocalPointY, Math.Clamp(imgDto.FocalPointY, 0, 100))));
                     break;
 
                 case (VideoBlock _, VideoBlockUpdateDto vDto):
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
-                                .Set(b => ((VideoBlock)b).EmbedUrl,
-                                    CleanVideoUrl(vDto.EmbedUrl) ?? string.Empty)
-                                .Set(b => ((VideoBlock)b).Title, vDto.Title)));
+                                .Set(b => ((VideoBlock)b).Asset, BlockAssetMetadataService.ToModel(vDto.Asset))
+                                .Set(b => ((VideoBlock)b).SourceType, NormalizeVideoSourceType(vDto.SourceType))
+                                .Set(b => ((VideoBlock)b).Title, SanitizeDictionary(vDto.Title))
+                                .Set(b => ((VideoBlock)b).ShowControls, vDto.ShowControls)
+                                .Set(b => ((VideoBlock)b).Autoplay, vDto.Autoplay)
+                                .Set(b => ((VideoBlock)b).Muted, vDto.Autoplay || vDto.Muted)
+                                .Set(b => ((VideoBlock)b).Loop, vDto.Loop)));
                     break;
 
                 case (FileBlock _, FileBlockUpdateDto fDto):
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
-                                .Set(b => ((FileBlock)b).FileUrl, fDto.FileUrl)
+                                .Set(b => ((FileBlock)b).Asset, BlockAssetMetadataService.ToModel(fDto.Asset))
                                 .Set(b => ((FileBlock)b).Filename, fDto.Filename)
-                                .Set(b => ((FileBlock)b).FileType, fDto.FileType)));
+                                .Set(b => ((FileBlock)b).OpenBehavior, NormalizeFileOpenBehavior(fDto.OpenBehavior))));
                     break;
 
                 case (MapBlock _, MapBlockUpdateDto mDto):
@@ -332,11 +753,12 @@ namespace FullProject.Services
                                 .Set(b => ((CardBlock)b).Icon, cardDto.Icon)
                                 .Set(b => ((CardBlock)b).Title, cardDto.Title)
                                 .Set(b => ((CardBlock)b).Description, SanitizeDictionary(cardDto.Description))
-                                .Set(b => ((CardBlock)b).ImageUrl, cardDto.ImageUrl)
+                                .Set(b => ((CardBlock)b).Asset, BlockAssetMetadataService.ToModel(cardDto.Asset))
                                 .Set(b => ((CardBlock)b).ButtonLabel, cardDto.ButtonLabel)
                                 .Set(b => ((CardBlock)b).Href, CleanUrl(cardDto.Href))
-                                .Set(b => ((CardBlock)b).Action, cardDto.Action)
-                                .Set(b => ((CardBlock)b).FormDefinitionId, cardDto.FormDefinitionId)));
+                                .Set(b => ((CardBlock)b).Action, NormalizeBlockAction(cardDto.Action))
+                                .Set(b => ((CardBlock)b).FormDefinitionId,
+                                    IsOpenFormAction(cardDto.Action) ? cardDto.FormDefinitionId : null)));
                     break;
 
                 case (ButtonBlock _, ButtonBlockUpdateDto buttonDto):
@@ -345,8 +767,9 @@ namespace FullProject.Services
                             Builders<Block>.Update
                                 .Set(b => ((ButtonBlock)b).Label, buttonDto.Label)
                                 .Set(b => ((ButtonBlock)b).Href, CleanUrl(buttonDto.Href))
-                                .Set(b => ((ButtonBlock)b).Action, buttonDto.Action)
-                                .Set(b => ((ButtonBlock)b).FormDefinitionId, buttonDto.FormDefinitionId)
+                                .Set(b => ((ButtonBlock)b).Action, NormalizeBlockAction(buttonDto.Action))
+                                .Set(b => ((ButtonBlock)b).FormDefinitionId,
+                                    IsOpenFormAction(buttonDto.Action) ? buttonDto.FormDefinitionId : null)
                                 .Set(b => ((ButtonBlock)b).Style, NormalizeButtonStyle(buttonDto.Style))));
                     break;
 
@@ -389,19 +812,23 @@ namespace FullProject.Services
                                 .Set(b => ((IconBlock)b).Description, SanitizeDictionary(iconDto.Description))));
                     break;
 
-                case (ContainerBlock _, ContainerBlockUpdateDto containerDto):
+                case (ContainerBlock existingContainer, ContainerBlockUpdateDto containerDto):
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
                                 .Set(b => ((ContainerBlock)b).Title, SanitizeDictionary(containerDto.Title))
-                                .Set(b => ((ContainerBlock)b).LayoutMode, NormalizeContainerLayout(containerDto.LayoutMode))
-                                .Set(b => ((ContainerBlock)b).Columns, Math.Clamp(containerDto.Columns, 1, 6))
-                                .Set(b => ((ContainerBlock)b).Gap, NormalizeBlockGap(containerDto.Gap))
-                                .Set(b => ((ContainerBlock)b).OrbitRadius, Math.Clamp(containerDto.OrbitRadius, 80, 480))
-                                .Set(b => ((ContainerBlock)b).OrbitStartAngle, Math.Clamp(containerDto.OrbitStartAngle, -360, 360))
-                                .Set(b => ((ContainerBlock)b).SemicircleRadius, Math.Clamp(containerDto.SemicircleRadius, 80, 480))
-                                .Set(b => ((ContainerBlock)b).SemicircleStartAngle, Math.Clamp(containerDto.SemicircleStartAngle, -360, 360))
-                                .Set(b => ((ContainerBlock)b).SemicircleEndAngle, Math.Clamp(containerDto.SemicircleEndAngle, -360, 360))));
+                                .Set(b => ((ContainerBlock)b).ContainerLayout,
+                                    BlockContractService.MergeContainerLayout(
+                                        existingContainer.ContainerLayout,
+                                        containerDto.ContainerLayout,
+                                        containerDto.LayoutMode,
+                                        containerDto.Columns,
+                                        containerDto.Gap,
+                                        containerDto.OrbitRadius,
+                                        containerDto.OrbitStartAngle,
+                                        containerDto.SemicircleRadius,
+                                        containerDto.SemicircleStartAngle,
+                                        containerDto.SemicircleEndAngle))));
                     break;
 
                 default:
@@ -414,6 +841,45 @@ namespace FullProject.Services
             return await GetByIdAsync(pageId, sectionId, blockId);
         }
 
+        public async Task<string?> ValidateParentAsync(
+            string pageId,
+            string sectionId,
+            string? blockId,
+            string? requestedParentId)
+        {
+            if (!string.IsNullOrWhiteSpace(blockId) && requestedParentId is not null)
+            {
+                var existing = await GetByIdAsync(pageId, sectionId, blockId);
+                if (existing is null) return "Block not found.";
+                var currentParentId = string.IsNullOrWhiteSpace(existing.ParentBlockId) ? null : existing.ParentBlockId;
+                var normalizedParentId = string.IsNullOrWhiteSpace(requestedParentId) ? null : requestedParentId;
+                if (!string.Equals(currentParentId, normalizedParentId, StringComparison.Ordinal))
+                    return "A Block's Container membership is fixed after creation. Container-owned Blocks cannot be released or moved to another Container.";
+            }
+
+            if (string.IsNullOrWhiteSpace(requestedParentId)) return null;
+            if (!string.IsNullOrWhiteSpace(blockId) && requestedParentId == blockId)
+                return "A Block cannot be its own parent Container.";
+
+            var parent = await GetByIdAsync(pageId, sectionId, requestedParentId);
+            if (parent is not ContainerBlock)
+                return "The selected parent must be a Container in the same Page and Section.";
+
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var current = parent;
+            while (current is not null)
+            {
+                if (!visited.Add(current.Id))
+                    return "The selected parent belongs to an invalid Container cycle.";
+                if (!string.IsNullOrWhiteSpace(blockId) && current.Id == blockId)
+                    return "The selected parent would create a Container cycle.";
+                if (string.IsNullOrWhiteSpace(current.ParentBlockId)) break;
+                current = await GetByIdAsync(pageId, sectionId, current.ParentBlockId);
+            }
+
+            return null;
+        }
+
         public async Task<Block?> UpdateLayoutAsync(string pageId, string sectionId,
             string blockId, BlockLayoutDto dto)
         {
@@ -422,10 +888,12 @@ namespace FullProject.Services
 
             await _context.BlocksDraft.UpdateOneAsync(
                 b => b.Id == blockId,
-                Builders<Block>.Update
-                    .Set(b => b.Layout, MergeLayout(existing.Layout, dto))
-                    .Set(b => b.UpdatedAt, DateTime.UtcNow)
-                    .Inc(b => b.Version, 1));
+                Builders<Block>.Update.Combine(
+                    Builders<Block>.Update.Set(b => b.Layout, MergeLayout(existing.Layout, dto)),
+                    Builders<Block>.Update.Set(b => b.Appearance,
+                        BlockContractService.MergeAppearance(existing.Appearance, null, dto)),
+                    Builders<Block>.Update.Set(b => b.UpdatedAt, DateTime.UtcNow),
+                    Builders<Block>.Update.Inc(b => b.Version, 1)));
 
             return await GetByIdAsync(pageId, sectionId, blockId);
         }
@@ -546,6 +1014,50 @@ namespace FullProject.Services
             };
         }
 
+        private static void ApplyDefaultFreeformPlacement(
+            Block block,
+            Section section,
+            Block? parentBlock,
+            int existingPeerCount,
+            BlockLayoutDto? requestedLayout)
+        {
+            if (!string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var hasExplicitPosition = requestedLayout?.LeftPercent.HasValue == true ||
+                                      requestedLayout?.TopPx.HasValue == true ||
+                                      requestedLayout?.X.HasValue == true ||
+                                      requestedLayout?.Y.HasValue == true;
+            if (hasExplicitPosition) return;
+
+            var zoneHeight = parentBlock?.Layout?.HeightPx ??
+                             (parentBlock?.Layout is not null ? parentBlock.Layout.H * 48d : (double?)null) ??
+                             section.Style?.CustomMinHeightPx ??
+                             640d;
+            zoneHeight = Math.Clamp(zoneHeight, 120d, 3000d);
+
+            var widthPercent = block.Layout.WidthPercent ?? block.Layout.W / 12d * 100d;
+            var heightPx = block.Layout.HeightPx ?? block.Layout.H * 48d;
+            widthPercent = Math.Clamp(widthPercent, 1d, 100d);
+            heightPx = Math.Clamp(heightPx, 24d, zoneHeight);
+
+            var offsetStep = (existingPeerCount + 1) / 2;
+            var offsetDirection = existingPeerCount % 2 == 0 ? -1d : 1d;
+            var leftOffset = existingPeerCount == 0 ? 0d : offsetDirection * offsetStep * 2d;
+            var topOffset = existingPeerCount == 0 ? 0d : offsetStep * 14d;
+            var leftPercent = Math.Clamp((100d - widthPercent) / 2d + leftOffset, 0d, 100d - widthPercent);
+            var topPx = Math.Clamp((zoneHeight - heightPx) / 2d + topOffset, 0d, zoneHeight - heightPx);
+
+            block.Layout.LeftPercent = leftPercent;
+            block.Layout.TopPx = topPx;
+            block.Layout.WidthPercent = widthPercent;
+            block.Layout.HeightPx = heightPx;
+            block.Layout.X = Math.Clamp((int)Math.Round(leftPercent / 100d * 12d), 0, 11);
+            block.Layout.Y = Math.Clamp((int)Math.Round(topPx / 48d), 0, 60);
+            block.Layout.W = Math.Clamp((int)Math.Round(widthPercent / 100d * 12d), 1, 12);
+            block.Layout.H = Math.Clamp((int)Math.Round(heightPx / 48d), 1, 40);
+        }
+
         private static BlockLayout MergeLayout(BlockLayout? current, BlockLayoutDto dto)
         {
             current ??= new BlockLayout();
@@ -601,6 +1113,12 @@ namespace FullProject.Services
         private static string NormalizeBlockZone(string? value) =>
             string.IsNullOrWhiteSpace(value) ? "default" : value.Trim().ToLowerInvariant();
 
+        private static string NormalizeParent(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
+        private static string NormalizeSlot(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
         private static string NormalizePositionMode(string? value) =>
             string.Equals(value, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
 
@@ -634,12 +1152,76 @@ namespace FullProject.Services
         private static string NormalizeContainerLayout(string? value) => value switch
         {
             "row" => "row",
+            "grid" => "grid",
+            "split" => "split",
             "orbit" => "orbit",
             "semicircle" => "semicircle",
             "freeform" => "freeform",
-            "grid" or "split" => "row",
             _ => "stack"
         };
+
+        private static string NormalizeVideoSourceType(string? value) =>
+            string.Equals(value, "upload", StringComparison.OrdinalIgnoreCase) ? "upload" : "youtube";
+
+        private static string NormalizeFileOpenBehavior(string? value) =>
+            string.Equals(value, "download", StringComparison.OrdinalIgnoreCase) ? "download" : "open";
+
+        private static string NormalizeBlockAction(string? value) => value?.Trim().ToLowerInvariant() switch
+        {
+            "openform" => "openForm",
+            "downloadfile" => "downloadFile",
+            "externalurl" => "externalUrl",
+            _ => "linkToPage"
+        };
+
+        private static bool IsOpenFormAction(string? value) =>
+            string.Equals(NormalizeBlockAction(value), "openForm", StringComparison.Ordinal);
+
+        private static void AddFormReference(
+            string? action,
+            string? formDefinitionId,
+            ISet<string> formIds)
+        {
+            if (IsOpenFormAction(action) && !string.IsNullOrWhiteSpace(formDefinitionId))
+                formIds.Add(formDefinitionId);
+        }
+
+        private static string? ValidateAction(
+            string? action,
+            string? href,
+            string? formDefinitionId,
+            bool required)
+        {
+            var normalized = NormalizeBlockAction(action);
+            if (normalized == "openForm")
+                return required && string.IsNullOrWhiteSpace(formDefinitionId)
+                    ? "Choose an active Form Definition for the Open Form action."
+                    : null;
+            if (!required && string.IsNullOrWhiteSpace(href)) return null;
+            if (string.IsNullOrWhiteSpace(href)) return "The selected Button action requires a destination.";
+            var cleaned = CleanUrl(href);
+            if (cleaned is null) return "Button destinations must be safe http, https, or site-relative URLs.";
+            if (normalized == "externalUrl" &&
+                (!Uri.TryCreate(cleaned, UriKind.Absolute, out var external) || external.Scheme is not ("http" or "https")))
+                return "External links require a complete http or https URL.";
+            if (normalized == "linkToPage" && !cleaned.StartsWith("/", StringComparison.Ordinal) &&
+                !cleaned.StartsWith("#", StringComparison.Ordinal))
+                return "Internal page links must start with / or #.";
+            return null;
+        }
+
+        private static string? ValidateAction(
+            BlockButtonAction action,
+            string? href,
+            string? formDefinitionId,
+            bool required) =>
+            ValidateAction(action switch
+            {
+                BlockButtonAction.OpenForm => "openForm",
+                BlockButtonAction.DownloadFile => "downloadFile",
+                BlockButtonAction.ExternalUrl => "externalUrl",
+                _ => "linkToPage"
+            }, href, formDefinitionId, required);
 
         private static string NormalizeBlockGap(string? value) => value switch
         {
@@ -674,7 +1256,51 @@ namespace FullProject.Services
             var section = await _context.SectionsDraft.Find(s => s.Id == sectionId).FirstOrDefaultAsync();
             if (section is null) return false;
 
-            var writes = orderedIds.Select((id, i) =>
+            var cleanIds = orderedIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (cleanIds.Count != orderedIds.Count || cleanIds.Count == 0) return false;
+
+            var sectionBlocks = await _context.BlocksDraft
+                .Find(block => block.PageStableId == page.StableId &&
+                               block.SectionStableId == section.StableId)
+                .ToListAsync();
+            var requestedBlocks = sectionBlocks
+                .Where(block => cleanIds.Contains(block.Id, StringComparer.Ordinal))
+                .ToList();
+            if (requestedBlocks.Count != cleanIds.Count) return false;
+
+            var first = requestedBlocks[0];
+            var parent = NormalizeParent(first.ParentBlockId);
+            var zone = NormalizeBlockZone(first.BlockZone);
+            var slot = NormalizeSlot(first.ColumnSlotId);
+            if (requestedBlocks.Any(block =>
+                    NormalizeParent(block.ParentBlockId) != parent ||
+                    NormalizeBlockZone(block.BlockZone) != zone ||
+                    NormalizeSlot(block.ColumnSlotId) != slot))
+                return false;
+
+            if (!string.IsNullOrWhiteSpace(parent))
+            {
+                var parentContainer = sectionBlocks.OfType<ContainerBlock>()
+                    .FirstOrDefault(container => container.Id == parent);
+                if (parentContainer is not null &&
+                    ContainerPresetCatalog.TryGetGoverned(parentContainer.PresetKey, out var preset) &&
+                    !preset.ChildOrderingAllowed)
+                    return false;
+            }
+
+            var peerIds = sectionBlocks
+                .Where(block => NormalizeParent(block.ParentBlockId) == parent)
+                .Where(block => NormalizeBlockZone(block.BlockZone) == zone)
+                .Where(block => NormalizeSlot(block.ColumnSlotId) == slot)
+                .Select(block => block.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            if (!peerIds.SetEquals(cleanIds)) return false;
+
+            var updatedAt = DateTime.UtcNow;
+            var writes = cleanIds.Select((id, i) =>
                 new UpdateOneModel<Block>(
                     Builders<Block>.Filter.Where(b =>
                         b.PageStableId == page.StableId &&
@@ -682,12 +1308,13 @@ namespace FullProject.Services
                         b.Id == id),
                     Builders<Block>.Update
                         .Set(b => b.Order, i)
-                        .Inc(b => b.Version, 1))
+                        .Set(b => b.Layout.ZIndex, i + 1)
+                        .Inc(b => b.Version, 1)
+                        .Set(b => b.UpdatedAt, updatedAt))
             ).Cast<WriteModel<Block>>().ToList();
 
-            if (writes.Count == 0) return true;
-            await _context.BlocksDraft.BulkWriteAsync(writes);
-            return true;
+            var result = await _context.BlocksDraft.BulkWriteAsync(writes);
+            return result.MatchedCount == cleanIds.Count;
         }
 
         // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -723,7 +1350,7 @@ namespace FullProject.Services
             Label = dto.Label,
             Action = dto.Action,
             Href = CleanUrl(dto.Href),
-            FormDefinitionId = dto.FormDefinitionId,
+            FormDefinitionId = dto.Action == BlockButtonAction.OpenForm ? dto.FormDefinitionId : null,
             Visible = dto.Visible,
             Order = dto.Order
         };

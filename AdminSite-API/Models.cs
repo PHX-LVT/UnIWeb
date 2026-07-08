@@ -705,15 +705,25 @@ namespace FullProject.Models
     }
 
     [BsonIgnoreExtraElements]
-    public class CanvasSectionPreset
+    public class SectionPreset
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string SectionType { get; set; } = "canvas";
+        public Section? Section { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string ThumbnailBackground { get; set; } = "#f3f4f6";
+        public Dictionary<string, string> PreviewText { get; set; } = new();
+        // Kept for schema 1-3 Canvas preset compatibility. New presets store the
+        // complete polymorphic Section snapshot above.
         public SectionStyle Style { get; set; } = new();
         public List<Block> Blocks { get; set; } = new();
         public int SchemaVersion { get; set; } = 1;
+        public List<CanvasPresetEditableSlot> EditableSlots { get; set; } = new();
+        public CanvasPresetLockPolicy LockPolicy { get; set; } = new();
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
@@ -836,6 +846,10 @@ namespace FullProject.Models
         }
         public string? ParentBlockId { get; set; }
         public BlockLayout Layout { get; set; } = new();
+        public BlockAppearance Appearance { get; set; } = new();
+        public BlockResponsiveSettings Responsive { get; set; } = new();
+        public BlockAnimationSettings Animation { get; set; } = new();
+        public BlockAuthoringPolicy Authoring { get; set; } = new();
         [BsonIgnore]
         [JsonIgnore]
         public int ZOrder
@@ -856,23 +870,48 @@ namespace FullProject.Models
     [BsonDiscriminator("image")]
     public class ImageBlock : Block
     {
-        public string? ImageUrl { get; set; }
+        public BlockAssetReference Asset { get; set; } = new();
+        [BsonIgnore, JsonIgnore]
+        public string? ImageUrl { get => Asset.Url; set => Asset.Url = value; }
+        [BsonElement("ImageUrl"), BsonIgnoreIfNull, JsonIgnore]
+        public string? LegacyImageUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public Dictionary<string, string> AltText { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public bool OpenInLightbox { get; set; }
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
     }
 
     [BsonDiscriminator("video")]
     public class VideoBlock : Block
     {
-        public string EmbedUrl { get; set; } = string.Empty;
+        public BlockAssetReference Asset { get; set; } = new();
+        [BsonIgnore, JsonIgnore]
+        public string EmbedUrl { get => Asset.Url ?? string.Empty; set => Asset.Url = value; }
+        [BsonElement("EmbedUrl"), BsonIgnoreIfNull, JsonIgnore]
+        public string? LegacyEmbedUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
+        public string SourceType { get; set; } = "youtube";
         public Dictionary<string, string> Title { get; set; } = new();
+        public bool ShowControls { get; set; } = true;
+        public bool Autoplay { get; set; }
+        public bool Muted { get; set; }
+        public bool Loop { get; set; }
     }
 
     [BsonDiscriminator("file")]
     public class FileBlock : Block
     {
-        public string? FileUrl { get; set; }
+        public BlockAssetReference Asset { get; set; } = new();
+        [BsonIgnore, JsonIgnore]
+        public string? FileUrl { get => Asset.Url; set => Asset.Url = value; }
+        [BsonElement("FileUrl"), BsonIgnoreIfNull, JsonIgnore]
+        public string? LegacyFileUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public string Filename { get; set; } = string.Empty;
-        public string FileType { get; set; } = string.Empty;
+        [BsonIgnore, JsonIgnore]
+        public string FileType { get => Asset.ContentType ?? string.Empty; set => Asset.ContentType = value; }
+        [BsonElement("FileType"), BsonIgnoreIfNull, JsonIgnore]
+        public string? LegacyFileType { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.ContentType = value; } }
+        public string OpenBehavior { get; set; } = "open";
     }
 
     // Map: pins are stored as embedded array, managed via block PUT
@@ -912,7 +951,11 @@ namespace FullProject.Models
         public string Icon { get; set; } = string.Empty;
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
-        public string? ImageUrl { get; set; }
+        public BlockAssetReference Asset { get; set; } = new();
+        [BsonIgnore, JsonIgnore]
+        public string? ImageUrl { get => Asset.Url; set => Asset.Url = value; }
+        [BsonElement("ImageUrl"), BsonIgnoreIfNull, JsonIgnore]
+        public string? LegacyImageUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -967,15 +1010,122 @@ namespace FullProject.Models
     [BsonDiscriminator("container")]
     public class ContainerBlock : Block
     {
+        [BsonIgnoreIfNull]
+        public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
-        public string LayoutMode { get; set; } = "stack";
-        public int Columns { get; set; } = 2;
-        public string Gap { get; set; } = "medium";
-        public int OrbitRadius { get; set; } = 180;
-        public int OrbitStartAngle { get; set; } = -90;
-        public int SemicircleRadius { get; set; } = 180;
-        public int SemicircleStartAngle { get; set; } = 180;
-        public int SemicircleEndAngle { get; set; } = 360;
+        public ContainerLayoutSettings ContainerLayout { get; set; } = new();
+
+        [BsonIgnore, JsonIgnore]
+        public string LayoutMode
+        {
+            get => ContainerLayout.Mode;
+            set => ContainerLayout.Mode = value;
+        }
+
+        [BsonIgnore, JsonIgnore]
+        public int Columns
+        {
+            get => ContainerLayout.Columns;
+            set => ContainerLayout.Columns = value;
+        }
+
+        [BsonIgnore, JsonIgnore]
+        public string Gap
+        {
+            get => ContainerLayout.Gap;
+            set => ContainerLayout.Gap = value;
+        }
+
+        [BsonIgnore, JsonIgnore]
+        public int OrbitRadius
+        {
+            get => ContainerLayout.OrbitRadius;
+            set => ContainerLayout.OrbitRadius = value;
+        }
+
+        [BsonIgnore, JsonIgnore]
+        public int OrbitStartAngle
+        {
+            get => ContainerLayout.OrbitStartAngle;
+            set => ContainerLayout.OrbitStartAngle = value;
+        }
+
+        [BsonIgnore, JsonIgnore]
+        public int SemicircleRadius
+        {
+            get => ContainerLayout.SemicircleRadius;
+            set => ContainerLayout.SemicircleRadius = value;
+        }
+
+        [BsonIgnore, JsonIgnore]
+        public int SemicircleStartAngle
+        {
+            get => ContainerLayout.SemicircleStartAngle;
+            set => ContainerLayout.SemicircleStartAngle = value;
+        }
+
+        [BsonIgnore, JsonIgnore]
+        public int SemicircleEndAngle
+        {
+            get => ContainerLayout.SemicircleEndAngle;
+            set => ContainerLayout.SemicircleEndAngle = value;
+        }
+
+        [BsonElement("LayoutMode"), BsonIgnoreIfNull, JsonIgnore]
+        public string? LegacyLayoutMode
+        {
+            get => null;
+            set { if (!string.IsNullOrWhiteSpace(value)) ContainerLayout.Mode = value; }
+        }
+
+        [BsonElement("Columns"), BsonIgnoreIfNull, JsonIgnore]
+        public int? LegacyColumns
+        {
+            get => null;
+            set { if (value.HasValue) ContainerLayout.Columns = value.Value; }
+        }
+
+        [BsonElement("Gap"), BsonIgnoreIfNull, JsonIgnore]
+        public string? LegacyGap
+        {
+            get => null;
+            set { if (!string.IsNullOrWhiteSpace(value)) ContainerLayout.Gap = value; }
+        }
+
+        [BsonElement("OrbitRadius"), BsonIgnoreIfNull, JsonIgnore]
+        public int? LegacyOrbitRadius
+        {
+            get => null;
+            set { if (value.HasValue) ContainerLayout.OrbitRadius = value.Value; }
+        }
+
+        [BsonElement("OrbitStartAngle"), BsonIgnoreIfNull, JsonIgnore]
+        public int? LegacyOrbitStartAngle
+        {
+            get => null;
+            set { if (value.HasValue) ContainerLayout.OrbitStartAngle = value.Value; }
+        }
+
+        [BsonElement("SemicircleRadius"), BsonIgnoreIfNull, JsonIgnore]
+        public int? LegacySemicircleRadius
+        {
+            get => null;
+            set { if (value.HasValue) ContainerLayout.SemicircleRadius = value.Value; }
+        }
+
+        [BsonElement("SemicircleStartAngle"), BsonIgnoreIfNull, JsonIgnore]
+        public int? LegacySemicircleStartAngle
+        {
+            get => null;
+            set { if (value.HasValue) ContainerLayout.SemicircleStartAngle = value.Value; }
+        }
+
+        [BsonElement("SemicircleEndAngle"), BsonIgnoreIfNull, JsonIgnore]
+        public int? LegacySemicircleEndAngle
+        {
+            get => null;
+            set { if (value.HasValue) ContainerLayout.SemicircleEndAngle = value.Value; }
+        }
     }
 
     // ----------------------------------------------------------------

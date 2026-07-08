@@ -20,23 +20,36 @@ public static class BlockUpdateDtoMapper
             },
             "image" => new ImageBlockUpdateDto
             {
+                Asset = ToAssetDto(block.Asset),
                 ImageUrl = block.ImageUrl,
                 AltText = block.AltText ?? new(),
+                Caption = block.Caption ?? new(),
+                OpenInLightbox = block.OpenInLightbox,
+                FocalPointX = block.FocalPointX,
+                FocalPointY = block.FocalPointY,
                 Visible = block.Visible,
                 Layout = layout
             },
             "video" => new VideoBlockUpdateDto
             {
+                Asset = ToAssetDto(block.Asset),
                 EmbedUrl = block.EmbedUrl ?? string.Empty,
+                SourceType = block.SourceType,
                 Title = block.Title ?? new(),
+                ShowControls = block.ShowControls,
+                Autoplay = block.Autoplay,
+                Muted = block.Muted,
+                Loop = block.Loop,
                 Visible = block.Visible,
                 Layout = layout
             },
             "file" => new FileBlockUpdateDto
             {
+                Asset = ToAssetDto(block.Asset),
                 FileUrl = block.FileUrl,
                 Filename = block.FileName ?? string.Empty,
                 FileType = block.FileType ?? string.Empty,
+                OpenBehavior = block.OpenBehavior,
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -78,6 +91,7 @@ public static class BlockUpdateDtoMapper
                 Title = block.Title ?? new(),
                 Description = block.Description ?? new(),
                 ImageUrl = block.ImageUrl,
+                Asset = ToAssetDto(block.Asset),
                 ButtonLabel = block.ButtonLabel ?? new(),
                 Href = block.Href,
                 Action = block.Action ?? "linkToPage",
@@ -139,15 +153,8 @@ public static class BlockUpdateDtoMapper
             },
             "container" => new ContainerBlockUpdateDto
             {
+                PresetKey = block.PresetKey,
                 Title = block.Title ?? new(),
-                LayoutMode = block.LayoutMode ?? "stack",
-                Columns = Math.Clamp(block.Columns ?? 2, 1, 6),
-                Gap = block.Gap ?? "medium",
-                OrbitRadius = Math.Clamp(block.OrbitRadius ?? 180, 80, 480),
-                OrbitStartAngle = Math.Clamp(block.OrbitStartAngle ?? -90, -360, 360),
-                SemicircleRadius = Math.Clamp(block.SemicircleRadius ?? 180, 80, 480),
-                SemicircleStartAngle = Math.Clamp(block.SemicircleStartAngle ?? 180, -360, 360),
-                SemicircleEndAngle = Math.Clamp(block.SemicircleEndAngle ?? 360, -360, 360),
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -165,8 +172,160 @@ public static class BlockUpdateDtoMapper
         dto.BlockZone = NormalizeBlockZone(block.BlockZone);
         dto.PositionMode = NormalizePositionMode(block.PositionMode);
         dto.ParentBlockId = block.ParentBlockId;
+        dto.Appearance = ToAppearanceDto(block.Appearance, block.Layout);
+        dto.Responsive = ToResponsiveDto(block.Responsive);
+        dto.Animation = ToAnimationDto(block.Animation);
+        dto.Authoring = ToAuthoringDto(block.Authoring);
+        if (dto is ContainerBlockUpdateDto containerDto)
+            containerDto.ContainerLayout = ToContainerLayoutDto(block.ContainerLayout);
         return dto;
     }
+
+    public static BlockAuthoringPolicyDto ToAuthoringDto(BlockAuthoringPolicyModel? value) => new()
+    {
+        SchemaVersion = Math.Max(value?.SchemaVersion ?? 0, 1),
+        ContentLocked = value?.ContentLocked ?? false,
+        GeometryLocked = value?.GeometryLocked ?? false,
+        FullLocked = false,
+        PresetSlotName = value?.PresetSlotName,
+        PresetSourceId = value?.PresetSourceId
+    };
+
+    private static BlockAppearanceDto ToAppearanceDto(
+        BlockAppearanceModel? appearance,
+        BlockLayoutModel? legacyLayout) => new()
+    {
+        SchemaVersion = Math.Max(appearance?.SchemaVersion ?? 0, 2),
+        BackgroundMode = appearance?.SchemaVersion < 2 &&
+            !string.IsNullOrWhiteSpace(appearance?.BackgroundColor ?? legacyLayout?.BackgroundColor)
+                ? "color"
+                : appearance?.BackgroundMode ??
+            (string.IsNullOrWhiteSpace(appearance?.BackgroundColor ?? legacyLayout?.BackgroundColor) ? "none" : "color"),
+        BackgroundColor = appearance?.BackgroundColor ?? legacyLayout?.BackgroundColor,
+        TextColor = appearance?.TextColor,
+        TextAlign = appearance?.TextAlign ?? "inherit",
+        Opacity = appearance?.Opacity ?? 1,
+        BorderColor = appearance?.BorderColor,
+        BorderWidth = appearance?.BorderWidth ?? 0,
+        BorderStyle = appearance?.BorderStyle ?? "solid",
+        BorderRadius = appearance?.BorderRadius ?? legacyLayout?.BorderRadius ?? "none",
+        Shadow = appearance?.Shadow ?? "none",
+        Shape = appearance?.Shape ?? "rectangle",
+        AspectRatio = appearance?.AspectRatio ?? "auto",
+        RotationDeg = appearance?.RotationDeg ?? 0,
+        MediaFit = appearance?.MediaFit ?? "cover",
+        MediaPosition = appearance?.MediaPosition ?? "center",
+        Padding = appearance?.Padding ?? legacyLayout?.Padding ?? "none",
+        Margin = appearance?.Margin ?? legacyLayout?.Margin ?? "none",
+        Decorative = appearance?.Decorative ?? false,
+        InheritFromContainer = appearance?.InheritFromContainer ?? false
+    };
+
+    private static BlockAssetReferenceDto ToAssetDto(BlockAssetReferenceModel? value) => new()
+    {
+        SchemaVersion = 1,
+        Url = value?.Url,
+        ResourceId = value?.ResourceId,
+        ResourceSource = value?.ResourceSource ?? "DirectUpload",
+        StorageKey = value?.StorageKey,
+        FileName = value?.FileName,
+        ContentType = value?.ContentType,
+        SizeBytes = value?.SizeBytes ?? 0
+    };
+
+    private static BlockResponsiveSettingsDto ToResponsiveDto(BlockResponsiveSettingsModel? responsive) => new()
+    {
+        SchemaVersion = 1,
+        Tablet = ToResponsiveOverrideDto(responsive?.Tablet),
+        Mobile = ToResponsiveOverrideDto(responsive?.Mobile)
+    };
+
+    private static BlockResponsiveOverrideDto? ToResponsiveOverrideDto(BlockResponsiveOverrideModel? value) =>
+        value is null ? null : new BlockResponsiveOverrideDto
+        {
+            Mode = value.Mode,
+            Width = value.Width,
+            ColumnSpan = value.ColumnSpan,
+            LeftPercent = value.LeftPercent,
+            TopPx = value.TopPx,
+            WidthPercent = value.WidthPercent,
+            HeightPx = value.HeightPx
+        };
+
+    private static BlockAnimationSettingsDto ToAnimationDto(BlockAnimationSettingsModel? animation) => new()
+    {
+        SchemaVersion = Math.Max(animation?.SchemaVersion ?? 0, 1),
+        Effect = animation?.Effect ?? "none",
+        Trigger = animation?.Trigger ?? "enter-viewport",
+        DurationMs = animation?.DurationMs ?? 500,
+        DelayMs = animation?.DelayMs ?? 0,
+        Easing = animation?.Easing ?? "ease-out",
+        PlayOnce = animation?.PlayOnce ?? true,
+        StaggerMs = animation?.StaggerMs ?? 0,
+        ContinuousEffect = animation?.ContinuousEffect ?? "none",
+        DisableForReducedMotion = true
+    };
+
+    private static ContainerLayoutSettingsDto ToContainerLayoutDto(ContainerLayoutSettingsModel? value) => new()
+    {
+        SchemaVersion = 2,
+        Purpose = value?.Purpose ?? "composition",
+        AllowedChildType = value?.Purpose == "collection" ? value.AllowedChildType : null,
+        Mode = value?.Mode ?? "stack",
+        Columns = Math.Clamp(value?.Columns ?? 2, 1, 6),
+        Gap = value?.Gap ?? "medium",
+        AlignItems = value?.AlignItems ?? "stretch",
+        JustifyContent = value?.JustifyContent ?? "start",
+        Wrap = value?.Wrap ?? true,
+        OrbitRadius = Math.Clamp(value?.OrbitRadius ?? 180, 80, 480),
+        OrbitStartAngle = Math.Clamp(value?.OrbitStartAngle ?? -90, -360, 360),
+        OrbitEndAngle = Math.Clamp(value?.OrbitEndAngle ?? 270, -360, 360),
+        OrbitDirection = value?.OrbitDirection ?? "clockwise",
+        SemicircleRadius = Math.Clamp(value?.SemicircleRadius ?? 180, 80, 480),
+        SemicircleStartAngle = Math.Clamp(value?.SemicircleStartAngle ?? 180, -360, 360),
+        SemicircleEndAngle = Math.Clamp(value?.SemicircleEndAngle ?? 360, -360, 360),
+        MobileMode = value?.MobileMode ?? "stack",
+        CompactRadius = Math.Clamp(value?.CompactRadius ?? 120, 60, 220),
+        CompactChildWidth = Math.Clamp(value?.CompactChildWidth ?? 120, 72, 180),
+        GeometryLocked = value?.GeometryLocked ?? false,
+        ShareAppearance = value?.ShareAppearance ?? false,
+        SharedAppearance = value?.SharedAppearance is null ? null : ToAppearanceDto(value.SharedAppearance, null),
+        Diagram = ToDiagramDto(value?.Diagram)
+    };
+
+    private static ContainerDiagramSettingsDto ToDiagramDto(ContainerDiagramSettingsModel? value) => new()
+    {
+        SchemaVersion = 1,
+        Enabled = value?.Enabled ?? false,
+        Decorations = (value?.Decorations ?? new()).Select(item => new ContainerDecorationSettingsDto
+        {
+            Id = item.Id,
+            Kind = item.Kind,
+            FromAnchor = item.FromAnchor,
+            ToAnchor = item.ToAnchor,
+            RadiusPercent = item.RadiusPercent,
+            StartAngle = item.StartAngle,
+            EndAngle = item.EndAngle,
+            ColorMode = item.ColorMode,
+            Color = item.Color,
+            Width = item.Width,
+            Style = item.Style,
+            Opacity = item.Opacity
+        }).ToList(),
+        Connectors = (value?.Connectors ?? new()).Select(item => new ContainerConnectorSettingsDto
+        {
+            Id = item.Id,
+            FromAnchor = item.FromAnchor,
+            ToAnchor = item.ToAnchor,
+            Routing = item.Routing,
+            ColorMode = item.ColorMode,
+            Color = item.Color,
+            Width = item.Width,
+            Style = item.Style,
+            Opacity = item.Opacity,
+            ArrowEnd = item.ArrowEnd
+        }).ToList()
+    };
 
     private static string NormalizeBlockZone(string? zone) =>
         string.IsNullOrWhiteSpace(zone) ? "default" : zone.Trim().ToLowerInvariant();

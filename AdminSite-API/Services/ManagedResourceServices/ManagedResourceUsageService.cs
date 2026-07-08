@@ -39,6 +39,7 @@ namespace FullProject.Services
             references.AddRange(await GetSectionUsageAsync(_context.SectionsPublished, resource, "Section Published"));
             references.AddRange(await GetBlockUsageAsync(_context.BlocksDraft, resource, "Block Draft"));
             references.AddRange(await GetBlockUsageAsync(_context.BlocksPublished, resource, "Block Published"));
+            references.AddRange(await GetSectionPresetUsageAsync(resource));
             references.AddRange(await GetBrandingUsageAsync(resource));
 
             return new ManagedResourceUsageDto
@@ -197,6 +198,37 @@ namespace FullProject.Services
             var brands = await _context.Branding.Find(b => b.LogoUrl == resource.Url).ToListAsync();
             return brands.Select(brand => UsageRef(resource, "Branding", brand.Id, brand.Id, brand.CompanyName, "Logo", string.Empty, null)).ToList();
         }
+
+        private async Task<List<ManagedResourceUsageReferenceDto>> GetSectionPresetUsageAsync(ManagedResource resource)
+        {
+            if (string.IsNullOrWhiteSpace(resource.Url)) return new();
+            var presets = await _context.SectionPresets.Find(SectionPresetUrlFilter(resource.Url)).ToListAsync();
+            return presets.Select(preset => UsageRef(
+                    resource,
+                    "Section Preset",
+                    preset.Id,
+                    preset.Id,
+                    FirstText(preset.Name),
+                    "Saved Section media",
+                    preset.SectionType,
+                    preset.UpdatedAt))
+                .ToList();
+        }
+
+        private static FilterDefinition<SectionPreset> SectionPresetUrlFilter(string url) =>
+            Builders<SectionPreset>.Filter.Or(
+                Builders<SectionPreset>.Filter.Eq(preset => preset.ThumbnailUrl, url),
+                Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundVideoUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Style.BackgroundImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Style.BackgroundVideoUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.ImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.FileUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.EmbedUrl", url));
 
         private static IEnumerable<ManagedResourceUsageReferenceDto> BuildContentReferences(
             ContentItem item,

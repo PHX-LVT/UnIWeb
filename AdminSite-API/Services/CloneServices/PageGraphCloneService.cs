@@ -58,6 +58,7 @@ namespace FullProject.Services.CloneServices
                 .ToList();
 
             RemapParentBlockIds(orderedSources, clones);
+            RemapGraphReferences(orderedSources, clones);
             return clones;
         }
 
@@ -80,7 +81,91 @@ namespace FullProject.Services.CloneServices
                 .ToList();
 
             RemapParentBlockIds(orderedSources, clones);
+            RemapGraphReferences(orderedSources, clones);
             return clones;
+        }
+
+        public List<Block> CloneBlocksAsNewContent(
+            IEnumerable<Block> sourceBlocks,
+            string targetPageStableId,
+            string targetSectionStableId,
+            DateTime? timestamp = null)
+        {
+            var now = timestamp ?? DateTime.UtcNow;
+            var orderedSources = sourceBlocks.OrderBy(block => block.Order).ToList();
+            var clones = orderedSources
+                .Select(block =>
+                {
+                    var clone = CloneBlock(block, CloneProfile.DuplicateAsNewContent, now);
+                    clone.PageStableId = targetPageStableId;
+                    clone.SectionStableId = targetSectionStableId;
+                    return clone;
+                })
+                .ToList();
+
+            RemapParentBlockIds(orderedSources, clones, preserveExternalParent: true);
+            RemapGraphReferences(orderedSources, clones);
+            return clones;
+        }
+
+        public IReadOnlyDictionary<string, string> RegenerateSectionOwnedIds(Section section)
+        {
+            var replacements = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            static string NextId() => ObjectId.GenerateNewId().ToString();
+            void Replace(string? current, Action<string> assign)
+            {
+                var next = NextId();
+                if (!string.IsNullOrWhiteSpace(current)) replacements[current] = next;
+                assign(next);
+            }
+
+            switch (section)
+            {
+                case HeroSection hero:
+                    foreach (var button in hero.Buttons)
+                        Replace(button.Id, value => button.Id = value);
+                    break;
+                case CtaSection cta:
+                    if (cta.Button is not null)
+                        Replace(cta.Button.Id, value => cta.Button.Id = value);
+                    foreach (var button in cta.Buttons)
+                        Replace(button.Id, value => button.Id = value);
+                    break;
+                case ListSection list:
+                    foreach (var item in list.Items)
+                        Replace(item.Id, value => item.Id = value);
+                    break;
+                case ColumnsSection columns:
+                    foreach (var slot in columns.Columns)
+                        Replace(slot.Id, value => slot.Id = value);
+                    break;
+                case ShowcaseSection showcase when showcase.ActionButton is not null:
+                    Replace(showcase.ActionButton.Id, value => showcase.ActionButton.Id = value);
+                    break;
+                case StatsSection stats:
+                    foreach (var item in stats.Items)
+                        Replace(item.Id, value => item.Id = value);
+                    break;
+                case CarouselSection carousel:
+                    foreach (var item in carousel.Items)
+                    {
+                        Replace(item.Id, value => item.Id = value);
+                        foreach (var metric in item.Metrics)
+                            Replace(metric.Id, value => metric.Id = value);
+                    }
+                    break;
+                case NetworkMapSection map:
+                    foreach (var pin in map.Pins)
+                        Replace(pin.Id, value => pin.Id = value);
+                    break;
+                case TestimonialSection testimonials:
+                    foreach (var item in testimonials.Items)
+                        Replace(item.Id, value => item.Id = value);
+                    break;
+            }
+
+            return replacements;
         }
 
         private static void ApplyPageIdentity(Page source, Page clone, CloneProfile profile, DateTime now)
@@ -151,8 +236,22 @@ namespace FullProject.Services.CloneServices
                     break;
 
                 case CloneProfile.PresetCapture:
+                    clone.StableId = Guid.NewGuid().ToString();
+                    clone.Version = 1;
+                    clone.PublishedAt = null;
+                    clone.PageStableId = string.Empty;
+                    clone.Order = 0;
+                    clone.CreatedAt = now;
+                    break;
+
                 case CloneProfile.PresetApply:
-                    throw new InvalidOperationException($"{profile} does not apply to section clones.");
+                    clone.StableId = Guid.NewGuid().ToString();
+                    clone.Version = 1;
+                    clone.PublishedAt = null;
+                    clone.PageStableId = string.Empty;
+                    clone.Order = 0;
+                    clone.CreatedAt = now;
+                    break;
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(profile), profile, null);
@@ -192,7 +291,6 @@ namespace FullProject.Services.CloneServices
                     clone.PublishedAt = null;
                     clone.PageStableId = string.Empty;
                     clone.SectionStableId = string.Empty;
-                    clone.ColumnSlotId = null;
                     clone.CreatedAt = now;
                     break;
 
@@ -200,7 +298,6 @@ namespace FullProject.Services.CloneServices
                     clone.StableId = Guid.NewGuid().ToString();
                     clone.Version = 1;
                     clone.PublishedAt = null;
-                    clone.ColumnSlotId = null;
                     clone.CreatedAt = now;
                     break;
 
@@ -246,7 +343,10 @@ namespace FullProject.Services.CloneServices
             }
         }
 
-        private static void RemapParentBlockIds(IReadOnlyList<Block> sources, IReadOnlyList<Block> clones)
+        private static void RemapParentBlockIds(
+            IReadOnlyList<Block> sources,
+            IReadOnlyList<Block> clones,
+            bool preserveExternalParent = false)
         {
             var idMap = sources
                 .Zip(clones, (source, clone) => new { source.Id, CloneId = clone.Id })
@@ -255,10 +355,42 @@ namespace FullProject.Services.CloneServices
 
             foreach (var clone in clones)
             {
-                clone.ParentBlockId = !string.IsNullOrWhiteSpace(clone.ParentBlockId) &&
-                                      idMap.TryGetValue(clone.ParentBlockId, out var newParentId)
+                if (string.IsNullOrWhiteSpace(clone.ParentBlockId))
+                {
+                    clone.ParentBlockId = null;
+                    continue;
+                }
+
+                clone.ParentBlockId = idMap.TryGetValue(clone.ParentBlockId, out var newParentId)
                     ? newParentId
-                    : null;
+                    : preserveExternalParent ? clone.ParentBlockId : null;
+            }
+        }
+
+        private static void RemapGraphReferences(
+            IReadOnlyList<Block> sources,
+            IReadOnlyList<Block> clones)
+        {
+            var stableIdMap = sources
+                .Zip(clones, (source, clone) => new { source.StableId, CloneStableId = clone.StableId })
+                .Where(item => !string.IsNullOrWhiteSpace(item.StableId))
+                .ToDictionary(item => item.StableId, item => item.CloneStableId, StringComparer.Ordinal);
+
+            static string Remap(string value, IReadOnlyDictionary<string, string> map) =>
+                map.TryGetValue(value, out var remapped) ? remapped : value;
+
+            foreach (var container in clones.OfType<ContainerBlock>())
+            {
+                foreach (var decoration in container.ContainerLayout.Diagram.Decorations)
+                {
+                    decoration.FromAnchor = Remap(decoration.FromAnchor, stableIdMap);
+                    decoration.ToAnchor = Remap(decoration.ToAnchor, stableIdMap);
+                }
+                foreach (var connector in container.ContainerLayout.Diagram.Connectors)
+                {
+                    connector.FromAnchor = Remap(connector.FromAnchor, stableIdMap);
+                    connector.ToAnchor = Remap(connector.ToAnchor, stableIdMap);
+                }
             }
         }
     }

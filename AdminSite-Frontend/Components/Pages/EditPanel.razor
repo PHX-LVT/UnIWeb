@@ -1,4 +1,5 @@
 ﻿@using Contracts.Admin
+@using System.Text.Json
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
@@ -11,9 +12,15 @@
             <i class="fas fa-sliders-h"></i>
             @Section.Type?.ToUpper() @T("Content")
         </span>
-        <button class="ez-icon-btn" @onclick="OnClose">
-            <i class="fas fa-times"></i>
-        </button>
+        <div class="ez-right-panel__header-actions">
+            <button type="button" class="btn-admin btn-ghost ez-section-preset-trigger" @onclick="OpenPresetDialog">
+                <i class="fas fa-bookmark"></i>
+                <span>@T("SaveAsPreset")</span>
+            </button>
+            <button class="ez-icon-btn" @onclick="OnClose">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
     </div>
 
     <div class="ez-right-panel__tabs">
@@ -37,7 +44,7 @@
             <SectionStylePanel PageId="@EffectivePageId"
                                SectionId="@Section.Id"
                                Style="@(Section.Style ?? new())"
-                               OnSaved="OnSectionSaved"
+                               OnSaved="HandleSectionSaved"
                                OnClose="OnClose" />
         }
         else if (_tab == "content")
@@ -52,28 +59,28 @@
                 <HeroSectionEditor Section="Section"
                                    PageId="@EffectivePageId"
                                    Languages="_languages"
-                                   OnSaved="OnSectionSaved" />
+                                   OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "cta")
             {
                 <CtaSectionEditor Section="Section"
                                   PageId="@EffectivePageId"
                                   Languages="_languages"
-                                  OnSaved="OnSectionSaved" />
+                                  OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "list")
             {
                 <ListSectionEditor Section="Section"
                                    PageId="@EffectivePageId"
                                    Languages="_languages"
-                                   OnSaved="OnSectionSaved" />
+                                   OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "showcase")
             {
                 <ShowcaseSectionEditor Section="Section"
                                           PageId="@EffectivePageId"
                                           Languages="_languages"
-                                          OnSaved="OnSectionSaved" />
+                                          OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "library")
             {
@@ -81,55 +88,55 @@
                                       Section="Section"
                                       PageId="@EffectivePageId"
                                       Languages="_languages"
-                                      OnSaved="OnSectionSaved" />
+                                      OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "html")
             {
                 <HtmlSectionEditor Section="Section"
                                    PageId="@EffectivePageId"
                                    Languages="_languages"
-                                   OnSaved="OnSectionSaved" />
+                                   OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "columns")
             {
                 <ColumnsSectionEditor Section="Section"
                                       PageId="@EffectivePageId"
                                       Languages="_languages"
-                                      OnSaved="OnSectionSaved" />
+                                      OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "stats")
             {
                 <StatsSectionEditor Section="Section"
                                     PageId="@EffectivePageId"
                                     Languages="_languages"
-                                    OnSaved="OnSectionSaved" />
+                                    OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "carousel")
             {
                 <CarouselSectionEditor Section="Section"
                                        PageId="@EffectivePageId"
                                        Languages="_languages"
-                                       OnSaved="OnSectionSaved" />
+                                       OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "network-map")
             {
                 <NetworkMapSectionEditor Section="Section"
                                          PageId="@EffectivePageId"
                                          Languages="_languages"
-                                         OnSaved="OnSectionSaved" />
+                                         OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "testimonial")
             {
                 <TestimonialSectionEditor Section="Section"
                                           PageId="@EffectivePageId"
                                           Languages="_languages"
-                                          OnSaved="OnSectionSaved" />
+                                          OnSaved="HandleSectionSaved" />
             }
             else if (Section.Type == "canvas")
             {
                 <CanvasSectionEditor Section="Section"
                                      PageId="@EffectivePageId"
-                                     OnSaved="OnSectionSaved"
+                                     OnSaved="HandleSectionSaved"
                                      OnSectionsChanged="OnSectionsChanged" />
             }
             else
@@ -141,6 +148,19 @@
         }
         else if (_tab == "blocks")
         {
+            @if (CanArrangeBlocks)
+            {
+                <div class="ez-blocks-tab-actions">
+                    <div>
+                        <strong>@T("ArrangeBlocks")</strong>
+                        <span>@T("ArrangeBlocksHint")</span>
+                    </div>
+                    <button type="button" class="btn-admin btn-primary" @onclick="RequestArrangeBlocks">
+                        <i class="fas fa-object-group"></i> @T("ArrangeBlocks")
+                    </button>
+                </div>
+            }
+
             <div class="ez-editor-language-notice">
                 <i class="fas fa-language"></i>
                 <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
@@ -149,7 +169,11 @@
             <BlockEditor PageId="@EffectivePageId"
                          SectionId="@Section.Id"
                          SectionType="@Section.Type"
+                         SectionBlockLayoutMode="@Section.Style?.BlockLayoutMode"
+                         UseArrangeWorkspace="@CanArrangeBlocks"
+                         InitialBlockId="@InitialBlockId"
                          Languages="_languages"
+                         ActiveBlockChanged="OnActiveBlockChanged"
                          OnChanged="OnBlocksChanged" />
         }
     </div>
@@ -161,6 +185,34 @@
     </div>
 </div>
 
+<DxWindow Visible="_showArrangeGuard"
+          VisibleChanged="OnArrangeGuardVisibilityChanged"
+          Width="440px"
+          MaxWidth="calc(100vw - 32px)"
+          ShowCloseButton="false"
+          CloseOnEscape="true"
+          AllowResize="false"
+          HorizontalAlignment="HorizontalAlignment.Center"
+          VerticalAlignment="VerticalAlignment.Center">
+    <BodyTemplate>
+        <div class="block-arrange-guard" role="alertdialog" aria-labelledby="block-arrange-guard-title">
+            <header id="block-arrange-guard-title">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>@T("UnsavedSectionChanges")</strong>
+            </header>
+            <p>@T("UnsavedSectionArrangeHint")</p>
+            <footer>
+                <button type="button" class="btn-admin btn-ghost" @onclick="KeepEditingSection">
+                    @T("KeepEditing")
+                </button>
+                <button type="button" class="btn-admin btn-danger" @onclick="DiscardAndArrange">
+                    <i class="fas fa-trash-alt"></i> @T("DiscardAndArrange")
+                </button>
+            </footer>
+        </div>
+    </BodyTemplate>
+</DxWindow>
+
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
@@ -170,10 +222,21 @@
     [Parameter] public EventCallback OnSectionSaved { get; set; }
     [Parameter] public EventCallback OnSectionsChanged { get; set; }
     [Parameter] public EventCallback OnBlocksChanged { get; set; }
+    [Parameter] public EventCallback<string?> OnActiveBlockChanged { get; set; }
+    [Parameter] public EventCallback<string> OnArrangeBlocksRequested { get; set; }
+    [Parameter] public EventCallback<string> OnDiscardAndArrangeRequested { get; set; }
+    [Parameter] public EventCallback<string> OnSaveAsPresetRequested { get; set; }
+    [Parameter] public bool CanArrangeBlocks { get; set; }
+    [Parameter] public string InitialTab { get; set; } = "style";
+    [Parameter] public string? InitialBlockId { get; set; }
 
     private string _tab = "style";
     private List<string> _languages = new() { "en" };
     private string? _loadedSectionId;
+    private string? _loadedInitialTab;
+    private SectionModel? _trackedSection;
+    private string _savedSectionSnapshot = string.Empty;
+    private bool _showArrangeGuard;
     private string EffectivePageId => !string.IsNullOrWhiteSpace(PageId) ? PageId : Section.PageId;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
@@ -185,8 +248,64 @@
 
     protected override void OnParametersSet()
     {
-        if (_loadedSectionId == Section.Id) return;
+        if (!ReferenceEquals(_trackedSection, Section))
+        {
+            _trackedSection = Section;
+            _savedSectionSnapshot = CaptureSectionSnapshot();
+            _showArrangeGuard = false;
+        }
+
+        if (_loadedSectionId == Section.Id && _loadedInitialTab == InitialTab) return;
         _loadedSectionId = Section.Id;
-        _tab = "style";
+        _loadedInitialTab = InitialTab;
+        _tab = InitialTab is "content" or "blocks" ? InitialTab : "style";
+    }
+
+    private bool HasUnsavedSectionChanges =>
+        !string.Equals(_savedSectionSnapshot, CaptureSectionSnapshot(), StringComparison.Ordinal);
+
+    private string CaptureSectionSnapshot() =>
+        JsonSerializer.Serialize(Section, Section.GetType());
+
+    private async Task RequestArrangeBlocks()
+    {
+        if (!CanArrangeBlocks) return;
+        if (HasUnsavedSectionChanges)
+        {
+            _showArrangeGuard = true;
+            return;
+        }
+
+        await OnArrangeBlocksRequested.InvokeAsync(Section.Id);
+    }
+
+    private async Task HandleSectionSaved()
+    {
+        _savedSectionSnapshot = CaptureSectionSnapshot();
+        await OnSectionSaved.InvokeAsync();
+    }
+
+    private async Task OpenPresetDialog()
+    {
+        if (HasUnsavedSectionChanges)
+        {
+            Http.Toast(T("SaveSectionBeforePreset"), 409);
+            return;
+        }
+        await OnSaveAsPresetRequested.InvokeAsync(Section.Id);
+    }
+
+    private void KeepEditingSection() => _showArrangeGuard = false;
+
+    private async Task DiscardAndArrange()
+    {
+        _showArrangeGuard = false;
+        await OnDiscardAndArrangeRequested.InvokeAsync(Section.Id);
+    }
+
+    private Task OnArrangeGuardVisibilityChanged(bool visible)
+    {
+        _showArrangeGuard = visible;
+        return Task.CompletedTask;
     }
 }

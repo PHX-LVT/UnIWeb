@@ -1,55 +1,68 @@
-﻿@inject AdminBlockService BlockService
+@inject AdminBlockService BlockService
 @inject IHttpService Http
 @using Contracts.Admin
 
 <div class="form-group">
     <label class="form-label">@T("Image")</label>
-    @if (!string.IsNullOrEmpty(_imageUrl))
+    @if (!string.IsNullOrWhiteSpace(_asset.Url))
     {
-        <div style="margin-bottom:.75rem">
-            <img src="@_imageUrl"
-                 style="max-height:160px;border-radius:6px;
-            border:1px solid var(--border)" />
-            <button class="btn-admin btn-ghost" style="margin-left:.5rem"
-                    @onclick="() => _imageUrl = null">
+        <div class="block-media-selection">
+            <img src="@_asset.Url" alt="" />
+            <button type="button" class="btn-admin btn-ghost" @onclick="ClearImage">
                 <i class="fas fa-times"></i> @T("Remove")
             </button>
         </div>
     }
-    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <InputFile id="image-block-upload"
-                   OnChange="OnFileSelected"
-                   accept="image/*"
-                   style="display:none" />
+    <div class="block-media-actions">
+        <InputFile id="image-block-upload" OnChange="OnFileSelected" accept="image/*" style="display:none" />
         <label class="btn-admin btn-ghost" for="image-block-upload">
             <i class="fas fa-image"></i> @T("UploadNew")
         </label>
-        <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
+        <button type="button" class="btn-admin btn-ghost" @onclick="() => _resourcePickerOpen = true">
             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
         </button>
     </div>
     <div class="form-hint">@T("UploadImageHint")</div>
 </div>
 
-<ResourcePickerModal Open="_resourcePickerOpen"
-                     Kind="image"
+<ResourcePickerModal Open="_resourcePickerOpen" Kind="image"
                      ResourceSelected="SelectResourceImage"
-                     Closed="CloseResourcePicker" />
+                     Closed="() => _resourcePickerOpen = false" />
 
 <div class="form-group">
     <label class="form-label">@T("AltText")</label>
-    <LangField @bind-Value="_altText"
-               Languages="Languages"
-               NullText="@T("AltTextHint")" />
+    <LangField @bind-Value="_altText" Languages="Languages" NullText="@T("AltTextHint")" />
 </div>
+<div class="form-group">
+    <label class="form-label">@T("Caption")</label>
+    <LangField @bind-Value="_caption" Languages="Languages" />
+</div>
+<div class="block-media-settings">
+    <label class="form-group">
+        <span class="form-label">@T("FocalPointX")</span>
+        <input class="form-control" type="range" min="0" max="100" step="1" @bind="_focalPointX" />
+        <span class="form-hint">@($"{_focalPointX:0}%")</span>
+    </label>
+    <label class="form-group">
+        <span class="form-label">@T("FocalPointY")</span>
+        <input class="form-control" type="range" min="0" max="100" step="1" @bind="_focalPointY" />
+        <span class="form-hint">@($"{_focalPointY:0}%")</span>
+    </label>
+</div>
+<label class="block-layout-panel__check">
+    <input type="checkbox" @bind="_openInLightbox" />
+    <span>@T("OpenImageInLightbox")</span>
+</label>
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+<div class="ez-editor-actions">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
         <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
 </div>
 
 @code {
+    private const long MaxImageBytes = 20L * 1024 * 1024;
+
     [Parameter] public BlockModel Block { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public string SectionId { get; set; } = string.Empty;
@@ -57,69 +70,108 @@
     [Parameter] public EventCallback OnSaved { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
-    private string? _imageUrl;
+    private BlockAssetReferenceModel _asset = new();
     private Dictionary<string, string> _altText = new();
+    private Dictionary<string, string> _caption = new();
+    private bool _openInLightbox;
+    private double _focalPointX = 50;
+    private double _focalPointY = 50;
     private bool _saving;
     private bool _resourcePickerOpen;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override void OnParametersSet()
     {
-        _imageUrl = Block.ImageUrl;
+        _asset = CopyAsset(Block.Asset, Block.ImageUrl);
         _altText = new(Block.AltText ?? new());
+        _caption = new(Block.Caption ?? new());
+        _openInLightbox = Block.OpenInLightbox;
+        _focalPointX = Math.Clamp(Block.FocalPointX, 0, 100);
+        _focalPointY = Math.Clamp(Block.FocalPointY, 0, 100);
     }
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
         var file = e.File;
-        if (file.Size > 5 * 1024 * 1024) return;
-
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=image-blocks", file, maxBytes: 5 * 1024 * 1024);
-        if (res.Success && res.Data is not null)
+        if (file.Size > MaxImageBytes)
         {
-            _imageUrl = res.Data.Url;
-            Http.Toast("Image uploaded.", res.StatusCode);
+            Http.Toast(T("ImageTooLarge"), 400);
+            return;
         }
-        else
+        var response = await Http.PostFileAsync<AssetUploadModel>(
+            "api/admin/assets/upload?folder=image-blocks", file, maxBytes: MaxImageBytes);
+        if (!response.Success || response.Data is null)
         {
-            Http.Toast(res.Message ?? "Image upload failed.", res.StatusCode);
+            Http.Toast(response.Message ?? T("ImageUploadFailed"), response.StatusCode);
+            return;
         }
-    }
-
-    private void OpenResourcePicker()
-    {
-        _resourcePickerOpen = true;
-    }
-
-    private void CloseResourcePicker()
-    {
-        _resourcePickerOpen = false;
+        _asset = DirectAsset(response.Data);
+        Http.Toast(T("ImageUploaded"), response.StatusCode);
     }
 
     private void SelectResourceImage(ManagedResourceModel resource)
     {
-        _imageUrl = resource.Url;
-        if (_altText.Count == 0 || !_altText.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+        _asset = ManagedAsset(resource);
+        if (!_altText.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
             _altText = new(resource.Name);
     }
+
+    private void ClearImage() => _asset = new BlockAssetReferenceModel { SchemaVersion = 1 };
 
     private async Task Save()
     {
         _saving = true;
         try
         {
-            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new ImageBlockUpdateDto
+            var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new ImageBlockUpdateDto
             {
-                ImageUrl = _imageUrl,
+                Asset = AssetDto(_asset),
+                ImageUrl = _asset.Url,
                 AltText = _altText,
-                Visible = Block.Visible
+                Caption = _caption,
+                OpenInLightbox = _openInLightbox,
+                FocalPointX = _focalPointX,
+                FocalPointY = _focalPointY,
+                Visible = Block.Visible,
+                Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Toast(res.Message, res.StatusCode);
-            if (res.Success) await OnSaved.InvokeAsync();
+            Http.Toast(response.Message, response.StatusCode);
+            if (response.Success) await OnSaved.InvokeAsync();
         }
-        finally
-        {
-            _saving = false;
-        }
+        finally { _saving = false; }
     }
+
+    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? value, string? legacyUrl) => new()
+    {
+        SchemaVersion = 1,
+        Url = value?.Url ?? legacyUrl,
+        ResourceId = value?.ResourceId,
+        ResourceSource = value?.ResourceSource ?? "DirectUpload",
+        StorageKey = value?.StorageKey,
+        FileName = value?.FileName,
+        ContentType = value?.ContentType,
+        SizeBytes = value?.SizeBytes ?? 0
+    };
+
+    private static BlockAssetReferenceModel DirectAsset(AssetUploadModel upload) => new()
+    {
+        SchemaVersion = 1, Url = upload.Url, ResourceSource = "DirectUpload",
+        StorageKey = upload.StorageKey, FileName = upload.FileName,
+        ContentType = upload.ContentType, SizeBytes = upload.Size
+    };
+
+    private static BlockAssetReferenceModel ManagedAsset(ManagedResourceModel resource) => new()
+    {
+        SchemaVersion = 1, Url = resource.Url, ResourceId = resource.Id,
+        ResourceSource = "ManagedResource", StorageKey = resource.StorageKey,
+        FileName = resource.FileName, ContentType = resource.ContentType,
+        SizeBytes = resource.SizeBytes
+    };
+
+    private static BlockAssetReferenceDto AssetDto(BlockAssetReferenceModel value) => new()
+    {
+        SchemaVersion = 1, Url = value.Url, ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource, StorageKey = value.StorageKey,
+        FileName = value.FileName, ContentType = value.ContentType, SizeBytes = value.SizeBytes
+    };
 }

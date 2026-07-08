@@ -17,6 +17,7 @@
                                  SectionId="@Section.Id"
                                  SlotId="@slot.Id"
                                  SectionType="@Section.Type"
+                                 SectionBlockLayoutMode="@Section.Style?.BlockLayoutMode"
                                  Languages="@Languages" />
                 </div>
             </div>
@@ -28,6 +29,7 @@ else
     <BlockEditor PageId="@PageId"
                  SectionId="@Section.Id"
                  SectionType="@Section.Type"
+                 SectionBlockLayoutMode="@Section.Style?.BlockLayoutMode"
                  Languages="@Languages" />
 }
 

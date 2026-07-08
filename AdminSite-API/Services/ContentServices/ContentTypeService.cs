@@ -111,8 +111,13 @@ namespace FullProject.Services
             var type = await GetTypeAsync(id);
             if (type is null) return false;
 
+            var sectionFilter = Builders<Section>.Filter.Eq("ContentTypes", type.Key);
+            var presetFilter = Builders<SectionPreset>.Filter.Eq("Section.ContentTypes", type.Key);
             var inUse = await _context.ContentDraft.Find(c => c.ContentTypeKey == type.Key).AnyAsync() ||
-                        await _context.ContentPublished.Find(c => c.ContentTypeKey == type.Key).AnyAsync();
+                        await _context.ContentPublished.Find(c => c.ContentTypeKey == type.Key).AnyAsync() ||
+                        await _context.SectionsDraft.Find(sectionFilter).AnyAsync() ||
+                        await _context.SectionsPublished.Find(sectionFilter).AnyAsync() ||
+                        await _context.SectionPresets.Find(presetFilter).AnyAsync();
             if (inUse) return false;
 
             var result = await _context.ContentTypes.DeleteOneAsync(t => t.Id == id);

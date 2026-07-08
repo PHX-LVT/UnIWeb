@@ -1,58 +1,60 @@
-﻿@inject AdminBlockService BlockService
+@inject AdminBlockService BlockService
 @inject IHttpService Http
 @using Contracts.Admin
 
+<div class="block-media-settings">
+    <label class="form-group">
+        <span class="form-label">@T("CenterLatitude")</span>
+        <input class="form-control" type="number" min="-90" max="90" step="0.0001" @bind="_centerLat" />
+    </label>
+    <label class="form-group">
+        <span class="form-label">@T("CenterLongitude")</span>
+        <input class="form-control" type="number" min="-180" max="180" step="0.0001" @bind="_centerLng" />
+    </label>
+    <label class="form-group">
+        <span class="form-label">@T("DefaultZoom")</span>
+        <input class="form-control" type="number" min="1" max="18" @bind="_defaultZoom" />
+    </label>
+</div>
+
 <div class="form-group">
     <label class="form-label">@T("Pins") (@_pins.Count)</label>
-
-    @foreach (var (pin, i) in _pins.Select((p, i) => (p, i)))
+    @foreach (var (pin, index) in _pins.Select((value, index) => (value, index)))
     {
-        <div style="border:1px solid var(--border);border-radius:8px;
-            padding:.75rem;margin-bottom:.5rem;background:var(--bg)">
-            <div style="display:flex;align-items:center;justify-content:space-between;
-                margin-bottom:.5rem">
-                <span style="font-weight:500;font-size:.85rem">
-                    @T("Pin") @(i + 1)
-                </span>
-                <button class="btn-admin btn-danger"
-                        style="padding:3px 8px"
-                        @onclick="() => _pins.RemoveAt(i)">
+        <div class="block-map-pin">
+            <div class="block-map-pin__header">
+                <strong>@T("Pin") @(index + 1)</strong>
+                <button type="button" class="btn-admin btn-danger" @onclick="() => RemovePin(index)" title="@T("Delete")">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-                <div class="form-group">
-                    <label class="form-label">@T("Latitude")</label>
-                    <DxSpinEdit Value="@pin.Lat"
-                                ValueChanged="@((double v) => pin.Lat = v)"
-                                CssClass="w-100" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">@T("Longitude")</label>
-                    <DxSpinEdit Value="@pin.Lng"
-                                ValueChanged="@((double v) => pin.Lng = v)"
-                                CssClass="w-100" />
-                </div>
+            <div class="block-media-settings">
+                <label class="form-group">
+                    <span class="form-label">@T("Latitude")</span>
+                    <input class="form-control" type="number" min="-90" max="90" step="0.0001" @bind="pin.Lat" />
+                </label>
+                <label class="form-group">
+                    <span class="form-label">@T("Longitude")</span>
+                    <input class="form-control" type="number" min="-180" max="180" step="0.0001" @bind="pin.Lng" />
+                </label>
             </div>
-            <div class="form-group">
-                <label class="form-label">@T("Label")</label>
-                <DxTextBox @bind-Text="pin.Label" CssClass="w-100"
-                           NullText="e.g. Head Office" />
-            </div>
-            <div class="form-group" style="margin:0">
-                <label class="form-label">@T("Notes")</label>
-                <DxMemo @bind-Text="pin.Notes" CssClass="w-100" Rows="2"
-                        NullText="Additional info shown on pin click" />
-            </div>
+            <label class="form-group">
+                <span class="form-label">@T("Label")</span>
+                <DxTextBox @bind-Text="pin.Label" CssClass="w-100" NullText="Head Office" />
+            </label>
+            <label class="form-group">
+                <span class="form-label">@T("LinkUrl")</span>
+                <DxTextBox @bind-Text="pin.Href" CssClass="w-100" NullText="/contact or https://maps.example.com" />
+            </label>
         </div>
     }
 
-    <button class="btn-admin btn-outline" @onclick="AddPin">
+    <button type="button" class="btn-admin btn-outline" @onclick="AddPin">
         <i class="fas fa-plus"></i> @T("AddPin")
     </button>
 </div>
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
+<div class="ez-editor-actions">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
         <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
@@ -65,53 +67,68 @@
     [Parameter] public EventCallback OnSaved { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
+    private double _centerLat = 10.7769;
+    private double _centerLng = 106.7009;
+    private int _defaultZoom = 12;
     private List<MapPinModel> _pins = new();
     private bool _saving;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
-    protected override void OnParametersSet() =>
-        _pins = Block.Pins?.Select(p => new MapPinModel
+    protected override void OnParametersSet()
+    {
+        _centerLat = Block.CenterLat ?? 10.7769;
+        _centerLng = Block.CenterLng ?? 106.7009;
+        _defaultZoom = Math.Clamp(Block.DefaultZoom ?? 12, 1, 18);
+        _pins = Block.Pins?.Select(pin => new MapPinModel
         {
-            Id = p.Id,
-            Lat = p.Lat,
-            Lng = p.Lng,
-            Label = p.Label,
-            Notes = p.Notes
+            Id = pin.Id,
+            Lat = pin.Lat,
+            Lng = pin.Lng,
+            Label = pin.Label,
+            Href = pin.Href,
+            Order = pin.Order
         }).ToList() ?? new();
+    }
 
     private void AddPin() => _pins.Add(new MapPinModel
     {
         Id = Guid.NewGuid().ToString(),
-        Lat = 10.7769,
-        Lng = 106.7009
+        Lat = _centerLat,
+        Lng = _centerLng,
+        Order = _pins.Count
     });
+
+    private void RemovePin(int index)
+    {
+        if (index < 0 || index >= _pins.Count) return;
+        _pins.RemoveAt(index);
+        for (var i = 0; i < _pins.Count; i++) _pins[i].Order = i;
+    }
 
     private async Task Save()
     {
         _saving = true;
         try
         {
-            var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new MapBlockUpdateDto
+            var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new MapBlockUpdateDto
             {
-                CenterLat = Block.CenterLat ?? 0,
-                CenterLng = Block.CenterLng ?? 0,
-                DefaultZoom = Block.DefaultZoom ?? 12,
-                Pins = _pins.Select(p => new MapPinDto
+                CenterLat = _centerLat,
+                CenterLng = _centerLng,
+                DefaultZoom = _defaultZoom,
+                Pins = _pins.Select(pin => new MapPinDto
                 {
-                    Id = p.Id,
-                    Label = p.Label ?? string.Empty,
-                    Lat = p.Lat,
-                    Lng = p.Lng,
-                    Href = p.Href
+                    Id = pin.Id,
+                    Label = pin.Label ?? string.Empty,
+                    Lat = pin.Lat,
+                    Lng = pin.Lng,
+                    Href = pin.Href
                 }).ToList(),
-                Visible = Block.Visible
+                Visible = Block.Visible,
+                Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Toast(res.Message, res.StatusCode);
-            if (res.Success) await OnSaved.InvokeAsync();
+            Http.Toast(response.Message, response.StatusCode);
+            if (response.Success) await OnSaved.InvokeAsync();
         }
-        finally
-        {
-            _saving = false;
-        }
+        finally { _saving = false; }
     }
 }

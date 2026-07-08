@@ -10,7 +10,7 @@
 
 .ez-canvas__viewport--interactive-preview {
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
 }
 
 .ez-canvas__preview-shell {
@@ -20,8 +20,7 @@
 }
 
 .ez-canvas__preview-shell--interactive-preview {
-    min-height: 480px;
-    overflow: hidden;
+    overflow: visible;
     background: #fff;
     box-shadow: 0 14px 36px rgba(15, 23, 42, .16);
 }
@@ -34,10 +33,7 @@
 }
 
 .ez-canvas__preview-shell--interactive-preview .ez-canvas__preview-scale {
-    width: 100%;
-    height: 100%;
-    transform: none;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .ez-canvas-empty {

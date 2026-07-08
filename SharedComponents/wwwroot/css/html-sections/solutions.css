@@ -1,0 +1,262 @@
+/* Solution-detail and integrated-flow HTML compositions
+   HTML roots: .sc-detail-risk-*, .sc-detail-stat*, .sc-solution-flow-*
+   Source-controlled styles for handcrafted CMS HTML compositions. */
+.sc-detail-risk-intro .sc-detail-eyebrow {
+    display: block;
+    margin-bottom: 14px;
+    color: var(--gold);
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.sc-detail-risk-intro h2 {
+    margin: 0;
+    color: var(--navy);
+    font-size: clamp(32px, 3.5vw, 44px);
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.sc-detail-risk-intro .sc-detail-lead {
+    margin: 24px 0 0;
+    color: #4f5f6d;
+    font-size: 18px;
+    line-height: 1.75;
+}
+
+.sc-detail-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    margin-top: 48px;
+}
+
+.sc-detail-stat strong {
+    display: block;
+    color: var(--navy);
+    font-size: 32px;
+    font-weight: 750;
+    line-height: 1;
+}
+
+.sc-detail-stat span {
+    display: block;
+    margin-top: 8px;
+    color: #637381;
+    font-size: 14px;
+}
+
+.sc-detail-risk-matrix {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+}
+
+.sc-detail-risk-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    min-width: 0;
+    padding: 28px;
+    background: #fff;
+    border: 1px solid rgba(0, 26, 51, 0.06);
+    border-radius: 10px;
+    box-shadow: 0 8px 26px rgba(0, 26, 51, 0.045);
+    transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
+
+.sc-detail-risk-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(229, 192, 118, 0.45);
+    box-shadow: var(--card-shadow-hover);
+}
+
+.sc-detail-risk-icon {
+    flex: 0 0 auto;
+    color: var(--gold);
+    font-size: 21px;
+    line-height: 1.2;
+}
+
+.sc-detail-risk-card h3 {
+    margin: 0 0 12px;
+    color: var(--navy);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.sc-detail-risk-card p {
+    margin: 0;
+    color: #637381;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.sc-solution-flow-copy {
+    max-width: 560px;
+}
+
+.sc-solution-flow-eyebrow {
+    display: block;
+    margin-bottom: 14px;
+    color: var(--gold);
+    font-size: 14px;
+    font-weight: 750;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.sc-solution-flow-copy h2 {
+    margin: 0 0 28px;
+    color: inherit;
+    font-size: clamp(34px, 4vw, 58px);
+    font-weight: 760;
+    line-height: 1.08;
+}
+
+.sc-solution-flow-copy ul {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sc-solution-flow-copy li {
+    position: relative;
+    padding-left: 30px;
+    color: inherit;
+    font-size: 18px;
+    line-height: 1.55;
+    opacity: 0.9;
+}
+
+.sc-solution-flow-copy li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 12px;
+    width: 10px;
+    height: 10px;
+    background: var(--gold-gradient);
+    border-radius: 999px;
+    box-shadow: 0 0 0 6px rgba(229, 192, 118, 0.16);
+}
+
+.sc-solution-flow-icons {
+    position: relative;
+    min-height: 460px;
+    display: grid;
+    place-items: center;
+}
+
+.sc-solution-flow-icons::before {
+    content: "";
+    position: absolute;
+    width: min(460px, 82%);
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50%;
+}
+
+.sc-solution-flow-node {
+    position: absolute;
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    transition: transform var(--transition), color var(--transition);
+}
+
+.sc-solution-flow-node:hover {
+    color: var(--gold);
+    transform: translateY(-8px);
+}
+
+.sc-solution-flow-circle {
+    width: 86px;
+    height: 86px;
+    display: grid;
+    place-items: center;
+    color: #392a0c;
+    background: var(--gold-gradient);
+    border-radius: 999px;
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.24);
+    transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.sc-solution-flow-node:hover .sc-solution-flow-circle {
+    transform: scale(1.08);
+    box-shadow: 0 26px 58px rgba(229, 192, 118, 0.34);
+}
+
+.sc-solution-flow-circle i {
+    font-size: 30px;
+}
+
+.sc-solution-flow-node--1 { top: 10%; left: 18%; }
+
+.sc-solution-flow-node--2 { top: 6%; right: 20%; }
+
+.sc-solution-flow-node--3 { top: 42%; left: 3%; }
+
+.sc-solution-flow-node--4 { top: 43%; right: 2%; }
+
+.sc-solution-flow-node--5 { bottom: 4%; left: 50%; transform: translateX(-50%); }
+
+.sc-solution-flow-node--5:hover {
+    transform: translateX(-50%) translateY(-8px);
+}
+
+@media (max-width: 992px) {
+.sc-detail-risk-matrix {
+        grid-template-columns: 1fr;
+    }
+
+.sc-solution-flow-icons {
+        min-height: 380px;
+    }
+}
+
+@media (max-width: 768px) {
+.sc-detail-stats {
+        flex-direction: column;
+        gap: 22px;
+    }
+
+.sc-detail-risk-card {
+        padding: 22px;
+    }
+
+.sc-solution-flow-icons {
+        min-height: auto;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+        place-items: stretch;
+    }
+
+.sc-solution-flow-icons::before {
+        display: none;
+    }
+
+.sc-solution-flow-node,
+    .sc-solution-flow-node--1,
+    .sc-solution-flow-node--2,
+    .sc-solution-flow-node--3,
+    .sc-solution-flow-node--4,
+    .sc-solution-flow-node--5 {
+        position: static;
+        transform: none;
+    }
+
+.sc-solution-flow-node--5:hover {
+        transform: translateY(-8px);
+    }
+}

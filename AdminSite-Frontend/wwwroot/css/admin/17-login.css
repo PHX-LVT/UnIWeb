@@ -1,19 +1,48 @@
 /* -- Independent App Pages (Login) ------------------------- */
 .login-page {
     min-height: 100vh;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #071b35 0%, var(--primary) 55%, var(--primary-light) 100%);
+}
+
+.login-page__video {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    pointer-events: none;
+}
+
+.login-page__overlay {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        linear-gradient(120deg, rgba(4, 18, 39, 0.72) 0%, rgba(8, 38, 73, 0.5) 52%, rgba(4, 18, 39, 0.7) 100%),
+        radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.08), transparent 48%);
 }
 
 .login-card {
-    background: white;
-    border-radius: 12px;
+    position: relative;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 16px;
     padding: 2.5rem;
     width: 100%;
     max-width: 400px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    box-shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .login-header {
@@ -39,4 +68,24 @@
     padding: 10px;
     font-size: 0.9rem;
     margin-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+    .login-page {
+        padding: 1rem;
+    }
+
+    .login-page__overlay {
+        background: rgba(4, 18, 39, 0.68);
+    }
+
+    .login-card {
+        padding: 2rem 1.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-page__video {
+        display: none;
+    }
 }

@@ -760,24 +760,41 @@ public class ColumnSlotResponseDto
         public long Size { get; set; }
     }
 
-    public class CanvasSectionPresetCreateDto
+    public class SectionPresetCreateDto
     {
         public string PageId { get; set; } = string.Empty;
         public string SectionId { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
     }
 
-    public class CanvasSectionPresetApplyDto
+    public class SectionPresetApplyDto
     {
         public string PageId { get; set; } = string.Empty;
     }
 
-    public class CanvasSectionPresetResponseDto
+    public class SectionPresetApplyResponseDto
+    {
+        public string SectionId { get; set; } = string.Empty;
+    }
+
+    public class SectionPresetResponseDto
     {
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public Dictionary<string, string> PreviewText { get; set; } = new();
+        public string SectionType { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string ThumbnailBackground { get; set; } = "#f3f4f6";
+        public string SummaryLabel { get; set; } = string.Empty;
+        public string IconClass { get; set; } = "fa-layer-group";
+        public string VisualKey { get; set; } = "section";
+        public int ItemCount { get; set; }
         public int BlockCount { get; set; }
         public int SchemaVersion { get; set; }
+        public bool IsCompatible { get; set; } = true;
+        public string? CompatibilityMessage { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -845,6 +862,10 @@ public class ColumnSlotResponseDto
         public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutDto? Layout { get; set; }
+        public BlockAppearanceDto? Appearance { get; set; }
+        public BlockResponsiveSettingsDto? Responsive { get; set; }
+        public BlockAnimationSettingsDto? Animation { get; set; }
+        public BlockAuthoringPolicyDto? Authoring { get; set; }
 
     }
 
@@ -856,21 +877,34 @@ public class ColumnSlotResponseDto
 
     public class ImageBlockCreateDto : BlockCreateDto
     {
+        public BlockAssetReferenceDto? Asset { get; set; }
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> AltText { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public bool OpenInLightbox { get; set; }
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
     }
 
     public class VideoBlockCreateDto : BlockCreateDto
     {
+        public BlockAssetReferenceDto? Asset { get; set; }
         public string EmbedUrl { get; set; } = string.Empty;
+        public string SourceType { get; set; } = "youtube";
         public Dictionary<string, string> Title { get; set; } = new();
+        public bool ShowControls { get; set; } = true;
+        public bool Autoplay { get; set; }
+        public bool Muted { get; set; }
+        public bool Loop { get; set; }
     }
 
     public class FileBlockCreateDto : BlockCreateDto
     {
+        public BlockAssetReferenceDto? Asset { get; set; }
         public string? FileUrl { get; set; }
         public string Filename { get; set; } = string.Empty;
         public string FileType { get; set; } = string.Empty;
+        public string OpenBehavior { get; set; } = "open";
     }
 
     public class MapBlockCreateDto : BlockCreateDto
@@ -903,6 +937,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public BlockAssetReferenceDto? Asset { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -951,15 +986,17 @@ public class ColumnSlotResponseDto
 
     public class ContainerBlockCreateDto : BlockCreateDto
     {
+        public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
-        public string LayoutMode { get; set; } = "stack";
-        public int Columns { get; set; } = 2;
-        public string Gap { get; set; } = "medium";
-        public int OrbitRadius { get; set; } = 180;
-        public int OrbitStartAngle { get; set; } = -90;
-        public int SemicircleRadius { get; set; } = 180;
-        public int SemicircleStartAngle { get; set; } = 180;
-        public int SemicircleEndAngle { get; set; } = 360;
+        public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
+        public string? LayoutMode { get; set; }
+        public int? Columns { get; set; }
+        public string? Gap { get; set; }
+        public int? OrbitRadius { get; set; }
+        public int? OrbitStartAngle { get; set; }
+        public int? SemicircleRadius { get; set; }
+        public int? SemicircleStartAngle { get; set; }
+        public int? SemicircleEndAngle { get; set; }
     }
 
     // -- Block Update DTOs -------------------------------------
@@ -977,6 +1014,10 @@ public class ColumnSlotResponseDto
         public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutDto? Layout { get; set; }
+        public BlockAppearanceDto? Appearance { get; set; }
+        public BlockResponsiveSettingsDto? Responsive { get; set; }
+        public BlockAnimationSettingsDto? Animation { get; set; }
+        public BlockAuthoringPolicyDto? Authoring { get; set; }
     }
 
     public class TextBlockUpdateDto : BlockUpdateDto
@@ -987,21 +1028,34 @@ public class ColumnSlotResponseDto
 
     public class ImageBlockUpdateDto : BlockUpdateDto
     {
+        public BlockAssetReferenceDto? Asset { get; set; }
         public string? ImageUrl { get; set; }
         public Dictionary<string, string> AltText { get; set; } = new();
+        public Dictionary<string, string> Caption { get; set; } = new();
+        public bool OpenInLightbox { get; set; }
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
     }
 
     public class VideoBlockUpdateDto : BlockUpdateDto
     {
+        public BlockAssetReferenceDto? Asset { get; set; }
         public string EmbedUrl { get; set; } = string.Empty;
+        public string SourceType { get; set; } = "youtube";
         public Dictionary<string, string> Title { get; set; } = new();
+        public bool ShowControls { get; set; } = true;
+        public bool Autoplay { get; set; }
+        public bool Muted { get; set; }
+        public bool Loop { get; set; }
     }
 
     public class FileBlockUpdateDto : BlockUpdateDto
     {
+        public BlockAssetReferenceDto? Asset { get; set; }
         public string? FileUrl { get; set; }
         public string Filename { get; set; } = string.Empty;
         public string FileType { get; set; } = string.Empty;
+        public string OpenBehavior { get; set; } = "open";
     }
 
     public class MapBlockUpdateDto : BlockUpdateDto
@@ -1025,6 +1079,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public BlockAssetReferenceDto? Asset { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -1073,15 +1128,17 @@ public class ColumnSlotResponseDto
 
     public class ContainerBlockUpdateDto : BlockUpdateDto
     {
+        public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
-        public string LayoutMode { get; set; } = "stack";
-        public int Columns { get; set; } = 2;
-        public string Gap { get; set; } = "medium";
-        public int OrbitRadius { get; set; } = 180;
-        public int OrbitStartAngle { get; set; } = -90;
-        public int SemicircleRadius { get; set; } = 180;
-        public int SemicircleStartAngle { get; set; } = 180;
-        public int SemicircleEndAngle { get; set; } = 360;
+        public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
+        public string? LayoutMode { get; set; }
+        public int? Columns { get; set; }
+        public string? Gap { get; set; }
+        public int? OrbitRadius { get; set; }
+        public int? OrbitStartAngle { get; set; }
+        public int? SemicircleRadius { get; set; }
+        public int? SemicircleStartAngle { get; set; }
+        public int? SemicircleEndAngle { get; set; }
     }
 
     public sealed class BlockCreateDtoJsonConverter : JsonConverter<BlockCreateDto>
@@ -1179,6 +1236,7 @@ public class ColumnSlotResponseDto
     public class BlockResponseDto
     {
         public string Id { get; set; } = string.Empty;
+        public string StableId { get; set; } = string.Empty;
         public string PageId { get; set; } = string.Empty;
         public string SectionId { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
@@ -1190,6 +1248,10 @@ public class ColumnSlotResponseDto
         public string? PositionMode { get; set; }
         public string? ParentBlockId { get; set; }
         public BlockLayoutResponseDto Layout { get; set; } = new();
+        public BlockAppearanceDto Appearance { get; set; } = new();
+        public BlockResponsiveSettingsDto Responsive { get; set; } = new();
+        public BlockAnimationSettingsDto Animation { get; set; } = new();
+        public BlockAuthoringPolicyDto Authoring { get; set; } = new();
         public List<BlockButtonResponseDto> Buttons { get; set; } = new();
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -1209,7 +1271,9 @@ public class ColumnSlotResponseDto
         public string? Action { get; set; }
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
+        public string? PresetKey { get; set; }
         public string? LayoutMode { get; set; }
+        public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
         public int? Columns { get; set; }
         public string? Gap { get; set; }
         public int? OrbitRadius { get; set; }
@@ -1220,16 +1284,27 @@ public class ColumnSlotResponseDto
 
         // Image
         public string? ImageUrl { get; set; }
+        public BlockAssetReferenceDto Asset { get; set; } = new();
         public Dictionary<string, string>? AltText { get; set; }
+        public Dictionary<string, string>? Caption { get; set; }
+        public bool OpenInLightbox { get; set; }
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
         public List<BulletListItemDto>? BulletItems { get; set; }
 
         // Video
         public string? EmbedUrl { get; set; }
+        public string SourceType { get; set; } = "youtube";
+        public bool ShowControls { get; set; } = true;
+        public bool Autoplay { get; set; }
+        public bool Muted { get; set; }
+        public bool Loop { get; set; }
 
         // File
         public string? FileUrl { get; set; }
         public string? Filename { get; set; }
         public string? FileType { get; set; }
+        public string OpenBehavior { get; set; } = "open";
 
         // Map
         public double? CenterLat { get; set; }

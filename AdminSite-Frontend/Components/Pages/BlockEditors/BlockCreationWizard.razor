@@ -1,0 +1,366 @@
+@using Contracts.Admin
+
+@if (Open)
+{
+    <section class="block-create-wizard" aria-label="@T("AddBlock")">
+        <header class="block-create-wizard__header">
+            <div>
+                <span class="block-create-wizard__step">@T(_step == 1 ? "BlockCreateStepType" : "BlockCreateStepStarter")</span>
+                <strong>@T(_step == 1 ? "ChooseBlockType" : "ChooseStarterVariant")</strong>
+                <small>@T(_step == 1 ? "ChooseBlock" : "ChooseStarterVariantHint")</small>
+            </div>
+            <button type="button" class="btn-admin btn-ghost" disabled="@Busy" title="@T("Cancel")" @onclick="CancelAsync">
+                <i class="fas fa-times"></i>
+            </button>
+        </header>
+
+        <div class="block-create-wizard__progress" aria-hidden="true">
+            <span class="is-active"></span>
+            <span class="@(_step == 2 ? "is-active" : null)"></span>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(ConstraintLabel))
+        {
+            <div class="block-create-wizard__constraint" role="status">
+                <i class="fas fa-layer-group"></i><span>@ConstraintLabel</span>
+            </div>
+        }
+
+        @if (_step == 1)
+        {
+            <div class="block-create-wizard__types">
+                @foreach (var group in VisibleTypeGroups)
+                {
+                    <div class="block-create-wizard__group">
+                        <span>@T(group.LabelKey)</span>
+                        <div class="block-create-wizard__type-grid">
+                            @foreach (var type in group.Types)
+                            {
+                                <button type="button" class="block-create-wizard__type" @onclick="() => SelectType(type.Key)">
+                                    <i class="fas @type.Icon"></i>
+                                    <strong>@T(type.LabelKey)</strong>
+                                    <small>@T(type.DescriptionKey)</small>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="block-create-wizard__selected-type">
+                <i class="fas @SelectedTypeMeta.Icon"></i>
+                <span><strong>@T(SelectedTypeMeta.LabelKey)</strong><small>@T(SelectedTypeMeta.DescriptionKey)</small></span>
+            </div>
+            <div class="block-create-wizard__variant-grid">
+                @foreach (var variant in CurrentVariants)
+                {
+                    <button type="button"
+                            class="block-create-wizard__variant @(variant.Key == _selectedVariantKey ? "is-selected" : null)"
+                            aria-pressed="@(variant.Key == _selectedVariantKey)"
+                            @onclick="() => _selectedVariantKey = variant.Key">
+                        <div class="block-starter-preview block-starter-preview--@variant.PreviewClass">
+                            @StarterPreview(_selectedType, variant)
+                        </div>
+                        <strong>@T(variant.LabelKey)</strong>
+                        <small>@T(variant.DescriptionKey)</small>
+                        @if (_selectedType == "container")
+                        {
+                            <div class="block-create-wizard__preset-summary">
+                                <span><i class="fas fa-layer-group"></i>@ContainerPresetName(variant)</span>
+                                <span><i class="fas fa-cubes"></i>@ContainerPresetCapacity(variant)</span>
+                                <span><i class="fas fa-shield-alt"></i>@ContainerPresetOrdering(variant)</span>
+                            </div>
+                            <div class="block-create-wizard__slot-preview" aria-label="@T("AvailableSlots")">
+                                @foreach (var slot in ContainerPresetSlots(variant))
+                                {
+                                    <span title="@slot.DisplayName" class="@(slot.Required ? "is-required" : null)"></span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="block-create-wizard__dimensions">@variant.ColumnSpan/12 · @variant.WidthUnits × @variant.HeightUnits</span>
+                        }
+                    </button>
+                }
+            </div>
+            <footer class="block-create-wizard__actions">
+                <button type="button" class="btn-admin btn-ghost" disabled="@Busy" @onclick="Back">
+                    <i class="fas fa-arrow-left"></i> @T("Back")
+                </button>
+                <button type="button" class="btn-admin btn-primary" disabled="@(Busy || string.IsNullOrWhiteSpace(_selectedVariantKey))" @onclick="ConfirmAsync">
+                    <i class="fas @(Busy ? "fa-spinner fa-spin" : "fa-plus")"></i>
+                    @T(Busy ? "CreatingBlock" : "CreateBlock")
+                </button>
+            </footer>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string AdminLanguage { get; set; } = "en";
+    [Parameter] public IReadOnlyCollection<string>? AllowedTypes { get; set; }
+    [Parameter] public string? ConstraintLabel { get; set; }
+    [Parameter] public EventCallback<BlockStarterSelection> Confirmed { get; set; }
+    [Parameter] public EventCallback Cancelled { get; set; }
+
+    private int _step = 1;
+    private string _selectedType = "text";
+    private string? _selectedVariantKey;
+    private bool _wasOpen;
+
+    private sealed record TypeMeta(string Key, string LabelKey, string Icon, string DescriptionKey);
+    private sealed record TypeGroup(string LabelKey, IReadOnlyList<TypeMeta> Types);
+
+    private static readonly IReadOnlyList<TypeGroup> TypeGroups =
+    [
+        new("BlockGroupText",
+        [
+            new("text", "Text", "fa-font", "BlockDescriptionText"),
+            new("bullet-list", "BulletList", "fa-list-check", "BlockDescriptionBulletList")
+        ]),
+        new("BlockGroupMedia",
+        [
+            new("image", "Image", "fa-image", "BlockDescriptionImage"),
+            new("video", "Video", "fa-play-circle", "BlockDescriptionVideo"),
+            new("file", "File", "fa-file-alt", "BlockDescriptionFile")
+        ]),
+        new("BlockGroupHighlights",
+        [
+            new("card", "Card", "fa-id-card", "BlockDescriptionCard"),
+            new("metric", "Metric", "fa-chart-line", "BlockDescriptionMetric"),
+            new("step", "Step", "fa-shoe-prints", "BlockDescriptionStep")
+        ]),
+        new("BlockGroupActions",
+        [
+            new("icon", "Icon", "fa-icons", "BlockDescriptionIcon"),
+            new("button", "Button", "fa-hand-pointer", "BlockDescriptionButton")
+        ]),
+        new("BlockGroupSpecial",
+        [
+            new("map", "Map", "fa-map-marker-alt", "BlockDescriptionMap"),
+            new("form", "Form", "fa-wpforms", "BlockDescriptionForm")
+        ]),
+        new("BlockGroupStructure",
+        [
+            new("container", "Container", "fa-layer-group", "BlockDescriptionContainer")
+        ])
+    ];
+
+    private IReadOnlyList<BlockStarterVariantDefinition> CurrentVariants => BlockStarterVariantCatalog.ForType(_selectedType);
+    private TypeMeta SelectedTypeMeta => TypeGroups.SelectMany(group => group.Types).First(type => type.Key == _selectedType);
+    private IEnumerable<TypeGroup> VisibleTypeGroups => TypeGroups
+        .Select(group => new TypeGroup(group.LabelKey, group.Types.Where(type => IsAllowed(type.Key)).ToList()))
+        .Where(group => group.Types.Count > 0);
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private bool IsAllowed(string type) => AllowedTypes is null || AllowedTypes.Count == 0 || AllowedTypes.Contains(type);
+    private string FirstAvailableType => TypeGroups.SelectMany(group => group.Types).First(type => IsAllowed(type.Key)).Key;
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _step = 1;
+            _selectedType = FirstAvailableType;
+            _selectedVariantKey = null;
+        }
+        else if (Open && !IsAllowed(_selectedType))
+        {
+            _step = 1;
+            _selectedType = FirstAvailableType;
+            _selectedVariantKey = null;
+        }
+        _wasOpen = Open;
+    }
+
+    private void SelectType(string type)
+    {
+        _selectedType = type;
+        _selectedVariantKey = BlockStarterVariantCatalog.ForType(type)[0].Key;
+        _step = 2;
+    }
+
+    private void Back()
+    {
+        _step = 1;
+        _selectedVariantKey = null;
+    }
+
+    private async Task CancelAsync()
+    {
+        if (!Busy)
+            await Cancelled.InvokeAsync();
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (Busy || string.IsNullOrWhiteSpace(_selectedVariantKey))
+            return;
+        await Confirmed.InvokeAsync(new BlockStarterSelection(_selectedType, _selectedVariantKey));
+    }
+
+    private string ContainerPresetName(BlockStarterVariantDefinition variant) =>
+        ContainerPresetCatalog.ForExisting(variant.ContainerPresetKey).DisplayName;
+
+    private string ContainerPresetCapacity(BlockStarterVariantDefinition variant)
+    {
+        var preset = ContainerPresetCatalog.ForExisting(variant.ContainerPresetKey);
+        return string.Format(T("ContainerPresetCapacity"), preset.MaximumChildren);
+    }
+
+    private string ContainerPresetOrdering(BlockStarterVariantDefinition variant)
+    {
+        var preset = ContainerPresetCatalog.ForExisting(variant.ContainerPresetKey);
+        return T(preset.ChildOrderingAllowed ? "ContainerOrderingAllowed" : "ContainerOrderingFixed");
+    }
+
+    private IReadOnlyList<ContainerPresetSlotDefinition> ContainerPresetSlots(BlockStarterVariantDefinition variant) =>
+        ContainerPresetCatalog.ForExisting(variant.ContainerPresetKey).Slots;
+
+    private static RenderFragment StarterPreview(string type, BlockStarterVariantDefinition? variant = null) => builder =>
+    {
+        var sequence = 0;
+        void Element(string name, string? css = null, string? icon = null)
+        {
+            builder.OpenElement(sequence++, name);
+            if (css is not null) builder.AddAttribute(sequence++, "class", css);
+            if (icon is not null)
+            {
+                builder.OpenElement(sequence++, "i");
+                builder.AddAttribute(sequence++, "class", $"fas {icon}");
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+        }
+
+        switch (type)
+        {
+            case "text":
+                Element("b", "preview-heading"); Element("span"); Element("span"); Element("span", "is-short");
+                break;
+            case "bullet-list":
+                for (var i = 0; i < 3; i++) { Element("i", "preview-dot", "fa-check"); Element("span"); }
+                break;
+            case "image": Element("div", "preview-media", "fa-image"); break;
+            case "video": Element("div", "preview-media", "fa-play-circle"); break;
+            case "file": Element("div", "preview-file", "fa-file-alt"); Element("span"); break;
+            case "card": Element("div", "preview-card-media", "fa-image"); Element("b"); Element("span"); Element("em"); break;
+            case "metric": Element("strong", "preview-metric"); Element("b"); Element("span"); break;
+            case "step": Element("strong", "preview-step"); Element("b"); Element("span"); break;
+            case "icon": Element("i", "preview-icon", "fa-star"); Element("b"); Element("span"); break;
+            case "button": Element("strong", "preview-button"); break;
+            case "map": Element("div", "preview-map", "fa-map-marker-alt"); break;
+            case "form": Element("span"); Element("span"); Element("strong", "preview-submit"); break;
+            case "container":
+                var key = variant?.ContainerPresetKey;
+                var cells = key == ContainerPresetCatalog.SplitKey ? 2 :
+                    key == ContainerPresetCatalog.SemicircleKey ? 6 :
+                    key == ContainerPresetCatalog.OrbitKey ? 8 : 4;
+                for (var i = 0; i < cells; i++) Element("div", "preview-container-cell");
+                break;
+        }
+    };
+}
+
+<style>
+    .block-create-wizard { margin: 0 0 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: 0 12px 32px rgba(15,23,42,.08); }
+    .block-create-wizard__header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; }
+    .block-create-wizard__header > div { display:grid; gap:.2rem; }
+    .block-create-wizard__header strong { color:var(--text); font-size:.95rem; }
+    .block-create-wizard__header small { color:var(--text-muted); line-height:1.4; }
+    .block-create-wizard__step { color:var(--primary); font-size:.68rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .block-create-wizard__progress { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:.8rem 0 1rem; }
+    .block-create-wizard__progress span { height:3px; border-radius:999px; background:var(--border); }
+    .block-create-wizard__progress span.is-active { background:var(--primary); }
+    .block-create-wizard__constraint { display:flex; align-items:flex-start; gap:.5rem; margin:0 0 .85rem; padding:.6rem .7rem; border:1px solid #bfdbfe; border-radius:8px; background:#eff6ff; color:#1e40af; font-size:.72rem; line-height:1.4; }
+    .block-create-wizard__constraint i { margin-top:.12rem; }
+    .block-create-wizard__types, .block-create-wizard__group { display:grid; gap:.65rem; }
+    .block-create-wizard__types { gap:1rem; }
+    .block-create-wizard__group > span { color:var(--text-muted); font-size:.7rem; font-weight:800; text-transform:uppercase; }
+    .block-create-wizard__type-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.55rem; }
+    .block-create-wizard__type, .block-create-wizard__variant { border:1px solid var(--border); border-radius:9px; background:#fff; color:var(--text); cursor:pointer; text-align:left; transition:.15s ease; }
+    .block-create-wizard__type { display:grid; grid-template-columns:26px 1fr; gap:.18rem .5rem; padding:.7rem; }
+    .block-create-wizard__type > i { grid-row:1/3; color:var(--primary); font-size:1rem; text-align:center; }
+    .block-create-wizard__type strong, .block-create-wizard__variant strong { font-size:.76rem; }
+    .block-create-wizard__type small, .block-create-wizard__variant small { color:var(--text-muted); font-size:.66rem; line-height:1.35; }
+    .block-create-wizard__type:hover, .block-create-wizard__variant:hover { border-color:var(--primary-light); transform:translateY(-1px); box-shadow:0 7px 18px rgba(15,23,42,.08); }
+    .block-create-wizard__selected-type { display:flex; align-items:center; gap:.65rem; margin-bottom:.8rem; padding:.65rem .75rem; border-radius:8px; background:var(--bg); }
+    .block-create-wizard__selected-type > i { color:var(--primary); font-size:1.1rem; }
+    .block-create-wizard__selected-type > span { display:grid; gap:.1rem; }
+    .block-create-wizard__selected-type strong { font-size:.8rem; }
+    .block-create-wizard__selected-type small { color:var(--text-muted); font-size:.68rem; }
+    .block-create-wizard__variant-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }
+    .block-create-wizard__variant { position:relative; display:grid; gap:.32rem; padding:.55rem; }
+    .block-create-wizard__variant.is-selected { border-color:var(--primary); box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 16%,transparent); }
+    .block-create-wizard__variant.is-selected::after { content:"✓"; position:absolute; top:.4rem; right:.4rem; display:grid; width:20px; height:20px; place-items:center; border-radius:50%; background:var(--primary); color:#fff; font-size:.7rem; font-weight:900; }
+    .block-create-wizard__dimensions { color:var(--primary); font-size:.62rem; font-weight:750; }
+    .block-create-wizard__preset-summary { display:grid; gap:.18rem; color:var(--text-muted); font-size:.63rem; line-height:1.25; }
+    .block-create-wizard__preset-summary span { display:flex; align-items:center; gap:.35rem; height:auto; background:transparent; opacity:1; }
+    .block-create-wizard__preset-summary i { color:var(--primary); width:12px; text-align:center; }
+    .block-create-wizard__slot-preview { display:flex; flex-wrap:wrap; gap:4px; margin-top:.1rem; }
+    .block-create-wizard__slot-preview span { display:block; width:12px; height:12px; border-radius:4px; border:1px solid #bfdbfe; background:#eff6ff; }
+    .block-create-wizard__slot-preview span.is-required { border-color:#f59e0b; background:#fef3c7; }
+    .block-create-wizard__actions { display:flex; justify-content:space-between; gap:.75rem; margin-top:1rem; padding-top:.8rem; border-top:1px solid var(--border); }
+    .block-starter-preview { display:grid; min-height:92px; width:100%; box-sizing:border-box; place-content:center; gap:6px; overflow:hidden; border-radius:7px; background:#f4f7fb; color:#3156a3; padding:12px; }
+    .block-starter-preview span, .block-starter-preview b { display:block; height:5px; border-radius:999px; background:currentColor; opacity:.18; }
+    .block-starter-preview .is-short { width:62%; }
+    .block-starter-preview .preview-heading { width:54%; height:9px; opacity:.55; }
+    .block-starter-preview--text-feature { text-align:center; background:#eaf0fb; }
+    .block-starter-preview--text-feature > * { margin-inline:auto; }
+    .block-starter-preview--text-compact,
+    .block-starter-preview--video-compact,
+    .block-starter-preview--file-compact,
+    .block-starter-preview--metric-compact,
+    .block-starter-preview--step-compact,
+    .block-starter-preview--map-compact,
+    .block-starter-preview--form-compact { width:78%; margin-inline:auto; }
+    .block-starter-preview--list-clean, .block-starter-preview--list-bordered, .block-starter-preview--list-wide { grid-template-columns:14px 1fr; align-items:center; }
+    .block-starter-preview--list-bordered { border:1px solid #b8c8e8; }
+    .block-starter-preview .preview-dot { font-size:8px; }
+    .block-starter-preview .preview-media, .block-starter-preview .preview-map { display:grid; min-height:66px; place-items:center; border-radius:6px; background:#dfe8f7; font-size:25px; }
+    .block-starter-preview--image-square { width:92px; min-height:92px; margin-inline:auto; padding:8px; }
+    .block-starter-preview--image-square .preview-media { width:74px; min-height:74px; }
+    .block-starter-preview--image-full .preview-media,
+    .block-starter-preview--video-full .preview-media { min-height:52px; border-radius:3px; }
+    .block-starter-preview .preview-file { font-size:26px; text-align:center; }
+    .block-starter-preview--file-wide { grid-template-columns:34px 1fr; align-items:center; }
+    .block-starter-preview .preview-card-media { display:grid; min-height:42px; place-items:center; border-radius:5px; background:#dfe8f7; }
+    .block-starter-preview--card-bordered, .block-starter-preview--card-media, .block-starter-preview--icon-card, .block-starter-preview--step-bordered, .block-starter-preview--form-compact, .block-starter-preview--form-standard, .block-starter-preview--form-full { border:1px solid #b8c8e8; background:#fff; }
+    .block-starter-preview em { width:44%; height:12px; border-radius:999px; background:currentColor; opacity:.45; }
+    .block-starter-preview .preview-metric { min-height:auto; background:none; opacity:1; font-size:24px; }
+    .block-starter-preview .preview-metric::before { content:"00"; }
+    .block-starter-preview--metric-highlight { background:#dfe8f7; box-shadow:inset 0 0 0 1px #b8c8e8; }
+    .block-starter-preview .preview-step { display:grid; width:28px; height:28px; place-items:center; border-radius:50%; background:#dfe8f7; opacity:1; }
+    .block-starter-preview .preview-step::before { content:"01"; font-size:9px; }
+    .block-starter-preview--step-wide { grid-template-columns:32px 1fr; align-items:center; }
+    .block-starter-preview .preview-icon { font-size:25px; text-align:center; }
+    .block-starter-preview--icon-circle { width:92px; margin:auto; border-radius:50%; background:#dfe8f7; }
+    .block-starter-preview .preview-button { width:76%; height:22px; margin:auto; border-radius:999px; background:#3156a3; opacity:1; }
+    .block-starter-preview .preview-button::before { content:"CTA"; display:grid; height:100%; place-items:center; color:#fff; font-size:8px; }
+    .block-starter-preview--button-outline .preview-button { border:2px solid #3156a3; background:transparent; }
+    .block-starter-preview--button-outline .preview-button::before, .block-starter-preview--button-ghost .preview-button::before { color:#3156a3; }
+    .block-starter-preview--button-ghost .preview-button { background:transparent; }
+    .block-starter-preview .preview-submit { width:56%; height:16px; margin:auto; background:#3156a3; opacity:.65; }
+    .block-starter-preview--form-standard { width:90%; margin-inline:auto; }
+    .block-starter-preview--form-full { border-radius:3px; }
+    .block-starter-preview--container-stack { grid-template-columns:1fr; }
+    .block-starter-preview--container-row { grid-template-columns:repeat(3,1fr); align-items:center; }
+    .block-starter-preview--container-grid { grid-template-columns:1fr 1fr; }
+    .block-starter-preview--container-split { grid-template-columns:1fr 1fr; align-items:stretch; }
+    .block-starter-preview--container-orbit,
+    .block-starter-preview--container-semicircle { position:relative; display:block; border:1px dashed #8299c7; }
+    .block-starter-preview .preview-container-cell { min-height:17px; border-radius:4px; background:#dfe8f7; }
+    .block-starter-preview--container-orbit .preview-container-cell,
+    .block-starter-preview--container-semicircle .preview-container-cell { position:absolute; width:30%; height:20px; }
+    .block-starter-preview--container-orbit .preview-container-cell:nth-child(1) { left:35%; top:8px; }
+    .block-starter-preview--container-orbit .preview-container-cell:nth-child(2) { right:8px; bottom:10px; }
+    .block-starter-preview--container-orbit .preview-container-cell:nth-child(3) { left:8px; bottom:10px; }
+    .block-starter-preview--container-semicircle .preview-container-cell:nth-child(1) { left:8px; bottom:10px; }
+    .block-starter-preview--container-semicircle .preview-container-cell:nth-child(2) { left:35%; top:9px; }
+    .block-starter-preview--container-semicircle .preview-container-cell:nth-child(3) { right:8px; bottom:10px; }
+    @@media (max-width:520px) { .block-create-wizard__type-grid, .block-create-wizard__variant-grid { grid-template-columns:1fr; } }
+</style>

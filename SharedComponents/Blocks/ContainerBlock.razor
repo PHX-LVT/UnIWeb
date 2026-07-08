@@ -2,7 +2,7 @@
 @using SharedComponents.Helpers
 
 <div class="@GetContainerClass()">
-    @if (!string.IsNullOrWhiteSpace(TitleText))
+    @if (!string.IsNullOrWhiteSpace(TitleText) && !IsPatternLayout)
     {
         <div class="sc-container-block__header">
             <h3>@TitleText</h3>
@@ -14,10 +14,24 @@
                    SectionId="@SectionId"
                    ParentBlockId="@Block.Id"
                    DataZoneId="@($"container-{Block.Id}")"
-                   ForceFreeform="@(NormalizeLayout(Block.LayoutMode) == "freeform")"
+                   ForceFreeform="@(EffectiveLayoutMode == "freeform")"
+                   MobileCompositionMode="@EffectiveMobileMode"
+                   ContainerPurpose="@EffectivePurpose"
+                   DefaultColumnSpan="@DefaultChildColumnSpan"
                    PatternRadius="@PatternRadius"
                    PatternStartAngle="@PatternStartAngle"
                    PatternEndAngle="@PatternEndAngle"
+                   PatternDirection="@EffectiveOrbitDirection"
+                   ContainerAlignItems="@EffectiveAlignItems"
+                   ContainerJustifyContent="@EffectiveJustifyContent"
+                   ContainerWrap="@EffectiveWrap"
+                   CompactRadius="@EffectiveCompactRadius"
+                   CompactChildWidth="@EffectiveCompactChildWidth"
+                   Diagram="@Block.ContainerLayout.Diagram"
+                   DiagramId="@Block.Id"
+                   ChildStaggerMs="@Math.Clamp(Block.Animation.StaggerMs, 0, 2000)"
+                   InheritedAppearance="@(Block.ContainerLayout.ShareAppearance ? Block.ContainerLayout.SharedAppearance : null)"
+                   CenterContent="@PatternCenterContent"
                    Lang="@Lang"
                    ShowInvisible="@ShowInvisible"
                    OnSubmit="@OnSubmit" />
@@ -31,40 +45,73 @@
     [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
 
     private string TitleText => StyleHelper.Lang(Block.Title, Lang);
+    private bool IsPatternLayout => EffectiveLayoutMode is "orbit" or "semicircle";
+    private RenderFragment? PatternCenterContent =>
+        IsPatternLayout && !string.IsNullOrWhiteSpace(TitleText)
+            ? @<div class="sc-container-block__pattern-title">@TitleText</div>
+            : null;
 
     private PublicSectionStyleDto NestedStyle => new()
     {
-        BlockLayoutMode = NormalizeLayout(Block.LayoutMode),
-        BlockGridColumns = 1,
-        BlockGap = NormalizeGap(Block.Gap)
+        BlockLayoutMode = EffectiveLayoutMode,
+        BlockGridColumns = EffectiveColumns,
+        BlockGap = EffectiveGap,
+        MobileLayout = EffectiveMobileMode,
+        CustomMinHeightPx = EffectiveLayoutMode == "freeform"
+            ? Math.Clamp((int)Math.Round((Block.Layout.HeightPx ?? 0) > 0 ? Block.Layout.HeightPx!.Value : 288), 120, 3000)
+            : null
     };
+
+    private bool HasUnifiedLayout => Block.ContainerLayout.SchemaVersion > 0;
+    private string EffectivePurpose => HasUnifiedLayout && Block.ContainerLayout.Purpose == "collection"
+        ? "collection"
+        : "composition";
+    private string EffectiveLayoutMode => NormalizeLayout(
+        HasUnifiedLayout ? Block.ContainerLayout.Mode : Block.LayoutMode);
+    private string EffectiveGap => NormalizeGap(
+        HasUnifiedLayout ? Block.ContainerLayout.Gap : Block.Gap);
+    private string EffectiveMobileMode => ResolveAutomaticMobileMode(
+        HasUnifiedLayout ? Block.ContainerLayout.MobileMode : null);
+    private int EffectiveColumns => EffectiveLayoutMode == "split"
+        ? 2
+        : Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.Columns : Block.Columns ?? 2, 1, 6);
+    private int? DefaultChildColumnSpan => EffectiveLayoutMode is "grid" or "split" ? 1 : null;
+    private string EffectiveAlignItems => HasUnifiedLayout ? Block.ContainerLayout.AlignItems : "stretch";
+    private string EffectiveJustifyContent => HasUnifiedLayout ? Block.ContainerLayout.JustifyContent : "start";
+    private bool EffectiveWrap => !HasUnifiedLayout || Block.ContainerLayout.Wrap;
+    private string EffectiveOrbitDirection => HasUnifiedLayout ? Block.ContainerLayout.OrbitDirection : "clockwise";
+    private int EffectiveCompactRadius => Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.CompactRadius : 120, 60, 220);
+    private int EffectiveCompactChildWidth => Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.CompactChildWidth : 120, 72, 180);
 
     private string GetContainerClass()
     {
-        var layout = NormalizeLayout(Block.LayoutMode);
-        var gap = NormalizeGap(Block.Gap);
+        var layout = EffectiveLayoutMode;
+        var gap = EffectiveGap;
         return $"sc-block sc-design-block sc-container-block sc-container-block--{layout} sc-container-block--gap-{gap}";
     }
 
-    private int PatternRadius => NormalizeLayout(Block.LayoutMode) == "semicircle"
-        ? Math.Clamp(Block.SemicircleRadius, 80, 480)
-        : Math.Clamp(Block.OrbitRadius, 80, 480);
+    private int PatternRadius => EffectiveLayoutMode == "semicircle"
+        ? Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.SemicircleRadius : Block.SemicircleRadius, 80, 480)
+        : Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.OrbitRadius : Block.OrbitRadius, 80, 480);
 
-    private int PatternStartAngle => NormalizeLayout(Block.LayoutMode) == "semicircle"
-        ? Math.Clamp(Block.SemicircleStartAngle, -360, 360)
-        : Math.Clamp(Block.OrbitStartAngle, -360, 360);
+    private int PatternStartAngle => EffectiveLayoutMode == "semicircle"
+        ? Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.SemicircleStartAngle : Block.SemicircleStartAngle, -360, 360)
+        : Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.OrbitStartAngle : Block.OrbitStartAngle, -360, 360);
 
-    private int PatternEndAngle => NormalizeLayout(Block.LayoutMode) == "semicircle"
-        ? Math.Clamp(Block.SemicircleEndAngle, -360, 360)
-        : PatternStartAngle + 360;
+    private int PatternEndAngle => EffectiveLayoutMode == "semicircle"
+        ? Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.SemicircleEndAngle : Block.SemicircleEndAngle, -360, 360)
+        : HasUnifiedLayout
+            ? Math.Clamp(Block.ContainerLayout.OrbitEndAngle, -360, 360)
+            : PatternStartAngle + 360;
 
     private static string NormalizeLayout(string? layout) => layout switch
     {
         "row" => "row",
+        "grid" => "grid",
+        "split" => "split",
         "orbit" => "orbit",
         "semicircle" => "semicircle",
         "freeform" => "freeform",
-        "grid" or "split" => "row",
         _ => "stack"
     };
 
@@ -75,4 +122,34 @@
         "large" => "large",
         _ => "medium"
     };
+
+    private static string NormalizeResponsiveMode(string? value, string fallback) => value switch
+    {
+        "stack" => "stack",
+        "scroll" => "horizontal-scroll",
+        "preserve" => "compact-preserve",
+        "compact-preserve" => "compact-preserve",
+        "horizontal-scroll" => "horizontal-scroll",
+        "custom" => "custom",
+        "hide" => "hide",
+        "inherit" => "inherit",
+        _ => fallback
+    };
+
+    private string ResolveAutomaticMobileMode(string? value)
+    {
+        var requested = NormalizeResponsiveMode(value, "auto");
+        if (EffectivePurpose == "collection")
+            return "stack";
+
+        if (EffectiveLayoutMode is "orbit" or "semicircle" ||
+            (Block.ContainerLayout.Diagram?.Enabled == true && EffectiveLayoutMode == "freeform"))
+        {
+            return requested is "custom" or "hide" or "horizontal-scroll"
+                ? requested
+                : "compact-preserve";
+        }
+
+        return requested is "auto" or "inherit" ? "stack" : requested;
+    }
 }

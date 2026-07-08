@@ -25,7 +25,9 @@ namespace FullProject.Data
 
         public IMongoCollection<Block> BlocksDraft => _database.GetCollection<Block>("blocks_draft");
         public IMongoCollection<Block> BlocksPublished => _database.GetCollection<Block>("blocks_published");
-        public IMongoCollection<CanvasSectionPreset> CanvasSectionPresets => _database.GetCollection<CanvasSectionPreset>("canvas_section_presets");
+        // The existing collection name is retained so pre-Phase-13 Canvas
+        // presets remain available after the universal Section preset upgrade.
+        public IMongoCollection<SectionPreset> SectionPresets => _database.GetCollection<SectionPreset>("canvas_section_presets");
 
         // System wide metadata collections
         public IMongoCollection<AdminUser> AdminUsers => _database.GetCollection<AdminUser>("admin_users");
