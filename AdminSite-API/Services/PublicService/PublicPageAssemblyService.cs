@@ -372,6 +372,300 @@ namespace FullProject.Services.PublicService
             return sectionDtos;
         }
 
+        public async Task<PublicSectionDto?> BuildPresetPreviewSectionDtoAsync(
+            Section? section,
+            IReadOnlyCollection<Block>? blocks)
+        {
+            if (section is null) return null;
+
+            var visibleBlocks = (blocks ?? Array.Empty<Block>())
+                .Where(block => block.Visible)
+                .OrderBy(block => block.Order)
+                .ToList();
+            var formDefinitions = (await _formDefinitionService.GetActiveByIdsAsync(
+                    visibleBlocks.OfType<FormBlock>()
+                        .Select(block => block.FormDefinitionId)
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Select(id => id!)))
+                .ToDictionary(definition => definition.Id, StringComparer.Ordinal);
+            var formInputCapabilities = await _formInputTypes.GetCapabilityLookupAsync();
+            var sectionBlocks = visibleBlocks
+                .Where(block => string.IsNullOrWhiteSpace(block.ColumnSlotId))
+                .ToList();
+
+            PublicSectionDto? dto = section switch
+            {
+                HeroSection hero => new PublicHeroSectionDto
+                {
+                    Type = "hero",
+                    Eyebrow = hero.Eyebrow,
+                    Heading = hero.Heading,
+                    Subheading = hero.Subheading,
+                    Layout = hero.Layout,
+                    HeadingSize = hero.HeadingSize,
+                    ContentAlignment = hero.ContentAlignment,
+                    ImageUrl = hero.ImageUrl,
+                    Buttons = hero.Buttons
+                        .Where(button => button.Visible)
+                        .OrderBy(button => button.Order)
+                        .Select(MapButton)
+                        .ToList()
+                },
+                CtaSection cta => new PublicCtaSectionDto
+                {
+                    Type = "cta",
+                    Heading = cta.Heading,
+                    Subtext = cta.Subtext,
+                    Layout = cta.Layout,
+                    Button = cta.Button is { Visible: true } ? MapButton(cta.Button) : null,
+                    Buttons = cta.Buttons
+                        .Where(button => button.Visible)
+                        .OrderBy(button => button.Order)
+                        .Select(MapButton)
+                        .ToList()
+                },
+                ListSection list => new PublicListSectionDto
+                {
+                    Type = "list",
+                    Layout = list.Layout,
+                    SectionTitle = list.SectionTitle,
+                    ShowIcon = list.ShowIcon,
+                    Columns = list.Columns,
+                    Items = list.Items
+                        .Where(item => item.Visible)
+                        .OrderBy(item => item.Order)
+                        .Select(item => new PublicListItemDto
+                        {
+                            Id = item.Id,
+                            Icon = item.Icon,
+                            Title = item.Title,
+                            Description = item.Description,
+                            ImageUrl = item.ImageUrl,
+                            LinkHref = item.LinkHref,
+                            Order = item.Order
+                        })
+                        .ToList()
+                },
+                HtmlSection html => new PublicHtmlSectionDto
+                {
+                    Type = "html",
+                    HtmlContent = html.Content
+                },
+                ColumnsSection columns => new PublicColumnsSectionDto
+                {
+                    Type = "columns",
+                    ColumnCount = columns.ColumnCount,
+                    ColumnRatio = columns.ColumnRatio,
+                    StackOnMobile = columns.StackOnMobile,
+                    ColumnSlots = columns.Columns
+                        .OrderBy(slot => slot.Order)
+                        .Select(slot => new PublicColumnSlotDto
+                        {
+                            Id = slot.Id,
+                            Order = slot.Order,
+                            Blocks = MapPublicBlocks(
+                                visibleBlocks.Where(block => string.Equals(block.ColumnSlotId, slot.Id, StringComparison.Ordinal)),
+                                formDefinitions,
+                                formInputCapabilities)
+                        })
+                        .ToList()
+                },
+                ShowcaseSection showcase => await BuildPresetShowcasePreviewAsync(showcase),
+                LibrarySection library => await BuildPresetLibraryPreviewAsync(library),
+                StatsSection stats => new PublicStatsSectionDto
+                {
+                    Type = "stats",
+                    SectionTitle = stats.SectionTitle,
+                    Columns = stats.Columns,
+                    DurationMs = stats.DurationMs,
+                    Items = stats.Items
+                        .Where(item => item.Visible)
+                        .OrderBy(item => item.Order)
+                        .Select(item => new PublicStatItemDto
+                        {
+                            Id = item.Id,
+                            Label = item.Label,
+                            Value = item.Value,
+                            Prefix = item.Prefix,
+                            Suffix = item.Suffix,
+                            Order = item.Order
+                        })
+                        .ToList()
+                },
+                CarouselSection carousel => new PublicCarouselSectionDto
+                {
+                    Type = "carousel",
+                    SectionTitle = carousel.SectionTitle,
+                    Layout = carousel.Layout,
+                    Columns = carousel.Columns,
+                    Autoplay = carousel.Autoplay,
+                    ShowDots = carousel.ShowDots,
+                    ShowArrows = carousel.ShowArrows,
+                    Items = carousel.Items
+                        .Where(item => item.Visible)
+                        .OrderBy(item => item.Order)
+                        .Select(item => new PublicCarouselItemDto
+                        {
+                            Id = item.Id,
+                            Tag = item.Tag,
+                            Title = item.Title,
+                            Description = item.Description,
+                            ImageUrl = item.ImageUrl,
+                            LinkHref = item.LinkHref,
+                            Order = item.Order,
+                            Metrics = item.Metrics
+                                .OrderBy(metric => metric.Order)
+                                .Select(metric => new PublicCarouselMetricDto
+                                {
+                                    Id = metric.Id,
+                                    Value = metric.Value,
+                                    Label = metric.Label,
+                                    Tone = metric.Tone,
+                                    Order = metric.Order
+                                })
+                                .ToList()
+                        })
+                        .ToList()
+                },
+                NetworkMapSection map => new PublicNetworkMapSectionDto
+                {
+                    Type = "network-map",
+                    SectionTitle = map.SectionTitle,
+                    CenterLat = map.CenterLat,
+                    CenterLng = map.CenterLng,
+                    DefaultZoom = map.DefaultZoom,
+                    Pins = map.Pins
+                        .Where(pin => pin.Visible)
+                        .OrderBy(pin => pin.Order)
+                        .Select(pin => new PublicMapPinDto
+                        {
+                            Id = pin.Id,
+                            Label = pin.Label,
+                            Lat = pin.Lat,
+                            Lng = pin.Lng,
+                            Href = pin.Href,
+                            Order = pin.Order
+                        })
+                        .ToList()
+                },
+                TestimonialSection testimonials => new PublicTestimonialSectionDto
+                {
+                    Type = "testimonial",
+                    Eyebrow = testimonials.Eyebrow,
+                    SectionTitle = testimonials.SectionTitle,
+                    Subheading = testimonials.Subheading,
+                    Layout = testimonials.Layout,
+                    HeaderAlignment = testimonials.HeaderAlignment,
+                    Columns = testimonials.Columns,
+                    Items = testimonials.Items
+                        .Where(item => item.Visible)
+                        .OrderBy(item => item.Order)
+                        .Select(item => new PublicTestimonialItemDto
+                        {
+                            Id = item.Id,
+                            Icon = item.Icon,
+                            Title = item.Title,
+                            Description = item.Description,
+                            ImageUrl = item.ImageUrl,
+                            Order = item.Order
+                        })
+                        .ToList()
+                },
+                CanvasSection canvas => new PublicCanvasSectionDto
+                {
+                    Type = "canvas",
+                    AdminLabel = canvas.AdminLabel
+                },
+                _ => null
+            };
+
+            if (dto is null) return null;
+
+            dto.Id = section.Id;
+            dto.Visible = section.Visible;
+            dto.Order = section.Order;
+            dto.Style = MapStyle(section.Style ?? new SectionStyle());
+            dto.Blocks ??= MapPublicBlocks(sectionBlocks, formDefinitions, formInputCapabilities);
+            return dto;
+        }
+
+        private async Task<PublicShowcaseSectionDto> BuildPresetShowcasePreviewAsync(ShowcaseSection showcase)
+        {
+            var children = await _pageService.GetPublicChildrenAsync(showcase.SourcePageId);
+            if (showcase.Limit > 0)
+                children = children.Take(Math.Clamp(showcase.Limit, 1, 200)).ToList();
+
+            var overrides = showcase.ItemOverrides
+                .Where(item => !string.IsNullOrWhiteSpace(item.ChildPageId))
+                .GroupBy(item => item.ChildPageId)
+                .ToDictionary(group => group.Key, group => group.Last());
+
+            return new PublicShowcaseSectionDto
+            {
+                Type = "showcase",
+                SourcePageId = showcase.SourcePageId,
+                Layout = showcase.Layout,
+                Columns = showcase.Columns,
+                Limit = showcase.Limit,
+                Eyebrow = showcase.Eyebrow,
+                SectionTitle = showcase.SectionTitle,
+                ShowImage = showcase.ShowImage,
+                ShowContent = showcase.ShowContent,
+                ShowItemButton = showcase.ShowItemButton,
+                ButtonLabel = ResolveShowcaseButtonLabel(showcase),
+                ActionButton = showcase.ActionButton != null ? MapButton(showcase.ActionButton) : null,
+                ActionButtonPosition = showcase.ActionButtonPosition,
+                ShowSearchBar = showcase.ShowSearchBar,
+                SearchPlaceholder = showcase.SearchPlaceholder,
+                Children = children.Select(child => new PublicChildCardDto
+                {
+                    Id = child.Id,
+                    StableId = child.StableId,
+                    SourceId = child.SourceId,
+                    FullSlug = child.FullSlug ?? child.Slug,
+                    Name = child.Name,
+                    Card = MapShowcaseCard(child.Card, FindShowcaseOverride(child, overrides))
+                }).ToList()
+            };
+        }
+
+        private async Task<PublicLibrarySectionDto> BuildPresetLibraryPreviewAsync(LibrarySection library)
+        {
+            var itemLimit = library.EnablePagination
+                ? 200
+                : Math.Clamp(library.Limit, 1, 24);
+            var items = await _contentService.GetPublishedLibraryItemsAsync(library.ContentTypes, itemLimit, library.SortMode);
+            var typesByKey = (await _contentService.GetTypesAsync())
+                .ToDictionary(type => type.Key, StringComparer.OrdinalIgnoreCase);
+
+            return new PublicLibrarySectionDto
+            {
+                Type = "library",
+                ContentTypes = library.ContentTypes,
+                Layout = library.Layout,
+                Columns = library.Columns,
+                Rows = library.Rows,
+                Limit = library.Limit,
+                EnableTabs = library.EnableTabs,
+                EnablePagination = library.EnablePagination,
+                Eyebrow = library.Eyebrow,
+                SectionTitle = library.SectionTitle,
+                Subheading = library.Subheading,
+                ShowImage = library.ShowImage,
+                ShowSummary = library.ShowSummary,
+                ShowButton = library.ShowButton,
+                ShowTime = library.ShowTime,
+                ButtonLabel = library.ButtonLabel,
+                ButtonStyle = library.ButtonStyle,
+                ShowSearchBar = library.ShowSearchBar,
+                ShowFilters = library.ShowFilters,
+                SearchPlaceholder = library.SearchPlaceholder,
+                SortMode = library.SortMode,
+                Items = items.Select(item =>
+                    MapLibraryItem(item, typesByKey.TryGetValue(item.ContentTypeKey, out var type) ? type : null)).ToList()
+            };
+        }
+
         private static List<PublicBlockDto> MapPublicBlocks(
             IEnumerable<Block> blocks,
             IReadOnlyDictionary<string, FormDefinition> formDefinitions,

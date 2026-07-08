@@ -52,7 +52,7 @@ else
     else
     {
         <div class="block-sort-list" @ref="_blockListRef">
-        @foreach (var entry in OrderedHierarchyBlocks)
+        @foreach (var entry in RootBlockEntries)
         {
             var block = entry.Block;
             <div class="block-sort-item @(entry.Depth > 0 ? "block-sort-item--nested" : "")"
@@ -63,7 +63,7 @@ else
                  data-block-slot="@NormalizeSlot(block.ColumnSlotId)"
                  data-block-sort-locked="@((block.Authoring.FullLocked || block.Authoring.GeometryLocked || !PresetAllowsChildReorder(block)).ToString().ToLowerInvariant())"
                  style="--block-depth: @entry.Depth;">
-            <div class="block-card @(block.Id == _activeBlockId ? "active" : "")">
+            <div class="block-card @(block.Id == _activePanelBlockId ? "active" : "")">
                 <div class="block-card-header"
                      @onclick="() => ToggleBlock(block.Id)">
                     <div class="block-card-header__identity">
@@ -113,13 +113,13 @@ else
                                 @onclick="() => _confirmDelete = block">
                             <i class="fas fa-trash"></i>
                         </button>
-                        <i class="fas @(block.Id == _activeBlockId
+                        <i class="fas @(block.Id == _activePanelBlockId
                             ? "fa-chevron-up" : "fa-chevron-down")"
                            style="color:var(--text-muted);font-size:.8rem"></i>
                     </div>
                 </div>
 
-                @if (block.Id == _activeBlockId)
+                @if (block.Id == _activePanelBlockId)
                 {
                     <div class="block-card-body">
                         @if (_fullBlock is null)
@@ -156,17 +156,7 @@ else
                                     </div>
                                 }
 
-                                @if (UseArrangeWorkspace)
-                                {
-                                    <div class="block-focused-inspector__workspace-note" role="note">
-                                        <i class="fas fa-object-group"></i>
-                                        <span>
-                                            <strong>@T("Content")</strong>
-                                            <small>@T("BlockContentOnlyHint")</small>
-                                        </span>
-                                    </div>
-                                }
-                                else
+                                @if (!UseArrangeWorkspace)
                                 {
                                 <div class="block-focused-inspector__actions">
                                     <button type="button" class="btn-admin btn-ghost"
@@ -189,17 +179,10 @@ else
                                         <label><input type="checkbox" @bind="_fullBlock.Authoring.ContentLocked" disabled="@(!Auth.IsAdminAdmin)" /> @T("ContentLocked")</label>
                                         <label><input type="checkbox" @bind="_fullBlock.Authoring.GeometryLocked" disabled="@(!Auth.IsAdminAdmin)" /> @T("GeometryLocked")</label>
                                     </div>
-                                    @if (Auth.IsAdminAdmin)
-                                    {
-                                        <button type="button" class="btn-admin btn-ghost" disabled="@_savingGovernance" @onclick="SaveGovernance">
-                                            <i class="fas @(_savingGovernance ? "fa-spinner fa-spin" : "fa-save")"></i>
-                                            @T(_savingGovernance ? "Saving" : "SaveGovernance")
-                                        </button>
-                                    }
                                 </details>
                             </div>
 
-                            @if (UseArrangeWorkspace && _fullBlock.Type == "container")
+                            @if (UseArrangeWorkspace && AddTargetContainer is not null)
                             {
                                 <section class="container-owned-manager">
                                     <header>
@@ -241,7 +224,9 @@ else
                                         <div class="container-owned-manager__list">
                                             @foreach (var child in ContainerChildren)
                                             {
-                                                <button type="button" @onclick="() => ToggleBlock(child.Id)">
+                                                <button type="button"
+                                                        class="@(child.Id == _activeBlockId ? "is-active" : null)"
+                                                        @onclick="() => ToggleBlock(child.Id)">
                                                     <i class="fas @BlockIconClass(child.Type)"></i>
                                                     <span><strong>@BlockDisplayName(child)</strong><small>@ChildSummary(child)</small></span>
                                                     <i class="fas fa-chevron-right"></i>
@@ -470,6 +455,7 @@ else
     .container-owned-manager__list { display:grid; gap:.35rem; }
     .container-owned-manager__list > button { display:grid; grid-template-columns:22px minmax(0,1fr) 14px; align-items:center; gap:.45rem; padding:.5rem .6rem; border:1px solid var(--border); border-radius:7px; background:#fff; color:var(--text); text-align:left; cursor:pointer; }
     .container-owned-manager__list > button:hover { border-color:var(--primary-light); background:#f8fafc; }
+    .container-owned-manager__list > button.is-active { border-color:var(--primary); background:#eef2ff; box-shadow:0 0 0 1px rgba(67,56,202,.12); }
     .container-owned-manager__list > button > i:first-child { color:var(--primary); text-align:center; }
     .container-owned-manager__list > button > i:last-child { color:var(--text-muted); font-size:.6rem; }
     .container-owned-manager__list span { display:grid; gap:.08rem; min-width:0; }
@@ -961,13 +947,13 @@ else
     private List<BlockModel> _blocks     = new();
     private BlockModel?      _fullBlock;
     private string?          _activeBlockId;
+    private string?          _activePanelBlockId;
     private BlockModel?      _confirmDelete;
     private bool             _loading    = true;
     private bool             _showPicker = false;
     private bool             _creatingBlock = false;
     private bool             _reorderingBlock = false;
     private bool             _savingLayout = false;
-    private bool             _savingGovernance = false;
     private string?          _visualValidationMessage;
     private string?          _visualHistoryBlockId;
     private BlockUpdateDto?  _savedVisualSnapshot;
@@ -980,7 +966,7 @@ else
     private ElementReference _blockListRef;
     private DotNetObjectReference<BlockEditor>? _dotNetRef;
     private bool _blockSortableInitialized;
-    private IReadOnlyList<BlockListEntry> OrderedHierarchyBlocks => BuildHierarchy();
+    private IReadOnlyList<BlockListEntry> RootBlockEntries => BuildRootEntries();
     private int DeleteDescendantCount => _confirmDelete?.Type == "container"
         ? OwnedDescendantIds(_confirmDelete.Id).Count
         : 0;
@@ -989,7 +975,7 @@ else
             .Select(id => _blocks.FirstOrDefault(block => block.Id == id))
             .Count(block => block?.Type == "container")
         : 0;
-    private BlockModel? AddTargetContainer => _fullBlock?.Type == "container" ? _fullBlock : null;
+    private BlockModel? AddTargetContainer => _fullBlock?.Type == "container" ? _fullBlock : ParentContainerForActive;
     private int AddTargetChildCount => AddTargetContainer is null
         ? 0
         : _blocks.Count(block => block.ParentBlockId == AddTargetContainer.Id);
@@ -1111,9 +1097,9 @@ else
     private bool VisualEditingLocked => _fullBlock is null || _fullBlock.Authoring.FullLocked || _fullBlock.Authoring.GeometryLocked;
     private bool CanUndoVisualChange => !_savingLayout && !VisualEditingLocked && _visualUndoHistory.Count > 0;
     private bool CanRedoVisualChange => !_savingLayout && !VisualEditingLocked && _visualRedoHistory.Count > 0;
-    private IReadOnlyList<BlockModel> ContainerChildren => _fullBlock is null
+    private IReadOnlyList<BlockModel> ContainerChildren => AddTargetContainer is null
         ? Array.Empty<BlockModel>()
-        : _blocks.Where(block => string.Equals(block.ParentBlockId, _fullBlock.Id, StringComparison.Ordinal))
+        : _blocks.Where(block => string.Equals(block.ParentBlockId, AddTargetContainer.Id, StringComparison.Ordinal))
             .OrderBy(block => block.Order)
             .ToList();
     private ContainerPresetDefinition? ActiveContainerPreset => AddTargetContainer is null
@@ -1263,6 +1249,7 @@ else
             _loadedSectionId = SectionId;
             _loadedSlotId = SlotId;
             _activeBlockId = null;
+            _activePanelBlockId = null;
             _fullBlock = null;
             await ReloadBlocks();
         }
@@ -1290,11 +1277,32 @@ else
     _loading = false;
 }
 
+    private string? ResolvePanelBlockId(string? blockId)
+    {
+        if (string.IsNullOrWhiteSpace(blockId))
+            return null;
+
+        var byId = _blocks.ToDictionary(block => block.Id, StringComparer.Ordinal);
+        if (!byId.TryGetValue(blockId, out var current))
+            return blockId;
+
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (!string.IsNullOrWhiteSpace(current.ParentBlockId) && visited.Add(current.Id))
+        {
+            if (!byId.TryGetValue(current.ParentBlockId, out var parent))
+                break;
+            current = parent;
+        }
+
+        return current.Id;
+    }
+
     private async Task ToggleBlock(string blockId)
     {
         if (_activeBlockId == blockId)
         {
             _activeBlockId = null;
+            _activePanelBlockId = null;
             _fullBlock     = null;
             await ActiveBlockChanged.InvokeAsync(null);
             return;
@@ -1306,6 +1314,7 @@ else
     private async Task OpenBlock(string blockId, bool notify)
     {
         _activeBlockId = blockId;
+        _activePanelBlockId = ResolvePanelBlockId(blockId);
         _fullBlock     = null;
 
         // Fetch full block so image/file base64 is included.
@@ -1388,39 +1397,6 @@ else
         await NotifyChangedAsync();
     }
 
-    private async Task SaveGovernance()
-    {
-        if (_fullBlock is null || _savingGovernance || !Auth.IsAdminAdmin)
-            return;
-
-        _savingGovernance = true;
-        try
-        {
-            var blockId = _fullBlock.Id;
-            var response = await BlockService.UpdateAuthoringLockAsync(
-                PageId,
-                SectionId,
-                blockId,
-                new BlockAuthoringLockUpdateDto
-                {
-                    ContentLocked = _fullBlock.Authoring.ContentLocked,
-                    GeometryLocked = _fullBlock.Authoring.GeometryLocked,
-                    FullLocked = false
-                });
-            Http.Toast(response.Message, response.StatusCode);
-            if (!response.Success)
-                return;
-
-            await ReloadBlocks();
-            await LoadFullBlock(blockId);
-            await NotifyChangedAsync();
-        }
-        finally
-        {
-            _savingGovernance = false;
-        }
-    }
-
     private async Task ConfirmDelete()
     {
         if (_confirmDelete is null) return;
@@ -1433,6 +1409,7 @@ else
             if (_activeBlockId is not null && deletingIds.Contains(_activeBlockId))
             {
                 _activeBlockId = null;
+                _activePanelBlockId = null;
                 _fullBlock     = null;
                 await ActiveBlockChanged.InvokeAsync(null);
             }
@@ -1460,40 +1437,16 @@ else
         return descendants;
     }
 
-    private IReadOnlyList<BlockListEntry> BuildHierarchy()
+    private IReadOnlyList<BlockListEntry> BuildRootEntries()
     {
-        var result = new List<BlockListEntry>(_blocks.Count);
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var byParent = _blocks
-            .GroupBy(block => NormalizeParent(block.ParentBlockId), StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
-
-        void AppendChildren(string parentId, int depth)
-        {
-            if (!byParent.TryGetValue(parentId, out var children)) return;
-            foreach (var child in children
-                         .OrderBy(block => block.Order)
-                         .ThenBy(block => NormalizeBlockZone(block.BlockZone), StringComparer.Ordinal)
-                         .ThenBy(block => block.Id, StringComparer.Ordinal))
-            {
-                if (!visited.Add(child.Id)) continue;
-                result.Add(new BlockListEntry(child, Math.Min(depth, 12)));
-                AppendChildren(child.Id, depth + 1);
-            }
-        }
-
-        AppendChildren(string.Empty, 0);
-        foreach (var orphan in _blocks
-                     .Where(block => !visited.Contains(block.Id))
-                     .OrderBy(block => block.Order)
-                     .ThenBy(block => block.Id, StringComparer.Ordinal))
-        {
-            if (!visited.Add(orphan.Id)) continue;
-            result.Add(new BlockListEntry(orphan, 0));
-            AppendChildren(orphan.Id, 1);
-        }
-
-        return result;
+        var blockIds = _blocks.Select(block => block.Id).ToHashSet(StringComparer.Ordinal);
+        return _blocks
+            .Where(block => string.IsNullOrWhiteSpace(block.ParentBlockId) || !blockIds.Contains(block.ParentBlockId))
+            .OrderBy(block => block.Order)
+            .ThenBy(block => NormalizeBlockZone(block.BlockZone), StringComparer.Ordinal)
+            .ThenBy(block => block.Id, StringComparer.Ordinal)
+            .Select(block => new BlockListEntry(block, 0))
+            .ToList();
     }
 
     [JSInvokable]
@@ -1575,11 +1528,13 @@ else
             _blocks.Any(b => b.Id == activeBlockId))
         {
             _activeBlockId = activeBlockId;
+            _activePanelBlockId = ResolvePanelBlockId(activeBlockId);
             await LoadFullBlock(activeBlockId);
             return;
         }
 
         _activeBlockId = null;
+        _activePanelBlockId = null;
         _fullBlock = null;
     }
 

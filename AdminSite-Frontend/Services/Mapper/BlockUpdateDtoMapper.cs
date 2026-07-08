@@ -175,10 +175,21 @@ public static class BlockUpdateDtoMapper
         dto.Appearance = ToAppearanceDto(block.Appearance, block.Layout);
         dto.Responsive = ToResponsiveDto(block.Responsive);
         dto.Animation = ToAnimationDto(block.Animation);
+        dto.Authoring = ToAuthoringDto(block.Authoring);
         if (dto is ContainerBlockUpdateDto containerDto)
             containerDto.ContainerLayout = ToContainerLayoutDto(block.ContainerLayout);
         return dto;
     }
+
+    public static BlockAuthoringPolicyDto ToAuthoringDto(BlockAuthoringPolicyModel? value) => new()
+    {
+        SchemaVersion = Math.Max(value?.SchemaVersion ?? 0, 1),
+        ContentLocked = value?.ContentLocked ?? false,
+        GeometryLocked = value?.GeometryLocked ?? false,
+        FullLocked = false,
+        PresetSlotName = value?.PresetSlotName,
+        PresetSourceId = value?.PresetSourceId
+    };
 
     private static BlockAppearanceDto ToAppearanceDto(
         BlockAppearanceModel? appearance,

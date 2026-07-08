@@ -207,7 +207,7 @@ namespace AdminSite.Services
                 }
 
                 return await ReadApiResponse<T>(response)
-                       ?? ApiResponse<T>.Fail("Empty response.", 500);
+                       ?? ApiResponse<T>.Fail("No response from server.", 500);
             }
             catch (Exception ex)
             {
@@ -233,14 +233,17 @@ namespace AdminSite.Services
         private static async Task<ApiResponse<T>?> ReadApiResponse<T>(HttpResponseMessage response)
         {
             ApiResponse<T>? result;
+            var statusCode = (int)response.StatusCode;
+            var content = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(content)) return null;
+
             try
             {
-                result = await response.Content
-                    .ReadFromJsonAsync<ApiResponse<T>>(_json);
+                result = JsonSerializer.Deserialize<ApiResponse<T>>(content, _json);
             }
             catch (JsonException)
             {
-                return null;
+                return ApiResponse<T>.Fail("Unexpected response format.", statusCode);
             }
 
             if (result is { Success: false, Errors.Count: > 0 })

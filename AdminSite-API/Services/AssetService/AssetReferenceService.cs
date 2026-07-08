@@ -25,6 +25,7 @@ namespace FullProject.Services.AssetService
             if (await SectionReferencesAsync(_context.SectionsPublished, url)) return true;
             if (await BlockReferencesAsync(_context.BlocksDraft, url)) return true;
             if (await BlockReferencesAsync(_context.BlocksPublished, url)) return true;
+            if (await SectionPresetReferencesAsync(url)) return true;
             if (await ContentReferencesAsync(_context.ContentDraft, url)) return true;
             if (await ContentReferencesAsync(_context.ContentPublished, url)) return true;
 
@@ -67,6 +68,25 @@ namespace FullProject.Services.AssetService
                 Builders<Block>.Filter.Eq("EmbedUrl", url));
 
             return await blocks.Find(filter).AnyAsync();
+        }
+
+        private async Task<bool> SectionPresetReferencesAsync(string url)
+        {
+            var filter = Builders<SectionPreset>.Filter.Or(
+                Builders<SectionPreset>.Filter.Eq(preset => preset.ThumbnailUrl, url),
+                Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundVideoUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Style.BackgroundImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Style.BackgroundVideoUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.ImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.FileUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.EmbedUrl", url));
+
+            return await _context.SectionPresets.Find(filter).AnyAsync();
         }
 
         private static async Task<bool> ContentReferencesAsync(IMongoCollection<ContentItem> content, string url)

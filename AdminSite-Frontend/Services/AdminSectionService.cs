@@ -36,30 +36,28 @@ namespace AdminSite.Services
             _http.PutAsync<object>($"{Base(pageId)}/reorder",
                 new ReorderRequest { OrderedIds = orderedIds });
 
-        public Task<ApiResponse<List<CanvasSectionPresetModel>>> GetCanvasPresetsAsync() =>
-            _http.GetAsync<List<CanvasSectionPresetModel>>("api/admin/canvas-section-presets");
+        public Task<ApiResponse<List<SectionPresetModel>>> GetSectionPresetsAsync() =>
+            _http.GetAsync<List<SectionPresetModel>>("api/admin/section-presets");
 
-        public Task<ApiResponse<CanvasSectionPresetModel>> SaveCanvasPresetAsync(
+        public Task<ApiResponse<SectionPresetModel>> SaveSectionPresetAsync(
             string pageId,
             string sectionId,
             Dictionary<string, string> name,
-            List<CanvasPresetEditableSlotModel> editableSlots,
-            CanvasPresetLockPolicyModel lockPolicy) =>
-            _http.PostAsync<CanvasSectionPresetModel>("api/admin/canvas-section-presets",
-                new CanvasSectionPresetCreateRequest
+            Dictionary<string, string> description) =>
+            _http.PostAsync<SectionPresetModel>("api/admin/section-presets",
+                new SectionPresetCreateRequest
                 {
                     PageId = pageId,
                     SectionId = sectionId,
                     Name = name,
-                    EditableSlots = editableSlots,
-                    LockPolicy = lockPolicy
+                    Description = description
                 });
 
-        public Task<ApiResponse<object>> ApplyCanvasPresetAsync(string pageId, string presetId) =>
-            _http.PostAsync<object>($"api/admin/canvas-section-presets/{presetId}/apply",
-                new CanvasSectionPresetApplyRequest { PageId = pageId });
+        public Task<ApiResponse<SectionPresetApplyResultModel>> ApplySectionPresetAsync(string pageId, string presetId) =>
+            _http.PostAsync<SectionPresetApplyResultModel>($"api/admin/section-presets/{presetId}/apply",
+                new SectionPresetApplyRequest { PageId = pageId });
 
-        public Task<ApiResponse<object>> DeleteCanvasPresetAsync(string presetId) =>
-            _http.DeleteAsync<object>($"api/admin/canvas-section-presets/{presetId}");
+        public Task<ApiResponse<object>> DeleteSectionPresetAsync(string presetId) =>
+            _http.DeleteAsync<object>($"api/admin/section-presets/{presetId}");
     }
 }

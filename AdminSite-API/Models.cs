@@ -705,12 +705,20 @@ namespace FullProject.Models
     }
 
     [BsonIgnoreExtraElements]
-    public class CanvasSectionPreset
+    public class SectionPreset
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public string SectionType { get; set; } = "canvas";
+        public Section? Section { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public string ThumbnailBackground { get; set; } = "#f3f4f6";
+        public Dictionary<string, string> PreviewText { get; set; } = new();
+        // Kept for schema 1-3 Canvas preset compatibility. New presets store the
+        // complete polymorphic Section snapshot above.
         public SectionStyle Style { get; set; } = new();
         public List<Block> Blocks { get; set; } = new();
         public int SchemaVersion { get; set; } = 1;

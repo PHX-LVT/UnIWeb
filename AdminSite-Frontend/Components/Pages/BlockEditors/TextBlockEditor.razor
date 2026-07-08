@@ -74,7 +74,8 @@
             {
                 Title = _title,
                 Content = _content,
-                Visible = Block.Visible
+                Visible = Block.Visible,
+                Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
             Http.Toast(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();

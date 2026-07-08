@@ -1294,3 +1294,38 @@ window.scrollAdminPageTabs = (container, direction) => {
         behavior: "smooth"
     });
 };
+
+window.revealAdminPageTab = (container, pageId) => {
+    if (!container || !pageId) return;
+
+    const reveal = () => {
+        const id = String(pageId);
+        const target = Array.from(container.querySelectorAll("[data-root-page-id]"))
+            .find(tab => tab.getAttribute("data-root-page-id") === id);
+        if (!target) return;
+
+        const containerRect = container.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const edgePadding = 8;
+        let nextScrollLeft = container.scrollLeft;
+
+        if (targetRect.left < containerRect.left + edgePadding) {
+            nextScrollLeft -= (containerRect.left + edgePadding) - targetRect.left;
+        } else if (targetRect.right > containerRect.right - edgePadding) {
+            nextScrollLeft += targetRect.right - (containerRect.right - edgePadding);
+        } else {
+            return;
+        }
+
+        const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+        nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, nextScrollLeft));
+        if (Math.abs(nextScrollLeft - container.scrollLeft) < 1) return;
+
+        container.scrollTo({
+            left: nextScrollLeft,
+            behavior: "smooth"
+        });
+    };
+
+    requestAnimationFrame(() => requestAnimationFrame(reveal));
+};

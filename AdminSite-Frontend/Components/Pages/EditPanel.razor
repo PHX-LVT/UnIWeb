@@ -12,9 +12,15 @@
             <i class="fas fa-sliders-h"></i>
             @Section.Type?.ToUpper() @T("Content")
         </span>
-        <button class="ez-icon-btn" @onclick="OnClose">
-            <i class="fas fa-times"></i>
-        </button>
+        <div class="ez-right-panel__header-actions">
+            <button type="button" class="btn-admin btn-ghost ez-section-preset-trigger" @onclick="OpenPresetDialog">
+                <i class="fas fa-bookmark"></i>
+                <span>@T("SaveAsPreset")</span>
+            </button>
+            <button class="ez-icon-btn" @onclick="OnClose">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
     </div>
 
     <div class="ez-right-panel__tabs">
@@ -219,6 +225,7 @@
     [Parameter] public EventCallback<string?> OnActiveBlockChanged { get; set; }
     [Parameter] public EventCallback<string> OnArrangeBlocksRequested { get; set; }
     [Parameter] public EventCallback<string> OnDiscardAndArrangeRequested { get; set; }
+    [Parameter] public EventCallback<string> OnSaveAsPresetRequested { get; set; }
     [Parameter] public bool CanArrangeBlocks { get; set; }
     [Parameter] public string InitialTab { get; set; } = "style";
     [Parameter] public string? InitialBlockId { get; set; }
@@ -276,6 +283,16 @@
     {
         _savedSectionSnapshot = CaptureSectionSnapshot();
         await OnSectionSaved.InvokeAsync();
+    }
+
+    private async Task OpenPresetDialog()
+    {
+        if (HasUnsavedSectionChanges)
+        {
+            Http.Toast(T("SaveSectionBeforePreset"), 409);
+            return;
+        }
+        await OnSaveAsPresetRequested.InvokeAsync(Section.Id);
     }
 
     private void KeepEditingSection() => _showArrangeGuard = false;

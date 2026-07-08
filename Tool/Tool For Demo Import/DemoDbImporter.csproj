@@ -14,7 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="appsettings.importer.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <None Include="appsettings.importer.json"
+          Condition="Exists('appsettings.importer.json')"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="Always" />
     <Content Include="demo-seed\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 

@@ -185,6 +185,14 @@ public sealed class FormDefinitionService
         if (await HasReferenceAsync("blocks_draft", blockFilter)) return true;
         if (await HasReferenceAsync("blocks_published", blockFilter)) return true;
 
+        var presetFilter = Builders<BsonDocument>.Filter.Or(
+            Builders<BsonDocument>.Filter.Eq("Section.Button.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Section.ActionButton.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Section.Buttons.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Blocks.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Blocks.Buttons.FormDefinitionId", id));
+        if (await HasReferenceAsync("canvas_section_presets", presetFilter)) return true;
+
         return false;
     }
 
@@ -204,6 +212,7 @@ public sealed class FormDefinitionService
         await AddSectionUsageAsync("sections_published", "Published", id, publishedPages, items);
         await AddBlockUsageAsync("blocks_draft", "Draft", id, draftPages, draftSections, items);
         await AddBlockUsageAsync("blocks_published", "Published", id, publishedPages, publishedSections, items);
+        await AddPresetUsageAsync(id, items);
 
         var ordered = items
             .OrderBy(item => item.Area == "FormBlock" ? 0 : item.Area == "Block" ? 1 : item.Area == "Section" ? 2 : 3)
@@ -235,6 +244,33 @@ public sealed class FormDefinitionService
                 Source = "Global",
                 ElementLabel = label,
                 Location = $"Global Button > {label}"
+            });
+        }
+    }
+
+    private async Task AddPresetUsageAsync(string id, List<FormDefinitionUsageItemDto> items)
+    {
+        var filter = Builders<BsonDocument>.Filter.Or(
+            Builders<BsonDocument>.Filter.Eq("Section.Button.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Section.ActionButton.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Section.Buttons.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Blocks.FormDefinitionId", id),
+            Builders<BsonDocument>.Filter.Eq("Blocks.Buttons.FormDefinitionId", id));
+        var presets = await _database.GetCollection<BsonDocument>("canvas_section_presets")
+            .Find(filter)
+            .ToListAsync();
+
+        foreach (var preset in presets)
+        {
+            var name = ReadText(preset, "Name") ?? "Untitled preset";
+            items.Add(new FormDefinitionUsageItemDto
+            {
+                Area = "Section Preset",
+                Source = "Preset",
+                SectionType = ReadString(preset, "SectionType") ?? "Section",
+                SectionTitle = name,
+                ElementLabel = "Form reference",
+                Location = $"Saved Presets > {name}"
             });
         }
     }

@@ -342,6 +342,7 @@
             ContinuousEffect = Block.Animation.ContinuousEffect,
             DisableForReducedMotion = Block.Animation.DisableForReducedMotion
         };
+        dto.Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring);
 
         if (dto is ContainerBlockUpdateDto containerDto)
         {

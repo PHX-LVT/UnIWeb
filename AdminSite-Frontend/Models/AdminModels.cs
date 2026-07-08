@@ -1086,32 +1086,43 @@ namespace AdminSite.Models
         public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
     }
-    public class CanvasSectionPresetModel
+    public class SectionPresetModel
     {
         public string Id { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
+        public Dictionary<string, string> PreviewText { get; set; } = new();
+        public string SectionType { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string ThumbnailBackground { get; set; } = "#f3f4f6";
+        public string SummaryLabel { get; set; } = string.Empty;
+        public string IconClass { get; set; } = "fa-layer-group";
+        public string VisualKey { get; set; } = "section";
+        public int ItemCount { get; set; }
         public int BlockCount { get; set; }
         public int SchemaVersion { get; set; }
-        public int SlotCount { get; set; }
-        public CanvasPresetLockPolicyModel LockPolicy { get; set; } = new();
         public bool IsCompatible { get; set; } = true;
         public string? CompatibilityMessage { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
 
-    public class CanvasSectionPresetCreateRequest
+    public class SectionPresetCreateRequest
     {
         public string PageId { get; set; } = string.Empty;
         public string SectionId { get; set; } = string.Empty;
         public Dictionary<string, string> Name { get; set; } = new();
-        public List<CanvasPresetEditableSlotModel> EditableSlots { get; set; } = new();
-        public CanvasPresetLockPolicyModel LockPolicy { get; set; } = new();
+        public Dictionary<string, string> Description { get; set; } = new();
     }
 
-    public class CanvasSectionPresetApplyRequest
+    public class SectionPresetApplyRequest
     {
         public string PageId { get; set; } = string.Empty;
+    }
+
+    public class SectionPresetApplyResultModel
+    {
+        public string SectionId { get; set; } = string.Empty;
     }
 }
 

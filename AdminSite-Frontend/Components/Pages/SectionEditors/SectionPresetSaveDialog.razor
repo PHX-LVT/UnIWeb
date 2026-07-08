@@ -1,0 +1,184 @@
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<DxWindow Visible="Visible"
+          VisibleChanged="HandleVisibleChanged"
+          Width="560px"
+          MaxWidth="calc(100vw - 32px)"
+          CssClass="ez-section-preset-save-window"
+          BodyCssClass="ez-section-preset-save-window__body"
+          AllowResize="false"
+          CloseOnEscape="true"
+          ShowCloseButton="false"
+          HorizontalAlignment="HorizontalAlignment.Center"
+          VerticalAlignment="VerticalAlignment.Center">
+    <BodyTemplate>
+        <div class="section-preset-save">
+            <header>
+                <div>
+                    <span class="section-preset-save__eyebrow">@T("SectionPreset")</span>
+                    <h2>@T("SaveSectionAsPreset")</h2>
+                </div>
+                <button type="button" class="ez-icon-btn" aria-label="@T("Close")" @onclick="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </header>
+
+            <div class="form-group">
+                <label class="form-label">@T("PresetName")</label>
+                <input class="form-control" maxlength="120" @bind="_name" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">@T("Description")</label>
+                <textarea class="form-control" rows="3" maxlength="400" @bind="_description"></textarea>
+            </div>
+            <div class="section-preset-save__meta-line">
+                <i class="fas @SectionIconClass" aria-hidden="true"></i>
+                <span>@SectionSummaryLabel</span>
+            </div>
+
+            <footer>
+                <button type="button" class="btn-admin btn-ghost" disabled="@_saving" @onclick="Close">
+                    @T("Cancel")
+                </button>
+                <button type="button" class="btn-admin btn-primary" disabled="@(_saving || string.IsNullOrWhiteSpace(_name))" @onclick="Save">
+                    <i class="fas @(_saving ? "fa-spinner fa-spin" : "fa-bookmark")"></i>
+                    @T(_saving ? "Saving" : "SavePreset")
+                </button>
+            </footer>
+        </div>
+    </BodyTemplate>
+</DxWindow>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter, EditorRequired] public SectionModel Section { get; set; } = default!;
+    [Parameter, EditorRequired] public string PageId { get; set; } = string.Empty;
+    [Parameter] public EventCallback<SectionPresetModel> OnSaved { get; set; }
+
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string? _loadedSectionId;
+    private bool _saving;
+
+    protected override void OnParametersSet()
+    {
+        if (!Visible || string.Equals(_loadedSectionId, Section.Id, StringComparison.Ordinal)) return;
+        _loadedSectionId = Section.Id;
+        _name = DefaultName();
+        _description = string.Empty;
+    }
+
+    private async Task Save()
+    {
+        if (_saving || string.IsNullOrWhiteSpace(_name)) return;
+        _saving = true;
+        try
+        {
+            var response = await SectionService.SaveSectionPresetAsync(
+                PageId,
+                Section.Id,
+                new Dictionary<string, string> { [AdminLanguage] = _name.Trim() },
+                string.IsNullOrWhiteSpace(_description)
+                    ? new()
+                    : new Dictionary<string, string> { [AdminLanguage] = _description.Trim() });
+            Http.Toast(response.Message, response.StatusCode);
+            if (!response.Success || response.Data is null) return;
+            await OnSaved.InvokeAsync(response.Data);
+            await Close();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task HandleVisibleChanged(bool visible) => VisibleChanged.InvokeAsync(visible);
+    private Task Close() => VisibleChanged.InvokeAsync(false);
+
+    private string DefaultName()
+    {
+        var value = PreviewTitle;
+        return string.IsNullOrWhiteSpace(value)
+            ? $"{SectionTypeLabel(Section.Type)} {T("SectionPreset")}".Trim()
+            : value;
+    }
+
+    private string PreviewTitle => FirstText(
+        Section.AdminLabel,
+        Section.Heading,
+        Section.SectionTitle,
+        Section.Eyebrow,
+        Section.Subheading) ?? T("Untitled");
+
+    private string SectionSummaryLabel => Section.Type switch
+    {
+        "html" => "HTML / Custom CSS",
+        "showcase" => "Showcase / Dynamic Source",
+        "library" => "Library / Dynamic Source",
+        "columns" => CountLabel(SectionTypeLabel("columns"), Section.ColumnCount ?? Section.ColumnSlots?.Count ?? 0, "Column"),
+        "canvas" => "Canvas / Block Section",
+        "list" => CountLabel(SectionTypeLabel("list"), Section.Items?.Count(item => item.Visible) ?? 0, "Item"),
+        "stats" => CountLabel(SectionTypeLabel("stats"), Section.Stats?.Count(item => item.Visible) ?? 0, "Item"),
+        "carousel" => CountLabel(SectionTypeLabel("carousel"), Section.CarouselItems?.Count(item => item.Visible) ?? 0, "Item"),
+        "network-map" => CountLabel(SectionTypeLabel("network-map"), Section.MapPins?.Count(pin => pin.Visible) ?? 0, "Pin"),
+        "testimonial" => CountLabel(SectionTypeLabel("testimonial"), Section.Testimonials?.Count(item => item.Visible) ?? 0, "Item"),
+        _ => SectionTypeLabel(Section.Type)
+    };
+
+    private string SectionIconClass => Section.Type switch
+    {
+        "hero" => "fa-image",
+        "cta" => "fa-bullhorn",
+        "columns" => "fa-columns",
+        "list" => "fa-th-large",
+        "stats" => "fa-chart-line",
+        "testimonial" => "fa-comments",
+        "carousel" => "fa-window-restore",
+        "showcase" => "fa-sitemap",
+        "library" => "fa-newspaper",
+        "network-map" => "fa-map-location-dot",
+        "html" => "fa-code",
+        "canvas" => "fa-object-group",
+        _ => "fa-layer-group"
+    };
+
+    private static string CountLabel(string label, int count, string unit) =>
+        count > 0
+            ? $"{label} · {count} {unit}{(count == 1 ? string.Empty : "s")}"
+            : label;
+
+    private string SectionTypeLabel(string type) => type switch
+    {
+        "hero" => T("SectionTemplateHeroName"),
+        "cta" => T("SectionTemplateCtaName"),
+        "columns" => T("SectionTemplateColumnsName"),
+        "list" => T("SectionTemplateListName"),
+        "stats" => T("SectionTemplateStatsName"),
+        "testimonial" => T("SectionTemplateTestimonialName"),
+        "carousel" => T("SectionTemplateCarouselName"),
+        "showcase" => T("SectionTemplateShowcaseName"),
+        "library" => T("SectionTemplateLibraryName"),
+        "network-map" => T("SectionTemplateMapName"),
+        "html" => T("SectionTemplateHtmlName"),
+        "canvas" => T("SectionTemplateCanvasName"),
+        _ => type
+    };
+
+    private string? FirstText(params Dictionary<string, string>?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (value is null) continue;
+            if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized)) return localized;
+            if (value.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english)) return english;
+            var first = value.Values.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item));
+            if (!string.IsNullOrWhiteSpace(first)) return first;
+        }
+        return null;
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+}

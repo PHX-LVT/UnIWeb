@@ -30,6 +30,7 @@ public static class Program
         TestPublishSnapshotSectionClones();
         TestPublishSnapshotBlockClones();
         TestDraftResetSnapshotClones();
+        TestPresetSectionProfiles();
         TestPresetBlockProfiles();
         TestPublishDiffService();
         TestBlockContractCompatibility();
@@ -330,6 +331,39 @@ public static class Program
             publishedBlocks);
 
         Expect(integrity.HasIntegrityIssues, "Publish diff should flag duplicate stable ids.");
+    }
+
+    private static void TestPresetSectionProfiles()
+    {
+        foreach (var source in SectionFixtures())
+        {
+            var captured = CloneService.CloneSection(source, CloneProfile.PresetCapture, ClonePublishedAt);
+            var label = $"PresetCapture {source.GetType().Name}";
+            Expect(captured.GetType() == source.GetType(), $"{label} should keep the concrete Section type.");
+            Expect(captured.Id != source.Id, $"{label} should regenerate Id.");
+            Expect(captured.StableId != source.StableId, $"{label} should regenerate StableId.");
+            Expect(captured.SourceId == source.Id, $"{label} should point SourceId to the source Section.");
+            Expect(captured.PageStableId == string.Empty, $"{label} should detach PageStableId.");
+            Expect(captured.Version == 1, $"{label} should reset Version.");
+            Expect(captured.PublishedAt is null, $"{label} should clear PublishedAt.");
+            AssertEquivalent(source, captured, label, CloneComparisonMode.PresetSection);
+
+            var applied = CloneService.CloneSection(captured, CloneProfile.PresetApply, ClonePublishedAt);
+            var appliedLabel = $"PresetApply {source.GetType().Name}";
+            Expect(applied.GetType() == source.GetType(), $"{appliedLabel} should keep the concrete Section type.");
+            Expect(applied.Id != captured.Id, $"{appliedLabel} should regenerate Id.");
+            Expect(applied.StableId != captured.StableId, $"{appliedLabel} should regenerate StableId.");
+            AssertEquivalent(captured, applied, appliedLabel, CloneComparisonMode.PresetSection);
+
+            if (applied is ColumnsSection columns && columns.Columns.Count > 0)
+            {
+                var originalSlot = columns.Columns[0].Id;
+                var replacements = CloneService.RegenerateSectionOwnedIds(columns);
+                Expect(columns.Columns[0].Id != originalSlot, "PresetApply ColumnsSection should regenerate ColumnSlot IDs.");
+                Expect(replacements.TryGetValue(originalSlot, out var replacement) && replacement == columns.Columns[0].Id,
+                    "PresetApply ColumnsSection should expose the ColumnSlot remap for owned Blocks.");
+            }
+        }
     }
 
     private static void TestBlockContractCompatibility()
@@ -796,7 +830,7 @@ public static class Program
     {
         AssertPropertyParity(typeof(BlockAuthoringPolicy), typeof(BlockAuthoringPolicyDto));
 
-        var contract = new FullProject.Services.SectionServices.CanvasPresetContractService();
+        var contract = new FullProject.Services.SectionServices.SectionPresetContractService();
         var presetBlock = WithBlockBase(new TextBlock
         {
             Title = Lang("Editable heading"),
@@ -805,7 +839,7 @@ public static class Program
         presetBlock.ParentBlockId = null;
         var lockedBlock = WithBlockBase(new IconBlock { Icon = "lock", Label = Lang("Locked icon") });
         lockedBlock.ParentBlockId = null;
-        var legacyPreset = new CanvasSectionPreset
+        var legacyPreset = new SectionPreset
         {
             Id = NewId(),
             Name = Lang("Legacy preset"),
@@ -829,24 +863,28 @@ public static class Program
         };
         var validation = contract.PrepareAndValidate(legacyPreset);
         Expect(validation is null, "Supported legacy preset schemas should migrate and validate.");
-        Expect(legacyPreset.SchemaVersion == FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion,
+        Expect(legacyPreset.SchemaVersion == FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion,
             "Preset migration should advance to the current schema.");
         Expect(legacyPreset.EditableSlots[0].Name == "heading-slot",
             "Preset editable slot names should be normalized.");
+        var serializedPreset = legacyPreset.ToBson();
+        var restoredPreset = BsonSerializer.Deserialize<SectionPreset>(serializedPreset);
+        Expect(restoredPreset.Section is CanvasSection,
+            "Section preset BSON round-trip should preserve the polymorphic Section snapshot.");
 
-        var futurePreset = new CanvasSectionPreset
+        var futurePreset = new SectionPreset
         {
             Name = Lang("Future"),
-            SchemaVersion = FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion + 1,
+            SchemaVersion = FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion + 1,
             Blocks = [presetBlock]
         };
         Expect(!contract.Compatibility(futurePreset).IsCompatible,
             "Future preset schemas should be rejected instead of silently downgraded.");
 
-        var unsupportedSlotPreset = new CanvasSectionPreset
+        var unsupportedSlotPreset = new SectionPreset
         {
             Name = Lang("Unsupported slot"),
-            SchemaVersion = FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion,
+            SchemaVersion = FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion,
             Blocks = [presetBlock],
             EditableSlots =
             [
@@ -861,10 +899,10 @@ public static class Program
         Expect(contract.PrepareAndValidate(unsupportedSlotPreset)?.Contains("unsupported kind", StringComparison.OrdinalIgnoreCase) == true,
             "Preset validation should reject unknown editable slot kinds.");
 
-        var duplicateBlockSlotPreset = new CanvasSectionPreset
+        var duplicateBlockSlotPreset = new SectionPreset
         {
             Name = Lang("Duplicate Block slot"),
-            SchemaVersion = FullProject.Services.SectionServices.CanvasPresetContractService.CurrentSchemaVersion,
+            SchemaVersion = FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion,
             Blocks = [presetBlock],
             EditableSlots =
             [
@@ -1504,7 +1542,7 @@ public static class Program
         Expect(clone.PublishedAt is null, $"{label} should clear PublishedAt.");
         Expect(clone.PageStableId == string.Empty, $"{label} should detach PageStableId.");
         Expect(clone.SectionStableId == string.Empty, $"{label} should detach SectionStableId.");
-        Expect(clone.ColumnSlotId is null, $"{label} should clear ColumnSlotId.");
+        Expect(clone.ColumnSlotId == source.ColumnSlotId, $"{label} should preserve ColumnSlotId for remapping with its Section preset.");
         Expect(clone.CreatedAt == ClonePublishedAt, $"{label} should refresh CreatedAt.");
         Expect(clone.UpdatedAt == ClonePublishedAt, $"{label} should refresh UpdatedAt.");
         AssertEquivalent(source, clone, label, CloneComparisonMode.PresetBlock);
@@ -1519,7 +1557,7 @@ public static class Program
         Expect(clone.PublishedAt is null, $"{label} should clear PublishedAt.");
         Expect(clone.PageStableId == "target-page-stable", $"{label} should attach target PageStableId.");
         Expect(clone.SectionStableId == "target-section-stable", $"{label} should attach target SectionStableId.");
-        Expect(clone.ColumnSlotId is null, $"{label} should clear ColumnSlotId.");
+        Expect(clone.ColumnSlotId == source.ColumnSlotId, $"{label} should preserve the captured ColumnSlotId until Section apply remaps it.");
         Expect(clone.CreatedAt == ClonePublishedAt, $"{label} should refresh CreatedAt.");
         Expect(clone.UpdatedAt == ClonePublishedAt, $"{label} should refresh UpdatedAt.");
         AssertEquivalent(source, clone, label, CloneComparisonMode.PresetBlock);
@@ -1586,6 +1624,7 @@ public static class Program
     private enum CloneComparisonMode
     {
         Snapshot,
+        PresetSection,
         PresetBlock
     }
 
@@ -1597,6 +1636,11 @@ public static class Program
 
         if (typeof(Section).IsAssignableFrom(ownerType) &&
             propertyName is nameof(Section.Id) or nameof(Section.SourceId) or nameof(Section.Version) or nameof(Section.PublishedAt) or nameof(Section.UpdatedAt))
+            return true;
+
+        if (mode == CloneComparisonMode.PresetSection &&
+            typeof(Section).IsAssignableFrom(ownerType) &&
+            propertyName is nameof(Section.StableId) or nameof(Section.PageStableId) or nameof(Section.Order) or nameof(Section.CreatedAt))
             return true;
 
         if (typeof(Block).IsAssignableFrom(ownerType) &&

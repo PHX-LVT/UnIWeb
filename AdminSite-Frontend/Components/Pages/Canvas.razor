@@ -405,11 +405,20 @@
                            OnBlocksChanged="HandleBlocksChanged"
                            OnActiveBlockChanged="HandleEditorActiveBlockChanged"
                            OnArrangeBlocksRequested="EnterArrangeBlocks"
-                           OnDiscardAndArrangeRequested="DiscardSectionChangesAndEnterArrangeBlocks" />
+                           OnDiscardAndArrangeRequested="DiscardSectionChangesAndEnterArrangeBlocks"
+                           OnSaveAsPresetRequested="OpenSectionPresetDialog" />
             </div>
         }
     </BodyTemplate>
 </DxWindow>
+
+@if (_presetSection is not null)
+{
+    <SectionPresetSaveDialog Visible="true"
+                             VisibleChanged="OnSectionPresetDialogVisibilityChanged"
+                             Section="_presetSection"
+                             PageId="@Page.Id" />
+}
 
 <DxWindow Visible="@(CanArrange && ArrangeEditBlock is not null)"
           VisibleChanged="OnArrangeContentEditorVisibilityChanged"
@@ -532,7 +541,8 @@
     private SectionModel? _selectedSection;
     private bool _publishing = false;
     private bool _resetting = false;
-    private const double CanvasScale = 0.7;
+    private const double DesktopCanvasScale = 0.8;
+    private const double DevicePreviewScale = 0.7;
     private double _iframeHeight = 2000;
     private List<SectionPosition> _sectionPositions = new();
     private List<BlockPosition> _blockPositions = new();
@@ -560,6 +570,7 @@
     private string? _arrangeContentEditBlockId;
     private List<string> _languages = new() { "en" };
     private DotNetObjectReference<Canvas>? _dotNetRef;
+    private SectionModel? _presetSection;
     private ElementReference _overlayRef;
     private bool _overlayInitialized;
     private bool _sortableInitialized;
@@ -684,6 +695,10 @@
         "mobile" => 375,
         _ => 1440
     };
+
+    private double CanvasScale => EffectiveViewport == "desktop"
+        ? DesktopCanvasScale
+        : DevicePreviewScale;
 
     private double ScaledIframeHeight => _iframeHeight * CanvasScale;
     private string PreviewShellStyle =>
@@ -2195,6 +2210,18 @@
         _selectedSection = null;
         _editPanelInitialTab = "style";
         _editPanelSelectedBlockId = null;
+    }
+
+    private Task OpenSectionPresetDialog(string sectionId)
+    {
+        _presetSection = Sections.FirstOrDefault(section => section.Id == sectionId) ?? _selectedSection;
+        return Task.CompletedTask;
+    }
+
+    private Task OnSectionPresetDialogVisibilityChanged(bool visible)
+    {
+        if (!visible) _presetSection = null;
+        return Task.CompletedTask;
     }
 
     private void OpenArrangeContentEditor(string blockId)

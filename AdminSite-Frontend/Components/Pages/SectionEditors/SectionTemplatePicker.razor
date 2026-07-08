@@ -15,8 +15,8 @@
                     <div class="ez-picker-grid">
                         @foreach (var template in group.Value)
                         {
-                            <button class="ez-picker-card"
-                                    @onclick="() => OnPicked.InvokeAsync(template.Type)">
+                            <button class="ez-picker-card @(template.Type == SavedPresetsType ? "ez-picker-card--saved-presets" : null)"
+                                    @onclick="() => Pick(template.Type)">
                                 <div class="ez-picker-card__icon">
                                     <i class="fas @template.Icon"></i>
                                 </div>
@@ -35,11 +35,16 @@
 
 @code {
     [Parameter] public EventCallback<string> OnPicked { get; set; }
+    [Parameter] public EventCallback OnSavedPresets { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private Dictionary<string, List<SectionTemplate>> _templates = new()
     {
+        ["SectionGroupSavedPresets"] = new()
+        {
+            new(SavedPresetsType, "SavedPresets", "fa-bookmark", "SavedPresetsCardHint")
+        },
         ["SectionGroupPageStructure"] = new()
         {
             new("hero",    "SectionTemplateHeroName", "fa-image", "SectionTemplateHeroDesc"),
@@ -68,6 +73,12 @@
             new("canvas", "SectionTemplateCanvasName", "fa-object-group", "SectionTemplateCanvasDesc")
         }
     };
+
+    private const string SavedPresetsType = "saved-presets";
+
+    private Task Pick(string type) => type == SavedPresetsType
+        ? OnSavedPresets.InvokeAsync()
+        : OnPicked.InvokeAsync(type);
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 

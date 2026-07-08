@@ -200,7 +200,15 @@
 @if (_showSectionPicker)
 {
     <SectionTemplatePicker OnPicked="CreateSection"
+                           OnSavedPresets="ShowPresetGallery"
                            OnCancel="() => _showSectionPicker = false" />
+}
+
+@if (_showPresetGallery && _selectedPageId is not null)
+{
+    <SectionPresetGallery PageId="@_selectedPageId"
+                          OnInserted="HandlePresetInserted"
+                          OnCancel="ClosePresetGallery" />
 }
 
 @* -- Create page modal (step 2 after template pick) -- *@
@@ -338,6 +346,7 @@
     private ElementReference _pageTabsRef;
     private ElementReference _pageTabsScrollRef;
     private ElementReference _childPageListRef;
+    private string? _pendingRevealRootPageId;
     private DotNetObjectReference<Dashboard>? _dotNetRef;
 
     private bool CanEditDashboard => Auth.CanUsePageBuilder;
@@ -373,6 +382,7 @@
 
     // Section picker
     private bool _showSectionPicker = false;
+    private bool _showPresetGallery = false;
 
     private IEnumerable<PageModel> RootPages =>
         _pages.Where(p => string.IsNullOrWhiteSpace(p.ParentPageId))
@@ -482,6 +492,20 @@
             catch
             {
                 Http.Toast("Child page sorting failed to initialize.", 500);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(_pendingRevealRootPageId))
+        {
+            var pageId = _pendingRevealRootPageId;
+            _pendingRevealRootPageId = null;
+            try
+            {
+                await JS.InvokeVoidAsync("revealAdminPageTab", _pageTabsScrollRef, pageId);
+            }
+            catch
+            {
+                // Non-critical polish: selection still succeeds if tab reveal cannot run.
             }
         }
     }
@@ -606,6 +630,7 @@
             }
         }
 
+        _pendingRevealRootPageId = _activeParentPage?.Id ?? page.Id;
         await ReloadChildren();
         await ReloadSections();
     }
@@ -638,6 +663,25 @@
     private void ShowPagePicker() => _showPagePicker = true;
 
     private void ShowSectionPicker() => _showSectionPicker = true;
+
+    private void ShowPresetGallery()
+    {
+        _showSectionPicker = false;
+        _showPresetGallery = true;
+    }
+
+    private Task ClosePresetGallery()
+    {
+        _showPresetGallery = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandlePresetInserted(string sectionId)
+    {
+        _showPresetGallery = false;
+        await ReloadSections();
+        await ReloadPreviewSafelyAsync();
+    }
 
     private void ShowCreateChildForm()
     {

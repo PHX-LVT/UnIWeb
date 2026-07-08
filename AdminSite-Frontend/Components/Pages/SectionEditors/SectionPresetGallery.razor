@@ -1,0 +1,259 @@
+@inject AdminSectionService SectionService
+@inject IHttpService Http
+
+<div class="ez-modal-overlay section-preset-gallery-overlay" @onclick="Close">
+    <section class="ez-modal section-preset-gallery" role="dialog" aria-modal="true" aria-labelledby="section-preset-gallery-title" @onclick:stopPropagation="true">
+        <header class="ez-modal__header section-preset-gallery__header">
+            <div>
+                <span class="section-preset-gallery__eyebrow">@T("AddSection")</span>
+                <h2 id="section-preset-gallery-title">@T("SavedPresets")</h2>
+                <p>@T("SavedPresetsGalleryHint")</p>
+            </div>
+            <button type="button" class="ez-icon-btn" aria-label="@T("Close")" @onclick="Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </header>
+
+        <div class="section-preset-gallery__filters">
+            <label class="section-preset-gallery__search">
+                <i class="fas fa-search"></i>
+                <input class="form-control" placeholder="@T("SearchPresets")" @bind="_search" @bind:event="oninput" />
+            </label>
+            <select class="form-select" @bind="_sectionType">
+                <option value="">@T("AllSectionTypes")</option>
+                @foreach (var type in SectionTypes)
+                {
+                    <option value="@type">@SectionTypeLabel(type)</option>
+                }
+            </select>
+        </div>
+
+        <div class="ez-modal__body section-preset-gallery__body">
+            @if (_loading)
+            {
+                <div class="section-preset-gallery__state"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
+            }
+            else if (FilteredPresets.Count == 0)
+            {
+                <div class="section-preset-gallery__empty">
+                    <i class="fas fa-bookmark"></i>
+                    <strong>@T("NoSavedPresets")</strong>
+                    <span>@T("NoSavedPresetsHint")</span>
+                </div>
+            }
+            else
+            {
+                <div class="section-preset-gallery__grid">
+                    @foreach (var preset in FilteredPresets)
+                    {
+                        <article class="section-preset-card @(!preset.IsCompatible ? "is-disabled" : null)">
+                            <div class="section-preset-card__surface">
+                                <div class="section-preset-card__thumbnail section-preset-card__thumbnail--@VisualKey(preset)" style="@ThumbnailStyle(preset)">
+                                    <div class="section-preset-card__thumbnail-bg"></div>
+                                    <div class="section-preset-card__icon" aria-hidden="true">
+                                        <i class="fas @IconClass(preset)"></i>
+                                    </div>
+                                </div>
+                                <div class="section-preset-card__copy">
+                                    <strong>@Localized(preset.Name, T("Untitled"))</strong>
+                                    <span>@Localized(preset.Description, T("SavedSectionPreset"))</span>
+                                    <small>@SummaryLabel(preset)</small>
+                                </div>
+                                <button type="button"
+                                        class="section-preset-card__action"
+                                        disabled="@(_busyPresetId is not null || !preset.IsCompatible)"
+                                        title="@(preset.CompatibilityMessage ?? T("InsertPresetSection"))"
+                                        @onclick="() => Insert(preset)">
+                                    <i class="fas @(_busyPresetId == preset.Id ? "fa-spinner fa-spin" : "fa-plus")"></i>
+                                    @T("Insert")
+                                </button>
+                            </div>
+                            <button type="button"
+                                    class="section-preset-card__delete"
+                                    aria-label="@T("DeletePreset")"
+                                    title="@T("DeletePreset")"
+                                    disabled="@(_busyPresetId is not null)"
+                                    @onclick="() => _deleteCandidate = preset">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </article>
+                    }
+                </div>
+            }
+        </div>
+
+        <footer class="ez-modal__footer section-preset-gallery__footer">
+            <span>@string.Format(T("PresetCount"), FilteredPresets.Count)</span>
+            <button type="button" class="btn-admin btn-ghost" @onclick="Close">@T("Close")</button>
+        </footer>
+    </section>
+</div>
+
+@if (_deleteCandidate is not null)
+{
+    <div class="ez-modal-overlay section-preset-confirm-overlay" @onclick="CancelDelete">
+        <section class="ez-modal section-preset-confirm" role="alertdialog" aria-modal="true" @onclick:stopPropagation="true">
+            <div class="ez-modal__header"><h2>@T("DeletePreset")</h2></div>
+            <div class="ez-modal__body">
+                <p>@string.Format(T("DeletePresetConfirm"), Localized(_deleteCandidate.Name, T("Untitled")))</p>
+            </div>
+            <div class="ez-modal__footer">
+                <button type="button" class="btn-admin btn-ghost" @onclick="CancelDelete">@T("Cancel")</button>
+                <button type="button" class="btn-admin btn-danger" disabled="@(_busyPresetId is not null)" @onclick="DeleteConfirmed">
+                    <i class="fas fa-trash"></i> @T("Delete")
+                </button>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter, EditorRequired] public string PageId { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> OnInserted { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private List<SectionPresetModel> _presets = new();
+    private bool _loading = true;
+    private string _search = string.Empty;
+    private string _sectionType = string.Empty;
+    private string? _busyPresetId;
+    private SectionPresetModel? _deleteCandidate;
+
+    private List<SectionPresetModel> FilteredPresets => _presets
+        .Where(preset => string.IsNullOrWhiteSpace(_sectionType) || string.Equals(preset.SectionType, _sectionType, StringComparison.OrdinalIgnoreCase))
+        .Where(preset => string.IsNullOrWhiteSpace(_search) ||
+                         Localized(preset.Name, string.Empty).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                         Localized(preset.Description, string.Empty).Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                         SummaryLabel(preset).Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(preset => preset.UpdatedAt)
+        .ToList();
+
+    private IEnumerable<string> SectionTypes => _presets
+        .Select(preset => preset.SectionType)
+        .Where(type => !string.IsNullOrWhiteSpace(type))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(SectionTypeLabel);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var response = await SectionService.GetSectionPresetsAsync();
+        if (!response.Success) Http.Toast(response.Message, response.StatusCode);
+        _presets = response.Data ?? new();
+        _loading = false;
+    }
+
+    private async Task Insert(SectionPresetModel preset)
+    {
+        if (_busyPresetId is not null || !preset.IsCompatible) return;
+        _busyPresetId = preset.Id;
+        try
+        {
+            var response = await SectionService.ApplySectionPresetAsync(PageId, preset.Id);
+            Http.Toast(response.Message, response.StatusCode);
+            if (!response.Success || response.Data is null) return;
+            await OnInserted.InvokeAsync(response.Data.SectionId);
+        }
+        finally
+        {
+            _busyPresetId = null;
+        }
+    }
+
+    private async Task DeleteConfirmed()
+    {
+        if (_deleteCandidate is null || _busyPresetId is not null) return;
+        var candidate = _deleteCandidate;
+        _busyPresetId = candidate.Id;
+        try
+        {
+            var response = await SectionService.DeleteSectionPresetAsync(candidate.Id);
+            Http.Toast(response.Message, response.StatusCode);
+            if (!response.Success) return;
+            _presets.RemoveAll(preset => preset.Id == candidate.Id);
+            _deleteCandidate = null;
+        }
+        finally
+        {
+            _busyPresetId = null;
+        }
+    }
+
+    private void CancelDelete() => _deleteCandidate = null;
+    private Task Close() => OnCancel.InvokeAsync();
+
+    private string ThumbnailStyle(SectionPresetModel preset) =>
+        $"--preset-bg:{(string.IsNullOrWhiteSpace(preset.ThumbnailBackground) ? "#f3f4f6" : preset.ThumbnailBackground)};";
+
+    private string SummaryLabel(SectionPresetModel preset)
+    {
+        if (!string.IsNullOrWhiteSpace(preset.SummaryLabel)) return preset.SummaryLabel;
+        var sectionLabel = SectionTypeLabel(preset.SectionType);
+        if (preset.BlockCount > 0) return $"{sectionLabel} · {string.Format(T("BlocksCount"), preset.BlockCount)}";
+        if (preset.ItemCount > 0) return $"{sectionLabel} · {preset.ItemCount} items";
+        return sectionLabel;
+    }
+
+    private static string IconClass(SectionPresetModel preset)
+    {
+        if (!string.IsNullOrWhiteSpace(preset.IconClass)) return preset.IconClass;
+        return preset.SectionType switch
+        {
+            "hero" => "fa-image",
+            "cta" => "fa-bullhorn",
+            "columns" => "fa-columns",
+            "list" => "fa-th-large",
+            "stats" => "fa-chart-line",
+            "testimonial" => "fa-comments",
+            "carousel" => "fa-window-restore",
+            "showcase" => "fa-sitemap",
+            "library" => "fa-newspaper",
+            "network-map" => "fa-map-location-dot",
+            "html" => "fa-code",
+            "canvas" => "fa-object-group",
+            _ => "fa-layer-group"
+        };
+    }
+
+    private static string VisualKey(SectionPresetModel preset)
+    {
+        if (!string.IsNullOrWhiteSpace(preset.VisualKey)) return preset.VisualKey;
+        return preset.SectionType switch
+        {
+            "html" => "code",
+            "showcase" or "library" => "dynamic",
+            "columns" or "stats" or "testimonial" => "grid",
+            "carousel" => "carousel",
+            "network-map" => "map",
+            "canvas" => "canvas",
+            _ => "section"
+        };
+    }
+
+    private string Localized(Dictionary<string, string>? values, string fallback)
+    {
+        if (values is null) return fallback;
+        if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized)) return localized;
+        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english)) return english;
+        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? fallback;
+    }
+
+    private string SectionTypeLabel(string type) => type switch
+    {
+        "hero" => T("SectionTemplateHeroName"),
+        "cta" => T("SectionTemplateCtaName"),
+        "columns" => T("SectionTemplateColumnsName"),
+        "list" => T("SectionTemplateListName"),
+        "stats" => T("SectionTemplateStatsName"),
+        "testimonial" => T("SectionTemplateTestimonialName"),
+        "carousel" => T("SectionTemplateCarouselName"),
+        "showcase" => T("SectionTemplateShowcaseName"),
+        "library" => T("SectionTemplateLibraryName"),
+        "network-map" => T("SectionTemplateMapName"),
+        "html" => T("SectionTemplateHtmlName"),
+        "canvas" => T("SectionTemplateCanvasName"),
+        _ => type
+    };
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+}

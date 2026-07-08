@@ -2,9 +2,9 @@ using FullProject.Models;
 
 namespace FullProject.Services.SectionServices;
 
-public sealed class CanvasPresetContractService
+public sealed class SectionPresetContractService
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
     public const int MinimumSupportedSchemaVersion = 1;
 
     private static readonly HashSet<string> SlotKinds = new(StringComparer.Ordinal)
@@ -12,7 +12,7 @@ public sealed class CanvasPresetContractService
         "content", "text", "icon", "image", "video", "link", "form"
     };
 
-    public CanvasPresetCompatibility Compatibility(CanvasSectionPreset preset)
+    public SectionPresetCompatibility Compatibility(SectionPreset preset)
     {
         if (preset.SchemaVersion < MinimumSupportedSchemaVersion)
             return new(false, $"Preset schema {preset.SchemaVersion} is too old to migrate safely.");
@@ -23,7 +23,7 @@ public sealed class CanvasPresetContractService
             : $"Preset schema {preset.SchemaVersion} will be upgraded in memory when applied.");
     }
 
-    public string? PrepareAndValidate(CanvasSectionPreset preset)
+    public string? PrepareAndValidate(SectionPreset preset)
     {
         var compatibility = Compatibility(preset);
         if (!compatibility.IsCompatible) return compatibility.Message;
@@ -31,13 +31,28 @@ public sealed class CanvasPresetContractService
         return Validate(preset);
     }
 
-    public void UpgradeInPlace(CanvasSectionPreset preset)
+    public void UpgradeInPlace(SectionPreset preset)
     {
         preset.Name ??= new();
+        preset.Description ??= new();
+        preset.PreviewText ??= new();
         preset.Style ??= new SectionStyle();
         preset.Blocks ??= new();
         preset.EditableSlots ??= new();
         preset.LockPolicy ??= new CanvasPresetLockPolicy();
+        preset.Section ??= new CanvasSection
+        {
+            Id = string.IsNullOrWhiteSpace(preset.Id) ? MongoDB.Bson.ObjectId.GenerateNewId().ToString() : preset.Id,
+            StableId = Guid.NewGuid().ToString(),
+            PageStableId = string.Empty,
+            AdminLabel = new Dictionary<string, string>(preset.Name),
+            Style = preset.Style
+        };
+        preset.SectionType = SectionType(preset.Section);
+        preset.Style = preset.Section.Style;
+        preset.ThumbnailBackground = string.IsNullOrWhiteSpace(preset.ThumbnailBackground)
+            ? preset.Section.Style.BackgroundColor
+            : preset.ThumbnailBackground;
         foreach (var block in preset.Blocks)
         {
             block.Authoring ??= new BlockAuthoringPolicy();
@@ -49,14 +64,20 @@ public sealed class CanvasPresetContractService
         preset.SchemaVersion = CurrentSchemaVersion;
     }
 
-    public string? Validate(CanvasSectionPreset preset)
+    public string? Validate(SectionPreset preset)
     {
         if (!preset.Name.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
             return "Preset name is required.";
-        if (preset.Blocks.Count == 0)
-            return "A Canvas preset must contain at least one Block.";
+        if (preset.Name.Values.Any(value => value.Length > 120))
+            return "Preset names must be 120 characters or fewer.";
+        if (preset.Description.Values.Any(value => value.Length > 400))
+            return "Preset descriptions must be 400 characters or fewer.";
+        if (preset.Section is null)
+            return "A Section preset must contain a Section snapshot.";
+        if (string.Equals(SectionType(preset.Section), "unknown", StringComparison.Ordinal))
+            return "The preset contains an unsupported Section type.";
         if (preset.Blocks.Count > 250)
-            return "A Canvas preset supports at most 250 Blocks.";
+            return "A Section preset supports at most 250 Blocks.";
 
         var ids = preset.Blocks.Select(block => block.Id).ToList();
         if (ids.Any(string.IsNullOrWhiteSpace) || ids.Distinct(StringComparer.Ordinal).Count() != ids.Count)
@@ -96,8 +117,17 @@ public sealed class CanvasPresetContractService
         return null;
     }
 
-    public void ApplyPolicy(CanvasSectionPreset preset, IEnumerable<Block> appliedBlocks)
+    public void ApplyPolicy(SectionPreset preset, IEnumerable<Block> appliedBlocks)
     {
+        if (preset.EditableSlots.Count == 0 &&
+            !preset.LockPolicy.LockGeometryOnApply &&
+            !preset.LockPolicy.LockContentOutsideSlots)
+        {
+            // Universal Section presets preserve each Block's existing authoring
+            // policy, including governed Container slot ownership.
+            return;
+        }
+
         var sourceById = preset.Blocks.ToDictionary(block => block.Id, StringComparer.Ordinal);
         var slotByStableId = preset.EditableSlots.ToDictionary(slot => slot.BlockStableId, StringComparer.Ordinal);
         foreach (var block in appliedBlocks)
@@ -148,6 +178,24 @@ public sealed class CanvasPresetContractService
         }
         return false;
     }
+
+    public static string SectionType(Section section) => section switch
+    {
+        HeroSection => "hero",
+        CtaSection => "cta",
+        ListSection => "list",
+        DynamicSection => "dynamic",
+        HtmlSection => "html",
+        ColumnsSection => "columns",
+        ShowcaseSection => "showcase",
+        LibrarySection => "library",
+        StatsSection => "stats",
+        CarouselSection => "carousel",
+        NetworkMapSection => "network-map",
+        TestimonialSection => "testimonial",
+        CanvasSection => "canvas",
+        _ => "unknown"
+    };
 }
 
-public sealed record CanvasPresetCompatibility(bool IsCompatible, string? Message);
+public sealed record SectionPresetCompatibility(bool IsCompatible, string? Message);
