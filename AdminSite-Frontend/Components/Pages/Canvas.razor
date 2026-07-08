@@ -115,6 +115,10 @@
         </div>
     </div>
 
+    <div class="ez-canvas__feedback-row">
+        <AdminInlineStatus TargetId="canvas-authoring" />
+    </div>
+
     <CanvasArrangeToolbar Visible="CanArrange"
                           SelectionCount="_selectedBlockIds.Count"
                           SelectedLabel="@SelectedBlockLabel"
@@ -868,7 +872,7 @@
             }
             catch
             {
-                Http.Toast("Canvas overlay failed to initialize.", 500);
+                Http.Toast(T("NotificationCanvasOverlayInitFailed"), 500);
             }
         }
 
@@ -881,7 +885,7 @@
             }
             catch
             {
-                Http.Toast("Section drag sorting failed to initialize.", 500);
+                Http.Toast(T("NotificationSectionSortingInitFailed"), 500);
             }
         }
 
@@ -894,7 +898,7 @@
             }
             catch
             {
-                Http.Toast("Block arranging failed to initialize.", 500);
+                Http.Toast(T("NotificationBlockArrangingInitFailed"), 500);
             }
         }
     }
@@ -1535,7 +1539,7 @@
             dto.ColumnSlotId = target.ColumnSlotId;
             dto.PositionMode = target.PositionMode;
             var response = await BlockService.CreateAsync(Page.Id, target.SectionId, dto);
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response, T("NotificationBlockCreated"));
             if (!response.Success || response.Data is null) return;
             _showArrangeBlockWizard = false;
             _activeArrangeSectionId = target.SectionId;
@@ -1566,7 +1570,7 @@
         async Task<bool> Apply(IReadOnlyList<string> ids)
         {
             var response = await BlockService.ReorderAsync(Page.Id, request.SectionId, ids.ToList());
-            Http.Toast(response.Message, response.StatusCode);
+            Http.NotifyInline(response, "canvas-authoring", T("NotificationOrderSaved"), T("NotificationReorderFailed"));
             if (!response.Success) return false;
             await RefreshAuthoringAsync(_selectedBlockIds.ToList());
             return true;
@@ -1671,7 +1675,7 @@
                 var response = await BlockService.UpdateAsync(Page.Id, state.SectionId, state.BlockId, state.Dto);
                 if (!response.Success || response.Data is null)
                 {
-                    Http.Toast(response.Message, response.StatusCode);
+                    Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
                     return false;
                 }
                 updatedBlocks.Add(response.Data);
@@ -1805,7 +1809,7 @@
         try
         {
             var response = await BlockService.DeleteGraphsAsync(Page.Id, sectionId, selected.Select(block => block.Id));
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response, T("NotificationBlockDeleted"));
             if (!response.Success) return;
             if (!string.IsNullOrWhiteSpace(_editPanelSelectedBlockId) && deletingIds.Contains(_editPanelSelectedBlockId))
                 _editPanelSelectedBlockId = null;
@@ -1904,7 +1908,7 @@
             });
             if (!response.Success)
             {
-                Http.Toast(response.Message, response.StatusCode);
+                Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
                 return false;
             }
             foreach (var state in states)
@@ -1944,7 +1948,7 @@
                 var response = await BlockService.DuplicateAsync(Page.Id, sectionId, originals);
                 if (!response.Success || response.Data is null)
                 {
-                    Http.Toast(response.Message, response.StatusCode);
+                    Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
                     return false;
                 }
                 currentIds = response.Data.BlockIds;
@@ -1954,7 +1958,7 @@
             async Task<bool> Remove()
             {
                 var response = await BlockService.DeleteGraphsAsync(Page.Id, sectionId, currentIds);
-                if (!response.Success) { Http.Toast(response.Message, response.StatusCode); return false; }
+                if (!response.Success) { Http.Notify(response, failureFallback: T("NotificationSaveFailed")); return false; }
                 await RefreshAuthoringAsync(originals);
                 return true;
             }
@@ -2086,7 +2090,7 @@
     private async Task DiscardSectionChangesAndEnterArrangeBlocks(string sectionId)
     {
         var response = await SectionService.GetByIdAsync(Page.Id, sectionId);
-        Http.Toast(response.Message, response.StatusCode);
+        Http.SilentSuccess(response);
         if (!response.Success || response.Data is null)
             return;
 
@@ -2302,7 +2306,7 @@
     private async Task ToggleVisibility(SectionModel section)
     {
         var res = await SectionService.SetVisibilityAsync(Page.Id, section.Id, !section.Visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.NotifyInline(res, "canvas-authoring", T("NotificationSectionVisibilityUpdated"));
         if (!res.Success)
         {
             return;
@@ -2331,7 +2335,7 @@
     public async Task OnReordered(List<string> orderedIds)
     {
         var res = await SectionService.ReorderAsync(Page.Id, orderedIds);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.NotifyInline(res, "canvas-authoring", T("NotificationOrderSaved"), T("NotificationReorderFailed"));
         if (res.Success)
         {
             await OnSectionsChanged.InvokeAsync();
@@ -2347,7 +2351,7 @@
         try
         {
             var res = await PageService.PublishAsync(Page.Id);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res, T("NotificationPublished"));
             if (res.Success)
             {
                 await OnPageStatusChanged.InvokeAsync();
@@ -2366,7 +2370,7 @@
         try
         {
             var res = await PageService.ResetAsync(Page.Id);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res, T("NotificationResetComplete"));
             if (res.Success)
             {
                 await OnSectionsChanged.InvokeAsync();

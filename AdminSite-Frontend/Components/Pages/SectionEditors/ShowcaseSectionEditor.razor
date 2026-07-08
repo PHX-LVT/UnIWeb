@@ -460,7 +460,7 @@
         const long max = 5 * 1024 * 1024;
         if (file.Size > max)
         {
-            Http.Toast("Image must be 5MB or smaller.", 422);
+            Http.Toast(T("ImageTooLarge"), 422);
             return;
         }
 
@@ -470,16 +470,16 @@
             var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=showcase", file, maxBytes: max);
             if (!res.Success || res.Data is null)
             {
-                Http.Toast(res.Message ?? "Image upload failed.", res.StatusCode);
+                Http.Toast(res.Message ?? T("NotificationImageUploadFailed"), res.StatusCode);
                 return;
             }
 
             card.CardImageUrl = res.Data.Url;
             card.CardBackgroundType = "image";
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Http.Toast($"Image upload failed: {ex.Message}", 500);
+            Http.Toast(T("NotificationImageUploadFailed"), 500);
         }
         finally
         {

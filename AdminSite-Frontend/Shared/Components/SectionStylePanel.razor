@@ -399,11 +399,11 @@
         if (res.Success && res.Data is not null)
         {
             _style.BackgroundImageUrl = res.Data.Url;
-            Http.Toast("Background image uploaded.", res.StatusCode);
+            Http.Toast(T("NotificationBackgroundImageUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? "Background image upload failed.", res.StatusCode);
+            Http.Toast(res.Message ?? T("NotificationBackgroundImageUploadFailed"), res.StatusCode);
         }
     }
 
@@ -416,11 +416,11 @@
         if (res.Success && res.Data is not null)
         {
             _style.BackgroundVideoUrl = res.Data.Url;
-            Http.Toast("Background video uploaded.", res.StatusCode);
+            Http.Toast(T("NotificationBackgroundVideoUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? "Background video upload failed.", res.StatusCode);
+            Http.Toast(res.Message ?? T("NotificationBackgroundVideoUploadFailed"), res.StatusCode);
         }
     }
 
@@ -477,21 +477,19 @@
             var res = await SectionService.UpdateStyleAsync(PageId, SectionId, ToDto());
             _saveSucceeded = res.Success;
             _saveMessage = string.IsNullOrWhiteSpace(res.Message)
-                ? (res.Success ? "Style updated." : "Style update failed.")
+                ? (res.Success ? T("NotificationSectionSaved") : T("NotificationSaveFailed"))
                 : res.Message;
-            Http.Toast(
-                _saveMessage,
-                res.StatusCode);
+            Http.Notify(res, T("NotificationSectionSaved"), T("NotificationSaveFailed"));
 
             if (res.Success)
             {
                 await OnSaved.InvokeAsync();
             }
         }
-        catch (Exception ex)
+        catch
         {
             _saveSucceeded = false;
-            _saveMessage = $"Style update failed: {ex.Message}";
+            _saveMessage = T("NotificationSaveFailed");
             Http.Toast(_saveMessage, 500);
         }
         finally

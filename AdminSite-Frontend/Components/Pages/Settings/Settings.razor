@@ -1,4 +1,6 @@
 @page "/settings"
+@using AdminSite.Languages.Core
+@using System.Globalization
 @inject AdminSettingsService SettingsService
 @inject AdminAuthService Auth
 @inject AdminLanguageService AdminLanguageState
@@ -79,13 +81,13 @@
                                         <input type="checkbox"
                                                checked="@lang.AdminEnabled"
                                                disabled="@(!lang.Active || isFallback)"
-                                               @onchange="e => lang.AdminEnabled = ReadChecked(e, lang.AdminEnabled)" />
+                                               @onchange="e => SetAdminEnabled(lang, e)" />
                                     </td>
                                     <td>
                                         <input type="checkbox"
                                                checked="@lang.UserEnabled"
                                                disabled="@(!lang.Active || isFallback)"
-                                               @onchange="e => lang.UserEnabled = ReadChecked(e, lang.UserEnabled)" />
+                                               @onchange="e => SetUserEnabled(lang, e)" />
                                     </td>
                                     <td>
                                         @if (isFallback)
@@ -112,6 +114,133 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if (_translationHealth is not null)
+                {
+                    <section class="translation-health" aria-labelledby="translation-health-title">
+                        <div class="translation-health__header">
+                            <div>
+                                <h3 id="translation-health-title">@T("TranslationHealth")</h3>
+                                <p>@T("TranslationHealthSummary")</p>
+                            </div>
+                            <div class="translation-health__key">
+                                <span>@T("TranslationHealthKeyLanguage")</span>
+                                <strong>@(_translationHealth.KeyLanguage?.DisplayName ?? _translationHealth.FallbackLanguage.ToUpperInvariant())</strong>
+                                <code>@_translationHealth.FallbackLanguage</code>
+                            </div>
+                        </div>
+
+                        <div class="translation-health__notice">
+                            <i class="fas fa-code"></i>
+                            <span>@T("TranslationHealthSourceNotice")</span>
+                        </div>
+
+                        <div class="translation-health__rows">
+                            @foreach (var health in _translationHealth.Languages)
+                            {
+                                <article class="translation-health__row @TranslationHealthSeverityClass(health.Severity)">
+                                    <div class="translation-health__row-main">
+                                        <div class="translation-health__language">
+                                            <span>@health.DisplayName</span>
+                                            <code>@health.LanguageCode</code>
+                                            @if (health.IsKeyLanguage)
+                                            {
+                                                <em>@T("TranslationHealthKeyBadge")</em>
+                                            }
+                                        </div>
+
+                                        <div class="translation-health__coverage">
+                                            <div>
+                                                <strong>@health.TranslatedCount / @health.TotalRequiredKeys</strong>
+                                                <span>@T("TranslationHealthCoverage")</span>
+                                            </div>
+                                            <div class="translation-health__bar" aria-hidden="true">
+                                                <span style="@TranslationHealthCoverageStyle(health)"></span>
+                                            </div>
+                                        </div>
+
+                                        <span class="translation-health__status">
+                                            @TranslationHealthStatus(health)
+                                        </span>
+
+                                        <button type="button"
+                                                class="translation-health__toggle"
+                                                disabled="@(!health.HasIssues)"
+                                                @onclick="() => ToggleTranslationHealthIssues(health.LanguageCode)">
+                                            @(IsTranslationHealthExpanded(health)
+                                                ? T("TranslationHealthHideIssues")
+                                                : T("TranslationHealthShowIssues"))
+                                        </button>
+                                    </div>
+
+                                    @if (IsTranslationHealthExpanded(health))
+                                    {
+                                        <div class="translation-health__issues">
+                                            @if (!health.HasCatalog)
+                                            {
+                                                <div class="translation-health__issue">
+                                                    <strong>@T("TranslationHealthUnsupported")</strong>
+                                                    <p>@(health.IsKeyLanguage
+                                                        ? T("TranslationHealthMissingFallbackCatalog")
+                                                        : T("TranslationHealthNoCompiledCatalog"))</p>
+                                                </div>
+                                            }
+
+                                            @if (health.MissingKeys.Count > 0)
+                                            {
+                                                <div class="translation-health__issue">
+                                                    <strong>@T("TranslationHealthMissing")</strong>
+                                                    <ul>
+                                                        @foreach (var key in health.MissingKeys)
+                                                        {
+                                                            <li><code>@key</code></li>
+                                                        }
+                                                    </ul>
+                                                </div>
+                                            }
+
+                                            @if (health.EmptyKeys.Count > 0)
+                                            {
+                                                <div class="translation-health__issue">
+                                                    <strong>@T("TranslationHealthEmpty")</strong>
+                                                    <ul>
+                                                        @foreach (var key in health.EmptyKeys)
+                                                        {
+                                                            <li><code>@key</code></li>
+                                                        }
+                                                    </ul>
+                                                </div>
+                                            }
+
+                                            @if (health.DuplicateKeys.Count > 0)
+                                            {
+                                                <div class="translation-health__issue">
+                                                    <strong>@T("TranslationHealthDuplicates")</strong>
+                                                    <ul>
+                                                        @foreach (var key in health.DuplicateKeys)
+                                                        {
+                                                            <li><code>@key</code></li>
+                                                        }
+                                                    </ul>
+                                                </div>
+                                            }
+
+                                            @if (!health.HasIssues)
+                                            {
+                                                <div class="translation-health__issue">
+                                                    <p>@T("TranslationHealthNoIssues")</p>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </article>
+                            }
+                        </div>
+
+                        <p class="translation-health__footnote">@T("TranslationHealthAdminEnabledOnly")</p>
+                    </section>
+                }
+
 
                 <div style="margin-top:1rem;display:flex;justify-content:flex-end">
                     <button class="btn-admin btn-primary"
@@ -298,7 +427,7 @@
                         <div style="flex:1">
                             <div style="font-weight:500">@term.Term</div>
                             <div class="text-muted" style="font-size:.8rem">
-                                @string.Join(" · ", term.Translations?
+                                @string.Join(" Â· ", term.Translations?
                                     .Select(kv => $"{kv.Key}: {kv.Value}") ?? new List<string>())
                             </div>
                         </div>
@@ -458,6 +587,8 @@
     private bool _langsLoading  = true;
     private bool _langSaving    = false;
     private string _defaultLanguage = "en";
+    private UiTextCatalogReport? _translationHealth;
+    private string? _expandedTranslationHealthCode;
     private bool _showLanguageModal;
     private LanguageModel _languageForm = NewLanguageForm();
     private bool _showLanguageSettingsModal;
@@ -495,7 +626,13 @@
             if (_cts.IsCancellationRequested) return;
             _languages = langRes.Data?.Languages ?? new();
             ReassignLocalLanguageOrders();
-            _defaultLanguage = langRes.Data?.DefaultLanguage ?? "en";
+            _defaultLanguage = NormalizeCode(langRes.Data?.DefaultLanguage);
+            if (string.IsNullOrWhiteSpace(_defaultLanguage))
+            {
+                _defaultLanguage = "en";
+            }
+            AdminUiLocalizer.SetFallbackLanguage(_defaultLanguage);
+            RefreshTranslationHealth();
             _langsLoading = false;
 
             var appearanceRes = await SettingsService.GetAdminAppearanceAsync();
@@ -548,7 +685,7 @@
             catch
             {
                 _languageSortableInitialized = true;
-                Http.Toast("Language reorder drag failed to initialize.", 500);
+                Http.Toast(T("NotificationLanguageSortingInitFailed"), 500);
             }
         }
     }
@@ -572,6 +709,7 @@
         var disabled = _languages.Where(l => !l.Active).OrderBy(l => l.Order).ToList();
         _languages = active.Concat(disabled).ToList();
         CompactLocalLanguageOrders();
+        RefreshTranslationHealth();
 
         return InvokeAsync(StateHasChanged);
     }
@@ -608,9 +746,15 @@
             var langRes = await SettingsService.GetLanguagesAsync();
             _languages = langRes.Data?.Languages ?? new();
             ReassignLocalLanguageOrders();
-            _defaultLanguage = langRes.Data?.DefaultLanguage ?? _defaultLanguage;
+            _defaultLanguage = NormalizeCode(langRes.Data?.DefaultLanguage ?? _defaultLanguage);
+            if (string.IsNullOrWhiteSpace(_defaultLanguage))
+            {
+                _defaultLanguage = "en";
+            }
             await AdminLanguageState.LoadSettingsAsync();
+            RefreshTranslationHealth();
         }
+        RefreshTranslationHealth();
         _langSaving = false;
     }
 
@@ -621,6 +765,82 @@
 
     private bool IsFallback(LanguageModel lang) =>
         string.Equals(lang.Slug, _defaultLanguage, StringComparison.OrdinalIgnoreCase);
+
+    private void RefreshTranslationHealth()
+    {
+        _translationHealth = AdminUiLocalizer.Validate(
+            _defaultLanguage,
+            _languages.Select(lang => new UiTextLanguageState(
+                NormalizeCode(lang.Slug),
+                DisplayLanguage(lang),
+                lang.Active,
+                lang.AdminEnabled,
+                lang.Order)));
+
+        if (_translationHealth.Languages.All(language =>
+                !string.Equals(language.LanguageCode, _expandedTranslationHealthCode, StringComparison.OrdinalIgnoreCase)))
+        {
+            _expandedTranslationHealthCode = null;
+        }
+    }
+
+    private void ToggleTranslationHealthIssues(string languageCode)
+    {
+        _expandedTranslationHealthCode = string.Equals(_expandedTranslationHealthCode, languageCode, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : languageCode;
+    }
+
+    private bool IsTranslationHealthExpanded(UiTextLanguageReport report) =>
+        string.Equals(_expandedTranslationHealthCode, report.LanguageCode, StringComparison.OrdinalIgnoreCase);
+
+    private static string TranslationHealthSeverityClass(UiTextCatalogSeverity severity) => severity switch
+    {
+        UiTextCatalogSeverity.Warning => "is-warning",
+        UiTextCatalogSeverity.Error => "is-error",
+        UiTextCatalogSeverity.Critical => "is-critical",
+        UiTextCatalogSeverity.Unsupported => "is-unsupported",
+        _ => "is-complete"
+    };
+
+    private static string TranslationHealthCoverageStyle(UiTextLanguageReport report)
+    {
+        var width = Math.Clamp(report.CoveragePercentage, 0, 100)
+            .ToString("0.#", CultureInfo.InvariantCulture);
+        return $"width:{width}%";
+    }
+
+    private string TranslationHealthStatus(UiTextLanguageReport report)
+    {
+        if (!report.HasCatalog)
+        {
+            return report.IsKeyLanguage
+                ? T("TranslationHealthInvalid")
+                : T("TranslationHealthUnsupportedStatus");
+        }
+
+        if (report.IsKeyLanguage && (report.MissingKeys.Count > 0 || report.EmptyKeys.Count > 0))
+        {
+            return T("TranslationHealthInvalid");
+        }
+
+        if (report.DuplicateKeys.Count > 0)
+        {
+            return string.Format(T("TranslationHealthDuplicateCountStatus"), report.DuplicateKeys.Count);
+        }
+
+        if (report.MissingKeys.Count > 0)
+        {
+            return string.Format(T("TranslationHealthMissingStatus"), report.MissingKeys.Count);
+        }
+
+        if (report.EmptyKeys.Count > 0)
+        {
+            return string.Format(T("TranslationHealthEmptyStatus"), report.EmptyKeys.Count);
+        }
+
+        return T("TranslationHealthComplete");
+    }
 
     private void ChangeFallbackLanguage(ChangeEventArgs e)
     {
@@ -634,6 +854,7 @@
         fallback.AdminEnabled = true;
         fallback.UserEnabled = true;
         ReassignLocalLanguageOrders();
+        RefreshTranslationHealth();
     }
 
     private void ToggleLanguage(LanguageModel lang, ChangeEventArgs e)
@@ -651,6 +872,19 @@
             lang.UserEnabled = false;
         }
         ReassignLocalLanguageOrders();
+        RefreshTranslationHealth();
+    }
+
+    private void SetAdminEnabled(LanguageModel lang, ChangeEventArgs e)
+    {
+        lang.AdminEnabled = ReadChecked(e, lang.AdminEnabled);
+        RefreshTranslationHealth();
+    }
+
+    private void SetUserEnabled(LanguageModel lang, ChangeEventArgs e)
+    {
+        lang.UserEnabled = ReadChecked(e, lang.UserEnabled);
+        RefreshTranslationHealth();
     }
 
     private void SelectAppearancePreset(string preset)
@@ -737,6 +971,7 @@
             ? lang.Name
             : _languageSettingsForm.NativeName.Trim();
 
+        RefreshTranslationHealth();
         CloseLanguageSettingsModal();
     }
 
@@ -745,13 +980,13 @@
         var code = NormalizeCode(_languageForm.Slug);
         if (string.IsNullOrWhiteSpace(code))
         {
-            Http.Toast("Language code is required.", 400);
+            Http.Toast(T("NotificationLanguageCodeRequired"), 400);
             return;
         }
 
         if (_languages.Any(l => string.Equals(l.Slug, code, StringComparison.OrdinalIgnoreCase)))
         {
-            Http.Toast("Language code already exists. Restore or edit the existing language.", 400);
+            Http.Toast(T("NotificationLanguageCodeExists"), 400);
             return;
         }
 
@@ -770,6 +1005,7 @@
         });
 
         ReassignLocalLanguageOrders();
+        RefreshTranslationHealth();
         CloseLanguageModal();
     }
 

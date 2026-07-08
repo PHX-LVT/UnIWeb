@@ -117,7 +117,8 @@ namespace FullProject.Controllers
             }
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId, blockId = created.Id },
-                ApiResult.Created(MapToDto(pageId, sectionId, created), "Block created."));
+                ApiResult.Created(MapToDto(pageId, sectionId, created), "Block created.")
+                    .WithNotification("NotificationBlockCreated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId
@@ -162,7 +163,8 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest(exception.Message));
             }
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
-            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block updated.")
+                .WithNotification("NotificationBlockUpdated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId/layout
@@ -176,7 +178,8 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest(lockError));
             var updated = await _service.UpdateLayoutAsync(pageId, sectionId, blockId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
-            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block layout updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block layout updated.")
+                .WithNotification("NotificationLayoutSaved"));
         }
 
         // DELETE api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId
@@ -187,7 +190,8 @@ namespace FullProject.Controllers
             var error = await _authoring.DeleteGraphsAsync(pageId, sectionId, [blockId]);
             if (error is not null)
                 return BadRequest(ApiResult.BadRequest(error));
-            return Ok(ApiResult.Ok("Block graph deleted."));
+            return Ok(ApiResult.Ok("Block graph deleted.")
+                .WithNotification("NotificationBlockDeleted"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId/visibility
@@ -201,7 +205,8 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest(lockError));
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, blockId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Block not found."));
-            return Ok(ApiResult.Ok($"Block {(dto.Visible ? "shown" : "hidden")}."));
+            return Ok(ApiResult.Ok($"Block {(dto.Visible ? "shown" : "hidden")}.")
+                .WithNotification("NotificationBlockUpdated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/reorder
@@ -214,8 +219,10 @@ namespace FullProject.Controllers
             if (lockError is not null)
                 return BadRequest(ApiResult.BadRequest(lockError));
             var ok = await _service.ReorderAsync(pageId, sectionId, dto.OrderedIds);
-            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
-            return Ok(ApiResult.Ok("Blocks reordered."));
+            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed.")
+                .WithNotification("NotificationReorderFailed"));
+            return Ok(ApiResult.Ok("Blocks reordered.")
+                .WithNotification("NotificationOrderSaved"));
         }
 
         [HttpPut("authoring/layouts")]
@@ -230,7 +237,8 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
             {
                 BlockIds = blocks!.Select(block => block.Id).ToList()
-            }, "Block layouts updated."));
+            }, "Block layouts updated.")
+                .WithNotification("NotificationLayoutSaved"));
         }
 
         [HttpPost("authoring/duplicate")]

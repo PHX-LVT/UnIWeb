@@ -27,6 +27,7 @@ namespace AdminSite.Services
         public IReadOnlyList<string> SupportedLanguages => _supportedLanguages.Select(l => l.Code).ToList();
         public IReadOnlyList<LanguageOption> SupportedLanguageOptions => _supportedLanguages;
         public string FallbackLanguage => _fallbackLanguage;
+        public string CurrentLanguage => _lang ?? _fallbackLanguage;
 
         public async Task<string> GetAsync()
         {
@@ -54,7 +55,8 @@ namespace AdminSite.Services
 
             _fallbackLanguage = string.IsNullOrWhiteSpace(settings.DefaultLanguage)
                 ? "en"
-                : settings.DefaultLanguage;
+                : settings.DefaultLanguage.Trim().ToLowerInvariant();
+            AdminUiLocalizer.SetFallbackLanguage(_fallbackLanguage);
 
             var options = settings.Languages
                 .Where(l => l.Active && l.AdminEnabled)

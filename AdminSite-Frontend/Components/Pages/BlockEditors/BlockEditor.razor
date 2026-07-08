@@ -1347,7 +1347,7 @@ else
                 ? await BlockService.CreateAsync(PageId, SectionId, dto)
                 : await BlockService.CreateInSlotAsync(PageId, SectionId, SlotId, dto);
 
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res, T("NotificationBlockCreated"));
             if (!res.Success)
             {
                 return;
@@ -1371,7 +1371,7 @@ else
     {
         var res = await BlockService.SetVisibilityAsync(
             PageId, SectionId, block.Id, !block.Visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.SilentSuccess(res);
         if (res.Success)
         {
             block.Visible = !block.Visible;
@@ -1386,7 +1386,7 @@ else
 
         var visible = !_fullBlock.Visible;
         var res = await BlockService.SetVisibilityAsync(PageId, SectionId, _fullBlock.Id, visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.SilentSuccess(res);
         if (!res.Success)
             return;
 
@@ -1403,7 +1403,7 @@ else
         var deletingIds = OwnedDescendantIds(_confirmDelete.Id);
         deletingIds.Add(_confirmDelete.Id);
         var res = await BlockService.DeleteAsync(PageId, SectionId, _confirmDelete.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res, T("NotificationBlockDeleted"));
         if (res.Success)
         {
             if (_activeBlockId is not null && deletingIds.Contains(_activeBlockId))
@@ -1484,7 +1484,7 @@ else
             var res = await BlockService.ReorderAsync(PageId, SectionId, cleanIds);
             if (!res.Success)
             {
-                Http.Toast(res.Message, res.StatusCode);
+                Http.Notify(res, failureFallback: T("NotificationReorderFailed"));
                 await ReloadBlocks();
                 await InvokeAsync(StateHasChanged);
                 return false;

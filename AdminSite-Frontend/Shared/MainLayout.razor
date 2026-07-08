@@ -21,7 +21,9 @@ else if (Auth.IsAuthenticated)
 {
     <BlazoredToasts Position="ToastPosition.TopRight"
     Timeout="4"
-    ShowProgressBar="true" />
+    ShowProgressBar="true"
+    MaxToastCount="3"
+    RemoveToastsOnNavigation="true" />
 
     <div class="ez-layout" style="@_appearanceCss">
         <div class="ez-contain">

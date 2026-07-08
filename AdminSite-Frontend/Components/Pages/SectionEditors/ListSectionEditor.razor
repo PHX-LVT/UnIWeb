@@ -165,11 +165,11 @@
         if (res.Success && res.Data is not null)
         {
             item.ImageUrl = res.Data.Url;
-            Http.Toast("List image uploaded.", res.StatusCode);
+            Http.Toast(T("NotificationImageUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? "List image upload failed.", res.StatusCode);
+            Http.Toast(res.Message ?? T("NotificationImageUploadFailed"), res.StatusCode);
         }
     }
 

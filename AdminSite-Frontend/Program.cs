@@ -1,4 +1,5 @@
 using AdminSite.Services;
+using AdminSite.Services.Notifications;
 using Blazored.LocalStorage;
 using Blazored.Toast;
 
@@ -26,6 +27,7 @@ builder.Services.AddScoped(sp => new HttpClient
 
 // Services
 builder.Services.AddScoped<IHttpService, HttpService>();
+builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 builder.Services.AddScoped<AdminAuthService>();
 builder.Services.AddScoped<BrandingService>();
 builder.Services.AddScoped<ThemeService>();

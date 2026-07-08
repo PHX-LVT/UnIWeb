@@ -1,6 +1,5 @@
 ﻿using AdminSite.Models;
 using Blazored.LocalStorage;
-using Blazored.Toast.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using System.Net;
@@ -21,6 +20,11 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         Task<FileDownloadResult> GetFileAsync(string uri);
         void Toast(string? message, int statusCode);
+        void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null);
+        void NotifyInline<T>(ApiResponse<T>? response, string targetId, string? successFallback = null, string? failureFallback = null);
+        void SilentSuccess<T>(ApiResponse<T>? response, string? failureFallback = null);
+        void SetInlineStatus(string targetId, AdminFeedbackSeverity severity, string message, string? technicalDetail = null);
+        void ClearInlineStatus(string targetId);
     }
 
     public sealed class FileDownloadResult
@@ -44,7 +48,7 @@ namespace AdminSite.Services
     {
         private readonly HttpClient _http;
         private readonly ILocalStorageService _storage;
-        private readonly IToastService _toast;
+        private readonly IAdminNotificationService _notifications;
         private readonly NavigationManager _nav;
 
         private static readonly JsonSerializerOptions _json = new()
@@ -57,12 +61,12 @@ namespace AdminSite.Services
         public HttpService(
             HttpClient http,
             ILocalStorageService storage,
-            IToastService toast,
+            IAdminNotificationService notifications,
             NavigationManager nav)
         {
             _http = http;
             _storage = storage;
-            _toast = toast;
+            _notifications = notifications;
             _nav = nav;
         }
 
@@ -148,7 +152,7 @@ namespace AdminSite.Services
                 {
                     await _storage.RemoveItemAsync("admin_session");
                     _nav.NavigateTo("/login");
-                    return FileDownloadResult.Fail("Session expired.", 401);
+                    return FileDownloadResult.Fail(AdminUiLocalizer.T("NotificationSessionExpired", "en"), 401);
                 }
 
                 if (!response.IsSuccessStatusCode)
@@ -177,7 +181,14 @@ namespace AdminSite.Services
             }
             catch (Exception ex)
             {
-                return FileDownloadResult.Fail(ex.Message, 500);
+                _notifications.Notify(new AdminFeedbackMessage
+                {
+                    Severity = AdminFeedbackSeverity.Error,
+                    MessageKey = "NotificationDownloadFailed",
+                    MessageFallback = "Download failed.",
+                    TechnicalDetail = ex.Message
+                });
+                return FileDownloadResult.Fail(AdminUiLocalizer.T("NotificationDownloadFailed", "en"), 500);
             }
         }
 
@@ -199,33 +210,65 @@ namespace AdminSite.Services
                     {
                         await _storage.RemoveItemAsync("admin_session");
                         _nav.NavigateTo("/login");
-                        return ApiResponse<T>.Fail("Session expired.", 401);
+                        return ApiResponse<T>.Fail(
+                            "Session expired.",
+                            401,
+                            notificationKey: "NotificationSessionExpired");
                     }
 
                     return await ReadApiResponse<T>(response)
-                           ?? ApiResponse<T>.Fail("Unauthorized.", 401);
+                           ?? ApiResponse<T>.Fail(
+                               "Unauthorized.",
+                               401,
+                               notificationKey: "NotificationUnauthorized");
                 }
 
                 return await ReadApiResponse<T>(response)
-                       ?? ApiResponse<T>.Fail("No response from server.", 500);
+                       ?? ApiResponse<T>.Fail(
+                           "No response from server.",
+                           500,
+                           notificationKey: "NotificationNoResponse");
             }
             catch (Exception ex)
             {
-                return ApiResponse<T>.Fail(ex.Message, 500);
+                return ApiResponse<T>.Fail(
+                    "Request failed.",
+                    500,
+                    errors: [ex.Message],
+                    notificationKey: "NotificationRequestFailed");
             }
         }
 
-        public void Toast(string? message, int statusCode)
-        {
-            if (string.IsNullOrEmpty(message)) return;
+        public void Toast(string? message, int statusCode) =>
+            _notifications.Notify(message, statusCode);
 
-            if (statusCode is >= 200 and < 300)
-                _toast.ShowSuccess(message);
-            else if (statusCode is 400 or 404 or 422)
-                _toast.ShowWarning(message);
-            else
-                _toast.ShowError(message);
-        }
+        public void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null) =>
+            _notifications.NotifyResponse(response, successFallback, failureFallback);
+
+        public void NotifyInline<T>(
+            ApiResponse<T>? response,
+            string targetId,
+            string? successFallback = null,
+            string? failureFallback = null) =>
+            _notifications.NotifyResponse(
+                response,
+                successFallback,
+                failureFallback,
+                AdminFeedbackDisplayMode.Inline,
+                targetId);
+
+        public void SilentSuccess<T>(ApiResponse<T>? response, string? failureFallback = null) =>
+            _notifications.SilentSuccess(response, failureFallback);
+
+        public void SetInlineStatus(
+            string targetId,
+            AdminFeedbackSeverity severity,
+            string message,
+            string? technicalDetail = null) =>
+            _notifications.SetInlineStatus(targetId, severity, message, technicalDetail);
+
+        public void ClearInlineStatus(string targetId) =>
+            _notifications.ClearInlineStatus(targetId);
 
         private static StringContent Json(object body) =>
             new(JsonSerializer.Serialize(body, body.GetType(), _json), Encoding.UTF8, "application/json");
@@ -243,7 +286,10 @@ namespace AdminSite.Services
             }
             catch (JsonException)
             {
-                return ApiResponse<T>.Fail("Unexpected response format.", statusCode);
+                return ApiResponse<T>.Fail(
+                    "Unexpected response format.",
+                    statusCode,
+                    notificationKey: "NotificationUnexpectedResponse");
             }
 
             if (result is { Success: false, Errors.Count: > 0 })

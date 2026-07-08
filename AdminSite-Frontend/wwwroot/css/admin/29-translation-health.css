@@ -1,0 +1,244 @@
+.translation-health {
+    margin-top: 1rem;
+    border: 1px solid rgba(20, 47, 88, .16);
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(248, 250, 252, .96), rgba(255, 255, 255, .98));
+    box-shadow: 0 14px 34px rgba(15, 23, 42, .06);
+    padding: 1rem;
+}
+
+.translation-health__header,
+.translation-health__row-main {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.translation-health__header {
+    justify-content: space-between;
+    margin-bottom: .85rem;
+}
+
+.translation-health__header h3 {
+    margin: 0;
+    color: #142f58;
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+.translation-health__header p,
+.translation-health__footnote {
+    margin: .2rem 0 0;
+    color: #64748b;
+    font-size: .86rem;
+}
+
+.translation-health__key {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    border: 1px solid rgba(20, 47, 88, .14);
+    border-radius: 999px;
+    background: #fff;
+    padding: .45rem .65rem;
+    color: #64748b;
+    font-size: .82rem;
+}
+
+.translation-health__key strong {
+    color: #142f58;
+}
+
+.translation-health__key code,
+.translation-health__language code {
+    border-radius: 999px;
+    background: rgba(20, 47, 88, .08);
+    color: #142f58;
+    padding: .12rem .38rem;
+}
+
+.translation-health__notice {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin-bottom: .85rem;
+    border-radius: 14px;
+    background: rgba(37, 99, 235, .08);
+    color: #1e3a8a;
+    padding: .65rem .75rem;
+    font-size: .86rem;
+}
+
+.translation-health__rows {
+    display: grid;
+    gap: .65rem;
+}
+
+.translation-health__row {
+    border: 1px solid rgba(148, 163, 184, .25);
+    border-left-width: 5px;
+    border-radius: 16px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.translation-health__row.is-complete {
+    border-left-color: #16a34a;
+}
+
+.translation-health__row.is-warning {
+    border-left-color: #f59e0b;
+}
+
+.translation-health__row.is-error,
+.translation-health__row.is-critical {
+    border-left-color: #dc2626;
+}
+
+.translation-health__row.is-unsupported {
+    border-left-color: #94a3b8;
+}
+
+.translation-health__row-main {
+    justify-content: space-between;
+    padding: .8rem .9rem;
+}
+
+.translation-health__language {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    min-width: 180px;
+    color: #0f172a;
+    font-weight: 750;
+}
+
+.translation-health__language em {
+    border-radius: 999px;
+    background: rgba(245, 158, 11, .14);
+    color: #92400e;
+    font-style: normal;
+    font-size: .74rem;
+    padding: .12rem .42rem;
+}
+
+.translation-health__coverage {
+    flex: 1;
+    min-width: 180px;
+    max-width: 320px;
+}
+
+.translation-health__coverage > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: .5rem;
+    color: #64748b;
+    font-size: .82rem;
+}
+
+.translation-health__coverage strong {
+    color: #142f58;
+}
+
+.translation-health__bar {
+    height: 8px;
+    margin-top: .35rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.translation-health__bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #1d4ed8, #16a34a);
+}
+
+.translation-health__status {
+    min-width: 92px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    padding: .28rem .55rem;
+    text-align: center;
+    font-size: .82rem;
+    font-weight: 750;
+}
+
+.translation-health__toggle {
+    border: 1px solid rgba(20, 47, 88, .14);
+    border-radius: 999px;
+    background: #fff;
+    color: #142f58;
+    cursor: pointer;
+    font-weight: 750;
+    padding: .4rem .7rem;
+}
+
+.translation-health__toggle:disabled {
+    cursor: default;
+    opacity: .45;
+}
+
+.translation-health__issues {
+    display: grid;
+    gap: .65rem;
+    border-top: 1px solid rgba(148, 163, 184, .22);
+    background: #f8fafc;
+    padding: .85rem .9rem;
+}
+
+.translation-health__issue strong {
+    display: block;
+    margin-bottom: .35rem;
+    color: #142f58;
+}
+
+.translation-health__issue p {
+    margin: 0;
+    color: #475569;
+}
+
+.translation-health__issue ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    max-height: 220px;
+    overflow: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.translation-health__issue li code {
+    display: inline-block;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #0f172a;
+    padding: .18rem .45rem;
+    font-size: .78rem;
+}
+
+.translation-health__footnote {
+    margin-top: .85rem;
+}
+
+@media (max-width: 900px) {
+    .translation-health__header,
+    .translation-health__row-main {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .translation-health__key,
+    .translation-health__coverage {
+        max-width: none;
+        width: 100%;
+    }
+
+    .translation-health__status,
+    .translation-health__toggle {
+        width: 100%;
+    }
+}

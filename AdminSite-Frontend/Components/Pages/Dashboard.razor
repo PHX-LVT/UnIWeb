@@ -466,7 +466,7 @@
             }
             catch
             {
-                Http.Toast("Page drag sorting failed to initialize.", 500);
+                Http.Toast(T("NotificationPageSortingInitFailed"), 500);
             }
         }
 
@@ -491,7 +491,7 @@
             }
             catch
             {
-                Http.Toast("Child page sorting failed to initialize.", 500);
+                Http.Toast(T("NotificationChildPageSortingInitFailed"), 500);
             }
         }
 
@@ -534,7 +534,7 @@
         }
 
         var res = await PageService.ReorderAsync(cleanOrderedIds);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.SilentSuccess(res, T("NotificationReorderFailed"));
         if (!res.Success)
         {
             _pageSortableInitialized = false;
@@ -571,7 +571,7 @@
             return;
 
         var res = await PageService.ReorderChildrenAsync(_activeParentPage.Id, cleanOrderedIds);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.SilentSuccess(res, T("NotificationReorderFailed"));
         if (!res.Success)
         {
             _childPageSortableInitialized = false;
@@ -694,7 +694,7 @@
     {
         if (!string.IsNullOrWhiteSpace(parent.ParentPageId))
         {
-            Http.Toast("Child pages cannot have child pages. Select the parent page to add another child page.", 400);
+            Http.Toast(T("NotificationChildPageNestedNotAllowed"), 400);
             return;
         }
 
@@ -844,7 +844,7 @@
 
         if (!string.IsNullOrWhiteSpace(parent.ParentPageId))
         {
-            Http.Toast("Child pages cannot have child pages. Select the parent page to add another child page.", 400);
+            Http.Toast(T("NotificationChildPageNestedNotAllowed"), 400);
             _showCreateChildForm = false;
             return;
         }

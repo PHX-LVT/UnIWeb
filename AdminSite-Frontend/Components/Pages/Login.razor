@@ -96,9 +96,9 @@
             else
                 _error = error ?? "Login failed.";
         }
-        catch (Exception ex)
+        catch
         {
-            _error = $"Unable to sign in: {ex.Message}";
+            _error = "Unable to sign in. Please try again.";
         }
         finally
         {

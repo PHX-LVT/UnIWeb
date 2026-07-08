@@ -162,9 +162,9 @@ else
                     .ToList()
             };
         }
-        catch (Exception ex)
+        catch
         {
-            _error = ex.Message;
+            _error = "Preview could not be loaded.";
         }
         finally
         {

@@ -92,5 +92,15 @@ namespace FullProject.Utils
             StatusCode = 500,
             Message = message
         };
+
+        public static ApiResponse<T> WithNotification<T>(
+            this ApiResponse<T> response,
+            string notificationKey,
+            List<string>? notificationArgs = null)
+        {
+            response.NotificationKey = notificationKey;
+            response.NotificationArgs = notificationArgs;
+            return response;
+        }
     }
 }

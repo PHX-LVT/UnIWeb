@@ -56,7 +56,8 @@ namespace FullProject.Controllers
             var created = await _service.CreateAsync(pageId, dto);
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId = created.Id },
-                ApiResult.Created(MapToDto(pageId, created), "Section created."));
+                ApiResult.Created(MapToDto(pageId, created), "Section created.")
+                    .WithNotification("NotificationSectionSaved"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId
@@ -69,7 +70,8 @@ namespace FullProject.Controllers
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
 
 
-            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Section updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Section updated.")
+                .WithNotification("NotificationSectionSaved"));
         }
 
         // DELETE api/admin/pages/:pageId/sections/:sectionId
@@ -79,7 +81,8 @@ namespace FullProject.Controllers
             if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.DeleteAsync(pageId, sectionId);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
-            return Ok(ApiResult.Ok("Section deleted."));
+            return Ok(ApiResult.Ok("Section deleted.")
+                .WithNotification("NotificationDeleted"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/visibility
@@ -90,7 +93,8 @@ namespace FullProject.Controllers
             if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
-            return Ok(ApiResult.Ok($"Section {(dto.Visible ? "shown" : "hidden")}."));
+            return Ok(ApiResult.Ok($"Section {(dto.Visible ? "shown" : "hidden")}.")
+                .WithNotification("NotificationSectionVisibilityUpdated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/style
@@ -101,7 +105,8 @@ namespace FullProject.Controllers
             if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateStyleAsync(pageId, sectionId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
-            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Style updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Style updated.")
+                .WithNotification("NotificationSectionSaved"));
         }
 
         // PUT api/admin/pages/:pageId/sections/reorder
@@ -110,8 +115,10 @@ namespace FullProject.Controllers
         {
             if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.ReorderAsync(pageId, dto.OrderedIds);
-            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
-            return Ok(ApiResult.Ok("Sections reordered."));
+            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed.")
+                .WithNotification("NotificationReorderFailed"));
+            return Ok(ApiResult.Ok("Sections reordered.")
+                .WithNotification("NotificationOrderSaved"));
         }
 
         // -- Mapping -------------------------------------------

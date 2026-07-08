@@ -249,9 +249,9 @@ else if (_footer is not null)
             {
                 await JS.InvokeVoidAsync("initFooterLinkSortables", _groupsRef, _dotNetRef);
             }
-            catch (Exception ex)
+            catch
             {
-                Http.Toast($"{T("FooterLinkSortingInitFailed")}: {ex.Message}", 500);
+                Http.Toast(T("FooterLinkSortingInitFailed"), 500);
             }
 
             try
