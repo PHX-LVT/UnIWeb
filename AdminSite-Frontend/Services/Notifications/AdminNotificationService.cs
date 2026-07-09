@@ -26,13 +26,11 @@ public interface IAdminNotificationService
 public sealed class AdminNotificationService : IAdminNotificationService
 {
     private readonly IToastService _toast;
-    private readonly AdminLanguageService _language;
     private readonly Dictionary<string, AdminInlineFeedbackState> _inlineStatuses = new(StringComparer.Ordinal);
 
-    public AdminNotificationService(IToastService toast, AdminLanguageService language)
+    public AdminNotificationService(IToastService toast)
     {
         _toast = toast;
-        _language = language;
     }
 
     public event Action? InlineFeedbackChanged;
@@ -137,7 +135,7 @@ public sealed class AdminNotificationService : IAdminNotificationService
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
 
-        var text = AdminUiLocalizer.T(key, _language.CurrentLanguage);
+        var text = AdminUiLocalizer.T(key, AdminUiLocalizer.FallbackLanguage);
         if (string.Equals(text, key, StringComparison.Ordinal))
             return null;
 
