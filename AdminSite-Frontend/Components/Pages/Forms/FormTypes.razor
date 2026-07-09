@@ -220,7 +220,7 @@ else
         var result = await FormService.GetInputTypesAsync();
         if (!result.Success)
         {
-            Http.Toast(result.Message, result.StatusCode);
+            Http.Notify(result.Message, result.StatusCode);
             if (result.StatusCode is 401 or 403)
                 _hasAccess = false;
             _loading = false;
@@ -248,7 +248,7 @@ else
         _saving = true;
         var result = await FormService.SaveInputTypeAsync(_editing);
         _saving = false;
-        Http.Toast(result.Message, result.StatusCode);
+        Http.Notify(result.Message, result.StatusCode);
         if (result.Success)
             await LoadTypesAsync(_editing.Type);
     }

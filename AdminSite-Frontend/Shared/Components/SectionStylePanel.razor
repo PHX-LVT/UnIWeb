@@ -1,4 +1,4 @@
-﻿@using AdminSite.Services
+@using AdminSite.Services
 @using Microsoft.AspNetCore.Components.Forms
 @using AdminSite.Models
 @using DevExpress.Blazor
@@ -399,11 +399,11 @@
         if (res.Success && res.Data is not null)
         {
             _style.BackgroundImageUrl = res.Data.Url;
-            Http.Toast(T("NotificationBackgroundImageUploaded"), res.StatusCode);
+            Http.Notify(T("NotificationBackgroundImageUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? T("NotificationBackgroundImageUploadFailed"), res.StatusCode);
+            Http.Notify(res.Message ?? T("NotificationBackgroundImageUploadFailed"), res.StatusCode);
         }
     }
 
@@ -416,11 +416,11 @@
         if (res.Success && res.Data is not null)
         {
             _style.BackgroundVideoUrl = res.Data.Url;
-            Http.Toast(T("NotificationBackgroundVideoUploaded"), res.StatusCode);
+            Http.Notify(T("NotificationBackgroundVideoUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? T("NotificationBackgroundVideoUploadFailed"), res.StatusCode);
+            Http.Notify(res.Message ?? T("NotificationBackgroundVideoUploadFailed"), res.StatusCode);
         }
     }
 
@@ -490,7 +490,7 @@
         {
             _saveSucceeded = false;
             _saveMessage = T("NotificationSaveFailed");
-            Http.Toast(_saveMessage, 500);
+            Http.Notify(_saveMessage, 500);
         }
         finally
         {

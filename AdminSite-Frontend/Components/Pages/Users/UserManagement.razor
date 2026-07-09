@@ -245,7 +245,7 @@ else
         }
         else
         {
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
         }
         _loading = false;
     }
@@ -302,7 +302,7 @@ else
             });
         }
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _saving = false;
         if (!res.Success) return;
 
@@ -327,7 +327,7 @@ else
         if (_resetUser is null) return;
         _saving = true;
         var res = await Users.ResetPasswordAsync(_resetUser.Id, _resetPassword);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _saving = false;
         if (res.Success)
         {
@@ -339,14 +339,14 @@ else
     private async Task EnableUser(AdminUserResponse user)
     {
         var res = await Users.EnableUserAsync(user.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) await LoadAsync();
     }
 
     private async Task DisableUser(AdminUserResponse user)
     {
         var res = await Users.DisableUserAsync(user.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) await LoadAsync();
     }
 
@@ -356,7 +356,7 @@ else
 
         _saving = true;
         var res = await Users.DeleteUserAsync(_deleteUser.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _saving = false;
         if (!res.Success) return;
 

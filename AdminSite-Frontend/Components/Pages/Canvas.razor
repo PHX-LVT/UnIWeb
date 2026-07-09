@@ -1,4 +1,4 @@
-﻿@using SharedComponents.Helpers
+@using SharedComponents.Helpers
 @using Contracts.Admin
 @using Microsoft.AspNetCore.Components.Web
 @using AdminSite.Components.Pages.CanvasAuthoring
@@ -872,7 +872,7 @@
             }
             catch
             {
-                Http.Toast(T("NotificationCanvasOverlayInitFailed"), 500);
+                Http.Notify(T("NotificationCanvasOverlayInitFailed"), 500);
             }
         }
 
@@ -885,7 +885,7 @@
             }
             catch
             {
-                Http.Toast(T("NotificationSectionSortingInitFailed"), 500);
+                Http.Notify(T("NotificationSectionSortingInitFailed"), 500);
             }
         }
 
@@ -898,7 +898,7 @@
             }
             catch
             {
-                Http.Toast(T("NotificationBlockArrangingInitFailed"), 500);
+                Http.Notify(T("NotificationBlockArrangingInitFailed"), 500);
             }
         }
     }
@@ -1507,12 +1507,12 @@
     {
         if (CurrentArrangeCreateTarget is null)
         {
-            Http.Toast(T("SelectSectionFirst"), 400);
+            Http.Notify(T("SelectSectionFirst"), 400);
             return;
         }
         if (!ArrangeCreateHasCapacity)
         {
-            Http.Toast(ArrangeAddTitle, 400);
+            Http.Notify(ArrangeAddTitle, 400);
             return;
         }
         _showArrangeBlockWizard = true;
@@ -2320,7 +2320,7 @@
     private async Task DeleteSection(SectionModel section)
     {
         var res = await SectionService.DeleteAsync(Page.Id, section.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success)
         {
             return;

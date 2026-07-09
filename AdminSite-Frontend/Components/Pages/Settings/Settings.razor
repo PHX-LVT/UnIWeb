@@ -651,7 +651,7 @@
                 }
                 else
                 {
-                    Http.Toast(resourceRes.Message, resourceRes.StatusCode);
+                    Http.Notify(resourceRes.Message, resourceRes.StatusCode);
                 }
                 _resourceSettingsLoading = false;
             }
@@ -685,7 +685,7 @@
             catch
             {
                 _languageSortableInitialized = true;
-                Http.Toast(T("NotificationLanguageSortingInitFailed"), 500);
+                Http.Notify(T("NotificationLanguageSortingInitFailed"), 500);
             }
         }
     }
@@ -740,7 +740,7 @@
             Languages = _languages.OrderBy(l => l.Order).ToList(),
             DefaultLanguage = _defaultLanguage
         });
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success)
         {
             var langRes = await SettingsService.GetLanguagesAsync();
@@ -901,7 +901,7 @@
             {
                 Preset = _appearancePreset
             });
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success && res.Data is not null)
                 _appearancePreset = res.Data.Preset;
         }
@@ -921,7 +921,7 @@
             _resourceSettings.AllowedVideoFormats = ResourceLibrarySettingsUiHelper.ParseFormats(_videoFormatsText);
 
             var res = await SettingsService.UpdateResourceLibrarySettingsAsync(_resourceSettings);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success && res.Data is not null)
             {
                 _resourceSettings = res.Data;
@@ -980,13 +980,13 @@
         var code = NormalizeCode(_languageForm.Slug);
         if (string.IsNullOrWhiteSpace(code))
         {
-            Http.Toast(T("NotificationLanguageCodeRequired"), 400);
+            Http.Notify(T("NotificationLanguageCodeRequired"), 400);
             return;
         }
 
         if (_languages.Any(l => string.Equals(l.Slug, code, StringComparison.OrdinalIgnoreCase)))
         {
-            Http.Toast(T("NotificationLanguageCodeExists"), 400);
+            Http.Notify(T("NotificationLanguageCodeExists"), 400);
             return;
         }
 
@@ -1117,7 +1117,7 @@
         else
             res = await SettingsService.UpdateTermAsync(_editingTerm.Id, _termForm);
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success)
         {
             CloseTermModal();
@@ -1130,7 +1130,7 @@
     private async Task DeleteTerm(string id)
     {
         var res = await SettingsService.DeleteTermAsync(id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) _glossary.RemoveAll(t => t.Id == id);
     }
 }

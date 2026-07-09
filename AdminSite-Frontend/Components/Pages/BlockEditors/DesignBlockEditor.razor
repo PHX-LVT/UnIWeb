@@ -266,7 +266,7 @@
         const long maxImageBytes = 20L * 1024 * 1024;
         if (file.Size > maxImageBytes)
         {
-            Http.Toast(T("ImageTooLarge"), 400);
+            Http.Notify(T("ImageTooLarge"), 400);
             return;
         }
 
@@ -275,11 +275,11 @@
         {
             _cardAsset = DirectAsset(res.Data);
             _imageUrl = _cardAsset.Url;
-            Http.Toast(T("ImageUploaded"), res.StatusCode);
+            Http.Notify(T("ImageUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? T("ImageUploadFailed"), res.StatusCode);
+            Http.Notify(res.Message ?? T("ImageUploadFailed"), res.StatusCode);
         }
     }
 
@@ -310,7 +310,7 @@
         try
         {
             var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, BuildDto());
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

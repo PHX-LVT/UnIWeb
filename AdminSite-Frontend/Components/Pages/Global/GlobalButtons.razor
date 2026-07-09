@@ -171,7 +171,7 @@ else
         else
             res = await ButtonsService.UpdateAsync(_editing.Id, _form);
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
 
         if (res.Success)
         {
@@ -184,14 +184,14 @@ else
     private async Task ToggleVisibility(GlobalButtonModel btn)
     {
         var res = await ButtonsService.SetVisibilityAsync(btn.Id, !btn.Visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) btn.Visible = !btn.Visible;
     }
 
     private async Task Delete(string id)
     {
         var res = await ButtonsService.DeleteAsync(id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) await Load();
     }
 

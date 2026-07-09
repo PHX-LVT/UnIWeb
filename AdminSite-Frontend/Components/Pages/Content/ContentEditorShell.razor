@@ -648,7 +648,7 @@ else
             if (res.Success && res.Data is not null)
                 LoadItem(res.Data);
             else
-                Http.Toast(res.Message, res.StatusCode);
+                Http.Notify(res.Message, res.StatusCode);
         }
 
         _loading = false;
@@ -712,7 +712,7 @@ else
             ? await ContentService.CreateAsync(_edit)
             : await ContentService.UpdateAsync(Id!, _edit);
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success || res.Data is null) return false;
 
         if (IsNew)
@@ -749,7 +749,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.PublishAsync(Id!);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null) LoadItem(res.Data);
     }
 
@@ -761,7 +761,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.SetStatusAsync(Id!, status);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null) LoadItem(res.Data);
     }
 
@@ -770,7 +770,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.DeleteAsync(Id!);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) Nav.NavigateTo("/content/deleted");
     }
 
@@ -779,7 +779,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.RestoreAsync(Id!);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null) LoadItem(res.Data);
     }
 
@@ -1085,7 +1085,7 @@ else
     private async Task UploadHero(InputFileChangeEventArgs e)
     {
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-hero", e.File, maxBytes: 5 * 1024 * 1024);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
         {
             _edit.HeroImageUrl = res.Data.Url;
@@ -1100,7 +1100,7 @@ else
         if (IsImageResource)
         {
             var managed = await ContentService.UploadResourceAsync(e.File, "image");
-            Http.Toast(managed.Message, managed.StatusCode);
+            Http.Notify(managed.Message, managed.StatusCode);
             if (managed.Success && managed.Data is not null)
             {
                 _edit.ThumbnailUrl = ResourceThumbnailUrl(managed.Data);
@@ -1112,7 +1112,7 @@ else
         }
 
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-thumbnails", e.File, maxBytes: 5 * 1024 * 1024);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
         {
             _edit.ThumbnailUrl = res.Data.Url;
@@ -1127,14 +1127,14 @@ else
         if (!IsPageContent)
         {
             var managed = await ContentService.UploadResourceAsync(e.File, "file");
-            Http.Toast(managed.Message, managed.StatusCode);
+            Http.Notify(managed.Message, managed.StatusCode);
             if (managed.Success && managed.Data is not null)
                 SetPrimaryFileFromResource(managed.Data);
             return;
         }
 
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-files", e.File, maxBytes: 20 * 1024 * 1024);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
         {
             _fileUrl = res.Data.Url;
@@ -1150,7 +1150,7 @@ else
     private async Task UploadBodyImage(ContentBodyItemModel item, InputFileChangeEventArgs e)
     {
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-body", e.File, maxBytes: 5 * 1024 * 1024);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
         {
             item.Url = res.Data.Url;
@@ -1161,7 +1161,7 @@ else
     private async Task UploadBodyFile(ContentBodyItemModel item, InputFileChangeEventArgs e)
     {
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-files", e.File, maxBytes: 20 * 1024 * 1024);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
         {
             item.Url = res.Data.Url;
@@ -1175,7 +1175,7 @@ else
     private async Task UploadGalleryImage(ContentGalleryItemModel item, InputFileChangeEventArgs e)
     {
         var managed = await ContentService.UploadResourceAsync(e.File, "image");
-        Http.Toast(managed.Message, managed.StatusCode);
+        Http.Notify(managed.Message, managed.StatusCode);
         if (managed.Success && managed.Data is not null)
             SetGalleryItemFromResource(item, managed.Data);
     }

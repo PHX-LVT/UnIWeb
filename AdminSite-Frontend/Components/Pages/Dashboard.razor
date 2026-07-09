@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @inject AdminPageService PageService
 @inject AdminSectionService SectionService
 @inject IHttpService Http
@@ -466,7 +466,7 @@
             }
             catch
             {
-                Http.Toast(T("NotificationPageSortingInitFailed"), 500);
+                Http.Notify(T("NotificationPageSortingInitFailed"), 500);
             }
         }
 
@@ -491,7 +491,7 @@
             }
             catch
             {
-                Http.Toast(T("NotificationChildPageSortingInitFailed"), 500);
+                Http.Notify(T("NotificationChildPageSortingInitFailed"), 500);
             }
         }
 
@@ -694,7 +694,7 @@
     {
         if (!string.IsNullOrWhiteSpace(parent.ParentPageId))
         {
-            Http.Toast(T("NotificationChildPageNestedNotAllowed"), 400);
+            Http.Notify(T("NotificationChildPageNestedNotAllowed"), 400);
             return;
         }
 
@@ -822,7 +822,7 @@
                     _createForm.Name[code] = en;
 
             var res = await PageService.CreateAsync(_createForm);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success && res.Data is not null)
             {
                 await PageService.SeedTemplateAsync(res.Data.Id, _pendingTemplate);
@@ -844,7 +844,7 @@
 
         if (!string.IsNullOrWhiteSpace(parent.ParentPageId))
         {
-            Http.Toast(T("NotificationChildPageNestedNotAllowed"), 400);
+            Http.Notify(T("NotificationChildPageNestedNotAllowed"), 400);
             _showCreateChildForm = false;
             return;
         }
@@ -858,7 +858,7 @@
                     _childCreateForm.Name[code] = en;
 
             var res = await PageService.CreateChildAsync(parent.Id, _childCreateForm);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success && res.Data is not null)
             {
                 _showCreateChildForm = false;
@@ -900,7 +900,7 @@
         try
         {
             var res = await PageService.UpdateAsync(_editingPage.Id, _settingsForm);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success)
             {
                 await LoadPages();
@@ -925,7 +925,7 @@
         var res = string.IsNullOrWhiteSpace(parentId)
             ? await PageService.DeleteAsync(deleting.Id)
             : await PageService.DeleteChildAsync(parentId, deleting.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success)
         {
             _confirmDelete = null;
@@ -990,7 +990,7 @@
         _showSectionPicker = false;
         if (_selectedPageId is null) return;
         var res = await SectionService.CreateAsync(_selectedPageId, CreateSectionDto(type));
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success)
         {
             return;

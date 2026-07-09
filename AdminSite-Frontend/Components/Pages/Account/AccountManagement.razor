@@ -104,7 +104,7 @@
         if (res.Success && res.Data is not null)
             _activity.AddRange(res.Data);
         else
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
 
         _loading = false;
     }
@@ -113,7 +113,7 @@
     {
         _saving = true;
         var res = await Users.UpdatePasswordAsync(_currentPassword, _newPassword);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _saving = false;
 
         if (!res.Success) return;

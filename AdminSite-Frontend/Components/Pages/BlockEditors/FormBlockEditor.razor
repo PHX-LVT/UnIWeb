@@ -156,7 +156,7 @@ else
     {
         if (SelectedDefinition is null)
         {
-            Http.Toast(T("SelectActiveFormDefinition"), 400);
+            Http.Notify(T("SelectActiveFormDefinition"), 400);
             return;
         }
 
@@ -171,7 +171,7 @@ else
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response.Message, response.StatusCode);
             if (response.Success)
                 await OnSaved.InvokeAsync();
         }

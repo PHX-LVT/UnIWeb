@@ -138,7 +138,7 @@
         {
             _resources = new();
             _selectedResource = null;
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
         }
         _loading = false;
     }

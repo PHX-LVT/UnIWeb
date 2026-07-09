@@ -66,7 +66,7 @@
                 Pins = _pins.Select(MapPin).ToList(),
                 Visible = Section.Visible
             });
-            Http.Toast(res.Message, res.StatusCode); if (res.Success) await OnSaved.InvokeAsync();
+            Http.Notify(res.Message, res.StatusCode); if (res.Success) await OnSaved.InvokeAsync();
         }
         finally
         {

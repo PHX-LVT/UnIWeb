@@ -131,7 +131,7 @@
         }
         else
         {
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
         }
         _loading = false;
     }
@@ -193,7 +193,7 @@
 
         _deleting = true;
         var res = await Users.DeleteAuditLogsAsync(_selectedAuditIds);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _deleting = false;
         if (!res.Success) return;
 

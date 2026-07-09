@@ -1463,7 +1463,7 @@ else
         }
         catch (InvalidOperationException)
         {
-            Http.Toast(string.Format(T("TooManyQueuedFiles"), MaxQueuedFiles), 422);
+            Http.Notify(string.Format(T("TooManyQueuedFiles"), MaxQueuedFiles), 422);
             return Task.CompletedTask;
         }
 
@@ -1496,7 +1496,7 @@ else
         var items = UploadableQueueItems;
         if (items.Count == 0)
         {
-            Http.Toast(T("NoQueuedFiles"), 422);
+            Http.Notify(T("NoQueuedFiles"), 422);
             return;
         }
 
@@ -1534,7 +1534,7 @@ else
             var files = items.Select(item => item.File).ToList();
             var names = items.Select(CleanQueueResourceName).ToList();
             var res = await ContentService.UploadResourcesAsync(files, _uploadKind, EmptyToNull(_uploadAlbumId), names);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
 
             if (!res.Success || res.Data is null)
             {
@@ -1585,7 +1585,7 @@ else
 
         if (string.IsNullOrWhiteSpace(_youtubeUrl))
         {
-            Http.Toast(T("YouTubeLinkRequired"), 422);
+            Http.Notify(T("YouTubeLinkRequired"), 422);
             return;
         }
 
@@ -1608,7 +1608,7 @@ else
             };
 
             var res = await ContentService.CreateResourceAsync(request);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (!res.Success) return;
 
             ResetYouTubeDraft();
@@ -1658,7 +1658,7 @@ else
             }
             else
             {
-                Http.Toast(res.Message, res.StatusCode);
+                Http.Notify(res.Message, res.StatusCode);
             }
         }
         finally
@@ -1698,7 +1698,7 @@ else
         if (SelectedAlbum is null) return;
         if (!_albumExistingSelectedIds.Any())
         {
-            Http.Toast(T("NoExistingResourcesSelected"), 422);
+            Http.Notify(T("NoExistingResourcesSelected"), 422);
             return;
         }
 
@@ -1707,7 +1707,7 @@ else
         {
             var selectedIds = _albumExistingSelectedIds.ToList();
             var res = await ContentService.AssignResourcesToAlbumAsync(SelectedAlbum.Id, selectedIds);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (!res.Success) return;
 
             _albumExistingSelectedIds.Clear();
@@ -1759,14 +1759,14 @@ else
 
         if (_editingId is null)
         {
-            Http.Toast(T("UploadResources"), 422);
+            Http.Notify(T("UploadResources"), 422);
             return;
         }
 
         PrepareRequest();
         var res = await ContentService.UpdateResourceAsync(_editingId, _edit);
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success)
         {
             var selectedId = res.Data?.Id;
@@ -1789,7 +1789,7 @@ else
         try
         {
             var res = await ContentService.ReplaceResourceFileAsync(_editingId, e.File, NormalizeKind(_edit.Kind));
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success && res.Data is not null)
             {
                 await LoadResources();
@@ -1808,7 +1808,7 @@ else
 
         if (resource.IsInUse)
         {
-            Http.Toast(string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s"), 422);
+            Http.Notify(string.Format(T("UsageUsedInPlaces"), resource.UsageCount, resource.UsageCount == 1 ? string.Empty : "s"), 422);
             return;
         }
 
@@ -1820,7 +1820,7 @@ else
         if (usage.Success)
             _deleteUsage = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
         else
-            Http.Toast(usage.Message, usage.StatusCode);
+            Http.Notify(usage.Message, usage.StatusCode);
 
         _deleteLoading = false;
     }
@@ -1839,7 +1839,7 @@ else
 
         var deletedId = _deleteResource.Id;
         var res = await ContentService.DeleteResourceAsync(deletedId);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success)
         {
             _usageByResourceId.Remove(deletedId);
@@ -1866,7 +1866,7 @@ else
 
         if (!BulkDeleteResources.Any())
         {
-            Http.Toast(T("NoResourcesSelectedForDelete"), 422);
+            Http.Notify(T("NoResourcesSelectedForDelete"), 422);
             return;
         }
 
@@ -1911,9 +1911,9 @@ else
         await LoadResources();
 
         if (deleted > 0)
-            Http.Toast(string.Format(T("DeleteResourcesSucceeded"), deleted), 200);
+            Http.Notify(string.Format(T("DeleteResourcesSucceeded"), deleted), 200);
         if (failed > 0)
-            Http.Toast(string.Format(T("DeleteResourcesPartial"), failed), 422);
+            Http.Notify(string.Format(T("DeleteResourcesPartial"), failed), 422);
     }
 
     private async Task LoadUsageDetails(ManagedResourceModel? resource, bool force = false)
@@ -1934,7 +1934,7 @@ else
         if (usage.Success)
             _usageByResourceId[resource.Id] = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
         else
-            Http.Toast(usage.Message, usage.StatusCode);
+            Http.Notify(usage.Message, usage.StatusCode);
 
         if (string.Equals(_usageLoadingResourceId, resource.Id, StringComparison.OrdinalIgnoreCase))
             _usageLoadingResourceId = null;
@@ -1993,7 +1993,7 @@ else
         _albumEdit.Name = (_albumEdit.Name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(_albumEdit.Name))
         {
-            Http.Toast(T("AlbumNameRequired"), 422);
+            Http.Notify(T("AlbumNameRequired"), 422);
             return;
         }
 
@@ -2001,7 +2001,7 @@ else
             ? await ContentService.CreateResourceAlbumAsync(_albumEdit)
             : await ContentService.UpdateResourceAlbumAsync(_editingAlbum.Id, _albumEdit);
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success) return;
 
         var selectedAlbumId = res.Data?.Id ?? _selectedAlbumId;
@@ -2054,7 +2054,7 @@ else
 
         var deletedId = _deleteAlbum.Id;
         var res = await ContentService.DeleteResourceAlbumAsync(deletedId);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success) return;
 
         if (string.Equals(_selectedAlbumId, deletedId, StringComparison.OrdinalIgnoreCase))
@@ -2079,7 +2079,7 @@ else
     {
         if (CanManageResources) return true;
 
-        Http.Toast(T("NoPermission"), 403);
+        Http.Notify(T("NoPermission"), 403);
         return false;
     }
 
@@ -2087,7 +2087,7 @@ else
     {
         if (CanUploadResources) return true;
 
-        Http.Toast(T("NoPermission"), 403);
+        Http.Notify(T("NoPermission"), 403);
         return false;
     }
 

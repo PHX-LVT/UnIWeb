@@ -138,7 +138,7 @@
     protected override async Task OnInitializedAsync()
     {
         var response = await SectionService.GetSectionPresetsAsync();
-        if (!response.Success) Http.Toast(response.Message, response.StatusCode);
+        if (!response.Success) Http.Notify(response.Message, response.StatusCode);
         _presets = response.Data ?? new();
         _loading = false;
     }
@@ -150,7 +150,7 @@
         try
         {
             var response = await SectionService.ApplySectionPresetAsync(PageId, preset.Id);
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response.Message, response.StatusCode);
             if (!response.Success || response.Data is null) return;
             await OnInserted.InvokeAsync(response.Data.SectionId);
         }
@@ -168,7 +168,7 @@
         try
         {
             var response = await SectionService.DeleteSectionPresetAsync(candidate.Id);
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response.Message, response.StatusCode);
             if (!response.Success) return;
             _presets.RemoveAll(preset => preset.Id == candidate.Id);
             _deleteCandidate = null;

@@ -126,7 +126,7 @@
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response.Message, response.StatusCode);
             if (response.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }

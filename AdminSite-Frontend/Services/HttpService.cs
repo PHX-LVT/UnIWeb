@@ -20,6 +20,7 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         Task<FileDownloadResult> GetFileAsync(string uri);
         void Toast(string? message, int statusCode);
+        void Notify(string? message, int statusCode);
         void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null);
         void NotifyInline<T>(ApiResponse<T>? response, string targetId, string? successFallback = null, string? failureFallback = null);
         void SilentSuccess<T>(ApiResponse<T>? response, string? failureFallback = null);
@@ -240,6 +241,9 @@ namespace AdminSite.Services
         }
 
         public void Toast(string? message, int statusCode) =>
+            Notify(message, statusCode);
+
+        public void Notify(string? message, int statusCode) =>
             _notifications.Notify(message, statusCode);
 
         public void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null) =>

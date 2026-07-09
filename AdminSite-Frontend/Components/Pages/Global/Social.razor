@@ -1,4 +1,4 @@
-﻿@page "/global/social"
+@page "/global/social"
 @inject SocialService SocialService
 @inject IHttpService Http
 
@@ -144,7 +144,7 @@ else if (_group is not null)
         else
             res = await SocialService.UpdateAsync(_editing.Id, _form);
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) { CloseModal(); await Load(); }
         _saving = false;
     }
@@ -152,21 +152,21 @@ else if (_group is not null)
     private async Task ToggleButton(SocialButtonModel btn)
     {
         var res = await SocialService.SetButtonVisibilityAsync(btn.Id, !btn.Visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) btn.Visible = !btn.Visible;
     }
 
     private async Task ToggleGroup()
     {
         var res = await SocialService.SetGroupVisibilityAsync(!_group!.Visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) _group.Visible = !_group.Visible;
     }
 
     private async Task Delete(string id)
     {
         var res = await SocialService.DeleteAsync(id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success) await Load();
     }
 

@@ -1,4 +1,4 @@
-﻿@page "/global/footer"
+@page "/global/footer"
 @inject FooterService FooterService
 @inject IHttpService Http
 @inject IJSRuntime JS
@@ -251,7 +251,7 @@ else if (_footer is not null)
             }
             catch
             {
-                Http.Toast(T("FooterLinkSortingInitFailed"), 500);
+                Http.Notify(T("FooterLinkSortingInitFailed"), 500);
             }
 
             try
@@ -267,7 +267,7 @@ else if (_footer is not null)
             }
             catch
             {
-                Http.Toast(T("FooterGroupSortingInitFailed"), 500);
+                Http.Notify(T("FooterGroupSortingInitFailed"), 500);
             }
 
             _sortableInitialized = true;
@@ -302,7 +302,7 @@ else if (_footer is not null)
         }
 
         var res = await FooterService.ReorderGroupsAsync(cleanOrderedIds);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success)
         {
             _sortableInitialized = false;
@@ -354,7 +354,7 @@ else if (_footer is not null)
         }
 
         var res = await FooterService.ReorderLinksAsync(groupId, cleanOrderedIds);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success)
         {
             _sortableInitialized = false;
@@ -389,7 +389,7 @@ else if (_footer is not null)
         var res = await FooterService.UpdateMetaAsync(
             new FooterMetaRequest { CompanyName = _footer!.CompanyName }); 
         if (res.Data is not null) _footer = res.Data;
-        Http.Toast(res.Message ?? T("FooterIdentitySaved"), res.StatusCode);
+        Http.Notify(res.Message ?? T("FooterIdentitySaved"), res.StatusCode);
     }
 
     // Groups
@@ -409,7 +409,7 @@ else if (_footer is not null)
             res = await FooterService.UpdateGroupAsync(_editingGroup.Id, _groupForm);
 
         if (res.Data is not null) _footer = res.Data;  
-        Http.Toast(res.Message ?? (_editingGroup is null ? T("FooterGroupCreated") : T("FooterGroupSaved")), res.StatusCode);
+        Http.Notify(res.Message ?? (_editingGroup is null ? T("FooterGroupCreated") : T("FooterGroupSaved")), res.StatusCode);
         if (res.Success) CloseModals();
     }
 
@@ -417,14 +417,14 @@ else if (_footer is not null)
     {
         var res = await FooterService.SetGroupVisibilityAsync(g.Id, !g.Visible);
         if (res.Data is not null) _footer = res.Data;  
-        Http.Toast(res.Message ?? (res.Success ? T("FooterGroupUpdated") : T("FooterGroupUpdateFailed")), res.StatusCode);
+        Http.Notify(res.Message ?? (res.Success ? T("FooterGroupUpdated") : T("FooterGroupUpdateFailed")), res.StatusCode);
     }
 
     private async Task DeleteGroup(string id)
     {
         var res = await FooterService.DeleteGroupAsync(id);
         if (res.Data is not null) _footer = res.Data; 
-        Http.Toast(res.Message ?? T("FooterGroupDeleted"), res.StatusCode);
+        Http.Notify(res.Message ?? T("FooterGroupDeleted"), res.StatusCode);
     }
     // Links
     private void OpenLinkModal(FooterGroupModel group, FooterLinkModel? link)
@@ -444,7 +444,7 @@ else if (_footer is not null)
             res = await FooterService.UpdateLinkAsync(_activeGroup!.Id, _editingLink.Id, _linkForm);
 
         if (res.Data is not null) _footer = res.Data;  
-        Http.Toast(res.Message ?? (_editingLink is null ? T("FooterLinkCreated") : T("FooterLinkSaved")), res.StatusCode);
+        Http.Notify(res.Message ?? (_editingLink is null ? T("FooterLinkCreated") : T("FooterLinkSaved")), res.StatusCode);
         if (res.Success) CloseModals();
     }
 
@@ -452,14 +452,14 @@ else if (_footer is not null)
     {
         var res = await FooterService.SetLinkVisibilityAsync(groupId, link.Id, !link.Visible);
         if (res.Data is not null) _footer = res.Data; 
-        Http.Toast(res.Message ?? (res.Success ? T("FooterLinkUpdated") : T("FooterLinkUpdateFailed")), res.StatusCode);
+        Http.Notify(res.Message ?? (res.Success ? T("FooterLinkUpdated") : T("FooterLinkUpdateFailed")), res.StatusCode);
     }
 
     private async Task DeleteLink(string groupId, string linkId)
     {
         var res = await FooterService.DeleteLinkAsync(groupId, linkId);
         if (res.Data is not null) _footer = res.Data;  // ← replace Load()
-        Http.Toast(res.Message ?? T("FooterLinkDeleted"), res.StatusCode);
+        Http.Notify(res.Message ?? T("FooterLinkDeleted"), res.StatusCode);
     }
 
     private void CloseModals()

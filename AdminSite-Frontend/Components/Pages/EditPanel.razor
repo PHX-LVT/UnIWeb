@@ -1,4 +1,4 @@
-﻿@using Contracts.Admin
+@using Contracts.Admin
 @using System.Text.Json
 @inject AdminSectionService SectionService
 @inject IHttpService Http
@@ -289,7 +289,7 @@
     {
         if (HasUnsavedSectionChanges)
         {
-            Http.Toast(T("SaveSectionBeforePreset"), 409);
+            Http.Notify(T("SaveSectionBeforePreset"), 409);
             return;
         }
         await OnSaveAsPresetRequested.InvokeAsync(Section.Id);

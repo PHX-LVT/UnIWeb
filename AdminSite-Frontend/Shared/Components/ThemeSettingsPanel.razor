@@ -288,7 +288,7 @@ else if (_model is not null)
             _model = Normalize(res.Data);
         }
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _saving = false;
 
         try
@@ -318,7 +318,7 @@ else if (_model is not null)
             ApplyLivePreview();
         }
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _resetting = false;
 
         try

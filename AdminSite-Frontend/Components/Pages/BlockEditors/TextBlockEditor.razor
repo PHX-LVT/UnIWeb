@@ -1,4 +1,4 @@
-﻿@inject AdminBlockService BlockService
+@inject AdminBlockService BlockService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
 @using Contracts.Admin
@@ -77,7 +77,7 @@
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

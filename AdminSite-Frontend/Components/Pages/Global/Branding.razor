@@ -75,11 +75,11 @@ else if (_model is not null)
         if (res.Success && res.Data is not null)
         {
             _model!.LogoUrl = res.Data.Url;
-            Http.Toast(T("LogoUploaded"), res.StatusCode);
+            Http.Notify(T("LogoUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? T("LogoUploadFailed"), res.StatusCode);
+            Http.Notify(res.Message ?? T("LogoUploadFailed"), res.StatusCode);
         }
         StateHasChanged();
     }
@@ -97,7 +97,7 @@ else if (_model is not null)
         StateHasChanged();
         var res = await BrandingService.UpdateAsync(_model);
         if (res.Data is not null) _model = res.Data;
-        Http.Toast(res.Message ?? T("BrandingSaved"), res.StatusCode);
+        Http.Notify(res.Message ?? T("BrandingSaved"), res.StatusCode);
         _saving = false;
         StateHasChanged();
     }

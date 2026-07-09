@@ -445,7 +445,7 @@ else
         }
 
         _fieldTypes = BuildFallbackTypes();
-        Http.Toast(result.Message, result.StatusCode);
+        Http.Notify(result.Message, result.StatusCode);
     }
 
     private async Task LoadDefinitionsAsync()
@@ -454,7 +454,7 @@ else
         var definitions = await FormService.GetDefinitionsAsync();
         if (!definitions.Success)
         {
-            Http.Toast(definitions.Message, definitions.StatusCode);
+            Http.Notify(definitions.Message, definitions.StatusCode);
             if (definitions.StatusCode is 401 or 403)
                 _hasAccess = false;
             _loading = false;
@@ -626,12 +626,12 @@ else
         var validationErrors = ValidateDefinition(_editingDefinition);
         if (validationErrors.Count > 0)
         {
-            Http.Toast($"{T("PleaseCompleteRequiredFields")} {string.Join(" | ", validationErrors)}", 400);
+            Http.Notify($"{T("PleaseCompleteRequiredFields")} {string.Join(" | ", validationErrors)}", 400);
             return;
         }
 
         var res = await FormService.SaveDefinitionAsync(_editingDefinition);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.StatusCode is >= 200 and < 300)
         {
             await LoadDefinitionsAsync();
@@ -642,7 +642,7 @@ else
     {
         if (!CanDeleteDefinition || _editingDefinition is null) return;
         var res = await FormService.DeleteDefinitionAsync(_editingDefinition.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.StatusCode is >= 200 and < 300)
         {
             _editingDefinition = null;
