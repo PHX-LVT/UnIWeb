@@ -127,15 +127,16 @@ Implemented:
 - login rate limiting;
 - account status and lockout fields;
 - CORS origin restrictions;
-- logout endpoint and local session removal.
+- standard AdminSite authentication/authorization middleware and protected routes;
+- encrypted Secure/HttpOnly/SameSite AdminSite cookie with the API JWT held only inside the protected ticket;
+- server-side Bearer forwarding, antiforgery-protected login/logout and legacy auth-storage cleanup;
+- account/token-scoped circuit invalidation plus 30-second API session revalidation.
 
-Important limitation:
+Operational requirements and limitations:
 
-- AdminSite stores the JWT-bearing `admin_session` object in browser localStorage.
-- This survives refresh and is convenient, but any successful XSS in the Admin origin can read it.
-- Backend checks prevent UI hiding from becoming authorization, but a stolen valid token remains valuable until expiry/revocation.
-
-Planned correction: Secure, HttpOnly, SameSite cookie authentication plus CSRF-aware request design.
+- Configure `Authentication:DataProtectionKeysPath` to a persistent company-server directory, protect the key ring at rest and grant only the AdminSite app-pool identity access.
+- Keep the IIS app pool at one worker when immediate in-process cross-tab invalidation is required. Other workers/instances learn revocation from the authoritative API on the next request or periodic revalidation.
+- Browser language preferences may still use localStorage; authentication may not.
 
 ## 8. Upload Security: Current Measures
 

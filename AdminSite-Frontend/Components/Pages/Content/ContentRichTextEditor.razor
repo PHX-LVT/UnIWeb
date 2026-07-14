@@ -1,38 +1,108 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
+@using Contracts.Global
 
-<div class="content-rich-editor">
-    <div class="content-rich-toolbar" aria-label='@T("RichTextToolbar")'>
-        <label class="content-rich-format" title='@T("TextStyle")'>
-            <select class="content-rich-select" value="@_blockFormat" @onchange="SetBlockFormat">
-                <option value="p">@T("Paragraph")</option>
-                <option value="h2">@T("Heading2")</option>
-                <option value="h3">@T("Heading3")</option>
-            </select>
-        </label>
-        <label class="content-rich-size" title='@T("TextSize")'>
-            <input type="number" min="10" max="72" step="1" value="@_fontSizePx" @onchange="SetFontSize" />
-            <span>px</span>
-        </label>
+<div class="content-rich-editor @(ShowBlockAppearanceTools ? "content-rich-editor--block-text" : null) @(Disabled ? "is-disabled" : null)">
+    <fieldset disabled="@Disabled" class="content-rich-toolbar @(ShowBlockAppearanceTools ? "content-rich-toolbar--block-text" : null)" aria-label='@T("RichTextToolbar")' style="border:0;margin:0;padding:0;min-width:0">
+        @if (ShowTypographyTools)
+        {
+            <label class="content-rich-format" title='@T("TextStyle")'>
+                <select class="content-rich-select" value="@_blockFormat" @onchange="SetBlockFormat">
+                    <option value="p">@T("Paragraph")</option>
+                    <option value="h2">@T("Heading2")</option>
+                    <option value="h3">@T("Heading3")</option>
+                </select>
+            </label>
+            <label class="content-rich-size" title='@T("TextSize")'>
+                <input type="number" min="10" max="72" step="1" value="@_fontSizePx" @onchange="SetInlineFontSize" />
+                <span>px</span>
+            </label>
+        }
         <button type="button" class="content-rich-btn" @onclick='() => Exec("bold")' title='@T("Bold")'><i class="fas fa-bold"></i></button>
         <button type="button" class="content-rich-btn" @onclick='() => Exec("italic")' title='@T("Italic")'><i class="fas fa-italic"></i></button>
         <button type="button" class="content-rich-btn" @onclick='() => Exec("underline")' title='@T("Underline")'><i class="fas fa-underline"></i></button>
-        <button type="button" class="content-rich-btn" @onclick='() => Exec("insertUnorderedList")' title='@T("BulletList")'><i class="fas fa-list-ul"></i></button>
-        <button type="button" class="content-rich-btn" @onclick='() => Exec("insertOrderedList")' title='@T("NumberedList")'><i class="fas fa-list-ol"></i></button>
-        <button type="button" class="content-rich-btn" @onclick="CreateLink" title='@T("Link")'><i class="fas fa-link"></i></button>
-        <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyLeft")' title='@T("AlignLeft")'><i class="fas fa-align-left"></i></button>
-        <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyCenter")' title='@T("AlignCenter")'><i class="fas fa-align-center"></i></button>
-        <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyRight")' title='@T("AlignRight")'><i class="fas fa-align-right"></i></button>
-        <label class="content-rich-color" title='@T("TextColor")'>
-            <i class="fas fa-palette"></i>
-            <input type="color" value="@_textColor" @onchange="SetColor" />
+        <label class="content-rich-list" title='@T("List")'>
+            <i class="fas fa-list"></i>
+            <select class="content-rich-select content-rich-list-select"
+                    value="@_listChoice"
+                    aria-label='@T("List")'
+                    @onchange="SetListFormat">
+                <option value="" disabled>@T("List")</option>
+                <option value="unordered">@T("BulletList")</option>
+                <option value="ordered">@T("NumberedList")</option>
+            </select>
         </label>
-        <button type="button" class="content-rich-btn" @onclick='() => Exec("removeFormat")' title='@T("ClearFormatting")'><i class="fas fa-eraser"></i></button>
-    </div>
+        @if (ShowLinkTool)
+        {
+            <button type="button" class="content-rich-btn" @onclick="CreateLink" title='@T("Link")'><i class="fas fa-link"></i></button>
+        }
+        @if (ShowTypographyTools)
+        {
+            <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyLeft")' title='@T("AlignLeft")'><i class="fas fa-align-left"></i></button>
+            <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyCenter")' title='@T("AlignCenter")'><i class="fas fa-align-center"></i></button>
+            <button type="button" class="content-rich-btn" @onclick='() => Exec("justifyRight")' title='@T("AlignRight")'><i class="fas fa-align-right"></i></button>
+            <label class="content-rich-color" title='@T("TextColor")'>
+                <i class="fas fa-palette"></i>
+                <input type="color" value="@_textColor" @onchange="SetInlineColor" />
+            </label>
+        }
+        @if (ShowBlockAppearanceTools)
+        {
+            <FontPicker Value="@FontFamily"
+                        ValueChanged="SetBlockFontFamily"
+                        AllowInherit="true"
+                        InheritLabel="@T("UseThemeFont")"
+                        InheritDescription="@T("UseThemeFontHint")"
+                        AriaLabel="@T("FontFamily")"
+                        CssClass="content-rich-font-picker" />
+            <label class="content-rich-size" title='@T("TextSize")'>
+                <input type="number" min="10" max="96" step="1" value="@EffectiveFontSizePx" @oninput="SetBlockFontSize" />
+                <span>px</span>
+            </label>
+            <label class="content-rich-color content-rich-color--block" title='@T("TextColor")'>
+                <i class="fas fa-font"></i>
+                <input type="color" value="@EffectiveTextColor" @oninput="SetBlockTextColor" />
+            </label>
+            <label class="content-rich-color content-rich-color--block content-rich-bg-control @(TransparentBackground ? "is-disabled" : null)" title='@T("BackgroundColor")'>
+                <i class="fas fa-fill-drip"></i>
+                <input type="color" value="@EffectiveBackgroundColor" disabled="@TransparentBackground" @oninput="SetBlockBackgroundColor" />
+            </label>
+            <label class="content-rich-format" title='@T("TextAlignment")'>
+                <select class="content-rich-select" value="@EffectiveTextAlign" @onchange="SetBlockTextAlign">
+                    <option value="inherit">@T("Inherit")</option>
+                    <option value="left">@T("Left")</option>
+                    <option value="center">@T("Center")</option>
+                    <option value="right">@T("Right")</option>
+                </select>
+            </label>
+        }
+        @if (ShowClearFormattingTool)
+        {
+            <button type="button" class="content-rich-btn" @onclick='() => Exec("removeFormat")' title='@T("ClearFormatting")'><i class="fas fa-eraser"></i></button>
+        }
+    </fieldset>
+    @if (ShowBlockAppearanceTools)
+    {
+        <label class="content-rich-transparent-row">
+            <input type="checkbox"
+                   checked="@TransparentBackground"
+                   @onchange="SetTransparentBackground" />
+            <span>@T("TransparentBackground")</span>
+        </label>
+    }
     <div @ref="_editor"
          class="content-rich-surface"
-         contenteditable="true"
-         data-placeholder="@Placeholder"></div>
+         contenteditable="@(!Disabled)"
+         role="textbox"
+         aria-disabled="@Disabled"
+         aria-multiline="true"
+         tabindex="@(Disabled ? -1 : 0)"
+         spellcheck="true"
+         data-placeholder="@Placeholder"
+         style="@SurfaceStyle"
+         @onmousedown:stopPropagation="true"
+         @onclick:stopPropagation="true"
+         @onkeydown:stopPropagation="true"></div>
 </div>
 
 @code {
@@ -40,7 +110,25 @@
 
     [Parameter] public string Value { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
     [Parameter] public string Placeholder { get; set; } = string.Empty;
+    [Parameter] public bool ShowTypographyTools { get; set; } = true;
+    [Parameter] public bool ShowBlockAppearanceTools { get; set; }
+    [Parameter] public bool ShowLinkTool { get; set; } = true;
+    [Parameter] public bool ShowClearFormattingTool { get; set; } = true;
+    [Parameter] public int FontSizePx { get; set; } = 16;
+    [Parameter] public EventCallback<int> FontSizePxChanged { get; set; }
+    [Parameter] public int FontWeight { get; set; } = 400;
+    [Parameter] public string? FontFamily { get; set; }
+    [Parameter] public EventCallback<string?> FontFamilyChanged { get; set; }
+    [Parameter] public string TextColor { get; set; } = "#0f172a";
+    [Parameter] public EventCallback<string> TextColorChanged { get; set; }
+    [Parameter] public bool TransparentBackground { get; set; } = true;
+    [Parameter] public EventCallback<bool> TransparentBackgroundChanged { get; set; }
+    [Parameter] public string BackgroundColor { get; set; } = "#ffffff";
+    [Parameter] public EventCallback<string> BackgroundColorChanged { get; set; }
+    [Parameter] public string TextAlign { get; set; } = "inherit";
+    [Parameter] public EventCallback<string> TextAlignChanged { get; set; }
 
     private readonly string _id = $"content-rich-{Guid.NewGuid():N}";
     private DotNetObjectReference<ContentRichTextEditor>? _dotNetRef;
@@ -49,7 +137,37 @@
     private int _fontSizePx = 16;
     private string _textColor = "#0f3460";
     private string _blockFormat = "p";
+    private string _listChoice = string.Empty;
     private bool _initialized;
+
+    private int EffectiveFontSizePx => Math.Clamp(FontSizePx <= 0 ? 16 : FontSizePx, 10, 96);
+    private int EffectiveFontWeight => NormalizeFontWeight(FontWeight <= 0 ? 400 : FontWeight);
+    private string EffectiveTextColor => ColorOrDefault(TextColor, "#0f172a");
+    private string EffectiveBackgroundColor => ColorOrDefault(BackgroundColor, "#ffffff");
+    private string EffectiveTextAlign => NormalizeTextAlign(TextAlign);
+    private string? EffectiveFontFamily =>
+        ThemeFontCatalog.NormalizeOptionalName(FontFamily);
+
+    private string SurfaceStyle
+    {
+        get
+        {
+            if (!ShowBlockAppearanceTools) return string.Empty;
+            var parts = new List<string>
+            {
+                $"font-size: {EffectiveFontSizePx}px",
+                $"font-weight: {EffectiveFontWeight}",
+                $"color: {EffectiveTextColor}",
+                $"text-align: {EffectiveTextAlign}"
+            };
+            if (ThemeFontCatalog.TryResolve(EffectiveFontFamily, out var font))
+                parts.Add($"font-family: {font.CssStack}");
+            parts.Add(TransparentBackground
+                ? "background-color: transparent"
+                : $"background-color: {EffectiveBackgroundColor}");
+            return string.Join("; ", parts);
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -74,13 +192,60 @@
         await JS.InvokeVoidAsync("contentRichTextEditor.exec", _id, command);
     }
 
-    private async Task SetFontSize(ChangeEventArgs e)
+    private async Task SetListFormat(ChangeEventArgs e)
+    {
+        var requested = e.Value?.ToString();
+        _listChoice = string.Empty;
+        var command = requested switch
+        {
+            "ordered" => "insertOrderedList",
+            "unordered" => "insertUnorderedList",
+            _ => null
+        };
+        if (command is not null)
+            await Exec(command);
+    }
+
+    private async Task SetInlineFontSize(ChangeEventArgs e)
     {
         if (!int.TryParse(e.Value?.ToString(), out var requestedSize))
             requestedSize = 16;
 
         _fontSizePx = Math.Clamp(requestedSize, 10, 72);
         await JS.InvokeVoidAsync("contentRichTextEditor.setFontSize", _id, _fontSizePx);
+    }
+
+    private async Task SetBlockFontSize(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var requestedSize))
+            requestedSize = EffectiveFontSizePx;
+
+        await FontSizePxChanged.InvokeAsync(Math.Clamp(requestedSize, 10, 96));
+    }
+
+    private async Task SetBlockTextColor(ChangeEventArgs e)
+    {
+        await TextColorChanged.InvokeAsync(ColorOrDefault(e.Value?.ToString(), "#0f172a"));
+    }
+
+    private async Task SetBlockBackgroundColor(ChangeEventArgs e)
+    {
+        await BackgroundColorChanged.InvokeAsync(ColorOrDefault(e.Value?.ToString(), "#ffffff"));
+    }
+
+    private async Task SetBlockFontFamily(string? value)
+    {
+        await FontFamilyChanged.InvokeAsync(ThemeFontCatalog.NormalizeOptionalName(value));
+    }
+
+    private async Task SetTransparentBackground(ChangeEventArgs e)
+    {
+        await TransparentBackgroundChanged.InvokeAsync(e.Value is bool enabled && enabled);
+    }
+
+    private async Task SetBlockTextAlign(ChangeEventArgs e)
+    {
+        await TextAlignChanged.InvokeAsync(NormalizeTextAlign(e.Value?.ToString()));
     }
 
     private async Task SetBlockFormat(ChangeEventArgs e)
@@ -90,7 +255,7 @@
         await JS.InvokeVoidAsync("contentRichTextEditor.setBlockFormat", _id, _blockFormat);
     }
 
-    private async Task SetColor(ChangeEventArgs e)
+    private async Task SetInlineColor(ChangeEventArgs e)
     {
         var color = e.Value?.ToString() ?? "#0f3460";
         _textColor = IsHexColor(color) ? color : "#0f3460";
@@ -112,6 +277,8 @@
     [JSInvokable]
     public void OnFormatChanged(int fontSizePx, string? color, string? blockFormat)
     {
+        if (!ShowTypographyTools) return;
+
         if (fontSizePx >= 10 && fontSizePx <= 72)
             _fontSizePx = fontSizePx;
 
@@ -125,7 +292,25 @@
 
     private static bool IsHexColor(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
-        System.Text.RegularExpressions.Regex.IsMatch(value, "^#[0-9a-fA-F]{6}$");
+        System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), "^#[0-9a-fA-F]{6}$");
+
+    private static string ColorOrDefault(string? value, string fallback) =>
+        IsHexColor(value) ? value!.Trim() : fallback;
+
+    private static int NormalizeFontWeight(int value)
+    {
+        var clamped = Math.Clamp(value, 100, 900);
+        return Math.Clamp((int)Math.Round(clamped / 100d) * 100, 100, 900);
+    }
+
+    private static string NormalizeTextAlign(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "left" => "left",
+            "center" => "center",
+            "right" => "right",
+            _ => "inherit"
+        };
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 

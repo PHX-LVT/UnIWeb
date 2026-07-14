@@ -84,6 +84,9 @@ namespace Contracts.Public
     public class PublicFormBlockDto : PublicBlockDto
     {
         public string? FormDefinitionId { get; set; }
+        public int? DefaultWidthPx { get; set; }
+        public double? DefaultWidthPercent { get; set; }
+        public double? DefaultHeightPx { get; set; }
         public Dictionary<string, string>? Name { get; set; }
         public Dictionary<string, string>? Introduction { get; set; }
         public string FormLayoutMode { get; set; } = "stacked";

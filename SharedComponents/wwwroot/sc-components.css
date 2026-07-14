@@ -527,7 +527,7 @@
     width: var(--sc-block-width, 33.3333%);
     height: var(--sc-block-min-height, 96px);
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame {
@@ -537,7 +537,7 @@
     width: var(--sc-block-width, 33.3333%);
     height: var(--sc-block-min-height, 96px);
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .sc-section-blocks--freeform .sc-block-frame--position-freeform > *,
@@ -546,6 +546,29 @@
 .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-block,
 .sc-section-blocks--freeform .sc-block-frame--position-freeform .sc-design-block,
 .sc-section-blocks--freeform.sc-section-blocks--force-freeform > .sc-block-frame .sc-design-block {
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+/* A governed Form keeps its definition-size layout as one visual object. The
+   freeform frame changes size, while this shell proportionally scales every
+   field, label and button so no Form content is removed or reflowed. */
+.sc-section-blocks--freeform .sc-block-frame[data-block-type="form"] .sc-block-visual {
+    overflow: hidden;
+}
+
+.sc-governed-form-scale {
+    width: calc(100% / var(--sc-form-scale, 1));
+    height: calc(100% / var(--sc-form-scale, 1));
+    min-height: 0;
+    box-sizing: border-box;
+    transform: scale(var(--sc-form-scale, 1));
+    transform-origin: top left;
+}
+
+.sc-governed-form-scale > .sc-form-block {
+    width: 100%;
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
@@ -1184,7 +1207,15 @@
     background: transparent;
     color: var(--theme-header-text, #fff);
     font-family: var(--font-body, "Inter", sans-serif);
-    transition: background var(--transition), color var(--transition), box-shadow var(--transition), backdrop-filter var(--transition);
+    box-shadow: none;
+    backdrop-filter: none;
+    transform: translateY(0);
+    transition:
+        transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1),
+        background var(--transition),
+        color var(--transition),
+        box-shadow var(--transition),
+        backdrop-filter var(--transition);
 }
 
 .sc-header--scrolled,
@@ -1192,6 +1223,23 @@
     background: var(--theme-header-background, var(--navy));
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(8px);
+}
+
+.sc-header--hidden {
+    pointer-events: none;
+    transform: translateY(calc(-100% - 2px));
+}
+
+.sc-header--menu-open,
+.sc-header--hidden:focus-within {
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sc-header {
+        transition: none;
+    }
 }
 
 .sc-header__inner {
@@ -3235,15 +3283,23 @@ button.sc-library__media--video {
 
 .sc-block__title {
     margin: 0 0 12px;
-    color: var(--navy);
-    font-size: 20px;
-    font-weight: 600;
+    color: inherit;
+    font-size: var(--sc-block-font-size, 20px);
+    font-weight: var(--sc-block-font-weight, 600);
+    line-height: var(--sc-block-line-height, 1.25);
+    letter-spacing: var(--sc-block-letter-spacing, normal);
 }
 
 .sc-block__content {
-    color: #4b5563;
-    font-size: 15px;
-    line-height: 1.7;
+    color: inherit;
+    font-size: var(--sc-block-font-size, 15px);
+    font-weight: var(--sc-block-font-weight, inherit);
+    line-height: var(--sc-block-line-height, 1.7);
+    letter-spacing: var(--sc-block-letter-spacing, normal);
+}
+
+.sc-block__content :where(p, h1, h2, h3, h4, h5, h6, li, span, strong, em, a) {
+    color: inherit;
 }
 
 .sc-video-wrap {
@@ -4681,6 +4737,8 @@ textarea.sc-form-input--size-5 {
         color: var(--theme-header-text, #fff);
         box-shadow: none;
         backdrop-filter: blur(10px);
+        pointer-events: auto;
+        transform: translateY(0);
     }
     .sc-header--menu-open .sc-hamburger {
         position: fixed;

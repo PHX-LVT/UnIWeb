@@ -115,6 +115,25 @@ namespace AdminSite.Services
             return sb.ToString();
         }
 
+        public static string ToLoginCssVariables(string? key)
+        {
+            var preset = Get(key);
+
+            var panelTop = Lighten(preset.Sidebar, 0.1);
+            var panelBase = preset.Sidebar;
+            var panelBottom = Darken(preset.Sidebar, 0.26);
+            var accentSoft = Lighten(preset.Accent, 0.1);
+
+            var sb = new StringBuilder();
+            sb.Append(ToCssVariables(preset.Key));
+            sb.Append("--login-panel-top:").Append(panelTop).Append(';');
+            sb.Append("--login-panel-base:").Append(panelBase).Append(';');
+            sb.Append("--login-panel-bottom:").Append(panelBottom).Append(';');
+            sb.Append("--login-accent:").Append(preset.Accent).Append(';');
+            sb.Append("--login-accent-soft:").Append(accentSoft).Append(';');
+            return sb.ToString();
+        }
+
         private static string Darken(string hex, double amount) => Shift(hex, -amount);
         private static string Lighten(string hex, double amount) => Shift(hex, amount);
 

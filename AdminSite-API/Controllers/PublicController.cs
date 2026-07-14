@@ -54,9 +54,17 @@ namespace FullProject.Controllers
         public async Task<IActionResult> GetTheme() =>
             Ok(ApiResult.Ok(await _metadata.GetThemeAsync()));
 
+        [HttpGet("admin-appearance")]
+        public async Task<IActionResult> GetAdminAppearance() =>
+            Ok(ApiResult.Ok(await _metadata.GetAdminAppearanceAsync()));
+
         [HttpGet("languages")]
         public async Task<IActionResult> GetLanguages() =>
             Ok(ApiResult.Ok(await _metadata.GetLanguagesAsync()));
+
+        [HttpGet("admin-languages")]
+        public async Task<IActionResult> GetAdminLanguages() =>
+            Ok(ApiResult.Ok(await _metadata.GetAdminLanguagesAsync()));
 
         [HttpGet("pages/{slug}")]
         public async Task<IActionResult> GetPage(string slug)

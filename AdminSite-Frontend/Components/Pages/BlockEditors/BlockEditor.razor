@@ -132,9 +132,38 @@ else
                         {
                             <div class="block-focused-inspector">
                                 <div class="block-focused-inspector__head">
-                                    <div>
+                                    <div class="block-focused-inspector__identity">
                                         <span>@T("BlockInspector")</span>
-                                        <strong><i class="fas @BlockIconClass(_fullBlock.Type)"></i> @T(BlockLabelKey(_fullBlock.Type))</strong>
+                                        <div class="block-focused-inspector__title-row" @onclick:stopPropagation="true">
+                                            <i class="fas @BlockIconClass(_fullBlock.Type)" aria-hidden="true"></i>
+                                            @if (_renamingBlockId == _fullBlock.Id)
+                                            {
+                                                <input class="block-focused-inspector__name-input"
+                                                       value="@_renameDraft"
+                                                       autofocus
+                                                       placeholder="@FocusedBlockDisplayName"
+                                                       aria-label="@T("BlockName")"
+                                                       @oninput="SetFocusedBlockNameDraft"
+                                                       @onblur="FinishFocusedBlockNameEdit"
+                                                       @onkeydown="HandleFocusedBlockNameKey"
+                                                       @onkeydown:stopPropagation="true" />
+                                            }
+                                            else
+                                            {
+                                                <strong>@FocusedBlockDisplayName</strong>
+                                                @if (SupportsFocusedBlockNameRename)
+                                                {
+                                                    <button type="button"
+                                                            class="block-focused-inspector__rename"
+                                                            title="@(CanRenameFocusedBlockName ? T("EditBlockName") : T("ContentLockedHint"))"
+                                                            aria-label="@T("EditBlockName")"
+                                                            disabled="@(!CanRenameFocusedBlockName)"
+                                                            @onclick="StartFocusedBlockNameEdit">
+                                                        <i class="fas fa-pen"></i>
+                                                    </button>
+                                                }
+                                            }
+                                        </div>
                                     </div>
                                     <div class="block-focused-inspector__badges">
                                         <span class="@(_fullBlock.Visible ? "is-visible" : "is-hidden")">
@@ -400,6 +429,9 @@ else
         display: grid;
         gap: .18rem;
     }
+    .block-focused-inspector__identity {
+        min-width: 0;
+    }
     .block-focused-inspector__head > div:first-child > span,
     .block-focused-inspector__organization label > span,
     .block-focused-inspector__path > span {
@@ -415,6 +447,66 @@ else
         gap: .45rem;
         color: var(--primary);
         font-size: .9rem;
+    }
+    .block-focused-inspector__title-row {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        min-width: 0;
+        color: var(--primary);
+    }
+    .block-focused-inspector__title-row > i {
+        flex: 0 0 auto;
+        width: 18px;
+        text-align: center;
+    }
+    .block-focused-inspector__title-row strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .block-focused-inspector__rename {
+        display: inline-grid;
+        width: 26px;
+        height: 26px;
+        flex: 0 0 26px;
+        place-items: center;
+        border: 1px solid #d8e0ea;
+        border-radius: 7px;
+        background: #fff;
+        color: var(--primary);
+        cursor: pointer;
+    }
+    .block-focused-inspector__rename:hover {
+        border-color: rgba(15, 52, 96, .28);
+        background: #f8fafc;
+    }
+    .block-focused-inspector__rename:disabled {
+        opacity: .45;
+        cursor: not-allowed;
+    }
+    .block-focused-inspector__rename:disabled:hover {
+        border-color: #d8e0ea;
+        background: #fff;
+    }
+    .block-focused-inspector__name-input {
+        width: min(260px, 100%);
+        min-width: 120px;
+        height: 30px;
+        padding: 0 .55rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 7px;
+        background: #fff;
+        color: var(--primary);
+        font: inherit;
+        font-size: .9rem;
+        font-weight: 750;
+    }
+    .block-focused-inspector__name-input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, .14);
+        outline: none;
     }
     .block-focused-inspector__workspace-note {
         display: flex;
@@ -948,6 +1040,9 @@ else
     private BlockModel?      _fullBlock;
     private string?          _activeBlockId;
     private string?          _activePanelBlockId;
+    private string?          _renamingBlockId;
+    private string           _renameDraft = string.Empty;
+    private string           _renameBeforeEdit = string.Empty;
     private BlockModel?      _confirmDelete;
     private bool             _loading    = true;
     private bool             _showPicker = false;
@@ -1034,6 +1129,80 @@ else
     private sealed record VisualHistoryEntry(BlockUpdateDto Before, BlockUpdateDto After);
     private sealed record ContainerSlotStatus(string Key, string Label, bool Required, BlockModel? Child);
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string FocusedBlockDisplayName => _fullBlock is null ? string.Empty : BlockDisplayName(_fullBlock);
+    private bool SupportsFocusedBlockNameRename =>
+        string.Equals(_fullBlock?.Type, "text", StringComparison.OrdinalIgnoreCase);
+    private bool CanRenameFocusedBlockName =>
+        _fullBlock is not null &&
+        SupportsFocusedBlockNameRename &&
+        !_fullBlock.Authoring.FullLocked &&
+        !_fullBlock.Authoring.ContentLocked;
+    private string ActiveBlockLanguage =>
+        Languages.Contains(AdminLanguage, StringComparer.OrdinalIgnoreCase)
+            ? AdminLanguage
+            : Languages.Contains("en", StringComparer.OrdinalIgnoreCase)
+                ? "en"
+                : Languages.FirstOrDefault() ?? "en";
+
+    private void StartFocusedBlockNameEdit()
+    {
+        if (_fullBlock is null || !CanRenameFocusedBlockName)
+            return;
+
+        _renamingBlockId = _fullBlock.Id;
+        _renameDraft = LangValue(_fullBlock.Title) ?? string.Empty;
+        _renameBeforeEdit = _renameDraft;
+    }
+
+    private void SetFocusedBlockNameDraft(ChangeEventArgs e)
+    {
+        _renameDraft = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private void FinishFocusedBlockNameEdit()
+    {
+        if (_fullBlock is null || !string.Equals(_renamingBlockId, _fullBlock.Id, StringComparison.Ordinal))
+            return;
+
+        ApplyFocusedBlockName(_renameDraft);
+        _renamingBlockId = null;
+    }
+
+    private void HandleFocusedBlockNameKey(KeyboardEventArgs e)
+    {
+        if (string.Equals(e.Key, "Enter", StringComparison.OrdinalIgnoreCase))
+        {
+            FinishFocusedBlockNameEdit();
+        }
+        else if (string.Equals(e.Key, "Escape", StringComparison.OrdinalIgnoreCase))
+        {
+            _renameDraft = _renameBeforeEdit;
+            _renamingBlockId = null;
+        }
+    }
+
+    private void ApplyFocusedBlockName(string value)
+    {
+        if (_fullBlock is null)
+            return;
+
+        var language = ActiveBlockLanguage;
+        var trimmed = value.Trim();
+        var title = _fullBlock.Title is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(_fullBlock.Title);
+
+        if (string.IsNullOrWhiteSpace(trimmed))
+            title.Remove(language);
+        else
+            title[language] = trimmed;
+
+        _fullBlock.Title = title;
+        var listBlock = _blocks.FirstOrDefault(block => block.Id == _fullBlock.Id);
+        if (listBlock is not null)
+            listBlock.Title = new Dictionary<string, string>(title);
+    }
+
     private bool IsRequiredContainerSlot(BlockModel block)
     {
         if (string.IsNullOrWhiteSpace(block.ParentBlockId) ||
@@ -1542,6 +1711,9 @@ else
     {
         var res = await BlockService.GetByIdAsync(PageId, SectionId, blockId);
         _fullBlock = res.Data;
+        _renamingBlockId = null;
+        _renameDraft = string.Empty;
+        _renameBeforeEdit = string.Empty;
         if (_fullBlock is not null)
         {
             _fullBlock.Layout ??= new BlockLayoutModel();

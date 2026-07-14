@@ -31,6 +31,7 @@ namespace FullProject.Data
 
         // System wide metadata collections
         public IMongoCollection<AdminUser> AdminUsers => _database.GetCollection<AdminUser>("admin_users");
+        public IMongoCollection<AdminRoleDefinition> AdminRoles => _database.GetCollection<AdminRoleDefinition>("admin_roles");
         public IMongoCollection<AdminLoginActivityRecord> AdminLoginActivity => _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
         public IMongoCollection<FormDefinition> FormDefinitions => _database.GetCollection<FormDefinition>("form_definitions");
         public IMongoCollection<FormSubmission> FormSubmissions => _database.GetCollection<FormSubmission>("form_submissions");

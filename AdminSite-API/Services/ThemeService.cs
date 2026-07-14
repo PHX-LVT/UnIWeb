@@ -1,3 +1,4 @@
+using Contracts.Global;
 using FullProject.DTOs;
 using FullProject.Models;
 using MongoDB.Driver;
@@ -29,8 +30,8 @@ namespace FullProject.Services
             var theme = await GetAsync();
 
             var updates = new List<UpdateDefinition<SiteTheme>>();
-            if (dto.FontBody != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontBody, dto.FontBody));
-            if (dto.FontHeading != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontHeading, dto.FontHeading));
+            if (dto.FontBody != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontBody, ThemeFontCatalog.NormalizeNameOrDefault(dto.FontBody)));
+            if (dto.FontHeading != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontHeading, ThemeFontCatalog.NormalizeNameOrDefault(dto.FontHeading)));
             if (dto.TextSizeBase != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.TextSizeBase, dto.TextSizeBase));
             if (dto.TextSizeEyebrow != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.TextSizeEyebrow, dto.TextSizeEyebrow));
             if (dto.TextSizeHeading != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.TextSizeHeading, dto.TextSizeHeading));

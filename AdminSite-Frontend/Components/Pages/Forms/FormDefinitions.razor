@@ -424,7 +424,7 @@ else
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
-        _hasAccess = Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions;
+        _hasAccess = Auth.CanAccessFormDefinitions;
         if (!_hasAccess)
         {
             _loading = false;

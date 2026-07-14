@@ -13,10 +13,12 @@ namespace FullProject.Controllers
     public class AuthController : ControllerBase
     {
         private readonly AuthService _service;
+        private readonly AdminRoleService _roles;
 
-        public AuthController(AuthService service)
+        public AuthController(AuthService service, AdminRoleService roles)
         {
             _service = service;
+            _roles = roles;
         }
 
         [AllowAnonymous]
@@ -79,15 +81,20 @@ namespace FullProject.Controllers
                 return Unauthorized(ApiResult.Unauthorized<SessionResponseDto>());
 
             AuthService.NormalizeUserDefaults(admin);
+            var role = await _roles.GetRoleForUserAsync(admin);
+            if (role is null)
+                return Unauthorized(ApiResult.Unauthorized<SessionResponseDto>("Assigned role is unavailable."));
             return Ok(ApiResult.Ok(new SessionResponseDto
             {
                 Valid = true,
                 AdminId = admin.Id,
                 Email = admin.Email,
                 FullName = string.IsNullOrWhiteSpace(admin.FullName) ? admin.Email : admin.FullName,
-                Role = admin.Role,
+                RoleId = role.Id,
+                RoleName = role.Name,
+                IsAdminAdmin = role.IsProtected,
                 Status = admin.Status,
-                Permissions = AuthService.GetEffectivePermissions(admin)
+                Permissions = await _service.GetEffectivePermissionsAsync(admin)
             }));
         }
 

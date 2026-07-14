@@ -18,17 +18,25 @@
             <div class="sc-spinner"></div>
         </div>
     }
+    else if (!string.IsNullOrWhiteSpace(_pageLoadError))
+    {
+        <div class="admin-card" style="text-align:center;padding:2rem">
+            <i class="fas @(_pageLoadDenied ? "fa-lock" : "fa-triangle-exclamation")" style="font-size:1.5rem"></i>
+            <p style="margin:.75rem 0">@_pageLoadError</p>
+            @if (!_pageLoadDenied)
+            {
+                <button class="btn-admin btn-primary" @onclick="RetryLoadPages">@T("Retry")</button>
+            }
+        </div>
+    }
     else
     {
         <div class="ez-dashboard__page-nav">
             <div class="ez-dashboard__page-controls">
-                <button type="button"
-                        class="ez-page-scroll-btn"
-                        title='@T("PreviousPages")'
-                        aria-label='@T("PreviousPages")'
-                        @onclick="() => ScrollPageTabs(-1)">
-                    <i class="fas fa-chevron-left"></i>
-                </button>
+                @if (RootPages.Any())
+                {
+                    <button type="button" class="ez-page-scroll-btn" title='@T("PreviousPages")' aria-label='@T("PreviousPages")' @onclick="() => ScrollPageTabs(-1)"><i class="fas fa-chevron-left"></i></button>
+                }
 
                 <div class="ez-dashboard__page-scroll" @ref="_pageTabsScrollRef">
                     <div class="ez-dashboard__tabs" @ref="_pageTabsRef">
@@ -62,13 +70,10 @@
                     </div>
                 </div>
 
-                <button type="button"
-                        class="ez-page-scroll-btn"
-                        title='@T("NextPages")'
-                        aria-label='@T("NextPages")'
-                        @onclick="() => ScrollPageTabs(1)">
-                    <i class="fas fa-chevron-right"></i>
-                </button>
+                @if (RootPages.Any())
+                {
+                    <button type="button" class="ez-page-scroll-btn" title='@T("NextPages")' aria-label='@T("NextPages")' @onclick="() => ScrollPageTabs(1)"><i class="fas fa-chevron-right"></i></button>
+                }
             </div>
 
             <button class="btn-admin ez-dashboard__mode-toggle ez-dashboard__mode-toggle--@_canvasMode"
@@ -339,6 +344,8 @@
     private PageModel? _activeParentPage;
     private List<SectionModel> _sections = new();
     private bool _loading = true;
+    private bool _pageLoadDenied;
+    private string? _pageLoadError;
     private bool _saving = false;
     private bool _pageSortableInitialized = false;
     private bool _childPageSortableInitialized = false;
@@ -513,10 +520,42 @@
     private async Task LoadPages()
     {
         var res = await PageService.GetAllAsync();
+        if (!res.Success)
+        {
+            _pageLoadDenied = res.StatusCode == 403;
+            _pageLoadError = res.StatusCode switch
+            {
+                401 => T("NotificationSessionExpired"),
+                403 => T("NoPermission"),
+                _ => string.IsNullOrWhiteSpace(res.Message) ? T("PageLoadFailed") : res.Message
+            };
+            _pageSortableInitialized = false;
+            return;
+        }
+
+        _pageLoadDenied = false;
+        _pageLoadError = null;
         _pages = res.Data ?? new();
         _pageSortableInitialized = false;
+        if (_pages.Count == 0)
+        {
+            _selectedPageId = null;
+            _selectedPage = null;
+            _activeParentPage = null;
+            _childPages = [];
+            _sections = [];
+            return;
+        }
         if (_pages.Any() && _selectedPageId is null)
             await SelectPageById(RootPages.FirstOrDefault()?.Id ?? _pages.First().Id);
+    }
+
+    private async Task RetryLoadPages()
+    {
+        _loading = true;
+        _pageLoadError = null;
+        await LoadPages();
+        _loading = false;
     }
 
     [JSInvokable]

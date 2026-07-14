@@ -2,7 +2,7 @@
 @inject AdminUserService Users
 @inject AdminAuthService Auth
 @inject IHttpService Http
-@inject NavigationManager Nav
+@inject AdminSessionInvalidationService Invalidations
 
 <div class="page-header">
     <h1 class="page-title"><i class="fas fa-user-circle"></i> @T("AccountManagement")</h1>
@@ -14,7 +14,7 @@
         <div style="display:grid;gap:.5rem">
             <div><strong>@T("Name"):</strong> @Auth.CurrentUser?.FullName</div>
             <div><strong>@T("Email"):</strong> @Auth.CurrentUser?.Email</div>
-            <div><strong>@T("Role"):</strong> @Auth.CurrentUser?.Role</div>
+            <div><strong>@T("Role"):</strong> @Auth.CurrentUser?.RoleName</div>
         </div>
 
         <hr />
@@ -111,6 +111,7 @@
 
     private async Task ChangePassword()
     {
+        var adminId = Auth.CurrentUser?.AdminId;
         _saving = true;
         var res = await Users.UpdatePasswordAsync(_currentPassword, _newPassword);
         Http.Notify(res.Message, res.StatusCode);
@@ -118,8 +119,8 @@
 
         if (!res.Success) return;
 
-        await Auth.LogoutAsync();
-        Nav.NavigateTo("/login");
+        if (!string.IsNullOrWhiteSpace(adminId))
+            Invalidations.InvalidateAccount(adminId, "password-changed");
     }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);

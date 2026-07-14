@@ -24,7 +24,7 @@
                    @oninput="OnSearchChanged" />
         </div>
         <div class="admin-data-toolbar__actions">
-            @if (_view == "deleted" && CanManageAllContent)
+            @if (_view == "deleted" && IsAdmin)
             {
                 <button class="btn-admin btn-ghost"
                         disabled="@(!_selectedIds.Any())"
@@ -37,9 +37,9 @@
                     <i class="fas fa-trash"></i> @T("PermanentDeleteSelected") (@_selectedIds.Count)
                 </button>
             }
-            else if (CanCreateContent || CanManageAllContent)
+            else if (CanCreateContent || IsAdmin)
             {
-                @if (CanManageAllContent)
+                @if (IsAdmin)
                 {
                     <button class="btn-admin btn-danger"
                             disabled="@(!_selectedIds.Any())"
@@ -58,30 +58,33 @@
     </div>
 </div>
 
-<div class="admin-data-stats content-stat-grid">
+<div class="admin-data-stats content-stat-grid @(_view == "deleted" ? "content-stat-grid--single" : string.Empty)">
     <div class="admin-data-stat content-stat-card content-stat-card--total">
         <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Total")</div>
-        <div class="admin-data-stat__value content-stat-value">@NonDeletedItems.Count</div>
+        <div class="admin-data-stat__value content-stat-value">@_items.Count</div>
     </div>
-    <div class="admin-data-stat content-stat-card content-stat-card--published">
-        <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Published")</div>
-        <div class="admin-data-stat__value content-stat-value">@CountStatus("Published")</div>
-    </div>
-    <div class="admin-data-stat content-stat-card content-stat-card--submitted">
-        <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("PendingReview")</div>
-        <div class="admin-data-stat__value content-stat-value">@CountStatus("Submitted")</div>
-    </div>
-    <div class="admin-data-stat content-stat-card content-stat-card--rejected">
-        <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Rejected")</div>
-        <div class="admin-data-stat__value content-stat-value">@CountStatus("Rejected")</div>
-    </div>
+    @if (_view != "deleted")
+    {
+        <div class="admin-data-stat content-stat-card content-stat-card--published">
+            <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Published")</div>
+            <div class="admin-data-stat__value content-stat-value">@CountStatus("Published")</div>
+        </div>
+        <div class="admin-data-stat content-stat-card content-stat-card--submitted">
+            <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("PendingReview")</div>
+            <div class="admin-data-stat__value content-stat-value">@CountStatus("Submitted")</div>
+        </div>
+        <div class="admin-data-stat content-stat-card content-stat-card--rejected">
+            <div class="admin-data-stat__label content-stat-label"><span class="admin-data-stat__marker"></span>@T("Rejected")</div>
+            <div class="admin-data-stat__value content-stat-value">@CountRejected</div>
+        </div>
+    }
 </div>
 
 <div class="admin-data-toolbar">
     <div class="admin-data-toolbar__row content-filter-row">
         <div class="content-filter-field">
             <label>@T("Status")</label>
-            <select class="form-control" @bind="_statusFilter" @bind:after="OnFilterChanged" disabled="@(!CanManageAllContent || _view is "submitted" or "published" or "deleted")">
+            <select class="form-control" @bind="_statusFilter" @bind:after="OnFilterChanged" disabled="@(!Auth.CanManageContent || _view is "submitted" or "published" or "deleted")">
                 @foreach (var option in StatusOptions)
                 {
                     <option value="@option.Value">@T(option.LabelKey)</option>
@@ -152,6 +155,7 @@
                                 <td>
                                     <input type="checkbox"
                                            checked="@_selectedIds.Contains(item.Id)"
+                                           disabled="@(!CanSelectItem(item))"
                                            @onchange="e => ToggleSelected(item.Id, e)" />
                                 </td>
                             }
@@ -159,12 +163,12 @@
                                 <a href="@TitleHref(item)" target="@TitleTarget(item)" rel="@TitleRel(item)" style="font-weight:600">@GetLang(item.Title)</a>
                             </td>
                             <td><span class="content-type-badge">@GetTypeLabel(item.ContentTypeKey)</span></td>
-                            <td><span class="content-status-pill @StatusPillClass(item.Status)">@DisplayStatus(item.Status)</span></td>
+                            <td><span class="content-status-pill @StatusPillClass(item)">@DisplayStatus(item)</span></td>
                             <td>
-                                <a class="content-author" href="@AuthorHref(item.AuthorId)">
-                                    <span class="content-author-avatar">@AuthorInitials(item.AuthorId)</span>
-                                    <span>@DisplayAuthor(item.AuthorId)</span>
-                                </a>
+                                <div class="content-author">
+                                    <span class="content-author-avatar">@AuthorInitials(item)</span>
+                                    <span>@DisplayAuthor(item)</span>
+                                </div>
                             </td>
                             <td>@item.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td>
                             <td>@item.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
@@ -178,10 +182,10 @@
                                                 <i class="fas fa-eye"></i>
                                             </a>
                                         }
-                                        @if (CanEditItem(item))
+                                        @if (CanOpenWorkflowItem(item))
                                         {
-                                            <a class="btn-admin btn-ghost content-icon-btn" href="@EditHref(item.Id)" title="@T("Edit")">
-                                                <i class="fas fa-edit"></i>
+                                            <a class="btn-admin btn-ghost content-icon-btn" href="@EditHref(item.Id)" title="@T(CanEditItem(item) ? "Edit" : "WithdrawToDraft")">
+                                                <i class="fas @(CanEditItem(item) ? "fa-edit" : "fa-rotate-left")"></i>
                                             </a>
                                         }
                                         @if (CanDeleteItem(item))
@@ -291,14 +295,15 @@
     private bool _loading = true;
     private bool _confirmPermanentDelete;
     private bool _confirmBulkDelete;
+    private int _loadVersion;
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentAdminId => Auth.CurrentUser?.AdminId ?? string.Empty;
     private string CurrentAdminEmail => Auth.CurrentUser?.Email ?? string.Empty;
-    private bool CanManageAllContent => Auth.CanManageAllContent;
-    private bool CanCreateContent => CanManageAllContent || Auth.IsWriter;
-    private bool CanSelectRows => CanManageAllContent;
-    private bool ShowActionsColumn => CanManageAllContent || (_view is "my" or "submitted" && Auth.IsWriter);
+    private bool IsAdmin => Auth.IsAdminAdmin;
+    private bool CanCreateContent => IsAdmin || Auth.CanCreateEditContent;
+    private bool CanSelectRows => IsAdmin;
+    private bool ShowActionsColumn => Auth.CanViewContent;
 
     private string ViewTitleKey => _view switch
     {
@@ -327,28 +332,16 @@
             _ => _baseChips
         };
 
-    private List<ContentItemModel> NonDeletedItems =>
-        _items.Where(i => !IsDeleted(i)).ToList();
-
     private IEnumerable<ContentItemModel> ViewItems
     {
         get
         {
             var items = _items.AsEnumerable();
 
-            items = _view switch
-            {
-                "my" => items.Where(IsMine).Where(i => !IsDeleted(i)),
-                "submitted" => items.Where(i => SameStatus(i, "Submitted")).Where(i => CanManageAllContent || IsMine(i)),
-                "published" => items.Where(i => SameStatus(i, "Published")),
-                "deleted" => items.Where(i => SameStatus(i, "Deleted")),
-                _ => CanManageAllContent
-                    ? items.Where(i => !IsDeleted(i))
-                    : items.Where(i => SameStatus(i, "Published"))
-            };
-
             if (!string.IsNullOrWhiteSpace(_statusFilter) && _view is "all" or "my")
-                items = items.Where(i => SameStatus(i, _statusFilter));
+                items = items.Where(i => string.Equals(_statusFilter, "Rejected", StringComparison.OrdinalIgnoreCase)
+                    ? IsRejected(i)
+                    : SameStatus(i, _statusFilter));
 
             if (!string.IsNullOrWhiteSpace(_typeFilter))
                 items = items.Where(i => string.Equals(i.ContentTypeKey, _typeFilter, StringComparison.OrdinalIgnoreCase));
@@ -358,7 +351,7 @@
                 var term = _search.Trim();
                 items = items.Where(i =>
                     Contains(GetLang(i.Title), term) ||
-                    Contains(DisplayAuthor(i.AuthorId), term) ||
+                    Contains(DisplayAuthor(i), term) ||
                     Contains(GetTypeLabel(i.ContentTypeKey), term) ||
                     Contains(i.ContentTypeKey, term));
             }
@@ -367,7 +360,7 @@
             {
                 "oldest" => items.OrderBy(i => i.CreatedAt),
                 "title" => items.OrderBy(i => GetLang(i.Title)),
-                "author" => items.OrderBy(i => DisplayAuthor(i.AuthorId)),
+                "author" => items.OrderBy(DisplayAuthor),
                 _ => items.OrderByDescending(i => i.UpdatedAt)
             };
 
@@ -381,7 +374,7 @@
         FilteredItems.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
 
     private bool AllPagedSelected =>
-        PagedItems.Any() && PagedItems.All(item => _selectedIds.Contains(item.Id));
+        PagedItems.Any(CanSelectItem) && PagedItems.Where(CanSelectItem).All(item => _selectedIds.Contains(item.Id));
 
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredItems.Count / (double)PageSize));
 
@@ -434,8 +427,11 @@
 
     private async Task LoadItems()
     {
+        var loadVersion = ++_loadVersion;
         _loading = true;
         var res = await ContentService.GetAllAsync(scope: _view);
+        if (loadVersion != _loadVersion) return;
+
         _items = res.Data ?? new();
         _loading = false;
         _selectedIds.RemoveWhere(id => !_items.Any(item => item.Id == id));
@@ -453,10 +449,13 @@
             _ => "all"
         };
 
-        if (!CanManageAllContent && resolved is "published" or "deleted")
+        if (!Auth.CanManageContent && resolved == "published")
             return "all";
 
-        if (!CanCreateContent && resolved is "my" or "submitted")
+        if (!IsAdmin && resolved == "deleted")
+            return "all";
+
+        if (!Auth.CanManageContent && resolved is "my" or "submitted")
             return "all";
 
         return resolved;
@@ -484,6 +483,9 @@
 
     private void ToggleSelected(string id, ChangeEventArgs e)
     {
+        var item = _items.FirstOrDefault(candidate => string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (item is null || !CanSelectItem(item)) return;
+
         if (e.Value is bool selected && selected)
             _selectedIds.Add(id);
         else
@@ -494,7 +496,7 @@
     {
         if (e.Value is bool selected && selected)
         {
-            foreach (var item in PagedItems)
+            foreach (var item in PagedItems.Where(CanSelectItem))
                 _selectedIds.Add(item.Id);
         }
         else
@@ -506,13 +508,14 @@
 
     private void AskDelete(string id)
     {
-        if (!CanManageAllContent) return;
+        var item = _items.FirstOrDefault(candidate => string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (item is null || !CanDeleteItem(item)) return;
         _deleteId = id;
     }
 
     private void AskBulkDelete()
     {
-        if (!CanManageAllContent || _view == "deleted" || !_selectedIds.Any()) return;
+        if (!IsAdmin || _view == "deleted" || !_selectedIds.Any()) return;
         _confirmBulkDelete = true;
     }
 
@@ -544,7 +547,7 @@
 
     private void AskPermanentDelete()
     {
-        if (!CanManageAllContent || _view != "deleted" || !_selectedIds.Any()) return;
+        if (!IsAdmin || _view != "deleted" || !_selectedIds.Any()) return;
         _confirmPermanentDelete = true;
     }
 
@@ -561,7 +564,7 @@
 
     private async Task RestoreSelected()
     {
-        if (!CanManageAllContent || _view != "deleted" || !_selectedIds.Any()) return;
+        if (!IsAdmin || _view != "deleted" || !_selectedIds.Any()) return;
 
         foreach (var id in _selectedIds.ToList())
         {
@@ -577,6 +580,8 @@
     private int CountStatus(string status) =>
         _items.Count(i => SameStatus(i, status));
 
+    private int CountRejected => _items.Count(IsRejected);
+
     private bool IsMine(ContentItemModel item)
     {
         if (!string.IsNullOrWhiteSpace(CurrentAdminId) &&
@@ -589,12 +594,16 @@
                string.Equals(item.AuthorId, CurrentAdminEmail, StringComparison.OrdinalIgnoreCase);
     }
 
-    private string DisplayStatus(string status) =>
-        string.Equals(status, "Submitted", StringComparison.OrdinalIgnoreCase)
+    private string DisplayStatus(ContentItemModel item) =>
+        IsRejected(item)
+            ? T("Rejected")
+            : string.Equals(item.Status, "Submitted", StringComparison.OrdinalIgnoreCase)
             ? T("PendingReview")
-            : T(status);
+            : T(item.Status);
 
-    private static string StatusPillClass(string status) => status.ToLowerInvariant() switch
+    private static string StatusPillClass(ContentItemModel item) => IsRejected(item)
+        ? "is-rejected"
+        : item.Status.ToLowerInvariant() switch
     {
         "published" => "is-published",
         "submitted" => "is-submitted",
@@ -618,6 +627,10 @@
     }
 
     private static bool IsDeleted(ContentItemModel item) => SameStatus(item, "Deleted");
+
+    private static bool IsRejected(ContentItemModel item) =>
+        SameStatus(item, "Rejected") ||
+        string.Equals(item.ReviewStatus, "Rejected", StringComparison.OrdinalIgnoreCase);
 
     private static bool SameStatus(ContentItemModel item, string status) =>
         string.Equals(item.Status, status, StringComparison.OrdinalIgnoreCase);
@@ -645,16 +658,14 @@
     private string EditHref(string id) =>
         $"/content/edit/{Uri.EscapeDataString(id)}?return={Uri.EscapeDataString(CurrentReturnPath)}";
 
-    private static string AuthorHref(string authorId) => $"/employees/{Uri.EscapeDataString(authorId)}/content";
-
     private static bool CanPreview(ContentItemModel item) =>
-        !SameStatus(item, "Deleted");
+        SameStatus(item, "Published");
 
     private static string PreviewHref(ContentItemModel item) =>
         $"/content/preview/{Uri.EscapeDataString(item.Id)}";
 
     private bool CanUseAdminPreview(ContentItemModel item) =>
-        IsPageContent(item) && (CanManageAllContent || (Auth.IsWriter && IsMine(item)));
+        CanPreview(item) && IsPageContent(item) && Auth.CanViewContent;
 
     private bool IsPageContent(ContentItemModel item) =>
         _types.FirstOrDefault(type => string.Equals(type.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase)) is { } type &&
@@ -664,22 +675,37 @@
         _types.FirstOrDefault(type => string.Equals(type.Key, item.ContentTypeKey, StringComparison.OrdinalIgnoreCase)) is { } type &&
         string.Equals(ContentBehaviorUiHelper.InferBehavior(type), "file-resource", StringComparison.OrdinalIgnoreCase);
 
-    private bool CanEditItem(ContentItemModel item) =>
-        CanManageAllContent ||
-        (Auth.IsWriter && IsMine(item) && !IsDeleted(item));
+    private bool CanEditItem(ContentItemModel item)
+    {
+        if (IsDeleted(item)) return false;
+        if (IsAdmin) return true;
+        if (Auth.CanApproveContent && (SameStatus(item, "Submitted") || SameStatus(item, "Published")))
+            return true;
+        return Auth.CanCreateEditContent && IsMine(item) && (SameStatus(item, "Draft") || IsRejected(item));
+    }
 
     private bool CanDeleteItem(ContentItemModel item) =>
-        CanManageAllContent && !IsDeleted(item);
+        !IsDeleted(item) && !SameStatus(item, "Published") &&
+        (IsAdmin || (Auth.CanCreateEditContent && IsMine(item) && (SameStatus(item, "Draft") || IsRejected(item))));
+
+    private bool CanOpenWorkflowItem(ContentItemModel item) =>
+        CanEditItem(item) ||
+        (Auth.CanCreateEditContent && IsMine(item) && SameStatus(item, "Submitted"));
+
+    private bool CanSelectItem(ContentItemModel item) =>
+        IsAdmin && (_view == "deleted" ? IsDeleted(item) : CanDeleteItem(item));
 
     private string TitleHref(ContentItemModel item) =>
-        IsFileContent(item)
+        IsFileContent(item) && SameStatus(item, "Published")
             ? PrimaryFileHref(item)
-            : CanEditItem(item) && _view is not "all"
+            : CanOpenWorkflowItem(item)
             ? EditHref(item.Id)
-            : PublicContentHref(item);
+            : SameStatus(item, "Published")
+                ? PublicContentHref(item)
+                : "#";
 
     private string? TitleTarget(ContentItemModel item) =>
-        TitleHref(item).StartsWith("/content/edit", StringComparison.OrdinalIgnoreCase) ? null : "_blank";
+        TitleHref(item) is "#" || TitleHref(item).StartsWith("/content/edit", StringComparison.OrdinalIgnoreCase) ? null : "_blank";
 
     private string? TitleRel(ContentItemModel item) =>
         TitleTarget(item) is null ? null : "noopener";
@@ -708,28 +734,14 @@
         _ => type
     };
 
-    private string DisplayAuthor(string authorId)
+    private static string DisplayAuthor(ContentItemModel item)
     {
-        if (string.IsNullOrWhiteSpace(authorId)) return "-";
-        if (!string.IsNullOrWhiteSpace(CurrentAdminId) &&
-            string.Equals(authorId, CurrentAdminId, StringComparison.OrdinalIgnoreCase))
-        {
-            return "Admin";
-        }
-
-        if (!string.IsNullOrWhiteSpace(CurrentAdminEmail) &&
-            string.Equals(authorId, CurrentAdminEmail, StringComparison.OrdinalIgnoreCase))
-        {
-            return "Admin";
-        }
-
-        return authorId.Length <= 10 ? authorId : $"{authorId[..10]}...";
+        return string.IsNullOrWhiteSpace(item.AuthorName) ? "Unknown author" : item.AuthorName.Trim();
     }
 
-    private string AuthorInitials(string authorId)
+    private static string AuthorInitials(ContentItemModel item)
     {
-        var display = DisplayAuthor(authorId);
-        if (display == "-") return "?";
+        var display = DisplayAuthor(item);
         var parts = display.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length >= 2) return $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant();
         return display[..Math.Min(2, display.Length)].ToUpperInvariant();
@@ -737,13 +749,18 @@
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
-        UpdateViewFromRoute();
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(async () =>
+        {
+            UpdateViewFromRoute();
+            await LoadItems();
+            StateHasChanged();
+        });
     }
 
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;
+        _loadVersion++;
     }
 
     private sealed record ContentStatusOption(string Value, string LabelKey);

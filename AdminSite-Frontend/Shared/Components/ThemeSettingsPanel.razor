@@ -1,5 +1,6 @@
 @using AdminSite.Models
 @using AdminSite.Services
+@using Contracts.Global
 @using DevExpress.Blazor
 @using Microsoft.JSInterop
 @inject ThemeService ThemeService
@@ -22,6 +23,28 @@ else if (_model is not null)
     <div class="theme-settings-panel">
         <section class="theme-settings-panel__section">
             <h3>@T("ThemeText")</h3>
+            <div class="theme-settings-panel__font-grid">
+                <label class="theme-settings-panel__font-field">
+                    <span>@T("BodyFont")</span>
+                    <FontPicker Value="@_model.FontBody"
+                                ValueChanged="SetBodyFont"
+                                AriaLabel="@T("BodyFont")"
+                                CssClass="theme-settings-panel__font-picker"
+                                PickerId="theme-body-font"
+                                OpenPickerId="@_openFontPickerId"
+                                OpenPickerIdChanged="SetOpenFontPicker" />
+                </label>
+                <label class="theme-settings-panel__font-field">
+                    <span>@T("HeadingFont")</span>
+                    <FontPicker Value="@_model.FontHeading"
+                                ValueChanged="SetHeadingFont"
+                                AriaLabel="@T("HeadingFont")"
+                                CssClass="theme-settings-panel__font-picker"
+                                PickerId="theme-heading-font"
+                                OpenPickerId="@_openFontPickerId"
+                                OpenPickerIdChanged="SetOpenFontPicker" />
+                </label>
+            </div>
             @SliderRow("EyebrowTextSize", EyebrowTextSizePx, 10, 24, "px", v => EyebrowTextSizePx = v)
             @SliderRow("HeadingTextSize", HeadingTextSizePx, 24, 72, "px", v => HeadingTextSizePx = v)
             @SliderRow("SubheadingTextSize", SubheadingTextSizePx, 12, 32, "px", v => SubheadingTextSizePx = v)
@@ -187,6 +210,7 @@ else if (_model is not null)
     private bool _loading = true;
     private bool _saving;
     private bool _resetting;
+    private string? _openFontPickerId;
 
     private readonly List<string> _animations = new() { "off", "subtle", "normal", "expressive" };
 
@@ -265,6 +289,36 @@ else if (_model is not null)
     private void ChangeAnimationSpeed(ChangeEventArgs e)
     {
         AnimationSpeedValue = e.Value?.ToString() ?? "normal";
+    }
+
+    private Task SetBodyFont(string? value)
+    {
+        if (_model is not null)
+        {
+            _model.FontBody = ThemeFontCatalog.NormalizeNameOrDefault(value);
+            _openFontPickerId = null;
+            ApplyLivePreview();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task SetHeadingFont(string? value)
+    {
+        if (_model is not null)
+        {
+            _model.FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(value);
+            _openFontPickerId = null;
+            ApplyLivePreview();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task SetOpenFontPicker(string? pickerId)
+    {
+        _openFontPickerId = pickerId;
+        return Task.CompletedTask;
     }
 
     protected override async Task OnInitializedAsync()
@@ -406,8 +460,8 @@ else if (_model is not null)
 
     private static ThemeModel Normalize(ThemeModel model)
     {
-        model.FontBody = string.IsNullOrWhiteSpace(model.FontBody) ? "Inter" : model.FontBody;
-        model.FontHeading = string.IsNullOrWhiteSpace(model.FontHeading) ? "Inter" : model.FontHeading;
+        model.FontBody = ThemeFontCatalog.NormalizeNameOrDefault(model.FontBody);
+        model.FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(model.FontHeading);
         model.TextSizeEyebrow = $"{ParsePx(model.TextSizeEyebrow, 13)}px";
         model.TextSizeHeading = $"{ParsePx(model.TextSizeHeading, 40)}px";
         model.TextSizeSubheading = $"{ParsePx(model.TextSizeSubheading, 17)}px";

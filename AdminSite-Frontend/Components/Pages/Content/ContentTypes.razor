@@ -8,7 +8,7 @@
     <h1 class="page-title"><i class="fas fa-tags"></i> @T("ContentTypes")</h1>
 </div>
 
-@if (!Auth.CanManageAllContent)
+@if (!Auth.CanManageContentConfiguration)
 {
     <div class="admin-card">
         <p class="text-muted">@T("NoPermission")</p>

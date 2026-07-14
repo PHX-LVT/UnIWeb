@@ -12,118 +12,15 @@
             <option value="@optionDefinition.Id">@DefinitionName(optionDefinition)</option>
         }
     </select>
-    <p class="form-hint">@T("FormDefinitionPreviewHint")</p>
 </div>
-
-@if (SelectedDefinition is { } definition)
-{
-    <div class="form-block-preview">
-        <div class="form-block-preview__header">
-            <strong>@DefinitionName(definition)</strong>
-            <span>@(definition.Layout == FormLayoutModel.TwoColumns ? T("TwoColumns") : T("Stacked"))</span>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(Localized(definition.Introduction)))
-        {
-            <p>@Localized(definition.Introduction)</p>
-        }
-
-        <div class="@(definition.Layout == FormLayoutModel.TwoColumns ? "form-block-preview__fields form-block-preview__fields--two" : "form-block-preview__fields")">
-            @foreach (var field in definition.Fields.OrderBy(item => item.Order))
-            {
-                <div class="form-block-preview__field">
-                    <span>@Localized(field.Label)@if (field.Required){<b>*</b>}</span>
-                    <div>@(string.IsNullOrWhiteSpace(Localized(field.Placeholder)) ? Localized(field.Label) : Localized(field.Placeholder))</div>
-                </div>
-            }
-        </div>
-
-        <button type="button" class="btn-admin btn-primary" disabled>
-            @Localized(definition.SubmitButtonLabel)
-        </button>
-    </div>
-}
-else
-{
-    <div class="form-block-preview form-block-preview--empty">
-        @T("SelectActiveFormDefinition")
-    </div>
-}
 
 <div class="ez-editor-actions">
     <button class="btn-admin btn-primary"
             @onclick="Save"
-            disabled="@(_saving || SelectedDefinition is null)">
+            disabled="@(_saving || !HasSelectedActiveDefinition)">
         <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
     </button>
 </div>
-
-<style>
-    .form-block-preview {
-        margin-top: .75rem;
-        padding: 1rem;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: #fff;
-        color: #111827;
-    }
-
-    .form-block-preview--empty {
-        color: #64748b;
-        background: #f8fafc;
-    }
-
-    .form-block-preview__header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: .75rem;
-        margin-bottom: .5rem;
-    }
-
-    .form-block-preview__header span {
-        color: #64748b;
-        font-size: .75rem;
-    }
-
-    .form-block-preview__fields {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: .65rem;
-        margin: 1rem 0;
-    }
-
-    .form-block-preview__fields--two {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .form-block-preview__field span {
-        display: block;
-        margin-bottom: .25rem;
-        font-size: .78rem;
-        font-weight: 600;
-    }
-
-    .form-block-preview__field b {
-        color: #dc2626;
-        margin-left: 2px;
-    }
-
-    .form-block-preview__field div {
-        min-height: 38px;
-        padding: .55rem .7rem;
-        color: #94a3b8;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        background: #fff;
-    }
-
-    @@media (max-width: 720px) {
-        .form-block-preview__fields--two {
-            grid-template-columns: 1fr;
-        }
-    }
-</style>
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
@@ -140,6 +37,9 @@ else
 
     private FormDefinitionModel? SelectedDefinition =>
         _definitions.FirstOrDefault(item => item.Id == _formDefinitionId && item.Active);
+
+    private bool HasSelectedActiveDefinition =>
+        SelectedDefinition is not null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -173,7 +73,11 @@ else
             });
             Http.Notify(response.Message, response.StatusCode);
             if (response.Success)
+            {
+                if (response.Data is not null)
+                    Block = response.Data;
                 await OnSaved.InvokeAsync();
+            }
         }
         finally
         {

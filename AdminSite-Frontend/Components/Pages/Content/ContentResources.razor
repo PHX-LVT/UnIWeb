@@ -1082,9 +1082,9 @@ else
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
-    private bool CanViewResourceLibrary => Auth.CanManageAllContent || Auth.IsWriter;
-    private bool CanUploadResources => Auth.CanManageAllContent || Auth.IsWriter;
-    private bool CanManageResources => Auth.CanManageAllContent;
+    private bool CanViewResourceLibrary => Auth.CanManageContent;
+    private bool CanUploadResources => Auth.CanManageContent;
+    private bool CanManageResources => Auth.IsAdminAdmin || Auth.CanApproveContent;
 
     private bool IsAlbumMode => string.Equals(_libraryMode, "albums", StringComparison.OrdinalIgnoreCase);
     private bool ShowingAlbumRoot => IsAlbumMode && string.IsNullOrWhiteSpace(_selectedAlbumId);

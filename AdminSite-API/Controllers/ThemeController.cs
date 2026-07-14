@@ -1,6 +1,7 @@
 using FullProject.DTOs;
 using FullProject.Services;
 using FullProject.Utils;
+using Contracts.Global;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Auth;
@@ -31,6 +32,10 @@ namespace FullProject.Controllers
         [HttpPut]
         public async Task<IActionResult> Update([FromBody] ThemeUpdateDto dto)
         {
+            var validationErrors = ValidateFonts(dto);
+            if (validationErrors.Count > 0)
+                return BadRequest(ApiResult.BadRequest("Theme contains unsupported font values.", validationErrors));
+
             var updated = await _service.UpdateAsync(dto);
             return Ok(ApiResult.Ok(MapToDto(updated)));
         }
@@ -38,8 +43,8 @@ namespace FullProject.Controllers
 
         private static ThemeResponseDto MapToDto(Models.SiteTheme t) => new()
         {
-            FontBody = t.FontBody,
-            FontHeading = t.FontHeading,
+            FontBody = ThemeFontCatalog.NormalizeNameOrDefault(t.FontBody),
+            FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(t.FontHeading),
             TextSizeBase = t.TextSizeBase,
             TextSizeEyebrow = t.TextSizeEyebrow,
             TextSizeHeading = t.TextSizeHeading,
@@ -58,5 +63,18 @@ namespace FullProject.Controllers
             AnimationSpeed = t.AnimationSpeed,
             SpacingScale = t.SpacingScale
         };
+
+        private static List<string> ValidateFonts(ThemeUpdateDto dto)
+        {
+            var errors = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(dto.FontBody) && !ThemeFontCatalog.IsAllowed(dto.FontBody))
+                errors.Add("Body font is not supported.");
+
+            if (!string.IsNullOrWhiteSpace(dto.FontHeading) && !ThemeFontCatalog.IsAllowed(dto.FontHeading))
+                errors.Add("Heading font is not supported.");
+
+            return errors;
+        }
     }
 }

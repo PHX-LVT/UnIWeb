@@ -649,7 +649,24 @@ window.patchPreviewBlockLayout = function (blockId, x, y, w, h, leftPercent, top
     block.style.setProperty("--sc-block-min-height", `${exactHeight}px`);
     block.style.height = `${exactHeight}px`;
     block.style.minHeight = "0px";
-    block.style.overflow = "hidden";
+    block.style.overflow = "visible";
+
+    if ((block.getAttribute("data-block-type") || "").toLowerCase() === "form") {
+        const defaultWidthPx = Number.parseFloat(block.dataset.formDefaultWidthPx || "0");
+        const defaultWidthPercent = Number.parseFloat(block.dataset.formDefaultWidthPercent || "0");
+        const defaultHeightPx = Number.parseFloat(block.dataset.formDefaultHeightPx || "0");
+        if ((defaultWidthPx > 0 || defaultWidthPercent > 0) && defaultHeightPx > 0) {
+            const zoneWidthPx = block.parentElement?.getBoundingClientRect().width || 0;
+            const exactWidthPx = zoneWidthPx > 0 ? zoneWidthPx * exactWidth / 100 : 0;
+            const widthScale = defaultWidthPx > 0 && exactWidthPx > 0
+                ? exactWidthPx / defaultWidthPx
+                : exactWidth / defaultWidthPercent;
+            const formScale = Math.min(
+                Math.max(Math.min(widthScale, exactHeight / defaultHeightPx), 0.05),
+                1);
+            block.style.setProperty("--sc-form-scale", String(formScale));
+        }
+    }
 
     block.querySelectorAll([
         ".sc-block-motion",
@@ -939,6 +956,11 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
         block.setPointerCapture?.(event.pointerId);
 
         const mode = handle.classList.contains("ez-freeform-block-resize") ? "resize" : "drag";
+        const blockType = String(block.dataset.blockType || "").toLowerCase();
+        const isGovernedFormBlock = blockType === "form";
+        const governedFormMinScale = clamp(Number.parseFloat(block.dataset.blockMinScale || "0.5") || 0.5, 0.1, 1);
+        const growsSection = isGovernedFormBlock && block.dataset.blockGrowSection === "true";
+        const governedFormMaxSectionHeight = 3000;
         const constrainToCircle = block.dataset.blockShape === "circle";
         const containerRect = container.getBoundingClientRect();
         const renderedScale = container.offsetWidth > 0
@@ -957,6 +979,22 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             sectionWidth: Math.max(parseFloat(block.dataset.sectionWidth || "1"), 1),
             sectionHeight: Math.max(parseFloat(block.dataset.sectionHeight || "1"), 1)
         };
+        const previewIframe = document.getElementById("ez-preview-iframe");
+        const previewBlock = isGovernedFormBlock && previewIframe?.contentDocument
+            ? [...previewIframe.contentDocument.querySelectorAll("[data-block-id]")]
+                .find(item => item.getAttribute("data-block-id") === block.dataset.blockId)
+            : null;
+        const governedFormDefaultWidthPx = Number.parseFloat(previewBlock?.dataset.formDefaultWidthPx || "0");
+        const governedFormDefaultWidthPercent = Number.parseFloat(previewBlock?.dataset.formDefaultWidthPercent || "0");
+        const governedFormDefaultHeightPx = Number.parseFloat(previewBlock?.dataset.formDefaultHeightPx || "0");
+        const governedFormDefaultWidth = governedFormDefaultWidthPx > 0
+            ? governedFormDefaultWidthPx
+            : governedFormDefaultWidthPercent > 0
+            ? start.sectionWidth * governedFormDefaultWidthPercent / 100
+            : start.width;
+        const governedFormDefaultHeight = governedFormDefaultHeightPx > 0
+            ? governedFormDefaultHeightPx
+            : start.height;
 
         const groupBlocks = mode === "drag" && block.classList.contains("ez-freeform-block-overlay--selected")
             ? [...container.querySelectorAll(".ez-freeform-block-overlay--selected")]
@@ -1025,9 +1063,13 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
         function syncPreviewBlock(blockId, left, top, width, height) {
             if (!blockId) return;
             const leftPercent = clamp((left - start.sectionLeft) / start.sectionWidth * 100, 0, 100);
-            const topPx = clamp(top - start.sectionTop, 0, Math.max(0, start.sectionHeight - height));
+            const topPx = growsSection
+                ? clamp(top - start.sectionTop, 0, Math.max(0, governedFormMaxSectionHeight - height))
+                : clamp(top - start.sectionTop, 0, Math.max(0, start.sectionHeight - height));
             const widthPercent = clamp(width / start.sectionWidth * 100, 1, 100);
-            const heightPx = clamp(height, 24, start.sectionHeight);
+            const heightPx = growsSection
+                ? clamp(height, 24, governedFormMaxSectionHeight)
+                : clamp(height, 24, start.sectionHeight);
             window.patchPreviewBlockLayout(
                 blockId,
                 0,
@@ -1061,6 +1103,40 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             if (mode === "resize") {
                 const availableWidth = Math.max(start.sectionWidth / 12, start.sectionWidth - (start.left - start.sectionLeft));
                 const availableHeight = Math.max(48, start.sectionHeight - (start.top - start.sectionTop));
+                if (isGovernedFormBlock) {
+                    const currentScale = Math.max(
+                        0.05,
+                        Math.min(
+                            start.width / governedFormDefaultWidth,
+                            start.height / governedFormDefaultHeight));
+                    const minimumAllowedScale = currentScale < governedFormMinScale
+                        ? currentScale
+                        : governedFormMinScale;
+                    const availableMaxScale = clamp(
+                        Math.min(
+                            1,
+                            availableWidth / governedFormDefaultWidth,
+                            (growsSection ? governedFormMaxSectionHeight : availableHeight) / governedFormDefaultHeight),
+                        0.05,
+                        1);
+                    const maximumAllowedScale = Math.max(minimumAllowedScale, availableMaxScale);
+                    const widthScale = (start.width + dx) / governedFormDefaultWidth;
+                    const heightScale = (start.height + dy) / governedFormDefaultHeight;
+                    const rawScale = Math.abs(widthScale - currentScale) >= Math.abs(heightScale - currentScale)
+                        ? widthScale
+                        : heightScale;
+                    const nextScale = clamp(rawScale, minimumAllowedScale, maximumAllowedScale);
+                    const width = governedFormDefaultWidth * nextScale;
+                    const height = governedFormDefaultHeight * nextScale;
+
+                    hideGuide("x");
+                    hideGuide("y");
+                    block.style.width = `${width}px`;
+                    block.style.height = `${height}px`;
+                    syncPreviewBlock(block.dataset.blockId, start.left, start.top, width, height);
+                    return;
+                }
+
                 const maximumCircleSize = Math.min(availableWidth, availableHeight);
                 const minimumCircleSize = Math.min(Math.max(48, start.sectionWidth / 12), maximumCircleSize);
                 const circleDelta = Math.abs(dx) >= Math.abs(dy) ? dx : dy;
@@ -1136,7 +1212,9 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             const width = parseFloat(block.style.width || `${start.width}`);
             const height = parseFloat(block.style.height || `${start.height}`);
             const maxLeft = Math.max(start.sectionLeft, start.sectionLeft + start.sectionWidth - width);
-            const maxTop = Math.max(start.sectionTop, start.sectionTop + start.sectionHeight - height);
+            const maxTop = growsSection
+                ? Math.max(start.sectionTop, start.sectionTop + governedFormMaxSectionHeight - height)
+                : Math.max(start.sectionTop, start.sectionTop + start.sectionHeight - height);
             let left = clamp(start.left + dx, start.sectionLeft, maxLeft);
             let top = clamp(start.top + dy, start.sectionTop, maxTop);
             const xCandidates = [
@@ -1235,9 +1313,13 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
             const w = clamp(Math.round(width / start.sectionWidth * 12), 1, 12);
             const h = clamp(Math.round(height / 48), 1, 40);
             const leftPercent = clamp((left - start.sectionLeft) / start.sectionWidth * 100, 0, 100);
-            const topPx = clamp(top - start.sectionTop, 0, start.sectionHeight - height);
+            const topPx = growsSection
+                ? clamp(top - start.sectionTop, 0, Math.max(0, governedFormMaxSectionHeight - height))
+                : clamp(top - start.sectionTop, 0, Math.max(0, start.sectionHeight - height));
             const widthPercent = clamp(width / start.sectionWidth * 100, 1, 100);
-            const heightPx = clamp(height, 24, start.sectionHeight);
+            const heightPx = growsSection
+                ? clamp(height, 24, governedFormMaxSectionHeight)
+                : clamp(height, 24, start.sectionHeight);
 
             if (Math.abs(left - start.left) < 0.5 &&
                 Math.abs(top - start.top) < 0.5 &&

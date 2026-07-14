@@ -1570,6 +1570,15 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "form",
                     FormDefinitionId = definition.Id,
+                    DefaultWidthPx = block.DefaultWidthPx > 0
+                        ? block.DefaultWidthPx
+                        : null,
+                    DefaultWidthPercent = block.DefaultWidthPercent > 0
+                        ? block.DefaultWidthPercent
+                        : null,
+                    DefaultHeightPx = block.DefaultHeightPx > 0
+                        ? block.DefaultHeightPx
+                        : null,
                     Name = definition.Name,
                     Introduction = definition.Introduction,
                     FormLayoutMode = definition.Layout == Contracts.Forms.FormLayout.TwoColumns ? "two-columns" : "stacked",

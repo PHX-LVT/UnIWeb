@@ -14,7 +14,7 @@ namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/sections/{sectionId}/blocks")]
-    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+    [Authorize]
     public class BlocksController : ControllerBase
     {
         private readonly BlockService _service;
@@ -78,6 +78,7 @@ namespace FullProject.Controllers
         }
 
         // POST api/admin/pages/:pageId/sections/:sectionId/blocks
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost]
         public async Task<IActionResult> Create(string pageId, string sectionId,
             [FromBody] BlockCreateDto dto)
@@ -122,6 +123,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{blockId}")]
         public async Task<IActionResult> Update(string pageId, string sectionId, string blockId,
             [FromBody] BlockUpdateDto dto)
@@ -168,6 +170,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId/layout
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{blockId}/layout")]
         public async Task<IActionResult> UpdateLayout(string pageId, string sectionId, string blockId,
             [FromBody] BlockLayoutDto dto)
@@ -183,6 +186,7 @@ namespace FullProject.Controllers
         }
 
         // DELETE api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpDelete("{blockId}")]
         public async Task<IActionResult> Delete(string pageId, string sectionId, string blockId)
         {
@@ -195,6 +199,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId/visibility
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{blockId}/visibility")]
         public async Task<IActionResult> SetVisibility(string pageId, string sectionId,
             string blockId, [FromBody] VisibilityDto dto)
@@ -210,6 +215,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/reorder
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder(string pageId, string sectionId,
             [FromBody] ReorderDto dto)
@@ -225,6 +231,7 @@ namespace FullProject.Controllers
                 .WithNotification("NotificationOrderSaved"));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("authoring/layouts")]
         public async Task<IActionResult> UpdateLayouts(
             string pageId,
@@ -241,6 +248,7 @@ namespace FullProject.Controllers
                 .WithNotification("NotificationLayoutSaved"));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost("authoring/duplicate")]
         public async Task<IActionResult> Duplicate(
             string pageId,
@@ -256,6 +264,7 @@ namespace FullProject.Controllers
             }, "Blocks duplicated."));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost("authoring/delete-graphs")]
         public async Task<IActionResult> DeleteGraphs(
             string pageId,
@@ -409,6 +418,15 @@ namespace FullProject.Controllers
                 // Form: fields returned as embedded array â€” no separate form endpoints
                 case FormBlock form:
                     dto.FormDefinitionId = form.FormDefinitionId;
+                    dto.FormDefaultWidthPx = form.DefaultWidthPx > 0
+                        ? form.DefaultWidthPx
+                        : null;
+                    dto.FormDefaultWidthPercent = form.DefaultWidthPercent > 0
+                        ? form.DefaultWidthPercent
+                        : null;
+                    dto.FormDefaultHeightPx = form.DefaultHeightPx > 0
+                        ? form.DefaultHeightPx
+                        : null;
                     dto.Fields = form.Fields.Select(f => new FormFieldDto
                     {
                         Name = f.Name,

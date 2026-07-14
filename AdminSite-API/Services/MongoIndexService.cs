@@ -206,10 +206,18 @@ namespace FullProject.Services
         }
         private async Task EnsureUserIndexesAsync()
         {
+            var adminRoles = _database.GetCollection<AdminRoleDefinition>("admin_roles");
+            await EnsureIndexAsync(adminRoles,
+                Builders<AdminRoleDefinition>.IndexKeys.Ascending(r => r.NormalizedName),
+                IndexOptions("ux_admin_roles_normalized_name", unique: true));
+
             var adminUsers = _database.GetCollection<AdminUser>("admin_users");
             await EnsureIndexAsync(adminUsers,
                 Builders<AdminUser>.IndexKeys.Ascending(u => u.Email),
                 IndexOptions("ux_admin_users_email", unique: true));
+            await EnsureIndexAsync(adminUsers,
+                Builders<AdminUser>.IndexKeys.Ascending(u => u.RoleId),
+                IndexOptions("ix_admin_users_role"));
 
             var adminSessions = _database.GetCollection<AdminSessionRecord>("admin_sessions");
             await EnsureIndexAsync(adminSessions,

@@ -2,6 +2,7 @@
 @inject AdminUserService Users
 @inject AdminAuthService Auth
 @inject IHttpService Http
+@inject AdminSessionInvalidationService Invalidations
 
 <div class="page-header">
     <h1 class="page-title"><i class="fas fa-users-cog"></i> @T("UserManagement")</h1>
@@ -15,94 +16,116 @@
 }
 else
 {
-    <div class="admin-card" style="margin-bottom:1rem">
-        <div style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
-            <input class="form-control"
-                   style="max-width:360px"
-                   placeholder="@T("SearchUsers")"
-                   value="@_search"
-                   @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
-            <button class="btn-admin btn-primary" @onclick="OpenCreate">
-                <i class="fas fa-user-plus"></i> @T("AddUser")
-            </button>
-        </div>
+    <div class="admin-card" style="margin-bottom:1rem;padding:.5rem;display:flex;gap:.5rem">
+        <button class="btn-admin @(_activeTab == "users" ? "btn-primary" : "btn-ghost")" @onclick="ShowUsersTab">
+            <i class="fas fa-users"></i> @T("Users")
+        </button>
+        <button class="btn-admin @(_activeTab == "roles" ? "btn-primary" : "btn-ghost")" @onclick="ShowRolesTab">
+            <i class="fas fa-user-shield"></i> @T("RoleSettings")
+        </button>
     </div>
 
-    <div class="admin-card">
-        @if (_loading)
-        {
-            <p class="text-muted">@T("Loading")</p>
-        }
-        else if (!FilteredUsers.Any())
-        {
-            <p class="text-muted">@T("NoUsers")</p>
-        }
-        else
-        {
-            <div style="overflow:auto">
-                <table class="table" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>@T("Name")</th>
-                            <th>@T("Email")</th>
-                            <th>@T("Role")</th>
-                            <th>@T("Status")</th>
-                            <th>@T("LastLogin")</th>
-                            <th>@T("Updated")</th>
-                            <th style="width:240px">@T("Actions")</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var user in FilteredUsers)
-                        {
-                            <tr>
-                                <td style="font-weight:700">@user.FullName</td>
-                                <td>@user.Email</td>
-                                <td><span class="content-type-badge">@user.Role</span></td>
-                                <td><span class="content-status-pill @StatusClass(user.Status)">@user.Status</span></td>
-                                <td>@FormatDate(user.LastLoginAt)</td>
-                                <td>@FormatDate(user.UpdatedAt)</td>
-                                <td>
-                                    <div style="display:flex;gap:.35rem;flex-wrap:wrap">
-                                        <button class="btn-admin btn-ghost content-icon-btn" title="@T("Edit")" @onclick="() => OpenEdit(user)">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn-admin btn-ghost content-icon-btn" title="@T("ResetPassword")" @onclick="() => OpenReset(user)">
-                                            <i class="fas fa-key"></i>
-                                        </button>
+    @if (_activeTab == "users")
+    {
+        <div class="admin-card" style="margin-bottom:1rem">
+            <div style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
+                <input class="form-control" style="max-width:360px" placeholder="@T("SearchUsers")"
+                       value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+                <button class="btn-admin btn-primary" @onclick="OpenCreate">
+                    <i class="fas fa-user-plus"></i> @T("AddUser")
+                </button>
+            </div>
+        </div>
+
+        <div class="admin-card">
+            @if (_loading)
+            {
+                <p class="text-muted">@T("Loading")</p>
+            }
+            else if (!FilteredUsers.Any())
+            {
+                <p class="text-muted">@T("NoUsers")</p>
+            }
+            else
+            {
+                <div style="overflow:auto">
+                    <table class="table" style="width:100%">
+                        <thead><tr><th>@T("Name")</th><th>@T("Email")</th><th>@T("Role")</th><th>@T("Status")</th><th>@T("LastLogin")</th><th>@T("Updated")</th><th style="width:240px">@T("Actions")</th></tr></thead>
+                        <tbody>
+                            @foreach (var user in FilteredUsers)
+                            {
+                                <tr>
+                                    <td style="font-weight:700">@user.FullName</td>
+                                    <td>@user.Email</td>
+                                    <td><span class="content-type-badge">@user.RoleName</span></td>
+                                    <td><span class="content-status-pill @StatusClass(user.Status)">@user.Status</span></td>
+                                    <td>@FormatDate(user.LastLoginAt)</td>
+                                    <td>@FormatDate(user.UpdatedAt)</td>
+                                    <td><div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                                        <button class="btn-admin btn-ghost content-icon-btn" title="@T("Edit")" disabled="@(user.IsAdminAdmin && !Auth.IsAdminAdmin)" @onclick="() => OpenEdit(user)"><i class="fas fa-edit"></i></button>
+                                        <button class="btn-admin btn-ghost content-icon-btn" title="@T("ResetPassword")" disabled="@(user.IsAdminAdmin && !Auth.IsAdminAdmin)" @onclick="() => OpenReset(user)"><i class="fas fa-key"></i></button>
                                         @if (user.Status == AdminUserStatus.Active)
                                         {
-                                            <button class="btn-admin btn-danger content-icon-btn"
-                                                    title="@T("Disable")"
-                                                    disabled="@(user.Id == Auth.CurrentUser?.AdminId)"
-                                                    @onclick="() => DisableUser(user)">
-                                                <i class="fas fa-user-slash"></i>
-                                            </button>
+                                            <button class="btn-admin btn-danger content-icon-btn" title="@T("Disable")" disabled="@(user.Id == Auth.CurrentUser?.AdminId || (user.IsAdminAdmin && !Auth.IsAdminAdmin))" @onclick="() => DisableUser(user)"><i class="fas fa-user-slash"></i></button>
                                         }
                                         else
                                         {
-                                            <button class="btn-admin btn-primary content-icon-btn" title="@T("Enable")" @onclick="() => EnableUser(user)">
-                                                <i class="fas fa-user-check"></i>
-                                            </button>
+                                            <button class="btn-admin btn-primary content-icon-btn" title="@T("Enable")" disabled="@(user.IsAdminAdmin && !Auth.IsAdminAdmin)" @onclick="() => EnableUser(user)"><i class="fas fa-user-check"></i></button>
                                         }
                                         @if (Auth.IsAdminAdmin)
                                         {
-                                            <button class="btn-admin btn-danger content-icon-btn"
-                                                    title="@T("DeleteAccount")"
-                                                    disabled="@(user.Id == Auth.CurrentUser?.AdminId)"
-                                                    @onclick="() => OpenDelete(user)">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                            <button class="btn-admin btn-danger content-icon-btn" title="@T("DeleteAccount")" disabled="@(user.Id == Auth.CurrentUser?.AdminId)" @onclick="() => OpenDelete(user)"><i class="fas fa-trash"></i></button>
                                         }
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                                    </div></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="admin-card" style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;gap:1rem">
+            <div>
+                <strong>@T("RoleSettings")</strong>
+                <div class="text-muted">@(Auth.IsAdminAdmin ? T("RoleSettingsHint") : T("RoleSettingsReadOnlyHint"))</div>
             </div>
-        }
-    </div>
+            @if (Auth.IsAdminAdmin)
+            {
+                <button class="btn-admin btn-primary" @onclick="() => OpenRoleEditor(null)"><i class="fas fa-plus"></i> @T("AddRole")</button>
+            }
+        </div>
+        <div class="admin-card">
+            @if (_loadingRoles)
+            {
+                <p class="text-muted">@T("Loading")</p>
+            }
+            else
+            {
+                <div style="display:grid;gap:.75rem">
+                    @foreach (var role in _roles.OrderBy(role => role.Name))
+                    {
+                        <div style="border:1px solid var(--admin-border,#d7deea);border-radius:10px;padding:1rem;display:flex;justify-content:space-between;gap:1rem;align-items:flex-start">
+                            <div>
+                                <div style="display:flex;gap:.5rem;align-items:center"><strong>@role.Name</strong>@if (role.IsProtected){<span class="content-status-pill is-published">@T("Protected")</span>}</div>
+                                <div class="text-muted">@role.Description</div>
+                                <div style="margin-top:.5rem">@string.Format(T("AssignedUsersCount"), role.UserCount) &middot; @string.Format(T("PermissionCount"), role.Permissions.Count)</div>
+                            </div>
+                            @if (Auth.IsAdminAdmin)
+                            {
+                                <div style="display:flex;gap:.35rem">
+                                    <button class="btn-admin btn-ghost content-icon-btn" title="@T("Edit")" disabled="@(role.IsProtected || role.IsDeleting)" @onclick="() => OpenRoleEditor(role)"><i class="fas fa-edit"></i></button>
+                                    <button class="btn-admin btn-danger content-icon-btn" title="@T("Delete")" disabled="@role.IsProtected" @onclick="() => OpenRoleDelete(role)"><i class="fas fa-trash"></i></button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
 }
 
 @if (_editing)
@@ -129,10 +152,10 @@ else
                     }
                     <label>
                         <span>@T("Role")</span>
-                        <select class="form-control" @bind="_edit.Role">
-                            @foreach (var role in Enum.GetValues<AdminRole>())
+                        <select class="form-control" value="@_edit.RoleId" @onchange="ChangeUserRole">
+                            @foreach (var role in AssignableRoles)
                             {
-                                <option value="@role">@role</option>
+                                <option value="@role.Id">@role.Name</option>
                             }
                         </select>
                     </label>
@@ -143,15 +166,17 @@ else
                 </div>
 
                 <div style="margin-top:1rem">
-                    <div style="font-weight:700;margin-bottom:.5rem">@T("ExtraPermissions")</div>
+                    <div style="font-weight:700;margin-bottom:.25rem">@T("Permissions")</div>
+                    <div class="text-muted" style="margin-bottom:.5rem">@T("RolePermissionLockHint")</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.5rem">
                         @foreach (var permission in AdminPermissionKeys.All)
                         {
                             <label style="display:flex;align-items:center;gap:.5rem;margin:0">
                                 <input type="checkbox"
-                                       checked="@_edit.Permissions.Contains(permission)"
+                                       checked="@(SelectedRolePermissions.Contains(permission) || _edit.ExtraPermissions.Contains(permission))"
+                                       disabled="@(SelectedRolePermissions.Contains(permission) || SelectedRole?.IsProtected == true || (!Auth.IsAdminAdmin && !Auth.HasPermission(permission)) || IsUserPermissionRequired(permission))"
                                        @onchange="e => TogglePermission(permission, e)" />
-                                <span>@PermissionLabel(permission)</span>
+                                <span>@PermissionLabel(permission) @if (SelectedRolePermissions.Contains(permission)){<small class="text-muted">(@T("FromRole"))</small>}</span>
                             </label>
                         }
                     </div>
@@ -203,20 +228,138 @@ else
     </div>
 }
 
+@if (_editingRole)
+{
+    <div class="modal-backdrop" @onclick="CloseRoleEditor">
+        <div class="modal-box" style="max-width:760px" @onclick:stopPropagation="true">
+            <div class="modal-header">@(_roleEdit.Id is null ? T("AddRole") : T("EditRole"))</div>
+            <div class="modal-body">
+                <label><span>@T("RoleName")</span><input class="form-control" maxlength="80" @bind="_roleEdit.Name" /></label>
+                <label style="display:block;margin-top:1rem"><span>@T("Description")</span><textarea class="form-control" rows="3" @bind="_roleEdit.Description"></textarea></label>
+                <div style="font-weight:700;margin:1rem 0 .5rem">@T("NormalPermissions")</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.5rem">
+                    @foreach (var permission in AdminPermissionKeys.All)
+                    {
+                        <label style="display:flex;align-items:center;gap:.5rem;margin:0">
+                            <input type="checkbox"
+                                   checked="@_roleEdit.Permissions.Contains(permission)"
+                                   disabled="@IsRolePermissionRequired(permission)"
+                                   @onchange="e => ToggleRolePermission(permission, e)" />
+                            <span>@PermissionLabel(permission)</span>
+                        </label>
+                    }
+                </div>
+                @if (Auth.IsAdminAdmin)
+                {
+                    <div style="font-weight:700;margin:1.25rem 0 .25rem">@T("AdminExclusivePermissions")</div>
+                    <div class="text-muted" style="margin-bottom:.65rem">@T("AdminExclusivePermissionsHint")</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.5rem">
+                        @foreach (var capability in AdminExclusiveCapabilityKeys.All)
+                        {
+                            <div style="display:flex;align-items:center;gap:.5rem;margin:0;color:var(--text-muted)">
+                                <i class="fas fa-lock" aria-hidden="true"></i>
+                                <span>@AdminExclusiveLabel(capability)</span>
+                            </div>
+                        }
+                    </div>
+                }
+                @if (_roleImpact is not null && _roleImpact.AffectedUsers > 0)
+                {
+                    <div class="admin-card" style="margin-top:1rem;background:var(--admin-warning-soft,#fff7df)">
+                        <strong>@string.Format(T("RoleChangeAffectsUsers"), _roleImpact.AffectedUsers)</strong>
+                        @if (_roleImpact.AddedPermissions.Count > 0){<div>@T("PermissionsAdded"): @string.Join(", ", _roleImpact.AddedPermissions.Select(PermissionLabel))</div>}
+                        @if (_roleImpact.RemovedPermissions.Count > 0){<div>@T("PermissionsRemoved"): @string.Join(", ", _roleImpact.RemovedPermissions.Select(PermissionLabel))</div>}
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseRoleEditor">@T("Cancel")</button>
+                @if (_roleEdit.Id is not null && _roleImpact is null)
+                {
+                    <button class="btn-admin btn-primary" disabled="@_saving" @onclick="PreviewRoleSave">@T("ReviewChanges")</button>
+                }
+                else
+                {
+                    <button class="btn-admin btn-primary" disabled="@(_saving || string.IsNullOrWhiteSpace(_roleEdit.Name))" @onclick="SaveRole">@T("Save")</button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (_deleteRole is not null)
+{
+    <div class="modal-backdrop" @onclick="CloseRoleDelete">
+        <div class="modal-box" style="max-width:520px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("DeleteRole")</div>
+            <div class="modal-body">
+                <p>@string.Format(T("DeleteRolePrompt"), _deleteRole.Name)</p>
+                @if (_deleteRole.UserCount > 0)
+                {
+                    <p class="text-muted">@string.Format(T("RoleReassignmentRequired"), _deleteRole.UserCount)</p>
+                    <label><span>@T("ReplacementRole")</span>
+                        <select class="form-control" @bind="_replacementRoleId">
+                            <option value="">@T("SelectRole")</option>
+                            @foreach (var role in _roles.Where(role => role.Id != _deleteRole.Id))
+                            {
+                                <option value="@role.Id">@role.Name</option>
+                            }
+                        </select>
+                    </label>
+                    @if (ReplacementRole is not null)
+                    {
+                        <div class="admin-card" style="margin-top:1rem">
+                            <strong>@ReplacementRole.Name</strong>
+                            <div class="text-muted">@T("ReplacementRolePermissions"): @(ReplacementRole.Permissions.Count == 0 ? T("None") : string.Join(", ", ReplacementRole.Permissions.Select(PermissionLabel)))</div>
+                            <div class="text-muted">@T("RoleExtrasPreserved")</div>
+                        </div>
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" @onclick="CloseRoleDelete">@T("Cancel")</button>
+                <button class="btn-admin btn-danger" disabled="@(_saving || (_deleteRole.UserCount > 0 && string.IsNullOrWhiteSpace(_replacementRoleId)))" @onclick="DeleteRole">@T("DeleteRole")</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private readonly List<AdminUserResponse> _users = new();
+    private readonly List<AdminRoleResponse> _roles = new();
+    private string _activeTab = "users";
     private bool _loading = true;
+    private bool _loadingRoles = true;
     private bool _saving;
     private bool _editing;
     private string? _editingId;
     private string _createPassword = string.Empty;
     private string _search = string.Empty;
     private AdminUserEditModel _edit = new();
+    private string _originalFullName = string.Empty;
+    private string _originalRoleId = string.Empty;
+    private bool _originalActive = true;
+    private List<string> _originalExtraPermissions = new();
     private AdminUserResponse? _resetUser;
     private AdminUserResponse? _deleteUser;
     private string _resetPassword = string.Empty;
+    private bool _editingRole;
+    private AdminRoleEditModel _roleEdit = new();
+    private AdminRoleImpactResponse? _roleImpact;
+    private AdminRoleResponse? _deleteRole;
+    private string _replacementRoleId = string.Empty;
+    private AdminRoleResponse? ReplacementRole => _roles.FirstOrDefault(role => role.Id == _replacementRoleId);
+
+    private AdminRoleResponse? SelectedRole => _roles.FirstOrDefault(role => role.Id == _edit.RoleId);
+    private HashSet<string> SelectedRolePermissions =>
+        (SelectedRole?.Permissions ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private IEnumerable<AdminRoleResponse> AssignableRoles => _roles.Where(role =>
+        !role.IsDeleting &&
+        (Auth.IsAdminAdmin ||
+         string.Equals(role.Id, _edit.RoleId, StringComparison.Ordinal) ||
+         (!role.IsProtected && role.Permissions.All(Auth.HasPermission))));
 
     private IEnumerable<AdminUserResponse> FilteredUsers =>
         string.IsNullOrWhiteSpace(_search)
@@ -224,14 +367,34 @@ else
             : _users.Where(u =>
                     u.Email.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
                     u.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-                    u.Role.ToString().Contains(_search, StringComparison.OrdinalIgnoreCase))
+                    u.RoleName.Contains(_search, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(u => u.Email);
+
+    private void ShowUsersTab() => _activeTab = "users";
+    private void ShowRolesTab() => _activeTab = "roles";
 
     protected override async Task OnInitializedAsync()
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
+        await LoadRolesAsync();
         await LoadAsync();
+    }
+
+    private async Task LoadRolesAsync()
+    {
+        _loadingRoles = true;
+        var res = await Users.GetRolesAsync();
+        if (res.Success && res.Data is not null)
+        {
+            _roles.Clear();
+            _roles.AddRange(res.Data);
+        }
+        else
+        {
+            Http.Notify(res.Message, res.StatusCode);
+        }
+        _loadingRoles = false;
     }
 
     private async Task LoadAsync()
@@ -254,20 +417,30 @@ else
     {
         _editingId = null;
         _createPassword = string.Empty;
-        _edit = new AdminUserEditModel { Role = AdminRole.Writer, Active = true };
+        _originalFullName = string.Empty;
+        var defaultRole = AssignableRoles.FirstOrDefault(role => string.Equals(role.Name, "Viewer", StringComparison.OrdinalIgnoreCase))
+                          ?? AssignableRoles.FirstOrDefault();
+        _originalRoleId = defaultRole?.Id ?? string.Empty;
+        _originalActive = true;
+        _originalExtraPermissions = new();
+        _edit = new AdminUserEditModel { RoleId = _originalRoleId, Active = true };
         _editing = true;
     }
 
     private void OpenEdit(AdminUserResponse user)
     {
         _editingId = user.Id;
+        _originalFullName = user.FullName;
+        _originalRoleId = user.RoleId;
+        _originalActive = user.Status == AdminUserStatus.Active;
+        _originalExtraPermissions = new List<string>(user.ExtraPermissions);
         _edit = new AdminUserEditModel
         {
             Email = user.Email,
             FullName = user.FullName,
-            Role = user.Role,
+            RoleId = user.RoleId,
             Active = user.Status == AdminUserStatus.Active,
-            Permissions = new List<string>(user.Permissions)
+            ExtraPermissions = new List<string>(user.ExtraPermissions)
         };
         _editing = true;
     }
@@ -276,6 +449,8 @@ else
 
     private async Task SaveUser()
     {
+        var updatedAdminId = _editingId;
+        var invalidatesSessions = false;
         _saving = true;
         ApiResponse<AdminUserResponse> res;
 
@@ -286,19 +461,26 @@ else
                 Email = _edit.Email,
                 FullName = _edit.FullName,
                 Password = _createPassword,
-                Role = _edit.Role,
-                Permissions = _edit.Permissions,
+                RoleId = _edit.RoleId,
+                ExtraPermissions = _edit.ExtraPermissions,
                 Active = _edit.Active
             });
         }
         else
         {
+            var roleChanged = !string.Equals(_edit.RoleId, _originalRoleId, StringComparison.Ordinal);
+            var permissionsChanged = !SamePermissions(_edit.ExtraPermissions, _originalExtraPermissions);
+            var activeChanged = _edit.Active != _originalActive;
+            invalidatesSessions = roleChanged || permissionsChanged || activeChanged;
+
             res = await Users.UpdateUserAsync(_editingId, new AdminUserUpdateRequest
             {
-                FullName = _edit.FullName,
-                Role = _edit.Role,
-                Permissions = _edit.Permissions,
-                Active = _edit.Active
+                FullName = string.Equals(_edit.FullName, _originalFullName, StringComparison.Ordinal)
+                    ? null
+                    : _edit.FullName,
+                RoleId = roleChanged ? _edit.RoleId : null,
+                ExtraPermissions = roleChanged || permissionsChanged ? _edit.ExtraPermissions : null,
+                Active = activeChanged ? _edit.Active : null
             });
         }
 
@@ -307,6 +489,13 @@ else
         if (!res.Success) return;
 
         _editing = false;
+        if (invalidatesSessions && !string.IsNullOrWhiteSpace(updatedAdminId))
+        {
+            var reason = res.Data?.Status == AdminUserStatus.Disabled
+                ? "account-disabled"
+                : "account-updated";
+            Invalidations.InvalidateAccount(updatedAdminId, reason);
+        }
         await LoadAsync();
     }
 
@@ -325,12 +514,14 @@ else
     private async Task ResetPassword()
     {
         if (_resetUser is null) return;
+        var adminId = _resetUser.Id;
         _saving = true;
-        var res = await Users.ResetPasswordAsync(_resetUser.Id, _resetPassword);
+        var res = await Users.ResetPasswordAsync(adminId, _resetPassword);
         Http.Notify(res.Message, res.StatusCode);
         _saving = false;
         if (res.Success)
         {
+            Invalidations.InvalidateAccount(adminId, "password-reset");
             CloseReset();
             await LoadAsync();
         }
@@ -347,40 +538,174 @@ else
     {
         var res = await Users.DisableUserAsync(user.Id);
         Http.Notify(res.Message, res.StatusCode);
-        if (res.Success) await LoadAsync();
+        if (res.Success)
+        {
+            Invalidations.InvalidateAccount(user.Id, "account-disabled");
+            await LoadAsync();
+        }
     }
 
     private async Task DeleteUser()
     {
         if (_deleteUser is null) return;
+        var adminId = _deleteUser.Id;
 
         _saving = true;
-        var res = await Users.DeleteUserAsync(_deleteUser.Id);
+        var res = await Users.DeleteUserAsync(adminId);
         Http.Notify(res.Message, res.StatusCode);
         _saving = false;
         if (!res.Success) return;
 
+        Invalidations.InvalidateAccount(adminId, "account-deleted");
         CloseDelete();
         await LoadAsync();
     }
 
     private void TogglePermission(string permission, ChangeEventArgs e)
     {
+        if (SelectedRolePermissions.Contains(permission)) return;
         var enabled = e.Value is bool b && b;
-        if (enabled && !_edit.Permissions.Contains(permission))
-            _edit.Permissions.Add(permission);
+        if (enabled)
+        {
+            _edit.ExtraPermissions = AdminPermissionKeys
+                .ExpandDependencies(_edit.ExtraPermissions.Append(permission))
+                .Where(selected => !SelectedRolePermissions.Contains(selected))
+                .ToList();
+        }
         else if (!enabled)
-            _edit.Permissions.Remove(permission);
+            _edit.ExtraPermissions.Remove(permission);
     }
+
+    private bool IsUserPermissionRequired(string permission) =>
+        !SelectedRolePermissions.Contains(permission) &&
+        AdminPermissionKeys.IsRequiredByAny(
+            permission,
+            SelectedRolePermissions.Concat(_edit.ExtraPermissions));
+
+    private void ChangeUserRole(ChangeEventArgs e)
+    {
+        _edit.RoleId = e.Value?.ToString() ?? string.Empty;
+        _edit.ExtraPermissions = AdminPermissionKeys
+            .ExpandDependencies(_edit.ExtraPermissions)
+            .Where(permission => !SelectedRolePermissions.Contains(permission))
+            .ToList();
+    }
+
+    private void OpenRoleEditor(AdminRoleResponse? role)
+    {
+        _roleImpact = null;
+        _roleEdit = role is null
+            ? new AdminRoleEditModel()
+            : new AdminRoleEditModel
+            {
+                Id = role.Id,
+                Name = role.Name,
+                Description = role.Description,
+                Permissions = new List<string>(role.Permissions)
+            };
+        _editingRole = true;
+    }
+
+    private void CloseRoleEditor()
+    {
+        _editingRole = false;
+        _roleImpact = null;
+    }
+
+    private void ToggleRolePermission(string permission, ChangeEventArgs e)
+    {
+        var enabled = e.Value is bool b && b;
+        if (enabled)
+            _roleEdit.Permissions = AdminPermissionKeys
+                .ExpandDependencies(_roleEdit.Permissions.Append(permission));
+        else if (!enabled)
+            _roleEdit.Permissions.Remove(permission);
+        _roleImpact = null;
+    }
+
+    private bool IsRolePermissionRequired(string permission) =>
+        AdminPermissionKeys.IsRequiredByAny(permission, _roleEdit.Permissions);
+
+    private async Task PreviewRoleSave()
+    {
+        if (_roleEdit.Id is null) return;
+        _saving = true;
+        var res = await Users.GetRoleImpactAsync(_roleEdit.Id, RoleUpdateRequest());
+        _saving = false;
+        if (!res.Success)
+        {
+            Http.Notify(res.Message, res.StatusCode);
+            return;
+        }
+        _roleImpact = res.Data;
+    }
+
+    private async Task SaveRole()
+    {
+        _saving = true;
+        ApiResponse<AdminRoleResponse> res = _roleEdit.Id is null
+            ? await Users.CreateRoleAsync(new AdminRoleCreateRequest
+            {
+                Name = _roleEdit.Name,
+                Description = _roleEdit.Description,
+                Permissions = _roleEdit.Permissions
+            })
+            : await Users.UpdateRoleAsync(_roleEdit.Id, RoleUpdateRequest());
+        _saving = false;
+        Http.Notify(res.Message, res.StatusCode);
+        if (!res.Success) return;
+
+        CloseRoleEditor();
+        await LoadRolesAsync();
+        await LoadAsync();
+    }
+
+    private AdminRoleUpdateRequest RoleUpdateRequest() => new()
+    {
+        Name = _roleEdit.Name,
+        Description = _roleEdit.Description,
+        Permissions = _roleEdit.Permissions
+    };
+
+    private void OpenRoleDelete(AdminRoleResponse role)
+    {
+        _deleteRole = role;
+        _replacementRoleId = string.Empty;
+    }
+
+    private void CloseRoleDelete()
+    {
+        _deleteRole = null;
+        _replacementRoleId = string.Empty;
+    }
+
+    private async Task DeleteRole()
+    {
+        if (_deleteRole is null) return;
+        _saving = true;
+        var res = await Users.DeleteRoleAsync(_deleteRole.Id, _replacementRoleId);
+        _saving = false;
+        Http.Notify(res.Message, res.StatusCode);
+        if (!res.Success) return;
+
+        CloseRoleDelete();
+        await LoadRolesAsync();
+        await LoadAsync();
+    }
+
+    private static bool SamePermissions(
+        IEnumerable<string> left,
+        IEnumerable<string> right) =>
+        new HashSet<string>(left, StringComparer.OrdinalIgnoreCase).SetEquals(right);
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     private string PermissionLabel(string permission) => permission switch
     {
         AdminPermissionKeys.PageBuilder => T("PermissionPageBuilder"),
-        AdminPermissionKeys.ManageContent => T("PermissionManageContent"),
-        AdminPermissionKeys.PublishContent => T("PermissionPublishContent"),
-        AdminPermissionKeys.DeleteContent => T("PermissionDeleteContent"),
+        AdminPermissionKeys.ViewContent => T("PermissionViewContent"),
+        AdminPermissionKeys.CreateEditContent => T("PermissionCreateEditContent"),
+        AdminPermissionKeys.ApproveContent => T("PermissionApproveContent"),
         AdminPermissionKeys.ManageUsers => T("PermissionManageUsers"),
         AdminPermissionKeys.ManageSettings => T("PermissionManageSettings"),
         AdminPermissionKeys.ViewLogs => T("PermissionViewLogs"),
@@ -390,6 +715,22 @@ else
         AdminPermissionKeys.ManageFormSubmissions => T("PermissionManageFormSubmissions"),
         AdminPermissionKeys.ExportFormSubmissions => T("PermissionExportFormSubmissions"),
         _ => permission.Replace("-", " ", StringComparison.OrdinalIgnoreCase)
+    };
+
+    private string AdminExclusiveLabel(string capability) => capability switch
+    {
+        AdminExclusiveCapabilityKeys.ManageContentConfiguration => T("AdminExclusiveManageContentConfiguration"),
+        AdminExclusiveCapabilityKeys.ViewEditAnyDraft => T("AdminExclusiveViewEditAnyDraft"),
+        AdminExclusiveCapabilityKeys.DirectPublishDraft => T("AdminExclusiveDirectPublishDraft"),
+        AdminExclusiveCapabilityKeys.ForceReturnContentToDraft => T("AdminExclusiveForceReturnContentToDraft"),
+        AdminExclusiveCapabilityKeys.DeleteAnyEligibleContent => T("AdminExclusiveDeleteAnyEligibleContent"),
+        AdminExclusiveCapabilityKeys.ViewDeletedContent => T("AdminExclusiveViewDeletedContent"),
+        AdminExclusiveCapabilityKeys.RestoreDeletedContent => T("AdminExclusiveRestoreDeletedContent"),
+        AdminExclusiveCapabilityKeys.PermanentlyDeleteContent => T("AdminExclusivePermanentlyDeleteContent"),
+        AdminExclusiveCapabilityKeys.ManageContentWorkflowHistory => T("AdminExclusiveManageContentWorkflowHistory"),
+        AdminExclusiveCapabilityKeys.ManageRoleDefinitions => T("AdminExclusiveManageRoleDefinitions"),
+        AdminExclusiveCapabilityKeys.ManageProtectedAdminAccounts => T("AdminExclusiveManageProtectedAdminAccounts"),
+        _ => capability.Replace("-", " ", StringComparison.OrdinalIgnoreCase)
     };
 
     private static string StatusClass(AdminUserStatus status) => status switch
@@ -407,8 +748,16 @@ else
     {
         public string Email { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
-        public AdminRole Role { get; set; } = AdminRole.Writer;
+        public string RoleId { get; set; } = string.Empty;
         public bool Active { get; set; } = true;
+        public List<string> ExtraPermissions { get; set; } = new();
+    }
+
+    private sealed class AdminRoleEditModel
+    {
+        public string? Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
         public List<string> Permissions { get; set; } = new();
     }
 }

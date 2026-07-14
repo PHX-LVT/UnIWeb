@@ -7,69 +7,16 @@ public static class AdminAuthorization
 {
     public static bool HasPermission(ClaimsPrincipal user, string permission)
     {
-        if (IsViewer(user) && IsFormManagementPermission(permission))
-            return false;
-
         return IsAdminAdmin(user) ||
             user.Claims.Any(claim =>
                 string.Equals(claim.Type, "permission", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(claim.Value, permission, StringComparison.OrdinalIgnoreCase)) ||
-            HasDefaultRolePermission(user, permission);
+                AdminPermissionKeys.PermissionImplies(claim.Value, permission));
     }
 
     public static bool CanUsePageBuilder(ClaimsPrincipal user) =>
         HasPermission(user, AdminPermissionKeys.PageBuilder);
 
     public static bool IsAdminAdmin(ClaimsPrincipal user) =>
-        string.Equals(user.FindFirst(ClaimTypes.Role)?.Value, AdminRole.AdminAdmin.ToString(), StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(user.FindFirst("role")?.Value, AdminRole.AdminAdmin.ToString(), StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsViewer(ClaimsPrincipal user) =>
-        string.Equals(user.FindFirst(ClaimTypes.Role)?.Value, AdminRole.Viewer.ToString(), StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(user.FindFirst("role")?.Value, AdminRole.Viewer.ToString(), StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsFormManagementPermission(string permission) =>
-        string.Equals(permission, AdminPermissionKeys.ViewFormDefinitions, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(permission, AdminPermissionKeys.EditFormDefinitions, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(permission, AdminPermissionKeys.ViewFormSubmissions, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(permission, AdminPermissionKeys.ManageFormSubmissions, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(permission, AdminPermissionKeys.ExportFormSubmissions, StringComparison.OrdinalIgnoreCase);
-
-    private static bool HasDefaultRolePermission(ClaimsPrincipal user, string permission)
-    {
-        var role = user.FindFirst(ClaimTypes.Role)?.Value ?? user.FindFirst("role")?.Value;
-        if (string.Equals(role, AdminRole.Manager.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            return ManagerDefaults.Contains(permission, StringComparer.OrdinalIgnoreCase);
-        }
-
-        if (string.Equals(role, AdminRole.Writer.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            return WriterDefaults.Contains(permission, StringComparer.OrdinalIgnoreCase);
-        }
-
-        return false;
-    }
-
-    private static readonly string[] ManagerDefaults =
-    [
-        AdminPermissionKeys.ManageContent,
-        AdminPermissionKeys.PublishContent,
-        AdminPermissionKeys.DeleteContent,
-        AdminPermissionKeys.ViewFormDefinitions,
-        AdminPermissionKeys.EditFormDefinitions,
-        AdminPermissionKeys.ViewFormSubmissions,
-        AdminPermissionKeys.ManageFormSubmissions,
-        AdminPermissionKeys.ExportFormSubmissions
-    ];
-
-    private static readonly string[] WriterDefaults =
-    [
-        AdminPermissionKeys.ManageContent,
-        AdminPermissionKeys.ViewFormDefinitions,
-        AdminPermissionKeys.EditFormDefinitions,
-        AdminPermissionKeys.ViewFormSubmissions,
-        AdminPermissionKeys.ManageFormSubmissions,
-        AdminPermissionKeys.ExportFormSubmissions
-    ];
+        string.Equals(user.FindFirst("isAdminAdmin")?.Value, "true", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(user.FindFirst(ClaimTypes.Role)?.Value, FullProject.Services.AdminRoleService.ProtectedAdminRoleName, StringComparison.OrdinalIgnoreCase);
 }

@@ -5,16 +5,19 @@ namespace AdminSite.Models
 
 { 
 
-    // Stored in localStorage after login
+    // Non-secret session snapshot projected from the authenticated server principal.
+    // The API bearer token remains inside the encrypted HttpOnly cookie ticket.
     public class AdminSession
     {
         public string AdminId { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
-        public AdminRole Role { get; set; } = AdminRole.Viewer;
+        public string RoleId { get; set; } = string.Empty;
+        public string RoleName { get; set; } = string.Empty;
+        public bool IsAdminAdmin { get; set; }
         public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
         public List<string> Permissions { get; set; } = new();
-        public string Token { get; set; } = string.Empty;
+        public string TokenId { get; set; } = string.Empty;
     }
 
  
@@ -541,6 +544,9 @@ namespace AdminSite.Models
         public List<MapPinModel>? Pins { get; set; }
 
         // Form
+        public int? FormDefaultWidthPx { get; set; }
+        public double? FormDefaultWidthPercent { get; set; }
+        public double? FormDefaultHeightPx { get; set; }
         public Dictionary<string, string>? FormTitle { get; set; }
         public Dictionary<string, string>? SubmitButtonLabel
         {
@@ -925,8 +931,13 @@ namespace AdminSite.Models
         public List<string> Tags { get; set; } = new();
         public List<ContentAttachmentModel> Attachments { get; set; } = new();
         public string Status { get; set; } = "Draft";
+        public string ReviewStatus { get; set; } = "None";
+        public string? RejectionMessage { get; set; }
+        public string? RejectedById { get; set; }
+        public DateTime? RejectedAt { get; set; }
         public bool Visible { get; set; } = true;
         public string AuthorId { get; set; } = string.Empty;
+        public string AuthorName { get; set; } = string.Empty;
         public string? UpdatedById { get; set; }
         public string? PublishedById { get; set; }
         public DateTime CreatedAt { get; set; }

@@ -1313,6 +1313,9 @@ public class ColumnSlotResponseDto
         public List<MapPinDto>? Pins { get; set; }
 
         // Form
+        public int? FormDefaultWidthPx { get; set; }
+        public double? FormDefaultWidthPercent { get; set; }
+        public double? FormDefaultHeightPx { get; set; }
         public List<FormFieldDto>? Fields { get; set; }
         public Dictionary<string, string>? SubmitButtonLabel { get; set; }
     }

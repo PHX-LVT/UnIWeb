@@ -18,14 +18,16 @@ namespace FullProject.Services
         private readonly IMongoCollection<AdminSessionRecord> _sessions;
         private readonly IMongoCollection<AdminLoginActivityRecord> _loginActivity;
         private readonly IMongoCollection<AdminAuditLog> _auditLogs;
+        private readonly AdminRoleService _roles;
         private readonly JwtSettings _jwt;
 
-        public AuthService(IMongoDatabase db, IOptions<JwtSettings> jwt)
+        public AuthService(IMongoDatabase db, IOptions<JwtSettings> jwt, AdminRoleService roles)
         {
             _users = db.GetCollection<AdminUser>("admin_users");
             _sessions = db.GetCollection<AdminSessionRecord>("admin_sessions");
             _loginActivity = db.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
             _auditLogs = db.GetCollection<AdminAuditLog>("admin_audit_logs");
+            _roles = roles;
             _jwt = jwt.Value;
         }
 
@@ -56,8 +58,14 @@ namespace FullProject.Services
 
             var tokenId = Guid.NewGuid().ToString("N");
             var expiresAt = DateTime.UtcNow.AddHours(_jwt.ExpiryHour);
-            var effectivePermissions = GetEffectivePermissions(user).ToList();
-            var token = GenerateJwt(user, tokenId, effectivePermissions, expiresAt);
+            var role = await _roles.GetRoleForUserAsync(user);
+            if (role is null)
+            {
+                await RecordLoginActivityAsync(user, user.Email, "login-denied", false, "Assigned role is unavailable.", ipAddress, userAgent);
+                return null;
+            }
+            var effectivePermissions = await _roles.GetEffectivePermissionsAsync(user);
+            var token = GenerateJwt(user, role, tokenId, effectivePermissions, expiresAt);
             var session = new AdminSessionRecord
             {
                 AdminId = user.Id,
@@ -94,7 +102,9 @@ namespace FullProject.Services
                 AdminId = user.Id,
                 Email = user.Email,
                 FullName = DisplayName(user),
-                Role = user.Role,
+                RoleId = role.Id,
+                RoleName = role.Name,
+                IsAdminAdmin = role.IsProtected,
                 Status = user.Status,
                 Permissions = effectivePermissions
             };
@@ -155,14 +165,26 @@ namespace FullProject.Services
             var exists = await _users.Find(u => u.Email == email).AnyAsync();
             if (exists) return (null, ["Email already exists."]);
 
+            var role = await _roles.GetByIdAsync(dto.RoleId);
+            if (role is null) return (null, ["A valid role is required."]);
+            if (role.IsDeleting) return (null, ["The selected role is currently being deleted."]);
+            if (role.IsProtected && !await _roles.IsAdminAdminAsync(actor))
+                return (null, ["Only AdminAdmin can assign the AdminAdmin role."]);
+
+            var requestedExtras = dto.ExtraPermissions.Count > 0 ? dto.ExtraPermissions : dto.Permissions;
+            if (!await CanGrantAsync(actor, role, requestedExtras))
+                return (null, ["You cannot grant a role or permission that you do not possess."]);
+
             var user = new AdminUser
             {
                 Email = email,
                 FullName = string.IsNullOrWhiteSpace(dto.FullName) ? email : dto.FullName.Trim(),
                 PasswordHash = HashPassword(dto.Password),
-                Role = dto.Role,
+                LegacyRole = role.Name,
+                RoleId = role.Id,
                 Status = dto.Active ? AdminUserStatus.Active : AdminUserStatus.Disabled,
-                Permissions = NormalizePermissions(dto.Role, dto.Permissions),
+                Permissions = [],
+                ExtraPermissions = role.IsProtected ? [] : _roles.NormalizeExtraPermissions(requestedExtras, role),
                 TokenVersion = 1,
                 DisabledAt = dto.Active ? null : DateTime.UtcNow,
                 DisabledById = dto.Active ? null : actor.Id,
@@ -173,7 +195,7 @@ namespace FullProject.Services
             };
 
             await _users.InsertOneAsync(user);
-            await LogAsync(AdminAuditArea.UserManagement, "user-created", actor.Id, actor.Email, user.Id, user.Email, $"Created {user.Role} account.", ipAddress, userAgent);
+            await LogAsync(AdminAuditArea.UserManagement, "user-created", actor.Id, actor.Email, user.Id, user.Email, $"Created account with role {role.Name}.", ipAddress, userAgent);
             return (user, []);
         }
 
@@ -183,9 +205,23 @@ namespace FullProject.Services
             if (user is null) return (null, ["User not found."]);
 
             NormalizeUserDefaults(user);
-            if (user.Role == AdminRole.AdminAdmin && dto.Role is not null && dto.Role.Value != AdminRole.AdminAdmin)
+            var currentRole = await _roles.GetRoleForUserAsync(user);
+            if (currentRole is null) return (null, ["The user's assigned role no longer exists."]);
+            if (currentRole.IsProtected && !await _roles.IsAdminAdminAsync(actor))
+                return (null, ["Only AdminAdmin can modify an AdminAdmin account."]);
+
+            var requestedRole = dto.RoleId is not null
+                ? await _roles.GetByIdAsync(dto.RoleId)
+                : currentRole;
+            if (requestedRole is null) return (null, ["A valid role is required."]);
+            if (requestedRole.IsDeleting) return (null, ["The selected role is currently being deleted."]);
+            if (requestedRole.IsProtected && !await _roles.IsAdminAdminAsync(actor))
+                return (null, ["Only AdminAdmin can assign the AdminAdmin role."]);
+
+            var roleChanged = !string.Equals(currentRole.Id, requestedRole.Id, StringComparison.Ordinal);
+            if (currentRole.IsProtected && roleChanged)
             {
-                var adminCount = await _users.CountDocumentsAsync(u => u.Role == AdminRole.AdminAdmin && u.Status == AdminUserStatus.Active);
+                var adminCount = await _users.CountDocumentsAsync(u => u.RoleId == currentRole.Id && u.Status == AdminUserStatus.Active);
                 if (adminCount <= 1) return (null, ["At least one active AdminAdmin account is required."]);
             }
 
@@ -198,21 +234,33 @@ namespace FullProject.Services
             if (dto.FullName is not null)
                 updates.Add(Builders<AdminUser>.Update.Set(u => u.FullName, string.IsNullOrWhiteSpace(dto.FullName) ? user.Email : dto.FullName.Trim()));
 
-            var roleChanged = dto.Role is not null && dto.Role.Value != user.Role;
-            if (dto.Role is not null)
-                updates.Add(Builders<AdminUser>.Update.Set(u => u.Role, dto.Role.Value));
+            if (roleChanged)
+            {
+                updates.Add(Builders<AdminUser>.Update.Set(u => u.RoleId, requestedRole.Id));
+                updates.Add(Builders<AdminUser>.Update.Set(u => u.LegacyRole, requestedRole.Name));
+            }
 
-            if (dto.Permissions is not null)
-                updates.Add(Builders<AdminUser>.Update.Set(u => u.Permissions, NormalizePermissions(dto.Role ?? user.Role, dto.Permissions)));
+            var requestedExtras = dto.ExtraPermissions ?? dto.Permissions;
+            if ((roleChanged || requestedExtras is not null) &&
+                !await CanGrantAsync(actor, requestedRole, requestedExtras ?? user.ExtraPermissions))
+                return (null, ["You cannot grant a role or permission that you do not possess."]);
+            if (requestedExtras is not null || roleChanged)
+            {
+                var extras = requestedRole.IsProtected
+                    ? []
+                    : _roles.NormalizeExtraPermissions(requestedExtras ?? user.ExtraPermissions, requestedRole);
+                updates.Add(Builders<AdminUser>.Update.Set(u => u.ExtraPermissions, extras));
+                updates.Add(Builders<AdminUser>.Update.Set(u => u.Permissions, new List<string>()));
+            }
 
             var statusChanged = dto.Active is not null &&
                                 ((dto.Active.Value && user.Status != AdminUserStatus.Active) ||
                                  (!dto.Active.Value && user.Status != AdminUserStatus.Disabled));
             if (dto.Active is not null)
             {
-                if (!dto.Active.Value && (dto.Role ?? user.Role) == AdminRole.AdminAdmin)
+                if (!dto.Active.Value && requestedRole.IsProtected)
                 {
-                    var adminCount = await _users.CountDocumentsAsync(u => u.Role == AdminRole.AdminAdmin && u.Status == AdminUserStatus.Active && u.Id != id);
+                    var adminCount = await _users.CountDocumentsAsync(u => u.RoleId == requestedRole.Id && u.Status == AdminUserStatus.Active && u.Id != id);
                     if (adminCount == 0) return (null, ["At least one active AdminAdmin account is required."]);
                 }
 
@@ -226,12 +274,12 @@ namespace FullProject.Services
                 }
             }
 
-            if (roleChanged || dto.Permissions is not null || statusChanged)
+            if (roleChanged || requestedExtras is not null || statusChanged)
                 updates.Add(Builders<AdminUser>.Update.Inc(u => u.TokenVersion, 1));
 
             await _users.UpdateOneAsync(u => u.Id == id, Builders<AdminUser>.Update.Combine(updates));
 
-            if (roleChanged || dto.Permissions is not null || (statusChanged && dto.Active == false))
+            if (roleChanged || requestedExtras is not null || (statusChanged && dto.Active == false))
                 await RevokeAllUserSessionsAsync(id, actor.Id, AdminSessionRevokeReason.RoleChanged, ipAddress);
 
             await LogAsync(AdminAuditArea.UserManagement, "user-updated", actor.Id, actor.Email, user.Id, user.Email, "Updated account settings.", ipAddress, userAgent);
@@ -244,9 +292,15 @@ namespace FullProject.Services
             if (user is null) return (null, ["User not found."]);
             NormalizeUserDefaults(user);
 
-            if (!enabled && user.Role == AdminRole.AdminAdmin)
+            if (await _roles.IsAdminAdminAsync(user) && !await _roles.IsAdminAdminAsync(actor))
+                return (null, ["Only AdminAdmin can modify an AdminAdmin account."]);
+
+            if (!enabled && await _roles.IsAdminAdminAsync(user))
             {
-                var adminCount = await _users.CountDocumentsAsync(u => u.Role == AdminRole.AdminAdmin && u.Status == AdminUserStatus.Active && u.Id != id);
+                var protectedRole = await _roles.GetProtectedAdminRoleAsync();
+                var adminCount = protectedRole is null
+                    ? 0
+                    : await _users.CountDocumentsAsync(u => u.RoleId == protectedRole.Id && u.Status == AdminUserStatus.Active && u.Id != id);
                 if (adminCount == 0) return (null, ["At least one active AdminAdmin account is required."]);
             }
 
@@ -275,6 +329,8 @@ namespace FullProject.Services
 
             var user = await GetByIdAsync(id);
             if (user is null) return (null, ["User not found."]);
+            if (await _roles.IsAdminAdminAsync(user) && !await _roles.IsAdminAdminAsync(actor))
+                return (null, ["Only AdminAdmin can reset an AdminAdmin password."]);
 
             await _users.UpdateOneAsync(u => u.Id == id,
                 Builders<AdminUser>.Update
@@ -297,9 +353,12 @@ namespace FullProject.Services
             if (user.Id == actor.Id)
                 return (null, ["You cannot delete your own account."]);
 
-            if (user.Role == AdminRole.AdminAdmin)
+            if (await _roles.IsAdminAdminAsync(user))
             {
-                var adminCount = await _users.CountDocumentsAsync(u => u.Role == AdminRole.AdminAdmin && u.Status == AdminUserStatus.Active && u.Id != id);
+                var protectedRole = await _roles.GetProtectedAdminRoleAsync();
+                var adminCount = protectedRole is null
+                    ? 0
+                    : await _users.CountDocumentsAsync(u => u.RoleId == protectedRole.Id && u.Status == AdminUserStatus.Active && u.Id != id);
                 if (adminCount == 0) return (null, ["At least one active AdminAdmin account is required."]);
             }
 
@@ -475,14 +534,20 @@ namespace FullProject.Services
             var exists = await _users.Find(u => u.Email == normalizedEmail).AnyAsync();
             if (exists) return;
 
+            await _roles.EnsureInitializedAsync();
+            var adminRole = await _roles.GetProtectedAdminRoleAsync()
+                ?? throw new InvalidOperationException("Protected AdminAdmin role is unavailable.");
+
             await _users.InsertOneAsync(new AdminUser
             {
                 Email = normalizedEmail,
                 FullName = "Admin",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-                Role = AdminRole.AdminAdmin,
+                LegacyRole = AdminRoleService.ProtectedAdminRoleName,
+                RoleId = adminRole.Id,
                 Status = AdminUserStatus.Active,
                 Permissions = AdminPermissionKeys.All.ToList(),
+                ExtraPermissions = [],
                 TokenVersion = 1,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -495,41 +560,8 @@ namespace FullProject.Services
         public string HashPassword(string password) =>
             BCrypt.Net.BCrypt.HashPassword(password);
 
-        public static List<string> GetEffectivePermissions(AdminUser user)
-        {
-            if (user.Role == AdminRole.AdminAdmin)
-                return AdminPermissionKeys.All.ToList();
-
-            var defaults = user.Role switch
-            {
-                AdminRole.Manager => new[]
-                {
-                    AdminPermissionKeys.ManageContent,
-                    AdminPermissionKeys.PublishContent,
-                    AdminPermissionKeys.DeleteContent,
-                    AdminPermissionKeys.ViewFormDefinitions,
-                    AdminPermissionKeys.EditFormDefinitions,
-                    AdminPermissionKeys.ViewFormSubmissions,
-                    AdminPermissionKeys.ManageFormSubmissions,
-                    AdminPermissionKeys.ExportFormSubmissions
-                },
-                AdminRole.Writer => new[]
-                {
-                    AdminPermissionKeys.ManageContent,
-                    AdminPermissionKeys.ViewFormDefinitions,
-                    AdminPermissionKeys.EditFormDefinitions,
-                    AdminPermissionKeys.ViewFormSubmissions,
-                    AdminPermissionKeys.ManageFormSubmissions,
-                    AdminPermissionKeys.ExportFormSubmissions
-                },
-                _ => Array.Empty<string>()
-            };
-
-            return defaults
-                .Concat(NormalizePermissions(user.Role, user.Permissions))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
+        public Task<List<string>> GetEffectivePermissionsAsync(AdminUser user) =>
+            _roles.GetEffectivePermissionsAsync(user);
 
         public static void NormalizeUserDefaults(AdminUser user)
         {
@@ -539,9 +571,10 @@ namespace FullProject.Services
             if (user.TokenVersion <= 0)
                 user.TokenVersion = 1;
             user.Permissions ??= new();
+            user.ExtraPermissions ??= new();
         }
 
-        private string GenerateJwt(AdminUser user, string tokenId, List<string> permissions, DateTime expiresAt)
+        private string GenerateJwt(AdminUser user, AdminRoleDefinition role, string tokenId, List<string> permissions, DateTime expiresAt)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Secret));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -550,7 +583,9 @@ namespace FullProject.Services
                 new("adminId", user.Id),
                 new(ClaimTypes.Email, user.Email),
                 new(ClaimTypes.Name, user.Email),
-                new(ClaimTypes.Role, user.Role.ToString()),
+                new(ClaimTypes.Role, role.Name),
+                new("roleId", role.Id),
+                new("isAdminAdmin", role.IsProtected ? "true" : "false"),
                 new("tokenVersion", user.TokenVersion.ToString()),
                 new(JwtRegisteredClaimNames.Jti, tokenId)
             };
@@ -659,40 +694,20 @@ namespace FullProject.Services
             return errors;
         }
 
-        private static List<string> NormalizePermissions(AdminRole role, IEnumerable<string>? permissions)
+        private async Task<bool> CanGrantAsync(
+            AdminUser actor,
+            AdminRoleDefinition role,
+            IEnumerable<string>? extras)
         {
-            var allowed = AllowedPermissionsForRole(role);
-            return (permissions ?? [])
-                .Where(permission => allowed.Contains(permission, StringComparer.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
+            if (await _roles.IsAdminAdminAsync(actor)) return true;
+            if (role.IsProtected) return false;
 
-        private static IReadOnlyCollection<string> AllowedPermissionsForRole(AdminRole role) => role switch
-        {
-            AdminRole.AdminAdmin => AdminPermissionKeys.All,
-            AdminRole.Manager => new[]
-            {
-                AdminPermissionKeys.ManageContent,
-                AdminPermissionKeys.PublishContent,
-                AdminPermissionKeys.DeleteContent,
-                AdminPermissionKeys.ViewFormDefinitions,
-                AdminPermissionKeys.EditFormDefinitions,
-                AdminPermissionKeys.ViewFormSubmissions,
-                AdminPermissionKeys.ManageFormSubmissions,
-                AdminPermissionKeys.ExportFormSubmissions
-            },
-            AdminRole.Writer => new[]
-            {
-                AdminPermissionKeys.ManageContent,
-                AdminPermissionKeys.ViewFormDefinitions,
-                AdminPermissionKeys.EditFormDefinitions,
-                AdminPermissionKeys.ViewFormSubmissions,
-                AdminPermissionKeys.ManageFormSubmissions,
-                AdminPermissionKeys.ExportFormSubmissions
-            },
-            _ => Array.Empty<string>()
-        };
+            var actorPermissions = (await _roles.GetEffectivePermissionsAsync(actor))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return AdminRoleService.NormalizePermissions(role.Permissions)
+                .Concat(AdminRoleService.NormalizePermissions(extras))
+                .All(actorPermissions.Contains);
+        }
 
         private static List<string> NormalizeIds(IEnumerable<string>? ids) =>
             (ids ?? [])

@@ -7,6 +7,11 @@ public class BlockAppearanceModel
     public string? BackgroundColor { get; set; }
     public string? TextColor { get; set; }
     public string TextAlign { get; set; } = "inherit";
+    public int? FontSizePx { get; set; }
+    public int? FontWeight { get; set; }
+    public string? FontFamily { get; set; }
+    public double? LineHeight { get; set; }
+    public double? LetterSpacingPx { get; set; }
     public double Opacity { get; set; } = 1;
     public string? BorderColor { get; set; }
     public int BorderWidth { get; set; }

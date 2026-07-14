@@ -125,7 +125,7 @@ else
             await Auth.InitializeAsync();
             if (!Auth.IsAuthenticated)
             {
-                Nav.NavigateTo("/login");
+                Nav.NavigateTo("login", forceLoad: true);
                 return;
             }
 
@@ -565,6 +565,9 @@ else
             "form" => new PublicFormBlockDto
             {
                 FormDefinitionId = b.FormDefinitionId,
+                DefaultWidthPx = b.FormDefaultWidthPx,
+                DefaultWidthPercent = b.FormDefaultWidthPercent,
+                DefaultHeightPx = b.FormDefaultHeightPx,
                 Name = ResolveFormDefinition(b)?.Name,
                 Introduction = ResolveFormDefinition(b)?.Introduction,
                 FormLayoutMode = ResolveFormDefinition(b)?.Layout == FormLayoutModel.TwoColumns ? "two-columns" : "stacked",
@@ -759,6 +762,11 @@ else
         BackgroundColor = value?.BackgroundColor ?? legacyLayout?.BackgroundColor,
         TextColor = value?.TextColor,
         TextAlign = value?.TextAlign ?? "inherit",
+        FontSizePx = value?.FontSizePx,
+        FontWeight = value?.FontWeight,
+        FontFamily = value?.FontFamily,
+        LineHeight = value?.LineHeight,
+        LetterSpacingPx = value?.LetterSpacingPx,
         Opacity = value?.Opacity ?? 1,
         BorderColor = value?.BorderColor,
         BorderWidth = value?.BorderWidth ?? 0,

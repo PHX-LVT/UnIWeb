@@ -4,7 +4,7 @@
 @implements IDisposable
 @inject NavigationManager Navigation
 
-<header class="sc-header @(Scrolled ? "sc-header--scrolled" : "") @(_menuOpen ? "sc-header--menu-open" : "")">
+<header class="sc-header @(Scrolled ? "sc-header--scrolled" : "") @(Hidden ? "sc-header--hidden" : "") @(_menuOpen ? "sc-header--menu-open" : "")">
     <div class="sc-header__inner">
         <a href="@Branding.Href" class="sc-header__brand" @onclick="CloseMenu">
             @if (!string.IsNullOrEmpty(Branding.LogoUrl))
@@ -74,6 +74,7 @@
     [Parameter] public IReadOnlyList<string> Languages { get; set; } = Array.Empty<string>();
     [Parameter] public EventCallback<string> OnLanguageChanged { get; set; }
     [Parameter] public bool Scrolled { get; set; }
+    [Parameter] public bool Hidden { get; set; }
 
     private IEnumerable<PublicGlobalButton> HeaderButtons =>
         (GlobalButtons ?? Enumerable.Empty<PublicGlobalButton>())

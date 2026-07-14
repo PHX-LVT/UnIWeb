@@ -51,6 +51,13 @@ namespace FullProject.Services
             restored.Id = current.Id;
             restored.StableId = current.StableId;
             restored.CreatedAt = current.CreatedAt;
+            restored.AuthorId = current.AuthorId;
+            restored.AuthorName = current.AuthorName;
+            restored.Status = current.Status;
+            restored.ReviewStatus = current.ReviewStatus;
+            restored.RejectionMessage = current.RejectionMessage;
+            restored.RejectedById = current.RejectedById;
+            restored.RejectedAt = current.RejectedAt;
             restored.UpdatedAt = DateTime.UtcNow;
             restored.UpdatedById = actorId;
 

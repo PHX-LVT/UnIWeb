@@ -13,7 +13,7 @@ namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/sections")]
-    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+    [Authorize]
     public class SectionsController : ControllerBase
     {
         private readonly SectionService _service;
@@ -46,6 +46,7 @@ namespace FullProject.Controllers
         }
 
         // POST api/admin/pages/:pageId/sections
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost]
         public async Task<IActionResult> Create(string pageId, [FromBody] SectionCreateDto dto)
         {
@@ -61,6 +62,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{sectionId}")]
         public async Task<IActionResult> Update(string pageId, string sectionId,
             [FromBody] SectionUpdateDto dto)
@@ -75,6 +77,7 @@ namespace FullProject.Controllers
         }
 
         // DELETE api/admin/pages/:pageId/sections/:sectionId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpDelete("{sectionId}")]
         public async Task<IActionResult> Delete(string pageId, string sectionId)
         {
@@ -86,6 +89,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/visibility
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{sectionId}/visibility")]
         public async Task<IActionResult> SetVisibility(string pageId, string sectionId,
             [FromBody] VisibilityDto dto)
@@ -98,6 +102,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/style
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{sectionId}/style")]
         public async Task<IActionResult> UpdateStyle(string pageId, string sectionId,
         [FromBody] SectionStyleDto dto)
@@ -110,6 +115,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/sections/reorder
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder(string pageId, [FromBody] ReorderDto dto)
         {

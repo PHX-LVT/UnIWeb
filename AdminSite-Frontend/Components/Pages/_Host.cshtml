@@ -12,8 +12,8 @@
     <title>MySite Admin</title>
     <base href="~/" />
 
-    <!-- Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <!-- Governed web fonts used by Theme and Text Block font pickers. System fonts such as Arial, Calibri and Times New Roman do not need web loading. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Lato:wght@300;400;700;900&family=Lexend:wght@300;400;500;600;700;800&family=Montserrat:wght@300;400;500;600;700;800&family=Noto+Sans:wght@300;400;500;600;700;800&family=Noto+Serif:wght@300;400;500;600;700;800&family=Open+Sans:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
     <!-- FontAwesome -->
     <link rel="stylesheet" href="css/fontawesome/css/all.min.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -39,6 +39,12 @@
 <body>
     <component type="typeof(App)" render-mode="Server" />
 
+    <form id="admin-signout-form" method="post" action="@Url.Page("/Auth/AdminLogout")" hidden>
+        @Html.AntiForgeryToken()
+        <input id="admin-signout-reason" name="reason" type="hidden" value="signed-out" />
+        <input id="admin-signout-revoke" name="revokeCurrent" type="hidden" value="false" />
+    </form>
+
     <div id="blazor-error-ui">
         An unhandled error has occurred.
         <a href="" class="reload">Reload</a>
@@ -50,6 +56,25 @@
     <script src="js/overlay.js" asp-append-version="true"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        // One-release migration cleanup. Authentication no longer reads or
+        // writes browser storage; only the legacy bearer-token container is removed.
+        try { localStorage.removeItem("admin_session"); } catch { }
+
+        window.adminAuth = {
+            submitSignOut: function (reason, revokeCurrent) {
+                const form = document.getElementById("admin-signout-form");
+                if (!form) return;
+
+                const reasonInput = document.getElementById("admin-signout-reason");
+                const revokeInput = document.getElementById("admin-signout-revoke");
+                if (reasonInput) reasonInput.value = reason || "session-expired";
+                if (revokeInput) revokeInput.value = revokeCurrent ? "true" : "false";
+
+                if (typeof form.requestSubmit === "function") form.requestSubmit();
+                else form.submit();
+            }
+        };
+
         window.cmsPublicApiBaseUrl = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Configuration["ApiBaseUrl"] ?? ""));
         window.adminDownloads = {
             downloadBase64: function (fileName, contentType, base64) {

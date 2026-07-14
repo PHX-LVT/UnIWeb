@@ -414,7 +414,7 @@ else
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
-        _hasAccess = Auth.CanViewFormSubmissions;
+        _hasAccess = Auth.CanAccessFormSubmissions;
         if (!_hasAccess)
         {
             _loading = false;

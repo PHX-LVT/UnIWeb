@@ -158,7 +158,7 @@ As of 2026-07-06, the earlier UX correction phases and the newer ten-phase Block
 ## 10. Known Warnings
 
 - `Models.cs`, `AdminDtos.cs`, large Razor editors and `sc-components.css` still need structural splitting.
-- Admin JWT is stored in browser `localStorage`; backend authorization exists, but XSS could expose the token. Secure HttpOnly cookie migration remains future work.
+- Admin authentication now uses an encrypted Secure/HttpOnly/SameSite cookie; the API JWT is held only inside the protected server ticket and is never read by browser JavaScript. Production must configure a persistent protected Data Protection key ring.
 - R2 secrets and JWT secrets must not be committed in real deployment configuration.
 - Antivirus, quarantine and archive-bomb scanning are not implemented.
 - Audit/Login Log Overhaul is deliberately deferred and must not be mixed into unrelated work.

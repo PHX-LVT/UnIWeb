@@ -18,8 +18,8 @@ namespace AdminSite.Services
 
         private static PublicTheme ToPublicTheme(ThemeModel? model) => new()
         {
-            FontBody = model?.FontBody ?? "Inter",
-            FontHeading = model?.FontHeading ?? "Inter",
+            FontBody = ThemeFontCatalog.NormalizeNameOrDefault(model?.FontBody),
+            FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(model?.FontHeading),
             TextSizeBase = model?.TextSizeBase ?? "16px",
             TextSizeEyebrow = model?.TextSizeEyebrow ?? "13px",
             TextSizeHeading = model?.TextSizeHeading ?? "40px",

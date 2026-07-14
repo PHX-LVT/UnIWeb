@@ -1,6 +1,6 @@
 ﻿using AdminSite.Models;
-using Blazored.LocalStorage;
-using Microsoft.AspNetCore.Components;
+using AdminSite.Services.Authentication;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using System.Net;
 using System.Net.Http.Headers;
@@ -48,9 +48,9 @@ namespace AdminSite.Services
     public class HttpService : IHttpService
     {
         private readonly HttpClient _http;
-        private readonly ILocalStorageService _storage;
+        private readonly AuthenticationStateProvider _authenticationStateProvider;
+        private readonly AdminSessionInvalidationService _invalidations;
         private readonly IAdminNotificationService _notifications;
-        private readonly NavigationManager _nav;
 
         private static readonly JsonSerializerOptions _json = new()
         {
@@ -61,14 +61,14 @@ namespace AdminSite.Services
 
         public HttpService(
             HttpClient http,
-            ILocalStorageService storage,
-            IAdminNotificationService notifications,
-            NavigationManager nav)
+            AuthenticationStateProvider authenticationStateProvider,
+            AdminSessionInvalidationService invalidations,
+            IAdminNotificationService notifications)
         {
             _http = http;
-            _storage = storage;
+            _authenticationStateProvider = authenticationStateProvider;
+            _invalidations = invalidations;
             _notifications = notifications;
-            _nav = nav;
         }
 
         public Task<ApiResponse<T>> GetAsync<T>(string uri) =>
@@ -140,19 +140,17 @@ namespace AdminSite.Services
 
             try
             {
-                var session = await _storage.GetItemAsync<AdminSession>("admin_session");
-                var hasSessionToken = !string.IsNullOrWhiteSpace(session?.Token);
-                if (hasSessionToken)
+                var auth = await GetAuthenticationContextAsync();
+                if (auth.HasToken)
                     request.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", session!.Token);
+                        new AuthenticationHeaderValue("Bearer", auth.Token);
 
                 using var response = await _http.SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized &&
-                    ShouldExpireSession(request, response, hasSessionToken))
+                    ShouldExpireSession(request, response, auth.IsAuthenticated))
                 {
-                    await _storage.RemoveItemAsync("admin_session");
-                    _nav.NavigateTo("/login");
+                    PublishSessionInvalidation(auth);
                     return FileDownloadResult.Fail(AdminUiLocalizer.T("NotificationSessionExpired", "en"), 401);
                 }
 
@@ -197,20 +195,18 @@ namespace AdminSite.Services
         {
             try
             {
-                var session = await _storage.GetItemAsync<AdminSession>("admin_session");
-                var hasSessionToken = !string.IsNullOrWhiteSpace(session?.Token);
-                if (hasSessionToken && !IsLoginRequest(request))
+                var auth = await GetAuthenticationContextAsync();
+                if (auth.HasToken && !IsLoginRequest(request))
                     request.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", session!.Token);
+                        new AuthenticationHeaderValue("Bearer", auth.Token);
 
                 using var response = await _http.SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
-                    if (ShouldExpireSession(request, response, hasSessionToken))
+                    if (ShouldExpireSession(request, response, auth.IsAuthenticated))
                     {
-                        await _storage.RemoveItemAsync("admin_session");
-                        _nav.NavigateTo("/login");
+                        PublishSessionInvalidation(auth);
                         return ApiResponse<T>.Fail(
                             "Session expired.",
                             401,
@@ -305,20 +301,52 @@ namespace AdminSite.Services
         private static bool ShouldExpireSession(
             HttpRequestMessage request,
             HttpResponseMessage response,
-            bool hasSessionToken)
+            bool isAuthenticated)
         {
             var sessionInvalid = response.Headers.TryGetValues("X-Admin-Session-Invalid", out var values) &&
                                  values.Any(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
             if (sessionInvalid) return true;
-            if (!hasSessionToken) return false;
+            if (!isAuthenticated) return false;
 
             return !IsLoginRequest(request);
+        }
+
+        private async Task<AdminRequestAuthentication> GetAuthenticationContextAsync()
+        {
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var principal = state.User;
+            return new AdminRequestAuthentication(
+                principal.Identity?.IsAuthenticated == true,
+                AdminAuthConstants.GetApiToken(principal),
+                AdminAuthConstants.GetAdminId(principal),
+                AdminAuthConstants.GetTokenId(principal));
+        }
+
+        private void PublishSessionInvalidation(AdminRequestAuthentication auth)
+        {
+            if (!string.IsNullOrWhiteSpace(auth.AdminId) &&
+                !string.IsNullOrWhiteSpace(auth.TokenId))
+            {
+                _invalidations.InvalidateToken(
+                    auth.AdminId,
+                    auth.TokenId,
+                    "session-expired");
+            }
         }
 
         private static bool IsLoginRequest(HttpRequestMessage request)
         {
             var uri = request.RequestUri?.OriginalString ?? string.Empty;
             return uri.Contains("api/auth/login", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed record AdminRequestAuthentication(
+            bool IsAuthenticated,
+            string? Token,
+            string? AdminId,
+            string? TokenId)
+        {
+            public bool HasToken => !string.IsNullOrWhiteSpace(Token);
         }
     }
 }

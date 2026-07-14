@@ -287,7 +287,7 @@ Still future:
 
 ### Phase E: Authentication Hardening
 
-- move admin authentication from JavaScript-readable localStorage to Secure, HttpOnly, SameSite cookies;
+- completed: move admin authentication from JavaScript-readable localStorage to an encrypted Secure, HttpOnly, SameSite cookie, with server-side bearer forwarding, antiforgery-protected login/logout and periodic session revalidation;
 - session/device management and revocation UX;
 - stronger password/change-password workflow;
 - security-header and CSP review;

@@ -31,8 +31,9 @@ namespace AdminSite.Services
 
         public async Task<string> GetAsync()
         {
+            var requestedLanguage = _lang ?? await _storage.GetItemAsync<string>(StorageKey);
             await LoadSettingsAsync();
-            _lang ??= Normalize(await _storage.GetItemAsync<string>(StorageKey));
+            _lang = Normalize(requestedLanguage);
             return _lang;
         }
 
@@ -70,7 +71,8 @@ namespace AdminSite.Services
             if (options.Count > 0)
                 _supportedLanguages = options;
 
-            _lang = Normalize(_lang);
+            if (!string.IsNullOrWhiteSpace(_lang))
+                _lang = Normalize(_lang);
         }
 
         private string Normalize(string? lang)

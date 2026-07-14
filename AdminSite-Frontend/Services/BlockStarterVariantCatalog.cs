@@ -31,9 +31,7 @@ public static class BlockStarterVariantCatalog
         {
             ["text"] =
             [
-                V("editorial", "StarterEditorial", "StarterEditorialHint", "text-editorial", 6, 3, 6),
-                V("compact", "StarterCompact", "StarterCompactHint", "text-compact", 5, 2, 5, padding: "small"),
-                V("feature", "StarterFeature", "StarterFeatureHint", "text-feature", 8, 4, 8, background: "theme-background", align: "center")
+                V("default", "Text", "BlockDescriptionText", "text-editorial", 6, 3, 6, padding: "none")
             ],
             ["bullet-list"] =
             [
@@ -98,9 +96,7 @@ public static class BlockStarterVariantCatalog
             ],
             ["form"] =
             [
-                V("compact", "StarterCompact", "StarterCompactHint", "form-compact", 5, 6, 5, border: 1),
-                V("standard", "StarterStandard", "StarterStandardHint", "form-standard", 7, 7, 7, border: 1),
-                V("full-width", "StarterFullWidth", "StarterFullWidthHint", "form-full", 12, 8, 12, border: 1)
+                V("default", "Form", "BlockDescriptionForm", "form", 7, 7, 7, border: 1)
             ],
             ["container"] =
             [

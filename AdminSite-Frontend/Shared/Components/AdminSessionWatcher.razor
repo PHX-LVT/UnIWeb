@@ -1,0 +1,101 @@
+@using AdminSite.Services.Authentication
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AdminSessionInvalidationService Invalidations
+@inject IJSRuntime JS
+@implements IDisposable
+
+@code {
+    private IDisposable? _subscription;
+    private string _adminId = string.Empty;
+    private string _tokenId = string.Empty;
+    private string? _pendingReason;
+    private bool _rendered;
+    private int _signingOut;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        CaptureIdentity(state.User);
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        _subscription = Invalidations.Subscribe(OnSessionInvalidated);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _rendered = true;
+        if (!string.IsNullOrWhiteSpace(_pendingReason))
+            await SubmitSignOutAsync(_pendingReason);
+    }
+
+    private void OnSessionInvalidated(AdminSessionInvalidation invalidation)
+    {
+        if (!invalidation.Matches(_adminId, _tokenId)) return;
+
+        _pendingReason = invalidation.Reason;
+        if (_rendered)
+            _ = InvokeAsync(() => SubmitSignOutAsync(invalidation.Reason));
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> stateTask)
+    {
+        try
+        {
+            var state = await stateTask;
+            if (state.User.Identity?.IsAuthenticated == true)
+            {
+                CaptureIdentity(state.User);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_adminId))
+            {
+                _pendingReason ??= "session-expired";
+                if (_rendered)
+                    await InvokeAsync(() => SubmitSignOutAsync(_pendingReason));
+            }
+        }
+        catch (Exception)
+        {
+            // The circuit may already be ending; the next HTTP request will
+            // still be rejected by cookie/API validation.
+        }
+    }
+
+    private void CaptureIdentity(System.Security.Claims.ClaimsPrincipal principal)
+    {
+        _adminId = AdminAuthConstants.GetAdminId(principal) ?? string.Empty;
+        _tokenId = AdminAuthConstants.GetTokenId(principal) ?? string.Empty;
+    }
+
+    private async Task SubmitSignOutAsync(string? reason)
+    {
+        if (Interlocked.Exchange(ref _signingOut, 1) != 0) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "adminAuth.submitSignOut",
+                AdminSessionInvalidationService.NormalizeReason(reason),
+                false);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The browser has already left this circuit.
+        }
+        catch
+        {
+            // Authentication remains invalid on the server. A reconnect or
+            // the next protected request will challenge the cookie again.
+        }
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        _subscription?.Dispose();
+    }
+}

@@ -14,10 +14,18 @@ namespace UserSite.Services
 
         public async Task<PublicTheme> GetAsync()
         {
-            _theme ??= await _api.GetThemeAsync();
+            _theme ??= Normalize(await _api.GetThemeAsync());
             return _theme;
         }
 
-        public string ToCssVariables(PublicTheme t) => ThemeCssBuilder.Build(t);
+        public string ToCssVariables(PublicTheme t) => ThemeCssBuilder.Build(Normalize(t));
+
+        private static PublicTheme Normalize(PublicTheme? theme)
+        {
+            theme ??= new PublicTheme();
+            theme.FontBody = ThemeFontCatalog.NormalizeNameOrDefault(theme.FontBody);
+            theme.FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(theme.FontHeading);
+            return theme;
+        }
     }
 }

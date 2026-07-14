@@ -273,15 +273,16 @@ Form invariants:
 
 Current login flow:
 
-1. Admin submits credentials.
+1. Admin submits credentials through an antiforgery-protected Razor Page.
 2. API rate-limits login by IP.
 3. AuthService verifies BCrypt password and user status/lockout.
 4. API creates a database session and JWT containing role/permissions/token version.
-5. AdminSite stores `admin_session` in localStorage.
-6. HttpService sends Bearer token.
+5. AdminSite validates the response and creates an encrypted Secure/HttpOnly/SameSite session cookie. The JWT is a private claim inside that protected ticket, not browser storage.
+6. Server-side HttpService reads the authenticated principal and sends the Bearer token to the API. Browser JavaScript never receives it.
 7. API JWT validation checks signature, issuer, audience and lifetime.
 8. `AdminSessionValidationMiddleware` verifies the database session/token state.
 9. Controller policy checks role/permission.
+10. API 401 responses, account mutations and 30-second periodic revalidation invalidate the Blazor circuit and submit an antiforgery-protected cookie sign-out.
 
 Roles:
 
@@ -290,7 +291,7 @@ Roles:
 - **Writer:** content creation/editing defaults, Form Management defaults, Resource Library access; no unrestricted system management.
 - **Viewer:** preview/read-oriented access; explicitly excluded from Form Management and Resource Library.
 
-LocalStorage is convenient but JavaScript-readable. Backend authorization limits damage, but XSS could steal an active token. HttpOnly secure cookie migration is planned.
+Authentication does not read or write `localStorage`. Two temporary cleanup statements only delete the former `admin_session` key during migration. Immediate cross-circuit invalidation uses an in-process event bus and therefore assumes one IIS worker; API rejection plus periodic revalidation remains authoritative. Persist and protect the configured Data Protection key ring so cookies survive recycle and deployment.
 
 ## 15. Language Workflow
 

@@ -147,6 +147,25 @@ namespace FullProject.Models
     // ----------------------------------------------------------------
 
     [BsonIgnoreExtraElements]
+    public class AdminRoleDefinition
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string NormalizedName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public List<string> Permissions { get; set; } = new();
+        public bool IsProtected { get; set; }
+        public bool IsSystem { get; set; }
+        public bool IsDeleting { get; set; }
+        public string? CreatedById { get; set; }
+        public string? UpdatedById { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
     public class AdminUser
     {
         [BsonId]
@@ -155,11 +174,14 @@ namespace FullProject.Models
         public string Email { get; set; } = string.Empty;
         public string FullName { get; set; } = "Admin";
         public string PasswordHash { get; set; } = string.Empty;
-        [BsonRepresentation(BsonType.String)]
-        public AdminRole Role { get; set; } = AdminRole.AdminAdmin;
+        [BsonElement("role")]
+        public string LegacyRole { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? RoleId { get; set; }
         [BsonRepresentation(BsonType.String)]
         public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
         public List<string> Permissions { get; set; } = new();
+        public List<string> ExtraPermissions { get; set; } = new();
         public int TokenVersion { get; set; } = 1;
         public int FailedLoginAttempts { get; set; }
         public DateTime? LockedUntil { get; set; }
@@ -929,6 +951,9 @@ namespace FullProject.Models
     public class FormBlock : Block
     {
         public string? FormDefinitionId { get; set; }
+        public int DefaultWidthPx { get; set; }
+        public double DefaultWidthPercent { get; set; }
+        public double DefaultHeightPx { get; set; }
         public List<FormField> Fields { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
     }
@@ -1303,10 +1328,18 @@ namespace FullProject.Models
     {
         Draft,
         Submitted,
+        // Legacy persisted value. New rejections use Draft + ReviewStatus.
         Rejected,
         Published,
+        // Retained only so legacy records remain deserializable.
         Archived,
         Deleted
+    }
+
+    public enum ContentReviewStatus
+    {
+        None,
+        Rejected
     }
 
     [BsonIgnoreExtraElements]
@@ -1413,8 +1446,13 @@ namespace FullProject.Models
         public List<string> Tags { get; set; } = new();
         public List<ContentAttachment> Attachments { get; set; } = new();
         public ContentStatus Status { get; set; } = ContentStatus.Draft;
+        public ContentReviewStatus ReviewStatus { get; set; } = ContentReviewStatus.None;
+        public string? RejectionMessage { get; set; }
+        public string? RejectedById { get; set; }
+        public DateTime? RejectedAt { get; set; }
         public bool Visible { get; set; } = true;
         public string AuthorId { get; set; } = string.Empty;
+        public string AuthorName { get; set; } = string.Empty;
         public string? UpdatedById { get; set; }
         public string? PublishedById { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -10,7 +10,7 @@ namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/children")]
-    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+    [Authorize]
     public class ChildPagesController : ControllerBase
     {
         private readonly PageService _pageService;
@@ -32,6 +32,7 @@ namespace FullProject.Controllers
         }
 
         // POST api/admin/pages/:pageId/children
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost]
         public async Task<IActionResult> Create(string pageId,
             [FromBody] ChildPageCreateDto dto)
@@ -69,6 +70,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/children/:childId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{childId}")]
         public async Task<IActionResult> Update(string pageId, string childId,
             [FromBody] PageUpdateDto dto)
@@ -82,6 +84,7 @@ namespace FullProject.Controllers
         }
 
         // DELETE api/admin/pages/:pageId/children/:childId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpDelete("{childId}")]
         public async Task<IActionResult> Delete(string pageId, string childId)
         {
@@ -95,6 +98,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/children/:childId/visibility
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{childId}/visibility")]
         public async Task<IActionResult> SetVisibility(string pageId, string childId,
             [FromBody] VisibilityDto dto)
@@ -109,6 +113,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/children/:childId/access
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{childId}/access")]
         public async Task<IActionResult> SetAccess(string pageId, string childId,
             [FromBody] VisibilityDto dto)
@@ -123,6 +128,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/children/:childId/card
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{childId}/card")]
         public async Task<IActionResult> UpdateCard(string pageId, string childId,
             [FromBody] PageCardDto dto)
@@ -137,6 +143,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/children/:childId/card/reset
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{childId}/card/reset")]
         public async Task<IActionResult> ResetCard(string pageId, string childId)
         {
@@ -150,6 +157,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/children/reorder
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder(string pageId, [FromBody] ReorderDto dto)
         {

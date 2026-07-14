@@ -27,10 +27,11 @@ else
                 <span class="content-status-dot @StatusClass"></span>
                 <div>
                     <div class="text-muted" style="font-size:.78rem">@T("Status")</div>
-                    <strong>@DisplayStatus(_status)</strong>
+                    <strong>@DisplayStatus</strong>
                 </div>
             </div>
 
+            <fieldset disabled="@(!CanEditCurrent)" style="border:0;margin:0;padding:0;min-width:0">
             <label style="margin-top:1rem">@T("ContentType")</label>
             <select class="form-control" value="@_edit.ContentTypeKey" @onchange="OnTypeChanged">
                 @foreach (var type in _types)
@@ -60,7 +61,7 @@ else
             </div>
 
             <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem">
-                <input type="checkbox" @bind="_edit.Visible" disabled="@(!Auth.CanManageAllContent)" />
+                <input type="checkbox" @bind="_edit.Visible" disabled="@(!Auth.IsAdminAdmin)" />
                 @T("Visible")
             </label>
 
@@ -73,23 +74,28 @@ else
                     <option value="case-study-default">@T("CaseStudyDefault")</option>
                 </select>
             }
+            </fieldset>
 
             <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem">
                 @if (CanSaveDraft)
                 {
                     <button class="btn-admin btn-primary" @onclick="Save">
-                        <i class="fas fa-save"></i> @T(IsPublished ? "SaveChanges" : "SaveDraft")
+                        <i class="fas fa-save"></i> @T(IsNew || IsDraft || IsRejected ? "SaveDraft" : "SaveChanges")
                     </button>
                 }
                 @if (!IsNew)
                 {
                     @if (CanSubmit)
                     {
-                        <button class="btn-admin btn-ghost" @onclick="Submit">@T(IsRejected ? "SubmitAgain" : "SubmitForReview")</button>
+                        <button class="btn-admin btn-ghost" @onclick="Submit">@T("SubmitForReview")</button>
                     }
-                    @if (CanReturnToDraft)
+                    @if (CanWithdraw)
                     {
-                        <button class="btn-admin btn-ghost" @onclick="ReturnToDraft">@T("Draft")</button>
+                        <button class="btn-admin btn-ghost" @onclick="Withdraw">@T("WithdrawToDraft")</button>
+                    }
+                    @if (CanForceDraft)
+                    {
+                        <button class="btn-admin btn-ghost" @onclick="ForceDraft">@T("ReturnToDraft")</button>
                     }
                     @if (CanPublish)
                     {
@@ -107,11 +113,18 @@ else
                     {
                         <button class="btn-admin btn-danger" @onclick="Delete">@T("Delete")</button>
                     }
+                    @if (CanPreview)
+                    {
+                        <a class="btn-admin btn-ghost" href="@($"/content/preview/{Uri.EscapeDataString(Id!)}")" target="_blank" rel="noopener">
+                            <i class="fas fa-eye"></i> @T("Preview")
+                        </a>
+                    }
                 }
             </div>
         </div>
 
         <div>
+            <fieldset disabled="@(!CanEditCurrent)" style="border:0;margin:0;padding:0;min-width:0">
             <div class="admin-card content-editor-card" style="margin-bottom:1rem">
                 <div class="content-editor-card-header">
                     <h2 style="font-size:1rem;margin:0">@T("Content")</h2>
@@ -294,6 +307,7 @@ else
                                         default:
                                             <ContentRichTextEditor Value="@GetValue(item.Content, CurrentLang)"
                                                                    ValueChanged="html => SetBodyRichText(item.Content, CurrentLang, html)"
+                                                                   Disabled="@(!CanEditCurrent)"
                                                                    Placeholder="@T("Body")" />
                                             break;
                                     }
@@ -506,6 +520,7 @@ else
                     <div class="form-hint">@T("Source"): @AssetSourceLabel(_edit.ThumbnailResourceSource, _edit.ThumbnailResourceId)</div>
                 </div>
             }
+            </fieldset>
         </div>
     </div>
 }
@@ -525,6 +540,8 @@ else
     private List<ContentTypeModel> _types = new();
     private ContentItemRequest _edit = NewRequest();
     private string _status = "Draft";
+    private string _reviewStatus = "None";
+    private string _authorId = string.Empty;
     private string _tagsText = string.Empty;
     private List<string> _tags = new();
     private string _tagDraft = string.Empty;
@@ -587,16 +604,31 @@ else
     private bool IsDraft => string.Equals(_status, "Draft", StringComparison.OrdinalIgnoreCase);
     private bool IsSubmitted => string.Equals(_status, "Submitted", StringComparison.OrdinalIgnoreCase);
     private bool IsPublished => string.Equals(_status, "Published", StringComparison.OrdinalIgnoreCase);
-    private bool IsRejected => string.Equals(_status, "Rejected", StringComparison.OrdinalIgnoreCase);
+    private bool IsRejected => string.Equals(_status, "Rejected", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(_reviewStatus, "Rejected", StringComparison.OrdinalIgnoreCase);
     private bool IsDeleted => string.Equals(_status, "Deleted", StringComparison.OrdinalIgnoreCase);
-    private bool CanSaveDraft => (Auth.CanManageAllContent || Auth.IsWriter) && !IsDeleted;
-    private bool CanSubmit => (Auth.CanManageAllContent || Auth.IsWriter) && !IsSubmitted && !IsPublished && !IsDeleted;
-    private bool CanReturnToDraft => (Auth.CanManageAllContent || Auth.IsWriter) && !IsNew && !IsDraft && !IsDeleted;
-    private bool CanPublish => Auth.CanManageAllContent && !IsDeleted && !IsNew;
-    private bool CanReject => Auth.CanManageAllContent && IsSubmitted;
-    private bool CanDelete => Auth.CanManageAllContent && !IsDeleted && !IsNew;
-    private bool CanRestore => Auth.CanManageAllContent && IsDeleted && !IsNew;
-    private string StatusClass => _status.ToLowerInvariant() switch
+    private bool IsMine => !string.IsNullOrWhiteSpace(_authorId) &&
+                           (string.Equals(_authorId, Auth.CurrentUser?.AdminId, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(_authorId, Auth.CurrentUser?.Email, StringComparison.OrdinalIgnoreCase));
+    private bool CanEditCurrent => IsNew
+        ? Auth.IsAdminAdmin || Auth.CanCreateEditContent
+        : !IsDeleted && (Auth.IsAdminAdmin ||
+            (Auth.CanApproveContent && (IsSubmitted || IsPublished)) ||
+            (Auth.CanCreateEditContent && IsMine && (IsDraft || IsRejected)));
+    private bool CanSaveDraft => CanEditCurrent;
+    private bool CanSubmit => !IsNew && IsDraft && !IsRejected &&
+                              (Auth.IsAdminAdmin || (Auth.CanCreateEditContent && IsMine));
+    private bool CanWithdraw => !IsNew && IsSubmitted &&
+                                (Auth.IsAdminAdmin || (Auth.CanCreateEditContent && IsMine));
+    private bool CanForceDraft => !IsNew && Auth.IsAdminAdmin && IsPublished;
+    private bool CanPublish => !IsNew && (Auth.IsAdminAdmin || Auth.CanApproveContent) &&
+                               (IsSubmitted || (Auth.IsAdminAdmin && IsDraft));
+    private bool CanReject => !IsNew && (Auth.IsAdminAdmin || Auth.CanApproveContent) && IsSubmitted;
+    private bool CanDelete => !IsNew && !IsPublished && !IsDeleted &&
+                              (Auth.IsAdminAdmin || (Auth.CanCreateEditContent && IsMine && (IsDraft || IsRejected)));
+    private bool CanRestore => !IsNew && Auth.IsAdminAdmin && IsDeleted;
+    private bool CanPreview => !IsNew && IsPublished;
+    private string StatusClass => IsRejected ? "is-rejected" : _status.ToLowerInvariant() switch
     {
         "submitted" => "is-submitted",
         "published" => "is-published",
@@ -657,6 +689,8 @@ else
     private void LoadItem(ContentItemModel item)
     {
         _status = item.Status;
+        _reviewStatus = item.ReviewStatus;
+        _authorId = item.AuthorId;
         _edit = new ContentItemRequest
         {
             ContentTypeKey = item.ContentTypeKey,
@@ -701,7 +735,11 @@ else
 
     private async Task Save()
     {
-        await SaveCurrentAsync();
+        var returnToReview = IsPublished;
+        if (!await SaveCurrentAsync()) return;
+
+        if (returnToReview)
+            await ChangeStatusAsync("Submitted", redirectToAll: true);
     }
 
     private async Task<bool> SaveCurrentAsync()
@@ -737,9 +775,20 @@ else
         }
     }
 
-    private async Task Submit() => await SetStatus("Submitted");
-    private async Task ReturnToDraft() => await SetStatus("Draft");
-    private async Task Reject() => await SetStatus("Rejected");
+    private async Task Submit()
+    {
+        if (await SaveCurrentAsync())
+            await ChangeStatusAsync("Submitted");
+    }
+
+    private Task Withdraw() => ChangeStatusAsync("Draft");
+    private Task ForceDraft() => ChangeStatusAsync("Draft");
+
+    private async Task Reject()
+    {
+        if (await SaveCurrentAsync())
+            await ChangeStatusAsync("Rejected", redirectToAll: true);
+    }
 
     private async Task Publish()
     {
@@ -750,19 +799,21 @@ else
 
         var res = await ContentService.PublishAsync(Id!);
         Http.Notify(res.Message, res.StatusCode);
-        if (res.Success && res.Data is not null) LoadItem(res.Data);
+        if (res.Success)
+            Nav.NavigateTo("/content/all");
     }
 
-    private async Task SetStatus(string status)
+    private async Task ChangeStatusAsync(string status, bool redirectToAll = false)
     {
-        if (!await SaveCurrentAsync())
-            return;
-
         if (IsNew) return;
 
         var res = await ContentService.SetStatusAsync(Id!, status);
         Http.Notify(res.Message, res.StatusCode);
-        if (res.Success && res.Data is not null) LoadItem(res.Data);
+        if (!res.Success || res.Data is null) return;
+
+        LoadItem(res.Data);
+        if (redirectToAll)
+            Nav.NavigateTo("/content/all");
     }
 
     private async Task Delete()
@@ -771,7 +822,7 @@ else
 
         var res = await ContentService.DeleteAsync(Id!);
         Http.Notify(res.Message, res.StatusCode);
-        if (res.Success) Nav.NavigateTo("/content/deleted");
+        if (res.Success) Nav.NavigateTo(Auth.IsAdminAdmin ? "/content/deleted" : "/content/my");
     }
 
     private async Task Restore()
@@ -1378,10 +1429,12 @@ else
         _edit.ThumbnailStorageKey = string.Empty;
     }
 
-    private string DisplayStatus(string status) =>
-        string.Equals(status, "Submitted", StringComparison.OrdinalIgnoreCase)
+    private string DisplayStatus =>
+        IsRejected
+            ? T("Rejected")
+            : string.Equals(_status, "Submitted", StringComparison.OrdinalIgnoreCase)
             ? T("PendingReview")
-            : T(status);
+            : T(_status);
 
     private string GetLang(Dictionary<string, string> values) =>
         GetValue(values, CurrentLang, fallback: true);

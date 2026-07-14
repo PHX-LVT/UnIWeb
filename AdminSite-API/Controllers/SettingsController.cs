@@ -138,11 +138,6 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok("Term deleted."));
         }
 
-        private AdminRole ActorRole =>
-            Enum.TryParse<AdminRole>(User.FindFirst(ClaimTypes.Role)?.Value, true, out var role)
-                ? role
-                : AdminRole.Viewer;
-
-        private bool IsAdminAdmin => ActorRole == AdminRole.AdminAdmin;
+        private bool IsAdminAdmin => FullProject.Security.AdminAuthorization.IsAdminAdmin(User);
     }
 }

@@ -36,8 +36,8 @@ namespace Contracts.Global
 
             var css = new StringBuilder();
             css.AppendLine(":root {");
-            css.AppendLine($"    --theme-font-body: '{EscapeFont(theme.FontBody, "Inter")}', sans-serif;");
-            css.AppendLine($"    --theme-font-heading: '{EscapeFont(theme.FontHeading, "Inter")}', sans-serif;");
+            css.AppendLine($"    --theme-font-body: {ThemeFontCatalog.CssStackOrDefault(theme.FontBody)};");
+            css.AppendLine($"    --theme-font-heading: {ThemeFontCatalog.CssStackOrDefault(theme.FontHeading)};");
             css.AppendLine($"    --theme-text-base: {baseText};");
             css.AppendLine($"    --theme-text-eyebrow: {eyebrowText};");
             css.AppendLine($"    --theme-text-heading: {headingText};");
@@ -99,12 +99,6 @@ namespace Contracts.Global
             css.AppendLine("    --transition: var(--theme-motion-duration) ease;");
             css.AppendLine("}");
             return css.ToString();
-        }
-
-        private static string EscapeFont(string? value, string fallback)
-        {
-            var font = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-            return font.Replace("\\", string.Empty, StringComparison.Ordinal).Replace("'", string.Empty, StringComparison.Ordinal);
         }
 
         private static string Color(string? value, string fallback)

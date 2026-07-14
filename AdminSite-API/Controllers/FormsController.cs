@@ -82,23 +82,22 @@ namespace FullProject.Controllers
         public async Task<IActionResult> GetAssignees()
         {
             var users = await _auth.GetUsersAsync();
-            var assignees = users
-                .Select(user =>
-                {
-                    AuthService.NormalizeUserDefaults(user);
-                    return user;
-                })
-                .Where(user => user.Status == AdminUserStatus.Active && user.Role != AdminRole.Viewer)
-                .OrderBy(user => DisplayName(user))
-                .Select(user => new FormSubmissionAssigneeResponse
+            var assignees = new List<FormSubmissionAssigneeResponse>();
+            foreach (var user in users.Where(user => user.Status == AdminUserStatus.Active))
+            {
+                AuthService.NormalizeUserDefaults(user);
+                var permissions = await _auth.GetEffectivePermissionsAsync(user);
+                if (!permissions.Contains(AdminPermissionKeys.ManageFormSubmissions, StringComparer.OrdinalIgnoreCase))
+                    continue;
+                assignees.Add(new FormSubmissionAssigneeResponse
                 {
                     Id = user.Id,
                     DisplayName = DisplayName(user),
                     Email = user.Email
-                })
-                .ToList();
+                });
+            }
 
-            return Ok(ApiResult.Ok(assignees));
+            return Ok(ApiResult.Ok(assignees.OrderBy(user => user.DisplayName).ToList()));
         }
 
         [HttpGet("submissions/{submissionId}")]
@@ -389,7 +388,9 @@ namespace FullProject.Controllers
                 return (null, null, "Assigned admin user was not found.");
 
             AuthService.NormalizeUserDefaults(admin);
-            if (admin.Status != AdminUserStatus.Active || admin.Role == AdminRole.Viewer)
+            var permissions = await _auth.GetEffectivePermissionsAsync(admin);
+            if (admin.Status != AdminUserStatus.Active ||
+                !permissions.Contains(AdminPermissionKeys.ManageFormSubmissions, StringComparer.OrdinalIgnoreCase))
                 return (null, null, "Assigned admin user is not available for submissions.");
 
             return (admin.Id, DisplayName(admin), null);
