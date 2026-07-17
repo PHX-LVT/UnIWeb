@@ -1,10 +1,9 @@
 using AdminSite.Services;
 using AdminSite.Services.Authentication;
-using AdminSite.Services.Notifications;
 using Blazored.LocalStorage;
 using Blazored.Toast;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages(options =>
@@ -123,7 +122,6 @@ builder.Services.AddScoped<AdminUserService>();
 
 var app = builder.Build();
 
-if (!app.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(configuredKeyPath))
 {
     app.Logger.LogWarning(
         "Authentication:DataProtectionKeysPath is not configured. Persist and protect the AdminSite key ring before production cutover so deployments do not invalidate authentication cookies.");

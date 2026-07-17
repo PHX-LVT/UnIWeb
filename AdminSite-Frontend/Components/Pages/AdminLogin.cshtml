@@ -81,7 +81,7 @@
                 <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
             }
 
-            <form method="post" autocomplete="on">
+            <form method="post" autocomplete="off" data-login-credential-form>
                 <input asp-for="ReturnUrl" type="hidden" />
                 <input asp-for="LanguageCode" type="hidden" data-login-language-input />
 
@@ -90,7 +90,10 @@
                     <input asp-for="Input.Email"
                            class="form-control"
                            type="email"
-                           autocomplete="username"
+                           autocomplete="off"
+                           autocapitalize="none"
+                           spellcheck="false"
+                           data-login-email
                            autofocus />
                     <span asp-validation-for="Input.Email" class="text-danger"></span>
                 </div>
@@ -100,9 +103,15 @@
                     <input asp-for="Input.Password"
                            class="form-control"
                            type="password"
-                           autocomplete="current-password" />
+                           autocomplete="off"
+                           data-login-password />
                     <span asp-validation-for="Input.Password" class="text-danger"></span>
                 </div>
+
+                <label class="login-remember" for="Input_RememberMe">
+                    <input asp-for="Input.RememberMe" data-login-remember />
+                    <span data-login-text="rememberMe">@Model.Text["rememberMe"]</span>
+                </label>
 
                 <button class="btn-admin btn-primary login-submit" type="submit">
                     <i class="fas fa-sign-in-alt"></i>
@@ -199,6 +208,28 @@
         // One-release migration cleanup. Authentication no longer reads or writes
         // browser storage; remove the legacy bearer-token container only.
         try { localStorage.removeItem("admin_session"); } catch { }
+
+        (function () {
+            const form = document.querySelector("[data-login-credential-form]");
+            const email = document.querySelector("[data-login-email]");
+            const password = document.querySelector("[data-login-password]");
+            const remember = document.querySelector("[data-login-remember]");
+
+            function applyCredentialPreference() {
+                const allowRemembering = remember?.checked === true;
+                if (form) form.autocomplete = allowRemembering ? "on" : "off";
+                if (email) email.autocomplete = allowRemembering ? "username" : "off";
+                if (password) password.autocomplete = allowRemembering ? "current-password" : "off";
+
+                if (!allowRemembering && navigator.credentials?.preventSilentAccess) {
+                    navigator.credentials.preventSilentAccess().catch(() => { });
+                }
+            }
+
+            applyCredentialPreference();
+            remember?.addEventListener("change", applyCredentialPreference);
+            form?.addEventListener("submit", applyCredentialPreference);
+        })();
     </script>
 </body>
 </html>

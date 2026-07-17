@@ -150,7 +150,7 @@
                           Command="RunAuthoringCommand"
                           BreadcrumbSelected="SelectBreadcrumb" />
 
-    @if (CanArrange && _showArrangeBlockWizard)
+    @if (_showArrangeBlockWizard && _blockCreationRequest is not null)
     {
         <div class="ez-modal-overlay ez-arrange-create-modal-overlay" @onclick="CloseArrangeBlockWizard">
             <div class="ez-modal ez-arrange-create-modal"
@@ -161,13 +161,13 @@
                 <div class="ez-arrange-create-panel">
                     <div class="ez-arrange-create-panel__target">
                         <i class="fas fa-crosshairs"></i>
-                        <span id="ez-arrange-create-modal-title">@T("CreateBlockIn"): <strong>@ArrangeCreateTargetLabel</strong></span>
+                        <span id="ez-arrange-create-modal-title">@T("CreateBlockIn"): <strong>@_blockCreationRequest.TargetLabel</strong></span>
                     </div>
                     <BlockCreationWizard Open="true"
                                          Busy="_creatingArrangeBlock"
                                          AdminLanguage="@AdminLanguage"
-                                         AllowedTypes="@ArrangeCreateAllowedTypes"
-                                         ConstraintLabel="@ArrangeCreateConstraintLabel"
+                                         AllowedTypes="@_blockCreationRequest.AllowedTypes"
+                                         ConstraintLabel="@_blockCreationRequest.ConstraintLabel"
                                          Confirmed="CreateArrangeBlock"
                                          Cancelled="CloseArrangeBlockWizard" />
                 </div>
@@ -404,12 +404,14 @@
                            PageId="@Page.Id"
                            InitialTab="@_editPanelInitialTab"
                            InitialBlockId="@_editPanelSelectedBlockId"
+                           BlockEditorRefreshVersion="@_blockEditorRefreshVersion"
                            CanArrangeBlocks="@IsArrangeCompatible(_selectedSection)"
                            OnClose="ClosePanel"
                            OnSectionSaved="HandleSectionSaved"
                            OnSectionsChanged="OnSectionsChanged"
                            OnBlocksChanged="HandleBlocksChanged"
                            OnActiveBlockChanged="HandleEditorActiveBlockChanged"
+                           OnAddBlockRequested="OpenBlockCreationModal"
                            OnArrangeBlocksRequested="EnterArrangeBlocks"
                            OnDiscardAndArrangeRequested="DiscardSectionChangesAndEnterArrangeBlocks"
                            OnSaveAsPresetRequested="OpenSectionPresetDialog" />
@@ -593,6 +595,8 @@
     private bool _runningAuthoringCommand;
     private bool _showArrangeBlockWizard;
     private bool _creatingArrangeBlock;
+    private BlockCreationRequest? _blockCreationRequest;
+    private int _blockEditorRefreshVersion;
     private bool _arrangeBlocksActive;
     private bool _restoreSectionEditorOnEdit;
     private string? _arrangeReturnSectionId;
@@ -1006,6 +1010,7 @@
         _activeArrangeColumnSlotId = null;
         _pendingArrangeExit = false;
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
         _arrangeBlocks.Clear();
         _arrangeBlocksLoadedForPage = null;
         _undoHistory.Clear();
@@ -1216,7 +1221,8 @@
     {
         var block = ArrangeBlock(blockId);
         if (block is null) return T("Block");
-        var title = LangValue(block.Title)
+        var title = LangValue(block.EditorLabel)
+            ?? LangValue(block.Title)
             ?? LangValue(block.Label)
             ?? LangValue(block.StepLabel)
             ?? LangValue(block.ButtonLabel)
@@ -1381,6 +1387,7 @@
         _selectedBlockIds.Clear();
         _editPanelSelectedBlockId = null;
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
     }
 
     private void TargetArrangeZone(ZonePosition zone)
@@ -1399,6 +1406,7 @@
         _selectedBlockIds.Clear();
         _editPanelSelectedBlockId = null;
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
     }
 
     private bool IsArrangeTargetZone(ZonePosition zone) =>
@@ -1541,7 +1549,8 @@
 
     private void OpenArrangeBlockWizard()
     {
-        if (CurrentArrangeCreateTarget is null)
+        var target = CurrentArrangeCreateTarget;
+        if (target is null)
         {
             Http.Notify(T("SelectSectionFirst"), 400);
             return;
@@ -1551,42 +1560,77 @@
             Http.Notify(ArrangeAddTitle, 400);
             return;
         }
+        _blockCreationRequest = new BlockCreationRequest(
+            Page.Id,
+            target.SectionId,
+            target.ColumnSlotId,
+            target.ParentBlockId,
+            target.Zone,
+            target.PositionMode,
+            ArrangeCreateAllowedTypes?.ToList(),
+            ArrangeCreateConstraintLabel,
+            target.Label,
+            true);
+        _showArrangeBlockWizard = true;
+    }
+
+    private void OpenBlockCreationModal(BlockCreationRequest request)
+    {
+        if (!CanModify) return;
+        _blockCreationRequest = request;
         _showArrangeBlockWizard = true;
     }
 
     private void CloseArrangeBlockWizard()
     {
         if (!_creatingArrangeBlock)
+        {
             _showArrangeBlockWizard = false;
+            _blockCreationRequest = null;
+        }
     }
 
     private async Task CreateArrangeBlock(BlockStarterSelection selection)
     {
-        var target = CurrentArrangeCreateTarget;
-        if (target is null || _creatingArrangeBlock || !ArrangeCreateHasCapacity) return;
+        var request = _blockCreationRequest;
+        if (request is null || _creatingArrangeBlock) return;
+        if (request.ReturnToArrange && !ArrangeCreateHasCapacity) return;
         _creatingArrangeBlock = true;
         var created = false;
         try
         {
-            var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey);
-            dto.ParentBlockId = target.ParentBlockId;
-            dto.BlockZone = target.Zone;
-            dto.ZoneId = target.Zone;
-            dto.ColumnSlotId = target.ColumnSlotId;
-            dto.PositionMode = target.PositionMode;
-            var response = await BlockService.CreateAsync(Page.Id, target.SectionId, dto);
+            var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey, selection.FormDefinitionId);
+            dto.ParentBlockId = request.ParentBlockId;
+            dto.BlockZone = request.BlockZone;
+            dto.ZoneId = request.BlockZone;
+            dto.ColumnSlotId = request.SlotId;
+            dto.PositionMode = request.PositionMode;
+            var response = string.IsNullOrWhiteSpace(request.SlotId)
+                ? await BlockService.CreateAsync(request.PageId, request.SectionId, dto)
+                : await BlockService.CreateInSlotAsync(request.PageId, request.SectionId, request.SlotId, dto);
             Http.Notify(response, T("NotificationBlockCreated"));
             if (!response.Success || response.Data is null) return;
             _showArrangeBlockWizard = false;
-            _activeArrangeSectionId = target.SectionId;
+            _blockCreationRequest = null;
+            _activeArrangeSectionId = request.SectionId;
             _editPanelSelectedBlockId = response.Data.Id;
-            await RefreshAuthoringAsync([response.Data.Id]);
+            if (request.ReturnToArrange)
+            {
+                await RefreshAuthoringAsync([response.Data.Id]);
+            }
+            else
+            {
+                _editPanelInitialTab = "blocks";
+                _blockEditorRefreshVersion++;
+                await HandleBlocksChanged();
+            }
             created = true;
         }
         finally
         {
             _creatingArrangeBlock = false;
-            await CompleteArrangeBusyStateAsync(created);
+            if (request.ReturnToArrange)
+                await CompleteArrangeBusyStateAsync(created);
         }
     }
 
@@ -2278,6 +2322,7 @@
         _iframeHeight = 2000;
         _selectedBlockIds.Clear();
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
         _arrangeBlocks.Clear();
         _arrangeBlocksLoadedForPage = null;
         _undoHistory.Clear();
@@ -2395,8 +2440,7 @@
         await ReloadPreviewSafelyAsync();
     }
 
-    private bool SupportsArrangeBlockNameRename(BlockModel block) =>
-        string.Equals(block.Type, "text", StringComparison.OrdinalIgnoreCase);
+    private static bool SupportsArrangeBlockNameRename(BlockModel block) => true;
 
     private bool CanRenameArrangeBlockName(BlockModel block) =>
         SupportsArrangeBlockNameRename(block) &&
@@ -2416,7 +2460,7 @@
             return;
 
         _arrangeRenamingBlockId = block.Id;
-        _arrangeRenameDraft = LangValue(block.Title) ?? string.Empty;
+        _arrangeRenameDraft = LangValue(block.EditorLabel) ?? string.Empty;
         _arrangeRenameBeforeEdit = _arrangeRenameDraft;
     }
 
@@ -2425,20 +2469,38 @@
         _arrangeRenameDraft = e.Value?.ToString() ?? string.Empty;
     }
 
-    private void FinishArrangeBlockNameEdit(BlockModel block)
+    private async Task FinishArrangeBlockNameEdit(BlockModel block)
     {
         if (!string.Equals(_arrangeRenamingBlockId, block.Id, StringComparison.Ordinal))
             return;
 
-        ApplyArrangeBlockName(block, _arrangeRenameDraft);
         _arrangeRenamingBlockId = null;
+        var before = block.EditorLabel is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(block.EditorLabel);
+        ApplyArrangeBlockName(block, _arrangeRenameDraft);
+        var response = await BlockService.UpdateAsync(
+            Page.Id,
+            block.SectionId,
+            block.Id,
+            BlockUpdateDtoMapper.Build(block));
+        if (!response.Success)
+        {
+            block.EditorLabel = before;
+            if (_arrangeBlocks.TryGetValue(block.Id, out var failedStored))
+                failedStored.EditorLabel = new Dictionary<string, string>(before);
+            Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
+            return;
+        }
+
+        await ReloadPreviewSafelyAsync();
     }
 
-    private void HandleArrangeBlockNameKey(KeyboardEventArgs e, BlockModel block)
+    private async Task HandleArrangeBlockNameKey(KeyboardEventArgs e, BlockModel block)
     {
         if (string.Equals(e.Key, "Enter", StringComparison.OrdinalIgnoreCase))
         {
-            FinishArrangeBlockNameEdit(block);
+            await FinishArrangeBlockNameEdit(block);
         }
         else if (string.Equals(e.Key, "Escape", StringComparison.OrdinalIgnoreCase))
         {
@@ -2451,18 +2513,18 @@
     {
         var language = ActiveArrangeBlockLanguage;
         var trimmed = value.Trim();
-        var title = block.Title is null
+        var title = block.EditorLabel is null
             ? new Dictionary<string, string>()
-            : new Dictionary<string, string>(block.Title);
+            : new Dictionary<string, string>(block.EditorLabel);
 
         if (string.IsNullOrWhiteSpace(trimmed))
             title.Remove(language);
         else
             title[language] = trimmed;
 
-        block.Title = title;
+        block.EditorLabel = title;
         if (_arrangeBlocks.TryGetValue(block.Id, out var stored))
-            stored.Title = new Dictionary<string, string>(title);
+            stored.EditorLabel = new Dictionary<string, string>(title);
     }
 
     private void ResetArrangeRenameState()

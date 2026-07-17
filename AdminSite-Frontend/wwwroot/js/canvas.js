@@ -662,7 +662,7 @@ window.patchPreviewBlockLayout = function (blockId, x, y, w, h, leftPercent, top
                 ? exactWidthPx / defaultWidthPx
                 : exactWidth / defaultWidthPercent;
             const formScale = Math.min(
-                Math.max(Math.min(widthScale, exactHeight / defaultHeightPx), 0.05),
+                Math.max(Math.min(widthScale, exactHeight / defaultHeightPx), 0.5),
                 1);
             block.style.setProperty("--sc-form-scale", String(formScale));
         }
@@ -1082,6 +1082,13 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
                 heightPx,
                 null,
                 false);
+            if (isGovernedFormBlock && previewBlock && previewBlock.getAttribute("data-block-id") === blockId) {
+                const liveScale = clamp(
+                    Math.min(width / governedFormDefaultWidth, height / governedFormDefaultHeight),
+                    governedFormMinScale,
+                    1);
+                previewBlock.style.setProperty("--sc-form-scale", String(liveScale));
+            }
         }
 
         function restorePreviewBlocks() {
@@ -1104,20 +1111,19 @@ window.initFreeformBlockEditor = function (container, dotnet, scale) {
                 const availableWidth = Math.max(start.sectionWidth / 12, start.sectionWidth - (start.left - start.sectionLeft));
                 const availableHeight = Math.max(48, start.sectionHeight - (start.top - start.sectionTop));
                 if (isGovernedFormBlock) {
-                    const currentScale = Math.max(
-                        0.05,
+                    const currentScale = clamp(
                         Math.min(
                             start.width / governedFormDefaultWidth,
-                            start.height / governedFormDefaultHeight));
-                    const minimumAllowedScale = currentScale < governedFormMinScale
-                        ? currentScale
-                        : governedFormMinScale;
+                            start.height / governedFormDefaultHeight),
+                        governedFormMinScale,
+                        1);
+                    const minimumAllowedScale = governedFormMinScale;
                     const availableMaxScale = clamp(
                         Math.min(
                             1,
                             availableWidth / governedFormDefaultWidth,
                             (growsSection ? governedFormMaxSectionHeight : availableHeight) / governedFormDefaultHeight),
-                        0.05,
+                        governedFormMinScale,
                         1);
                     const maximumAllowedScale = Math.max(minimumAllowedScale, availableMaxScale);
                     const widthScale = (start.width + dx) / governedFormDefaultWidth;

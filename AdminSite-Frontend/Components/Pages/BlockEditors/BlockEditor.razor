@@ -20,25 +20,10 @@ else
         <button class="btn-admin btn-primary"
                 disabled="@(!AddTargetHasCapacity)"
                 title="@AddTargetTitle"
-                @onclick="TogglePicker">
+                @onclick="RequestAddBlock">
             <i class="fas fa-plus"></i> @T("AddBlock")
         </button>
     </div>
-
-    @if (_showPicker)
-    {
-        <div class="ez-modal-overlay block-create-modal-overlay" @onclick="ClosePicker">
-            <div class="ez-modal block-create-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
-                <BlockCreationWizard Open="true"
-                                     Busy="_creatingBlock"
-                                     AdminLanguage="@AdminLanguage"
-                                     AllowedTypes="@AddTargetAllowedTypes"
-                                     ConstraintLabel="@AddTargetConstraintLabel"
-                                     Confirmed="AddBlock"
-                                     Cancelled="ClosePicker" />
-            </div>
-        </div>
-    }
 
     @if (!_blocks.Any())
     {
@@ -266,7 +251,7 @@ else
                                     <button type="button" class="btn-admin btn-primary"
                                             disabled="@(!AddTargetHasCapacity)"
                                             title="@AddTargetTitle"
-                                            @onclick="TogglePicker">
+                                            @onclick="RequestAddBlock">
                                         <i class="fas fa-plus"></i> @T("AddBlockToContainer")
                                     </button>
                                 </section>
@@ -1032,9 +1017,11 @@ else
     [Parameter] public string?      SectionBlockLayoutMode { get; set; }
     [Parameter] public bool         UseArrangeWorkspace { get; set; }
     [Parameter] public string?      InitialBlockId { get; set; }
+    [Parameter] public int          RefreshVersion { get; set; }
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback<string?> ActiveBlockChanged { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<BlockCreationRequest> AddRequested { get; set; }
 
     private List<BlockModel> _blocks     = new();
     private BlockModel?      _fullBlock;
@@ -1045,8 +1032,6 @@ else
     private string           _renameBeforeEdit = string.Empty;
     private BlockModel?      _confirmDelete;
     private bool             _loading    = true;
-    private bool             _showPicker = false;
-    private bool             _creatingBlock = false;
     private bool             _reorderingBlock = false;
     private bool             _savingLayout = false;
     private string?          _visualValidationMessage;
@@ -1058,6 +1043,7 @@ else
     private string?          _loadedSectionId;
     private string?          _loadedSlotId;
     private string?          _loadedInitialBlockId;
+    private int              _loadedRefreshVersion = -1;
     private ElementReference _blockListRef;
     private DotNetObjectReference<BlockEditor>? _dotNetRef;
     private bool _blockSortableInitialized;
@@ -1130,8 +1116,7 @@ else
     private sealed record ContainerSlotStatus(string Key, string Label, bool Required, BlockModel? Child);
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string FocusedBlockDisplayName => _fullBlock is null ? string.Empty : BlockDisplayName(_fullBlock);
-    private bool SupportsFocusedBlockNameRename =>
-        string.Equals(_fullBlock?.Type, "text", StringComparison.OrdinalIgnoreCase);
+    private bool SupportsFocusedBlockNameRename => _fullBlock is not null;
     private bool CanRenameFocusedBlockName =>
         _fullBlock is not null &&
         SupportsFocusedBlockNameRename &&
@@ -1150,7 +1135,7 @@ else
             return;
 
         _renamingBlockId = _fullBlock.Id;
-        _renameDraft = LangValue(_fullBlock.Title) ?? string.Empty;
+        _renameDraft = LangValue(_fullBlock.EditorLabel) ?? string.Empty;
         _renameBeforeEdit = _renameDraft;
     }
 
@@ -1159,20 +1144,42 @@ else
         _renameDraft = e.Value?.ToString() ?? string.Empty;
     }
 
-    private void FinishFocusedBlockNameEdit()
+    private async Task FinishFocusedBlockNameEdit()
     {
         if (_fullBlock is null || !string.Equals(_renamingBlockId, _fullBlock.Id, StringComparison.Ordinal))
             return;
 
-        ApplyFocusedBlockName(_renameDraft);
         _renamingBlockId = null;
+        var before = _fullBlock.EditorLabel is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(_fullBlock.EditorLabel);
+        ApplyFocusedBlockName(_renameDraft);
+        var blockId = _fullBlock.Id;
+        var response = await BlockService.UpdateAsync(
+            PageId,
+            SectionId,
+            blockId,
+            BlockUpdateDtoMapper.Build(_fullBlock));
+        if (!response.Success)
+        {
+            _fullBlock.EditorLabel = before;
+            var failedListBlock = _blocks.FirstOrDefault(block => block.Id == blockId);
+            if (failedListBlock is not null)
+                failedListBlock.EditorLabel = new Dictionary<string, string>(before);
+            Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
+            return;
+        }
+
+        await ReloadBlocks();
+        await LoadFullBlock(blockId);
+        await NotifyChangedAsync();
     }
 
-    private void HandleFocusedBlockNameKey(KeyboardEventArgs e)
+    private async Task HandleFocusedBlockNameKey(KeyboardEventArgs e)
     {
         if (string.Equals(e.Key, "Enter", StringComparison.OrdinalIgnoreCase))
         {
-            FinishFocusedBlockNameEdit();
+            await FinishFocusedBlockNameEdit();
         }
         else if (string.Equals(e.Key, "Escape", StringComparison.OrdinalIgnoreCase))
         {
@@ -1188,19 +1195,19 @@ else
 
         var language = ActiveBlockLanguage;
         var trimmed = value.Trim();
-        var title = _fullBlock.Title is null
+        var title = _fullBlock.EditorLabel is null
             ? new Dictionary<string, string>()
-            : new Dictionary<string, string>(_fullBlock.Title);
+            : new Dictionary<string, string>(_fullBlock.EditorLabel);
 
         if (string.IsNullOrWhiteSpace(trimmed))
             title.Remove(language);
         else
             title[language] = trimmed;
 
-        _fullBlock.Title = title;
+        _fullBlock.EditorLabel = title;
         var listBlock = _blocks.FirstOrDefault(block => block.Id == _fullBlock.Id);
         if (listBlock is not null)
-            listBlock.Title = new Dictionary<string, string>(title);
+            listBlock.EditorLabel = new Dictionary<string, string>(title);
     }
 
     private bool IsRequiredContainerSlot(BlockModel block)
@@ -1410,9 +1417,10 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        var refreshChanged = _loadedRefreshVersion != RefreshVersion;
         var contextChanged = _loadedPageId != PageId || _loadedSectionId != SectionId || _loadedSlotId != SlotId;
         var initialBlockChanged = _loadedInitialBlockId != InitialBlockId;
-        if (contextChanged)
+        if (contextChanged || refreshChanged)
         {
             _loadedPageId = PageId;
             _loadedSectionId = SectionId;
@@ -1423,7 +1431,7 @@ else
             await ReloadBlocks();
         }
 
-        if ((contextChanged || initialBlockChanged) &&
+        if ((contextChanged || refreshChanged || initialBlockChanged) &&
             !string.IsNullOrWhiteSpace(InitialBlockId) &&
             _activeBlockId != InitialBlockId &&
             _blocks.Any(block => block.Id == InitialBlockId))
@@ -1431,6 +1439,7 @@ else
             await OpenBlock(InitialBlockId, notify: false);
         }
         _loadedInitialBlockId = InitialBlockId;
+        _loadedRefreshVersion = RefreshVersion;
     }
 
   private async Task ReloadBlocks()
@@ -1492,48 +1501,24 @@ else
             await ActiveBlockChanged.InvokeAsync(blockId);
     }
 
-    private void TogglePicker()
+    private async Task RequestAddBlock()
     {
         if (!AddTargetHasCapacity)
         {
             Http.Notify(AddTargetTitle, 400);
             return;
         }
-        _showPicker = !_showPicker;
-    }
-    private void ClosePicker() => _showPicker = false;
-
-    private async Task AddBlock(BlockStarterSelection selection)
-    {
-        if (!AddTargetHasCapacity) return;
-        _creatingBlock = true;
-        try
-        {
-            var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey);
-            dto.ParentBlockId = AddTargetContainer?.Id;
-            // Use slotted create only when SlotId is set.
-            var res = string.IsNullOrEmpty(SlotId)
-                ? await BlockService.CreateAsync(PageId, SectionId, dto)
-                : await BlockService.CreateInSlotAsync(PageId, SectionId, SlotId, dto);
-
-            Http.Notify(res, T("NotificationBlockCreated"));
-            if (!res.Success)
-            {
-                return;
-            }
-
-            _showPicker = false;
-            await ReloadBlocks();
-            if (res.Data is not null)
-            {
-                await ToggleBlock(res.Data.Id);
-            }
-            await NotifyChangedAsync();
-        }
-        finally
-        {
-            _creatingBlock = false;
-        }
+        await AddRequested.InvokeAsync(new BlockCreationRequest(
+            PageId,
+            SectionId,
+            SlotId,
+            AddTargetContainer?.Id,
+            "default",
+            null,
+            AddTargetAllowedTypes?.ToList(),
+            AddTargetConstraintLabel,
+            AddTargetContainer is null ? T("SelectedSection") : BlockDisplayName(AddTargetContainer),
+            false));
     }
 
     private async Task ToggleVisibility(BlockModel block)
@@ -2109,7 +2094,8 @@ else
 
     private string BlockDisplayName(BlockModel block)
     {
-        var title = LangValue(block.Title)
+        var title = LangValue(block.EditorLabel)
+            ?? LangValue(block.Title)
             ?? LangValue(block.Label)
             ?? LangValue(block.StepLabel)
             ?? LangValue(block.ButtonLabel)

@@ -2,10 +2,12 @@ using Contracts.Forms;
 using FullProject.Models;
 using FullProject.Services;
 using FullProject.Services.FormServices;
+using FullProject.Settings;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Auth;
+using Microsoft.Extensions.Options;
 
 namespace FullProject.Controllers
 {
@@ -19,6 +21,8 @@ namespace FullProject.Controllers
         private readonly FormDefinitionService _definitions;
         private readonly FormInputTypeService _inputTypes;
         private readonly FormValidationService _validation;
+        private readonly FormDefinitionOrderService _definitionOrder;
+        private readonly FormDesignV2RuntimeSettings _v2Settings;
         private readonly AuthService _auth;
 
         public FormsController(
@@ -27,6 +31,8 @@ namespace FullProject.Controllers
             FormDefinitionService definitions,
             FormInputTypeService inputTypes,
             FormValidationService validation,
+            FormDefinitionOrderService definitionOrder,
+            IOptions<FormDesignV2RuntimeSettings> v2Settings,
             AuthService auth)
         {
             _submissions = submissions;
@@ -34,6 +40,8 @@ namespace FullProject.Controllers
             _definitions = definitions;
             _inputTypes = inputTypes;
             _validation = validation;
+            _definitionOrder = definitionOrder;
+            _v2Settings = v2Settings.Value;
             _auth = auth;
         }
 
@@ -183,6 +191,30 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definitions)));
         }
 
+        [HttpGet("definitions/order")]
+        [Authorize(Policy = AdminPermissionKeys.ViewFormDefinitions)]
+        public async Task<IActionResult> GetDefinitionOrder()
+        {
+            var definitions = await _definitions.GetAllAsync();
+            return Ok(ApiResult.Ok(await _definitionOrder.GetAsync(definitions)));
+        }
+
+        [HttpPut("definitions/order")]
+        [Authorize(Policy = AdminPermissionKeys.EditFormDefinitions)]
+        public async Task<IActionResult> ReorderDefinitions([FromBody] FormDefinitionReorderRequest request)
+        {
+            var result = await _definitionOrder.TryReorderAsync(request);
+            return result.Status switch
+            {
+                FormDefinitionOrderMutationStatus.Applied => Ok(ApiResult.Ok(result.Order, result.Message)),
+                FormDefinitionOrderMutationStatus.Conflict => Conflict(ApiResult.Conflict(result.Order, result.Message)),
+                FormDefinitionOrderMutationStatus.Disabled => StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    ApiResult.Unavailable(result.Order, result.Message)),
+                _ => BadRequest(ApiResult.BadRequest(result.Message))
+            };
+        }
+
         [HttpGet("definitions/{id}")]
         [Authorize(Policy = AdminPermissionKeys.ViewFormDefinitions)]
         public async Task<IActionResult> GetDefinition(string id)
@@ -212,6 +244,8 @@ namespace FullProject.Controllers
             var errors = await _validation.ValidateDefinitionAsync(request);
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
+            if (!_v2Settings.CanWriteV2 && HasV2WritePayload(request, null))
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, ApiResult.Unavailable("Form Design v2 writes are not enabled. The submitted v2 content was not saved."));
 
             var normalizedRequestKey = FormDefinitionService.NormalizeKey(request.Key);
             if (normalizedRequestKey is not null && await _definitions.GetByKeyAsync(normalizedRequestKey) is not null)
@@ -220,6 +254,7 @@ namespace FullProject.Controllers
             try
             {
                 var definition = await _definitions.UpsertAsync(request);
+                await _definitionOrder.AppendAsync(definition.Id);
                 return Ok(ApiResult.Ok(await _definitions.MapPublicAsync(definition), "Form definition saved."));
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("Form Key already exists", StringComparison.OrdinalIgnoreCase))
@@ -249,6 +284,13 @@ namespace FullProject.Controllers
             var errors = await _validation.ValidateDefinitionAsync(request, permittedInactiveTypes);
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
+            if (!_v2Settings.CanWriteV2 &&
+                ((request.InformationItems?.Count ?? 0) > 0 ||
+                 (request.AuxiliaryActions?.Count ?? 0) > 0 ||
+                 HasV2WritePayload(request, existing.Id)))
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, ApiResult.Unavailable("Form Design v2 writes are not enabled. The submitted v2 changes were not saved."));
+            }
 
             try
             {
@@ -258,6 +300,10 @@ namespace FullProject.Controllers
             catch (InvalidOperationException ex) when (ex.Message.Contains("saved Field Key", StringComparison.OrdinalIgnoreCase))
             {
                 return BadRequest(ApiResult.BadRequest(ex.Message));
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("schema-v2", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, ApiResult.Unavailable(ex.Message));
             }
         }
 
@@ -287,10 +333,20 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest("This form is still used by one or more FormBlocks or buttons. Remove those usages before deleting it."));
 
             var ok = await _definitions.DeleteAsync(id);
+            if (ok)
+                await _definitionOrder.RemoveAsync(id);
             return ok
                 ? Ok(ApiResult.Ok("Form definition deleted."))
                 : NotFound(ApiResult.NotFound("Form definition not found."));
         }
+
+        private static bool HasV2WritePayload(FormDefinitionUpsertRequest request, string? definitionId)
+            => !FormDesignV2Policy.IsReadOnlyProjection(
+                definitionId,
+                request.Design,
+                request.Fields,
+                request.InformationItems,
+                request.AuxiliaryActions);
 
         private static ManagedFormSubmissionResponse MapSubmission(
             Models.FormSubmission submission,

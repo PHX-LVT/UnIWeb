@@ -16,6 +16,9 @@ namespace AdminSite.Services
 
         public string ToCssVariables(ThemeModel? model) => ThemeCssBuilder.Build(ToPublicTheme(model));
 
+        public string ToScopedCssVariables(ThemeModel? model, string selector) =>
+            ThemeCssBuilder.BuildScoped(ToPublicTheme(model), selector);
+
         private static PublicTheme ToPublicTheme(ThemeModel? model) => new()
         {
             FontBody = ThemeFontCatalog.NormalizeNameOrDefault(model?.FontBody),
@@ -32,6 +35,9 @@ namespace AdminSite.Services
             ColorBackground = model?.ColorBackground ?? "#ffffff",
             ColorText = model?.ColorText ?? "#111827",
             BorderRadius = model?.BorderRadius ?? "10px",
+            ButtonStyle = model?.ButtonStyle ?? "filled",
+            ButtonColorRole = model?.ButtonColorRole ?? "accent",
+            ButtonRadius = model?.ButtonRadius ?? "6px",
             ButtonSizeScale = model?.ButtonSizeScale ?? "1",
             ButtonTextSize = model?.ButtonTextSize ?? "15px",
             AnimationsEnabled = model?.AnimationsEnabled ?? true,

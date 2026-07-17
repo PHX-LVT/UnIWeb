@@ -1,0 +1,149 @@
+@implements IAsyncDisposable
+@inject PublicApiService Api
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using Contracts.Forms
+@using Contracts.Public
+
+@if (_open)
+{
+    <div class="sc-public-modal open"
+         role="dialog"
+         aria-modal="true"
+         aria-label="@ModalLabel"
+         @onclick="CloseFromBackdrop">
+        <div class="sc-public-modal__dialog" style="@DialogStyle" @onclick:stopPropagation="true">
+            @if (_loading)
+            {
+                <p class="sc-public-modal__intro">@LoadingText</p>
+            }
+            else if (_block is null)
+            {
+                <div class="sc-public-modal__header">
+                    <h2>@ErrorTitle</h2>
+                    <button type="button" class="sc-public-modal__close" aria-label="@CloseText" @onclick="Close">×</button>
+                </div>
+                <p class="sc-public-modal__intro">@NotFoundText</p>
+            }
+            else
+            {
+                <button type="button" class="sc-public-modal__close sc-public-modal__close--floating" aria-label="@CloseText" @onclick="Close">×</button>
+                <PublicFormRenderer Block="@_block"
+                                    Lang="@Lang"
+                                    Context="modal"
+                                    OnSubmit="Submit" />
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Lang { get; set; } = "en";
+
+    private DotNetObjectReference<PublicFormModalHost>? _reference;
+    private PublicFormBlockDto? _block;
+    private FormDefinitionResponse? _definition;
+    private bool _open;
+    private bool _loading;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _reference = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("cmsFormHost.register", _reference);
+    }
+
+    [JSInvokable]
+    public Task OpenById(string id) => Open(() => Api.GetFormDefinitionByIdAsync(id));
+
+    [JSInvokable]
+    public Task OpenByKey(string key) => Open(() => Api.GetFormDefinitionByKeyAsync(key));
+
+    [JSInvokable]
+    public Task CloseFromJs() => Close();
+
+    private async Task Open(Func<Task<FormDefinitionResponse?>> load)
+    {
+        _open = true;
+        _loading = true;
+        _block = null;
+        _definition = null;
+        await JS.InvokeVoidAsync("cmsFormHost.setOpen", true);
+        await InvokeAsync(StateHasChanged);
+
+        _definition = await load();
+        _block = _definition is null ? null : Map(_definition);
+        _loading = false;
+        await InvokeAsync(StateHasChanged);
+        await JS.InvokeVoidAsync("cmsFormHost.focusDialog");
+    }
+
+    private Task<bool> Submit(Dictionary<string, string> data) =>
+        _definition is null
+            ? Task.FromResult(false)
+            : Api.SubmitDefinitionFormAsync(_definition.Key, data, Lang, Navigation.Uri);
+
+    private Task CloseFromBackdrop() => Close();
+
+    private async Task Close()
+    {
+        _open = false;
+        _loading = false;
+        _block = null;
+        _definition = null;
+        await JS.InvokeVoidAsync("cmsFormHost.setOpen", false);
+    }
+
+    private static PublicFormBlockDto Map(FormDefinitionResponse definition) => new()
+    {
+        Id = $"modal-{definition.Id}",
+        Type = "form",
+        Visible = true,
+        FormDefinitionId = definition.Id,
+        FormDefinitionAvailable = true,
+        Name = definition.Name,
+        Introduction = definition.Introduction,
+        InformationItems = definition.InformationItems,
+        AuxiliaryActions = definition.AuxiliaryActions,
+        SubmitButtonLabel = definition.SubmitButtonLabel,
+        Design = definition.Design,
+        Fields = definition.Fields.Select(field => new PublicFormFieldDto
+        {
+            Name = field.Key,
+            Type = field.Type,
+            Label = field.Label,
+            Placeholder = field.Placeholder,
+            Required = field.Required,
+            MaxLength = field.MaxLength,
+            InputBoxSize = field.InputBoxSize,
+            Order = field.Order,
+            Options = field.Options.Select(option => new PublicFormFieldOptionDto
+            {
+                Value = option.Value,
+                Label = option.Label,
+                Order = option.Order
+            }).ToList()
+        }).ToList()
+    };
+
+    private bool IsVietnamese => Lang.StartsWith("vi", StringComparison.OrdinalIgnoreCase);
+    private bool IsChinese => Lang.StartsWith("zh", StringComparison.OrdinalIgnoreCase) || Lang.StartsWith("cn", StringComparison.OrdinalIgnoreCase);
+    private string ModalLabel => IsVietnamese ? "Biểu mẫu" : IsChinese ? "表单" : "Form";
+    private string LoadingText => IsVietnamese ? "Đang tải biểu mẫu..." : IsChinese ? "正在加载表单..." : "Loading form...";
+    private string ErrorTitle => IsVietnamese ? "Không thể mở biểu mẫu" : IsChinese ? "无法打开表单" : "Unable to open form";
+    private string NotFoundText => IsVietnamese ? "Biểu mẫu này không tồn tại hoặc chưa được bật." : IsChinese ? "此表单不存在或尚未启用。" : "This form is unavailable or inactive.";
+    private string CloseText => IsVietnamese ? "Đóng" : IsChinese ? "关闭" : "Close";
+    private string DialogStyle => $"--sc-form-design-width:{_block?.Design?.WidthPx ?? FormDesignPolicy.StackedDefaultWidthPx}px";
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("cmsFormHost.unregister");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        _reference?.Dispose();
+    }
+}

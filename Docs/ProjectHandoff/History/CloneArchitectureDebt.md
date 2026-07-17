@@ -1,5 +1,8 @@
 # Clone Architecture Debt
 
+Last reviewed: **2026-07-15**
+Status: **archived completed architecture record; this is not an active plan or an instruction to restore `CloneUtility`.**
+
 This document records the clone architecture cleanup that moved page graph
 duplication from manual field-by-field copying to serializer-backed clone
 profiles and granular publish diffs.
@@ -222,3 +225,9 @@ integrity protection.
 
 Asset cleanup remains on the existing centralized cleanup service. More precise
 diff-aware asset cleanup rules belong to a future asset cleanup phase.
+
+## Current Extension Rule
+
+When adding fields to Page, Section or Block models, rely on the serializer-backed clone profiles and extend the page-graph coverage tool when identity/workflow behavior differs. Do not add manual field copying.
+
+Form Design v2 is primarily Form Definition data; a FormBlock continues to store only `FormDefinitionId` plus Block geometry/scale. Presets, publish/reset and clone must preserve that reference without copying the definition schema/design into the Block. Any new Block-level Form field introduced contrary to that rule should be treated as an architecture regression.

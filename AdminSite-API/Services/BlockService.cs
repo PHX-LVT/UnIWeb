@@ -7,6 +7,7 @@ using Contracts.Admin;
 using Contracts.Forms;
 using FullProject.Services.AssetService;
 using FullProject.Services.BlockServices;
+using FullProject.Services.FormServices;
 using SharedComponents.Helpers;
 
 namespace FullProject.Services
@@ -242,16 +243,8 @@ namespace FullProject.Services
                 FormBlockCreateDto form => new FormBlock
                 {
                     FormDefinitionId = string.IsNullOrWhiteSpace(form.FormDefinitionId) ? null : form.FormDefinitionId,
-                    Fields = form.Fields.Select(f => new FormField
-                    {
-                        Name = f.Name,
-                        Type = f.Type,
-                        Label = f.Label,
-                        Required = f.Required,
-                        Options = f.Options,
-                        Order = f.Order
-                    }).ToList(),
-                    SubmitButtonLabel = form.SubmitButtonLabel
+                    DesignSchemaVersion = FormDesignPolicy.CurrentSchemaVersion,
+                    FormScale = Math.Clamp(form.FormScale, FormBlockLayoutPolicy.MinimumScale, FormBlockLayoutPolicy.MaximumScale)
                 },
                 CardBlockCreateDto card => new CardBlock
                 {
@@ -350,6 +343,7 @@ namespace FullProject.Services
             block.PageStableId = page.StableId;       // â† GUID
             block.SectionStableId = section.StableId; // â† GUID
             block.Visible = dto.Visible;
+            block.EditorLabel = SanitizeDictionary(dto.EditorLabel);
             block.Layout = MapLayout(dto.Layout);
             if (block is FormBlock createdForm && !string.IsNullOrWhiteSpace(createdForm.FormDefinitionId))
             {
@@ -357,13 +351,10 @@ namespace FullProject.Services
                     .Find(item => item.Id == createdForm.FormDefinitionId && item.Active)
                     .FirstOrDefaultAsync()
                     ?? throw new ArgumentException("Choose an active Form Definition for the Form Block.");
+                var design = GovernedFormDesign(definition);
+                createdForm.DesignSchemaVersion = design.SchemaVersion;
                 var defaultSize = FormBlockLayoutPolicy.CalculateDefaultSize(
-                    definition.Layout,
-                    definition.Fields
-                        .OrderBy(field => field.Order)
-                        .Select(field => new FormBlockSizingField(field.Type, field.InputBoxSize)),
-                    definition.Name.Values.Any(value => !string.IsNullOrWhiteSpace(value)),
-                    definition.Introduction.Values.Any(value => !string.IsNullOrWhiteSpace(value)),
+                    design,
                     FormBlockLayoutPolicy.AvailableContentWidthPx(section.Style?.ContentWidth));
                 createdForm.DefaultWidthPercent = defaultSize.WidthPercent;
                 createdForm.DefaultWidthPx = defaultSize.WidthPx;
@@ -654,6 +645,7 @@ namespace FullProject.Services
 
             FormBlockDefaultSize? governedFormSize = null;
             Section? governedFormSection = null;
+            int? governedFormSchemaVersion = null;
             if (existing is FormBlock existingForm && dto is FormBlockUpdateDto formUpdate)
             {
                 if (string.IsNullOrWhiteSpace(formUpdate.FormDefinitionId))
@@ -667,7 +659,10 @@ namespace FullProject.Services
                     existingForm.FormDefinitionId,
                     definition.Id,
                     StringComparison.Ordinal);
-                var resetToDefinitionSize = definitionChanged || formUpdate.Layout is null;
+                var governedDesign = GovernedFormDesign(definition);
+                governedFormSchemaVersion = governedDesign.SchemaVersion;
+                var resetToDefinitionSize = definitionChanged ||
+                    existingForm.DefaultWidthPx <= 0 || existingForm.DefaultHeightPx <= 0;
                 if (resetToDefinitionSize)
                 {
                     if (existing.Authoring?.FullLocked == true || existing.Authoring?.GeometryLocked == true)
@@ -678,14 +673,10 @@ namespace FullProject.Services
                         .FirstOrDefaultAsync()
                         ?? throw new ArgumentException("Section not found.");
                     governedFormSize = FormBlockLayoutPolicy.CalculateDefaultSize(
-                        definition.Layout,
-                        definition.Fields
-                            .OrderBy(field => field.Order)
-                            .Select(field => new FormBlockSizingField(field.Type, field.InputBoxSize)),
-                        definition.Name.Values.Any(value => !string.IsNullOrWhiteSpace(value)),
-                        definition.Introduction.Values.Any(value => !string.IsNullOrWhiteSpace(value)),
+                        governedDesign,
                         FormBlockLayoutPolicy.AvailableContentWidthPx(governedFormSection.Style?.ContentWidth));
                     formUpdate.Layout = BuildGovernedFormLayout(existing.Layout, governedFormSize.Value);
+                    formUpdate.FormScale = 1d;
                 }
             }
 
@@ -706,6 +697,8 @@ namespace FullProject.Services
 
             if (dto.Visible.HasValue)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Visible, dto.Visible.Value));
+            if (dto.EditorLabel is not null)
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.EditorLabel, SanitizeDictionary(dto.EditorLabel)));
             if (dto.Buttons is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Buttons,
                     dto.Buttons.Select(MapButton).ToList()));
@@ -793,23 +786,19 @@ namespace FullProject.Services
                                     }).ToList())));
                     break;
 
-                case (FormBlock _, FormBlockUpdateDto formDto):
+                case (FormBlock formBlock, FormBlockUpdateDto formDto):
                     var formUpdates = new List<UpdateDefinition<Block>>
                     {
                         Builders<Block>.Update.Set(b => ((FormBlock)b).FormDefinitionId,
                             string.IsNullOrWhiteSpace(formDto.FormDefinitionId) ? null : formDto.FormDefinitionId),
-                        Builders<Block>.Update.Set(b => ((FormBlock)b).Fields,
-                            formDto.Fields.Select(f => new FormField
-                            {
-                                Name = f.Name,
-                                Type = f.Type,
-                                Label = f.Label,
-                                Required = f.Required,
-                                Options = f.Options,
-                                Order = f.Order
-                            }).ToList()),
-                        Builders<Block>.Update.Set(b => ((FormBlock)b).SubmitButtonLabel,
-                            formDto.SubmitButtonLabel)
+                        Builders<Block>.Update.Set(b => ((FormBlock)b).DesignSchemaVersion,
+                            governedFormSchemaVersion ?? formBlock.DesignSchemaVersion),
+                        Builders<Block>.Update.Set(b => ((FormBlock)b).FormScale,
+                            Math.Clamp(formDto.FormScale ?? formBlock.FormScale,
+                                FormBlockLayoutPolicy.MinimumScale,
+                                FormBlockLayoutPolicy.MaximumScale)),
+                        Builders<Block>.Update.Unset("Fields"),
+                        Builders<Block>.Update.Unset("SubmitButtonLabel")
                     };
                     if (governedFormSize is { } formSize)
                     {
@@ -973,6 +962,7 @@ namespace FullProject.Services
 
             var nextLayout = MergeLayout(existing.Layout, dto);
             FormBlockDefaultSize? recoveredDefaultSize = null;
+            int? recoveredDesignSchemaVersion = null;
             Section? formSection = null;
             if (existing is FormBlock form)
             {
@@ -991,13 +981,9 @@ namespace FullProject.Services
                     if (definition is not null)
                     {
                         recoveredDefaultSize = FormBlockLayoutPolicy.CalculateDefaultSize(
-                            definition.Layout,
-                            definition.Fields
-                                .OrderBy(field => field.Order)
-                                .Select(field => new FormBlockSizingField(field.Type, field.InputBoxSize)),
-                            definition.Name.Values.Any(value => !string.IsNullOrWhiteSpace(value)),
-                            definition.Introduction.Values.Any(value => !string.IsNullOrWhiteSpace(value)),
+                            GovernedFormDesign(definition),
                             FormBlockLayoutPolicy.AvailableContentWidthPx(formSection.Style?.ContentWidth));
+                        recoveredDesignSchemaVersion = definition.Design?.SchemaVersion ?? FormDesignPolicy.CurrentSchemaVersion;
                         defaultWidthPercent = recoveredDefaultSize.Value.WidthPercent;
                         defaultHeightPx = recoveredDefaultSize.Value.HeightPx;
                     }
@@ -1026,6 +1012,19 @@ namespace FullProject.Services
                 updates.Add(Builders<Block>.Update.Set(
                     b => ((FormBlock)b).DefaultHeightPx,
                     recovered.HeightPx));
+            }
+            if (existing is FormBlock formBlock)
+            {
+                updates.Add(Builders<Block>.Update.Set(
+                    b => ((FormBlock)b).DesignSchemaVersion,
+                    recoveredDesignSchemaVersion ?? formBlock.DesignSchemaVersion));
+                var baselineWidth = recoveredDefaultSize?.WidthPercent ?? formBlock.DefaultWidthPercent;
+                var baselineHeight = recoveredDefaultSize?.HeightPx ?? formBlock.DefaultHeightPx;
+                if (baselineWidth > 0 && baselineHeight > 0)
+                {
+                    var resolvedScale = ResolveFormScale(nextLayout, baselineHeight);
+                    updates.Add(Builders<Block>.Update.Set(b => ((FormBlock)b).FormScale, resolvedScale));
+                }
             }
 
             await _context.BlocksDraft.UpdateOneAsync(
@@ -1198,20 +1197,10 @@ namespace FullProject.Services
                 defaultHeightPx,
                 24d,
                 FormBlockLayoutPolicy.MaximumHeightPx);
-            var currentWidth = current.WidthPercent ?? (Math.Clamp(current.W, 1, 12) / 12d * 100d);
-            var currentHeight = current.HeightPx ?? (Math.Clamp(current.H, 1, 40) * 48d);
-            var currentScale = Math.Clamp(
-                Math.Min(currentWidth / safeDefaultWidth, currentHeight / safeDefaultHeight),
-                0.05d,
-                FormBlockLayoutPolicy.MaximumScale);
-            var minimumAllowedScale = currentScale < FormBlockLayoutPolicy.MinimumScale
-                ? currentScale
-                : FormBlockLayoutPolicy.MinimumScale;
-            var requestedWidth = requested.WidthPercent ?? (Math.Clamp(requested.W, 1, 12) / 12d * 100d);
             var requestedHeight = requested.HeightPx ?? (Math.Clamp(requested.H, 1, 40) * 48d);
             var requestedScale = Math.Clamp(
-                Math.Min(requestedWidth / safeDefaultWidth, requestedHeight / safeDefaultHeight),
-                minimumAllowedScale,
+                requestedHeight / safeDefaultHeight,
+                FormBlockLayoutPolicy.MinimumScale,
                 FormBlockLayoutPolicy.MaximumScale);
             var widthPercent = safeDefaultWidth * requestedScale;
             var heightPx = safeDefaultHeight * requestedScale;
@@ -1244,6 +1233,53 @@ namespace FullProject.Services
             requested.WidthPercent = widthPercent;
             requested.HeightPx = heightPx;
             return requested;
+        }
+
+        private static double ResolveFormScale(
+            BlockLayout layout,
+            double defaultHeightPx)
+        {
+            var height = layout.HeightPx ?? (Math.Clamp(layout.H, 1, 40) * 48d);
+            return Math.Clamp(
+                height / Math.Max(24d, defaultHeightPx),
+                FormBlockLayoutPolicy.MinimumScale,
+                FormBlockLayoutPolicy.MaximumScale);
+        }
+
+        private static FormDesignSettingsDto GovernedFormDesign(FormDefinition definition)
+        {
+            var source = definition.Design?.SchemaVersion > 0
+                ? FormDefinitionService.MapDesign(definition.Design)
+                : FormDesignPolicy.CreateDefault(
+                    definition.Layout == LegacyFormLayout.TwoColumns
+                        ? FormDesignShape.TwoColumns
+                        : FormDesignShape.Stacked);
+            var fields = definition.Fields.OrderBy(field => field.Order).Select(field => new FormFieldDefinitionDto
+                {
+                    Key = field.Key,
+                    Type = field.Type,
+                    Label = field.Label,
+                    Placeholder = field.Placeholder,
+                    Required = field.Required,
+                    InputBoxSize = field.InputBoxSize,
+                    Order = field.Order
+                }).ToList();
+            return source.V2 is not null
+                ? FormDefinitionService.NormalizeV2WriteDesign(
+                    definition.Id,
+                    source,
+                    fields,
+                    definition.Name,
+                    definition.Introduction,
+                    definition.SubmitButtonLabel,
+                    FormDefinitionService.MapInformationItems(definition.InformationItems),
+                    FormDefinitionService.MapAuxiliaryActions(definition.AuxiliaryActions))
+                : FormDesignPolicy.Normalize(
+                    source,
+                    fields,
+                    definition.Name,
+                    definition.Introduction,
+                    definition.SubmitButtonLabel);
         }
 
         private async Task GrowSectionForGovernedFormAsync(Section section, BlockLayoutDto layout)

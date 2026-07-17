@@ -317,10 +317,12 @@
 
         if (GetFormDefaultSize(block) is { } formSize && EffectivePositionMode(block) == "freeform")
         {
-            var scale = Math.Min(
-                FreeformWidthPercent(layout) / formSize.WidthPercent,
-                FreeformHeightPx(layout) / formSize.HeightPx);
-            parts.Add($"--sc-form-scale: {FormatNumber(Math.Clamp(scale, 0.05d, 1d))}");
+            var scale = block is PublicFormBlockDto form
+                ? form.FormScale
+                : FreeformHeightPx(layout) / formSize.HeightPx;
+            parts.Add($"--sc-form-scale: {FormatNumber(Math.Clamp(scale, FormBlockLayoutPolicy.MinimumScale, FormBlockLayoutPolicy.MaximumScale))}");
+            parts.Add($"--sc-form-default-width-px: {formSize.WidthPx}px");
+            parts.Add($"--sc-form-default-height-px: {formSize.HeightPx}px");
         }
 
         AddResponsiveStyleParts(parts, "tablet", layout, block.Responsive?.Tablet, span);
@@ -348,14 +350,22 @@
         }
 
         return FormBlockLayoutPolicy.CalculateDefaultSize(
-            string.Equals(form.FormLayoutMode, "two-columns", StringComparison.OrdinalIgnoreCase)
-                ? FormLayout.TwoColumns
-                : FormLayout.Stacked,
-            (form.Fields ?? new List<PublicFormFieldDto>())
-                .OrderBy(field => field.Order)
-                .Select(field => new FormBlockSizingField(field.Type, field.InputBoxSize)),
-            HasLocalizedText(form.Name),
-            HasLocalizedText(form.Introduction));
+            FormDesignPolicy.Normalize(
+                form.Design,
+                (form.Fields ?? new List<PublicFormFieldDto>()).Select(field => new FormFieldDefinitionDto
+                {
+                    Key = field.Name,
+                    Type = field.Type,
+                    Label = field.Label,
+                    Placeholder = field.Placeholder,
+                    Required = field.Required,
+                    MaxLength = field.MaxLength,
+                    InputBoxSize = field.InputBoxSize,
+                    Order = field.Order
+                }),
+                form.Name,
+                form.Introduction,
+                form.SubmitButtonLabel));
     }
 
     private string GetBlockVisualStyle(PublicBlockDto block)

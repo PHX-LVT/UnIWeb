@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
 using Contracts.Auth;
+using Contracts.Forms;
 using FullProject.Services.SectionServices;
 
 namespace FullProject.Controllers
@@ -331,6 +332,7 @@ namespace FullProject.Controllers
                 },
                 Visible = b.Visible,
                 Order = b.Order,
+                EditorLabel = b.EditorLabel ?? new Dictionary<string, string>(),
                 Layout = MapLayoutToDto(b.Layout),
                 CreatedAt = b.CreatedAt,
                 UpdatedAt = b.UpdatedAt,
@@ -418,6 +420,7 @@ namespace FullProject.Controllers
                 // Form: fields returned as embedded array â€” no separate form endpoints
                 case FormBlock form:
                     dto.FormDefinitionId = form.FormDefinitionId;
+                    dto.FormScale = Math.Clamp(form.FormScale, FormBlockLayoutPolicy.MinimumScale, FormBlockLayoutPolicy.MaximumScale);
                     dto.FormDefaultWidthPx = form.DefaultWidthPx > 0
                         ? form.DefaultWidthPx
                         : null;
@@ -427,16 +430,6 @@ namespace FullProject.Controllers
                     dto.FormDefaultHeightPx = form.DefaultHeightPx > 0
                         ? form.DefaultHeightPx
                         : null;
-                    dto.Fields = form.Fields.Select(f => new FormFieldDto
-                    {
-                        Name = f.Name,
-                        Type = f.Type,
-                        Label = f.Label,
-                        Required = f.Required,
-                        Options = f.Options,
-                        Order = f.Order
-                    }).ToList();
-                    dto.SubmitButtonLabel = form.SubmitButtonLabel;
                     break;
 
                 case CardBlock card:

@@ -50,6 +50,9 @@ namespace FullProject.Models
 
         // Shape
         public string BorderRadius { get; set; } = "10px";
+        public string ButtonStyle { get; set; } = "filled";
+        public string ButtonColorRole { get; set; } = "accent";
+        public string ButtonRadius { get; set; } = "6px";
         public string ButtonSizeScale { get; set; } = "1";
         public string ButtonTextSize { get; set; } = "15px";
 
@@ -853,6 +856,7 @@ namespace FullProject.Models
         public string SectionId => SectionStableId;
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
+        public Dictionary<string, string> EditorLabel { get; set; } = new();
         public List<BlockButton> Buttons { get; set; } = new();
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -946,16 +950,17 @@ namespace FullProject.Models
         public List<MapPin> Pins { get; set; } = new();
     }
 
-    // Form: fields stored as embedded array, managed via block PUT
+    // Form Blocks reference one governed Form Definition; fields and design are never copied into the Block.
     [BsonDiscriminator("form")]
+    [BsonIgnoreExtraElements]
     public class FormBlock : Block
     {
         public string? FormDefinitionId { get; set; }
+        public int DesignSchemaVersion { get; set; }
+        public double FormScale { get; set; } = 1d;
         public int DefaultWidthPx { get; set; }
         public double DefaultWidthPercent { get; set; }
         public double DefaultHeightPx { get; set; }
-        public List<FormField> Fields { get; set; } = new();
-        public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
     }
 
     [BsonIgnoreExtraElements]
@@ -1157,6 +1162,19 @@ namespace FullProject.Models
     // FORM SUBMISSIONS
     // ----------------------------------------------------------------
 
+    // Persisted only to read pre-FormDesign records during idempotent migration.
+    public enum LegacyFormDisplayMode
+    {
+        Modal,
+        Embedded
+    }
+
+    public enum LegacyFormLayout
+    {
+        Stacked,
+        TwoColumns
+    }
+
     [BsonIgnoreExtraElements]
     public class FormDefinition
     {
@@ -1167,8 +1185,13 @@ namespace FullProject.Models
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Introduction { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
-        public FormDisplayMode DisplayMode { get; set; } = FormDisplayMode.Embedded;
-        public FormLayout Layout { get; set; } = FormLayout.Stacked;
+        [BsonIgnoreIfNull]
+        public List<FormInformationItem>? InformationItems { get; set; }
+        [BsonIgnoreIfNull]
+        public List<FormAuxiliaryAction>? AuxiliaryActions { get; set; }
+        public LegacyFormDisplayMode DisplayMode { get; set; } = LegacyFormDisplayMode.Embedded;
+        public LegacyFormLayout Layout { get; set; } = LegacyFormLayout.Stacked;
+        public FormDesignSettings Design { get; set; } = new();
         public bool Active { get; set; } = true;
         public List<FormDefinitionField> Fields { get; set; } = new();
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -1198,6 +1221,131 @@ namespace FullProject.Models
         public string Value { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
         public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormFieldRow
+    {
+        [BsonElement("Id")]
+        public string Id { get; set; } = string.Empty;
+        public int Order { get; set; }
+        public List<string> FieldKeys { get; set; } = new();
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormActionTarget
+    {
+        [BsonRepresentation(BsonType.String)]
+        public FormActionTargetType Type { get; set; } = FormActionTargetType.InternalLink;
+        public string? PageId { get; set; }
+        public string? Path { get; set; }
+        public string? Url { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? ResourceId { get; set; }
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormInformationItem
+    {
+        [BsonElement("Id")]
+        public string Id { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+        public Dictionary<string, string> Text { get; set; } = new();
+        [BsonIgnoreIfNull]
+        public FormActionTarget? Target { get; set; }
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormAuxiliaryAction
+    {
+        [BsonElement("Id")]
+        public string Id { get; set; } = string.Empty;
+        public Dictionary<string, string> Label { get; set; } = new();
+        public FormActionTarget Target { get; set; } = new();
+        public int Order { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormAuxiliaryActionLayout
+    {
+        public string ActionId { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.String)]
+        public FormAuxiliaryActionStyle Style { get; set; } = FormAuxiliaryActionStyle.Outline;
+        [BsonRepresentation(BsonType.String)]
+        public FormAuxiliaryActionPlacement Placement { get; set; } = FormAuxiliaryActionPlacement.BelowFields;
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormDesignV2Settings
+    {
+        [BsonRepresentation(BsonType.String)]
+        public FormOuterLayout OuterLayout { get; set; } = FormOuterLayout.Standard;
+        public List<FormFieldRow> FieldRows { get; set; } = new();
+        public string InformationBackgroundColor { get; set; } = "#0f2740";
+        public string InformationTextColor { get; set; } = "#ffffff";
+        public string FormBackgroundColor { get; set; } = "#ffffff";
+        public string FormTextColor { get; set; } = "#0f172a";
+        public int SplitPanelPercent { get; set; } = FormDesignV2Policy.DefaultSplitPanelPercent;
+        [BsonRepresentation(BsonType.String)]
+        public FormSubmitLayout SubmitLayout { get; set; } = FormSubmitLayout.Full;
+        public List<FormAuxiliaryActionLayout> AuxiliaryActionLayouts { get; set; } = new();
+    }
+
+    [BsonIgnoreExtraElements]
+    public class FormDefinitionOrderDocument
+    {
+        public const string SingletonId = "admin-form-definitions";
+
+        [BsonId]
+        public string Id { get; set; } = SingletonId;
+        public int Revision { get; set; }
+        public List<string> DefinitionIds { get; set; } = new();
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    public class FormDesignV2MigrationLease
+    {
+        [BsonId]
+        public string Id { get; set; } = "form-design-v2";
+        public string OwnerId { get; set; } = string.Empty;
+        public DateTime AcquiredAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    public class FormDesignV2MigrationRecord
+    {
+        [BsonId]
+        public string Id { get; set; } = string.Empty;
+        public int SourceSchemaVersion { get; set; } = FormDesignPolicy.CurrentSchemaVersion;
+        public int TargetSchemaVersion { get; set; } = FormDesignV2Policy.TargetSchemaVersion;
+        public string Status { get; set; } = "planned";
+        public string OwnerId { get; set; } = string.Empty;
+        public string BackupEvidence { get; set; } = string.Empty;
+        public int DefinitionCount { get; set; }
+        public int ConvertibleCount { get; set; }
+        public int MigratedCount { get; set; }
+        public int AlreadyV2Count { get; set; }
+        public int SubmissionCountBefore { get; set; }
+        public int SubmissionCountAfter { get; set; }
+        public int OrderRevisionBefore { get; set; }
+        public int OrderRevisionAfter { get; set; }
+        public string UnrelatedContentHashBefore { get; set; } = string.Empty;
+        public string UnrelatedContentHashAfter { get; set; } = string.Empty;
+        public List<string> Warnings { get; set; } = new();
+        public string? Error { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? CompletedAt { get; set; }
     }
 
     [BsonIgnoreExtraElements]
@@ -1334,6 +1482,34 @@ namespace FullProject.Models
         // Retained only so legacy records remain deserializable.
         Archived,
         Deleted
+    }
+
+    [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class FormDesignSettings
+    {
+        [BsonIgnoreIfNull]
+        public bool? UseThemeDefaults { get; set; }
+        public int SchemaVersion { get; set; }
+        public FormDesignShape Shape { get; set; } = FormDesignShape.Stacked;
+        public int WidthPx { get; set; } = FormDesignPolicy.StackedDefaultWidthPx;
+        public int CalculatedHeightPx { get; set; } = FormDesignPolicy.MinimumHeightPx;
+        public FormDesignBackgroundMode BackgroundMode { get; set; } = FormDesignBackgroundMode.Solid;
+        public string BackgroundColor { get; set; } = "#ffffff";
+        public string TextColor { get; set; } = "#0f172a";
+        public string AccentColor { get; set; } = "#1d4ed8";
+        public string BorderColor { get; set; } = "#dbe3ef";
+        public int BorderWidthPx { get; set; } = 1;
+        public int BorderRadiusPx { get; set; } = 16;
+        public string Shadow { get; set; } = "small";
+        public int PaddingPx { get; set; } = 32;
+        public int FieldGapPx { get; set; } = 16;
+        public FormDesignTextAlign TextAlign { get; set; } = FormDesignTextAlign.Left;
+        public FormLabelMode LabelMode { get; set; } = FormLabelMode.Visible;
+        public string ButtonStyle { get; set; } = "filled";
+        public FormDesignButtonWidth ButtonWidth { get; set; } = FormDesignButtonWidth.Full;
+        [BsonIgnoreIfNull]
+        public FormDesignV2Settings? V2 { get; set; }
     }
 
     public enum ContentReviewStatus

@@ -1,4 +1,5 @@
 using AdminSite.Models;
+using Contracts.Forms;
 
 namespace AdminSite.Services
 {
@@ -56,6 +57,18 @@ namespace AdminSite.Services
         public Task<ApiResponse<List<FormDefinitionModel>>> GetDefinitionsAsync() =>
             _http.GetAsync<List<FormDefinitionModel>>("api/admin/forms/definitions");
 
+        public Task<ApiResponse<FormDefinitionOrderResponse>> GetDefinitionOrderAsync() =>
+            _http.GetAsync<FormDefinitionOrderResponse>("api/admin/forms/definitions/order");
+
+        public Task<ApiResponse<FormDefinitionOrderResponse>> ReorderDefinitionsAsync(
+            int expectedRevision,
+            IEnumerable<string> definitionIds) =>
+            _http.PutAsync<FormDefinitionOrderResponse>("api/admin/forms/definitions/order", new FormDefinitionReorderRequest
+            {
+                ExpectedRevision = expectedRevision,
+                DefinitionIds = definitionIds.ToList()
+            });
+
         public Task<ApiResponse<List<FormInputTypeModel>>> GetInputTypesAsync() =>
             _http.GetAsync<List<FormInputTypeModel>>("api/admin/forms/types");
 
@@ -88,8 +101,9 @@ namespace AdminSite.Services
                 definition.Name,
                 definition.Introduction,
                 definition.SubmitButtonLabel,
-                definition.DisplayMode,
-                definition.Layout,
+                definition.InformationItems,
+                definition.AuxiliaryActions,
+                definition.Design,
                 definition.Active,
                 definition.Fields
             };

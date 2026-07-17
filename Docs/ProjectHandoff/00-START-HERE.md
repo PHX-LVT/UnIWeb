@@ -1,181 +1,221 @@
-# UIWEB CMS: Complete Project Handoff
+# UIWEB CMS: Current Project Handoff
 
-Last reconciled: 2026-07-06
-Active workspace: `F:\0-Project\Test1\0-AdminSite-CompleteProject`  
-Active branch at reconciliation: `Indev3-Overhaul3`
+Last reconciled: **2026-07-16**
 
-This documentation set is the current orientation source for a new developer or a new Codex session. It supersedes the old handoff files for current status, but the old files remain useful as historical evidence.
+Active workspace: `F:\0-Project\Test1\0-AdminSite-CompleteProject`
 
-## 1. Read This First
+The working tree contains active user and implementation changes. Inspect it
+before editing and never discard unrelated changes.
 
-Before changing anything:
+Form Design v2 implementation is present, including Standard, Split Panel and
+CTA layouts, explicit field rows, information items, auxiliary actions,
+definition ordering, drag authoring, the preview-first settings drawer and
+schema-v2 write support. The local API is configured for v2 writes and
+definition ordering. V1 compatibility remains intentionally available until
+deployment observation and final acceptance justify its removal.
+
+Completed execution plans are archived under
+[History](History/README.md). They are records, not active task instructions.
+
+## 1. First Actions In A New Session
+
+Run:
 
 ```powershell
 git branch --show-current
 git status --short
+git log -5 --oneline
 ```
 
-The worktree was intentionally dirty when this handoff was written. It contained the in-progress BlockOverhaul-3 implementation across API, Contracts, AdminSite, SharedComponents, JavaScript, CSS, and clone-test tooling. Do not discard, reset, or overwrite those changes.
-
-Read the files in this order:
+Read current documents in this order:
 
 1. [00-START-HERE.md](00-START-HERE.md)
-2. [01-PRODUCT-HISTORY-AND-DIRECTION.md](01-PRODUCT-HISTORY-AND-DIRECTION.md)
+2. [04-FEATURE-STATUS-AND-ROADMAP.md](04-FEATURE-STATUS-AND-ROADMAP.md)
 3. [02-ARCHITECTURE-AND-MODULES.md](02-ARCHITECTURE-AND-MODULES.md)
 4. [03-DATA-WORKFLOWS-AND-INVARIANTS.md](03-DATA-WORKFLOWS-AND-INVARIANTS.md)
-5. [04-FEATURE-STATUS-AND-ROADMAP.md](04-FEATURE-STATUS-AND-ROADMAP.md)
-6. [05-REFERENCES-AND-MIGRATION.md](05-REFERENCES-AND-MIGRATION.md)
-7. [06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md](06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md)
-8. [07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md](07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md)
-9. [08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md](08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md)
+5. [05-REFERENCES-AND-MIGRATION.md](05-REFERENCES-AND-MIGRATION.md)
+6. [06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md](06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md)
+7. [09-HTML-TO-BLOCK-CAPABILITY-AUDIT.md](09-HTML-TO-BLOCK-CAPABILITY-AUDIT.md)
+8. [11-IIS-DEPLOYMENT-RUNBOOK.md](11-IIS-DEPLOYMENT-RUNBOOK.md)
 
-## 2. Source-Of-Truth Hierarchy
+Read [History](History/README.md) only when implementation history or an
+accepted legacy contract is relevant.
 
-When documents disagree, use this order:
+The English and Vietnamese Word technical guides are dated generated snapshots
+archived under `History`. The current source and Markdown handoff set take
+precedence when they disagree.
 
-1. The current user instruction.
-2. Current branch and current source code.
-3. Current MongoDB data when the task concerns existing Pages or migration.
-4. This handoff set.
-5. Feature-specific current plans.
-6. Old handoffs and conversation exports.
-7. Demo projects.
+## 2. Source-Of-Truth Order
 
-Old files such as `LibraryFeature_9Phase_Handoff.md` correctly describe the original decisions, but their branch names and phase status are obsolete.
+When information conflicts, use:
 
-## 3. Project In One Paragraph
+1. The latest explicit user instruction.
+2. Current source and configuration.
+3. Current MongoDB data for persisted content and references.
+4. The active Markdown handoff set.
+5. Historical plans and acceptance records.
+6. Git history, demo projects and external mirrors.
 
-UIWEB is a .NET 8, Blazor Server, MongoDB-backed content-management system and public website. It has an administrative Page Builder, Content Management, Form Management, Resource Library, user and role management, global Theme/Branding/Footer/Social settings, shared public renderers, and a draft/published page graph. Cloudflare R2 currently stores uploaded binary assets while MongoDB stores URLs, storage keys, ownership metadata, content, layouts, and references. The long-term direction is to make Pages data-driven through Sections, Blocks, CanvasSection, reusable presets, and shared renderers, while progressively retiring eligible handcrafted HTMLSection compositions.
+Source owns validation, security, workflow, rendering and migration behavior.
+MongoDB owns live content and persisted references. Rendered HTML is evidence,
+not an authoritative editing source.
 
-## 4. Runtime Topology
+## 3. Project Summary
 
-```mermaid
-flowchart LR
-    Admin["Admin browser\nhttps://localhost:7152"] --> AF["AdminSite-Frontend\nBlazor Server"]
-    User["Public browser\nhttps://localhost:7113"] --> US["UserSite\nBlazor Server"]
-    AF --> API["AdminSite-API\nhttps://localhost:6969"]
-    US --> API
-    API --> MDB[("MongoDB\nFullProjectDb-UIWEB-3")]
-    API --> R2["Cloudflare R2\ncurrent binary storage"]
-    AF --> SC["SharedComponents"]
-    US --> SC
-    API --> CT["Contracts"]
-    AF --> CT
-    US --> CT
-    SC --> CT
-```
+UIWEB is a .NET 8, Blazor Server and MongoDB-backed CMS with:
 
-## 5. Main Projects
+- AdminSite-API;
+- AdminSite-Frontend;
+- UserSite;
+- SharedComponents;
+- shared Contracts;
+- Page, Section and Block authoring;
+- Content workflow;
+- governed Forms and submissions;
+- Resource Library and asset governance;
+- dynamic roles and permissions;
+- source-owned EN/VI/CN UI catalogs;
+- Theme, Branding, Footer, Social and global actions;
+- separate draft and published page graphs.
 
-| Folder | Responsibility |
-| --- | --- |
-| `AdminSite-API` | REST API, MongoDB models and services, authentication, authorization, workflows, uploads, public page assembly. |
-| `AdminSite-Frontend` | Administrative dashboard, Page Builder, editors, Content/Form/Resource management, preview iframe and authoring overlays. |
-| `UserSite` | Public navigation, page/content routes, language state, API client and public form submission. |
-| `SharedComponents` | One shared Page/Section/Block renderer used by UserSite and Admin Preview, plus shared CSS and widget JavaScript. |
-| `Contracts` | Shared Admin, Public, Auth, Form, Global and API DTO boundaries. |
-| `Tool/Tool For Demo Import` | User-operated one-click demo database importer. |
-| `Tool/Tools For Page Graph Clone Testing` | Explicit page graph clone coverage tool. |
-| `AI-Tools` | Developer/AI maintenance scripts, audits and one-off migration helpers; not ordinary user tooling. |
+Cloudflare R2 currently stores uploaded bytes. MongoDB stores metadata,
+relationships and content documents.
 
-## 6. Core Product Principles
+## 4. Non-Negotiable Product Contracts
 
-These decisions must not be casually reversed:
+1. Draft and published graphs remain separate.
+2. `StableId` is logical graph identity; Mongo `_id` is a document instance.
+3. Admin Preview and UserSite share public contracts and renderers.
+4. Admin bearer tokens never return to browser localStorage.
+5. API authorization is authoritative; hidden UI is not security.
+6. `AdminAdmin` is the only protected system role.
+7. Content status and ownership transitions remain server-governed.
+8. A Form Definition owns exactly one design.
+9. FormBlock stores a Form Definition reference plus Block geometry/scale; it
+   does not copy the Form schema or own another design.
+10. Form layouts are Standard, Split Panel and CTA. Explicit field rows are
+    independent from the outer layout.
+11. Modal, embedded, Admin preview and design preview use the same Form renderer.
+12. FormBlock scales proportionally between 50% and 100%.
+13. Direct Upload and Managed Resource remain different ownership paths.
+14. Asset deletion remains usage-aware and server-authoritative.
+15. Arrange Blocks is Section-scoped.
+16. Container ownership cannot be dissolved through Group/Ungroup/detach.
+17. Block content and Block geometry have explicit control ownership.
+18. Ordinary migration work does not introduce raw HTML, hidden code or scoped
+    CSS.
+19. HTMLSection remains valid for bespoke scenes that do not yet have an honest
+    reusable data contract.
+20. New Block types require repeated, governable product need.
+21. Source catalogs remain authoritative for Admin UI text.
+22. Immediate request feedback and persistent notifications are separate
+    systems.
+23. Real Page migration remains one Section at a time with explicit approval.
+24. The proposed user-facing name is **Split Section**. Existing
+    `ColumnsSection` code and persisted discriminators remain compatible until a
+    deliberate rename decision is made.
 
-1. **Draft and published data are separate.** Admin edits draft records. UserSite reads published records.
-2. **StableId is graph identity.** Mongo `_id` identifies a document instance; `StableId` connects draft, published, revision and clone meaning.
-3. **Admin Preview and UserSite share renderers.** Fix parity in shared rendering or data mapping, not with isolated visual patches.
-4. **Content Type Behavior is authoritative.** Page, FileResource, VideoResource, ImageResource and Gallery govern editor fields, validation, preview and LibrarySection behavior.
-5. **Direct Upload and Managed Resource are different paths.** Not every upload belongs in Resource Library.
-6. **Resource deletion is usage-aware and server-authoritative.** The UI hint is not the safeguard.
-7. **Deleted Form fields stay deleted.** Submission handling is definition-driven; JavaScript must not invent fields.
-8. **Form Key and Field Key are identities, not labels.** Saved keys are locked; labels remain editable.
-9. **Viewer cannot access Resource Library or Form Management.** Writer can view Resource Library. Backend permissions remain authoritative.
-10. **HTMLSection is transitional, not forbidden.** Keep advanced visual-only compositions until Blocks can reproduce them safely.
-11. **New Block types are gated.** Add one only when the existing Blocks and layout contracts cannot represent the required data or interaction.
-12. **Containers are layout structures.** The current UX correction direction makes them invisible by default and governed through Collection/Composition behavior.
+## 5. Completed And Historical Programs
 
-## 7. Current State Snapshot
+Completed programs include:
 
-MongoDB inventory captured on 2026-07-02:
+- Library and Resource Management;
+- Content workflow and dynamic roles;
+- serializer-backed Page graph clone profiles and granular publish diff;
+- FormOverhaul-3;
+- Form Design v2 implementation;
+- BlockOverhaul-3 and the accepted Block editor redesign;
+- saved Section presets;
+- Language Health and EN/VI/CN catalog parity;
+- immediate Admin feedback abstraction;
+- HttpOnly Admin authentication;
+- Theme font controls and UserSite header behavior.
 
-| Collection | Count |
-| --- | ---: |
-| `pages_draft` | 33 |
-| `pages_published` | 32 |
-| `sections_draft` | 72 |
-| `sections_published` | 69 |
-| `blocks_draft` | 23 |
-| `blocks_published` | 5 |
-| `canvas_section_presets` | 0 |
+Completed execution detail belongs in [History](History/README.md), not in the
+active roadmap.
 
-Draft Sections include 22 HTMLSections and 2 CanvasSections. Draft Blocks are concentrated in `solutions`, `solutions/custom-brokerage`, `insights`, and the `test-2` sandbox. This confirms that the Block system is architecturally advanced but has not yet replaced most real page HTML.
+## 6. Current Development Order
 
-The `test-2` Page is the current safe Block migration sandbox. Do not use bulk automatic page conversion. Work one reference Section at a time and compare desktop and mobile behavior.
+Excluding production cutover and company-local storage work that the owner may
+perform separately, the agreed development order is:
 
-## 8. Current Development Focus
+1. Upload Protection.
+2. Asset Lifecycle Reliability and a bounded clone coverage audit.
+3. Log Overhaul foundation.
+4. Page Revision History.
+5. Targeted structural refactoring for Section/Block work.
+6. Split Section behavior redesign and naming decision.
+7. Block Authoring Refinement.
+8. Structural-refactoring consolidation.
+9. Website Activity Overhaul.
+10. Richer data-backed visual capabilities.
+11. Persistent Notification Platform.
 
-The active feature is **BlockOverhaul-3**.
+Parked unless a concrete requirement appears:
 
-Implemented in the current dirty worktree, pending full closure:
+- Advanced Form Platform. One design per Form remains a rule.
+- Advanced Translation Platform.
+- multiple Form designs;
+- automatic translation;
+- database UI-text editing;
+- PWA/push notification delivery;
+- 2FA;
+- Redis as an infrastructure goal by itself.
 
-- unified Block contracts;
-- responsive composition contracts;
-- shared rendering foundation;
-- responsive authoring controls;
-- appearance and shape system;
-- expanded Container layouts;
-- diagram decorations and connectors;
-- animation contracts and renderer;
-- media/functional Block completion;
-- Canvas authoring commands;
-- preset governance.
+See [04-FEATURE-STATUS-AND-ROADMAP.md](04-FEATURE-STATUS-AND-ROADMAP.md) for
+scope and dependencies.
 
-Still remaining from the original 17 phases:
+## 7. Immediate Known Work
 
-- reference preset library;
-- strict new Block type gate audit;
-- page-by-page HTML migration;
-- responsive/accessibility/workflow compatibility verification;
-- legacy cleanup and documentation.
+- Harden upload intake with quarantine, malware scanning and archive-bomb
+  protection.
+- Ensure revision snapshots cannot restore assets that cleanup already removed.
+- Add retry, visibility and reconciliation for failed asset deletion.
+- Replace casual log deletion with retention/archive/export governance.
+- Build Page revision inspection, preview and restore UI on the existing backend.
+- Complete Form Design deployment observation, device/accessibility QA and
+  eventual v1 compatibility cleanup.
+- Continue selected HTML-to-Block migration in Test-3.
+- Preserve production-security requirements even when they are executed
+  manually outside the active development order.
 
-A second UX correction plan was agreed after real use showed that the Block Editor exposed too many raw controls. That full plan and its per-phase implementation status are in [07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md](07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md); underlying contracts alone are never evidence of UX completion.
+## 8. Development And Editing Rules
 
-As of 2026-07-06, the earlier UX correction phases and the newer ten-phase Block Editor redesign are implemented in the active worktree. The redesign now uses Preview/Edit as the only global modes, launches Arrange Blocks from a specific Section's Blocks tab, scopes the Block list to that Section, persists governed Container presets/slots, enforces containment, and gives Container deletion an explicit recursive warning. Phase 9 was completed through the user-approved no-data path: no bulk Test-2 migration was run because Test-2 contains no migration-worthy content, while legacy Containers remain compatible through `legacy-freeform`. See [08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md](08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md) for the phase-by-phase acceptance record.
+- If the user says “do not code,” investigate and discuss only.
+- Follow an agreed phase or program order.
+- Do not touch SVN, IIS publish folders or live data without explicit scope.
+- Do not use a publish directory as source.
+- Never revert unrelated dirty changes.
+- Preserve BSON/JSON compatibility during refactoring and renaming.
+- Prefer shared renderers and domain services over duplicate fixes.
+- Explain persistence and migration consequences before broad contract changes.
+- Keep user-operated tools under `Tool`; keep disposable audits under
+  `AI-Tools`.
+- Do not put secrets or credentials in documentation.
+- Update Markdown only when explicitly requested.
 
-## 9. User Collaboration Rules
+## 9. Definition Of Complete
 
-- If the user says "do not code," investigate and discuss only.
-- Follow plans in phase order. Do not jump ahead because a later task looks easier.
-- For database-based visual migration, work slowly, one Page and one Section at a time.
-- Never replace the original reference Section while prototyping; use the designated test Page.
-- Do not touch copied repos or the SVN mirror unless explicitly asked.
-- Do not revert unrelated dirty changes.
-- Explain architecture implications before broad model, DTO or workflow changes.
-- Prefer a real service/file split over partial-class cosmetic splitting.
-- Keep operational tools under `Tool`; keep disposable maintenance scripts under `AI-Tools`.
+A program is complete only when its relevant layers are covered:
 
-## 10. Known Warnings
+1. Contract/model and old-document compatibility.
+2. API validation, authorization and failure semantics.
+3. Admin UI loading, focus, busy, empty and error states.
+4. Shared renderer/UserSite parity where public.
+5. Publish/reset/revision/clone/preset/import implications.
+6. Asset lifecycle and cleanup implications.
+7. EN/VI/CN labels where Admin UI changes.
+8. Desktop/tablet/mobile, keyboard and reduced-motion behavior.
+9. Focused automated/static checks or an explicit manual-QA boundary.
+10. Current handoff and roadmap state when documentation is requested.
 
-- `Models.cs`, `AdminDtos.cs`, large Razor editors and `sc-components.css` still need structural splitting.
-- Admin authentication now uses an encrypted Secure/HttpOnly/SameSite cookie; the API JWT is held only inside the protected server ticket and is never read by browser JavaScript. Production must configure a persistent protected Data Protection key ring.
-- R2 secrets and JWT secrets must not be committed in real deployment configuration.
-- Antivirus, quarantine and archive-bomb scanning are not implemented.
-- Audit/Login Log Overhaul is deliberately deferred and must not be mixed into unrelated work.
-- No general CI pipeline or Dockerfile currently defines automated delivery.
-- Physical phone rendering can differ from a width-only iframe preview.
-- The old resource and library markdown contains superseded UI details, especially multilingual resource names and old two-pane layouts.
+## 10. Fast Handoff Prompt
 
-## 11. Definition Of "Complete"
-
-A feature is not complete merely because it builds. Completion requires:
-
-1. API validation and authorization.
-2. Admin UI behavior and error states.
-3. Shared renderer or UserSite behavior where applicable.
-4. Draft/publish/reset/clone compatibility.
-5. MongoDB old-document compatibility.
-6. English/Vietnamese UI verification where touched.
-7. Desktop/tablet/mobile verification where visual.
-8. Focused tests or an explicit statement that testing remains manual.
-9. Updated source-of-truth documentation.
+> Work only in `F:\0-Project\Test1\0-AdminSite-CompleteProject`. Read
+> `Docs/ProjectHandoff/00-START-HERE.md` and
+> `04-FEATURE-STATUS-AND-ROADMAP.md`, then inspect `git status --short`.
+> Preserve active and unrelated user changes. Completed phase plans are under
+> `Docs/ProjectHandoff/History` and must not be restarted as active work. The
+> current development order begins with Upload Protection, then Asset Lifecycle
+> Reliability, Log Overhaul and Page Revision History. Do not touch live
+> MongoDB, SVN or IIS unless explicitly requested.

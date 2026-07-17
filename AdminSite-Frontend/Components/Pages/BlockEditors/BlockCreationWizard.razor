@@ -1,4 +1,8 @@
 @using Contracts.Admin
+@using Contracts.Forms
+@using Contracts.Public
+@using SharedComponents
+@inject AdminFormSubmissionService FormService
 
 @if (Open)
 {
@@ -53,6 +57,37 @@
                 <i class="fas @SelectedTypeMeta.Icon"></i>
                 <span><strong>@T(SelectedTypeMeta.LabelKey)</strong><small>@T(SelectedTypeMeta.DescriptionKey)</small></span>
             </div>
+            @if (_selectedType == "form")
+            {
+                <div class="block-create-wizard__form-definition">
+                    <label class="form-filter">
+                        <span>@T("FormDefinition")</span>
+                        <select class="form-control" value="@_selectedFormDefinitionId" disabled="@(Busy || _loadingFormDefinitions)" @onchange="SelectFormDefinition">
+                            <option value="">@T("SelectActiveFormDefinition")</option>
+                            @foreach (var definition in _formDefinitions)
+                            {
+                                <option value="@definition.Id">@DefinitionName(definition)</option>
+                            }
+                        </select>
+                    </label>
+                    @if (_loadingFormDefinitions)
+                    {
+                        <div class="admin-data-empty">@T("Loading")</div>
+                    }
+                    else if (SelectedFormDefinition is null)
+                    {
+                        <div class="admin-data-empty">@T("SelectActiveFormDefinition")</div>
+                    }
+                    else
+                    {
+                        <div class="block-create-wizard__form-preview">
+                            <PublicFormRenderer Block="@FormPreviewBlock" Lang="@AdminLanguage" Context="preview" PreviewOnly="true" />
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
             <div class="block-create-wizard__variant-grid">
                 @foreach (var variant in CurrentVariants)
                 {
@@ -86,11 +121,12 @@
                     </button>
                 }
             </div>
+            }
             <footer class="block-create-wizard__actions">
                 <button type="button" class="btn-admin btn-ghost" disabled="@Busy" @onclick="Back">
                     <i class="fas fa-arrow-left"></i> @T("Back")
                 </button>
-                <button type="button" class="btn-admin btn-primary" disabled="@(Busy || string.IsNullOrWhiteSpace(_selectedVariantKey))" @onclick="ConfirmAsync">
+                <button type="button" class="btn-admin btn-primary" disabled="@(!CanConfirm)" @onclick="ConfirmAsync">
                     <i class="fas @(Busy ? "fa-spinner fa-spin" : "fa-plus")"></i>
                     @T(Busy ? "CreatingBlock" : "CreateBlock")
                 </button>
@@ -111,6 +147,9 @@
     private int _step = 1;
     private string _selectedType = "text";
     private string? _selectedVariantKey;
+    private string? _selectedFormDefinitionId;
+    private List<FormDefinitionModel> _formDefinitions = new();
+    private bool _loadingFormDefinitions;
     private bool _wasOpen;
 
     private sealed record TypeMeta(string Key, string LabelKey, string Icon, string DescriptionKey);
@@ -167,6 +206,7 @@
             _step = 1;
             _selectedType = FirstAvailableType;
             _selectedVariantKey = null;
+            _selectedFormDefinitionId = null;
         }
         else if (Open && !IsAllowed(_selectedType))
         {
@@ -177,17 +217,21 @@
         _wasOpen = Open;
     }
 
-    private void SelectType(string type)
+    private async Task SelectType(string type)
     {
         _selectedType = type;
-        _selectedVariantKey = BlockStarterVariantCatalog.ForType(type)[0].Key;
+        _selectedVariantKey = type == "form" ? "definition" : BlockStarterVariantCatalog.ForType(type)[0].Key;
+        _selectedFormDefinitionId = null;
         _step = 2;
+        if (type == "form")
+            await LoadFormDefinitionsAsync();
     }
 
     private void Back()
     {
         _step = 1;
         _selectedVariantKey = null;
+        _selectedFormDefinitionId = null;
     }
 
     private async Task CancelAsync()
@@ -198,10 +242,94 @@
 
     private async Task ConfirmAsync()
     {
-        if (Busy || string.IsNullOrWhiteSpace(_selectedVariantKey))
+        if (!CanConfirm)
             return;
-        await Confirmed.InvokeAsync(new BlockStarterSelection(_selectedType, _selectedVariantKey));
+        await Confirmed.InvokeAsync(new BlockStarterSelection(_selectedType, _selectedVariantKey!, _selectedFormDefinitionId));
     }
+
+    private bool CanConfirm => !Busy &&
+        !string.IsNullOrWhiteSpace(_selectedVariantKey) &&
+        (_selectedType != "form" || !string.IsNullOrWhiteSpace(_selectedFormDefinitionId));
+
+    private FormDefinitionModel? SelectedFormDefinition => _formDefinitions.FirstOrDefault(item => item.Id == _selectedFormDefinitionId);
+
+    private async Task LoadFormDefinitionsAsync()
+    {
+        _loadingFormDefinitions = true;
+        var result = await FormService.GetDefinitionsAsync();
+        _formDefinitions = result.Success
+            ? (result.Data ?? new()).Where(definition => definition.Active).OrderBy(DefinitionName).ToList()
+            : new();
+        _selectedFormDefinitionId = _formDefinitions.FirstOrDefault()?.Id;
+        _loadingFormDefinitions = false;
+    }
+
+    private void SelectFormDefinition(ChangeEventArgs args) => _selectedFormDefinitionId = args.Value?.ToString();
+
+    private string DefinitionName(FormDefinitionModel definition) =>
+        definition.Name.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : definition.Name.GetValueOrDefault("en") is { Length: > 0 } english
+                ? english
+                : definition.Key;
+
+    private PublicFormBlockDto FormPreviewBlock => SelectedFormDefinition is not { } definition
+        ? new PublicFormBlockDto { Id = "form-create-preview", Type = "form", Visible = true }
+        : new PublicFormBlockDto
+        {
+            Id = $"form-create-preview-{definition.Id}",
+            Type = "form",
+            Visible = true,
+            FormDefinitionId = definition.Id,
+            FormDefinitionAvailable = true,
+            Name = definition.Name,
+            Introduction = definition.Introduction,
+            InformationItems = definition.InformationItems,
+            AuxiliaryActions = definition.AuxiliaryActions,
+            SubmitButtonLabel = definition.SubmitButtonLabel,
+            Design = MapDesign(definition.Design),
+            Fields = definition.Fields.OrderBy(field => field.Order).Select(field => new PublicFormFieldDto
+            {
+                Name = field.Key,
+                Type = field.Type,
+                Label = field.Label,
+                Placeholder = field.Placeholder,
+                Required = field.Required,
+                MaxLength = field.MaxLength,
+                InputBoxSize = field.InputBoxSize,
+                Order = field.Order,
+                Options = field.Options.Select(option => new PublicFormFieldOptionDto
+                {
+                    Value = option.Value,
+                    Label = option.Label,
+                    Order = option.Order
+                }).ToList()
+            }).ToList()
+        };
+
+    private static FormDesignSettingsDto MapDesign(FormDesignSettingsModel design) => new()
+    {
+        UseThemeDefaults = design.UseThemeDefaults,
+        SchemaVersion = design.SchemaVersion,
+        Shape = (FormDesignShape)design.Shape,
+        WidthPx = design.WidthPx,
+        CalculatedHeightPx = design.CalculatedHeightPx,
+        BackgroundMode = (FormDesignBackgroundMode)design.BackgroundMode,
+        BackgroundColor = design.BackgroundColor,
+        TextColor = design.TextColor,
+        AccentColor = design.AccentColor,
+        BorderColor = design.BorderColor,
+        BorderWidthPx = design.BorderWidthPx,
+        BorderRadiusPx = design.BorderRadiusPx,
+        Shadow = design.Shadow,
+        PaddingPx = design.PaddingPx,
+        FieldGapPx = design.FieldGapPx,
+        TextAlign = (FormDesignTextAlign)design.TextAlign,
+        LabelMode = (FormLabelMode)design.LabelMode,
+        ButtonStyle = design.ButtonStyle,
+        ButtonWidth = (FormDesignButtonWidth)design.ButtonWidth,
+        V2 = design.V2
+    };
 
     private string ContainerPresetName(BlockStarterVariantDefinition variant) =>
         ContainerPresetCatalog.ForExisting(variant.ContainerPresetKey).DisplayName;

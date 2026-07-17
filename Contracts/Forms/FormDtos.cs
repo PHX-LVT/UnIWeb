@@ -1,15 +1,163 @@
 namespace Contracts.Forms;
 
-public enum FormDisplayMode
-{
-    Modal,
-    Embedded
-}
-
-public enum FormLayout
+public enum FormDesignShape
 {
     Stacked,
-    TwoColumns
+    TwoColumns,
+    Cta
+}
+
+public enum FormLabelMode
+{
+    Visible,
+    InsideInputs
+}
+
+public enum FormDesignBackgroundMode
+{
+    Transparent,
+    Solid
+}
+
+public enum FormDesignTextAlign
+{
+    Left,
+    Center
+}
+
+public enum FormDesignButtonWidth
+{
+    Content,
+    Full
+}
+
+public enum FormOuterLayout
+{
+    Standard,
+    SplitPanel,
+    Cta
+}
+
+public enum FormSubmitLayout
+{
+    Left,
+    Center,
+    Right,
+    Full
+}
+
+public enum FormActionTargetType
+{
+    InternalLink,
+    ExternalUrl,
+    ManagedResource,
+    Phone,
+    Email
+}
+
+public enum FormAuxiliaryActionStyle
+{
+    Filled,
+    Outline,
+    Ghost,
+    Theme
+}
+
+public enum FormAuxiliaryActionPlacement
+{
+    InformationPanel,
+    BelowFields
+}
+
+public enum FormDesignCompatibilityMode
+{
+    V1Only,
+    DualReadV1Write,
+    DualReadV2Write
+}
+
+public class FormFieldRowDto
+{
+    public string Id { get; set; } = string.Empty;
+    public int Order { get; set; }
+    public List<string> FieldKeys { get; set; } = new();
+}
+
+public class FormActionTargetDto
+{
+    public FormActionTargetType Type { get; set; } = FormActionTargetType.InternalLink;
+    public string? PageId { get; set; }
+    public string? Path { get; set; }
+    public string? Url { get; set; }
+    public string? ResourceId { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+
+    // Public/API projections may resolve a governed target without persisting the URL.
+    public string? ResolvedHref { get; set; }
+}
+
+public class FormInformationItemDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Icon { get; set; } = string.Empty;
+    public Dictionary<string, string> Text { get; set; } = new();
+    public FormActionTargetDto? Target { get; set; }
+    public int Order { get; set; }
+}
+
+public class FormAuxiliaryActionDto
+{
+    public string Id { get; set; } = string.Empty;
+    public Dictionary<string, string> Label { get; set; } = new();
+    public FormActionTargetDto Target { get; set; } = new();
+    public int Order { get; set; }
+}
+
+public class FormAuxiliaryActionLayoutDto
+{
+    public string ActionId { get; set; } = string.Empty;
+    public FormAuxiliaryActionStyle Style { get; set; } = FormAuxiliaryActionStyle.Outline;
+    public FormAuxiliaryActionPlacement Placement { get; set; } = FormAuxiliaryActionPlacement.BelowFields;
+}
+
+public class FormDesignV2SettingsDto
+{
+    public FormOuterLayout OuterLayout { get; set; } = FormOuterLayout.Standard;
+    public List<FormFieldRowDto> FieldRows { get; set; } = new();
+    public string InformationBackgroundColor { get; set; } = "#0f2740";
+    public string InformationTextColor { get; set; } = "#ffffff";
+    public string FormBackgroundColor { get; set; } = "#ffffff";
+    public string FormTextColor { get; set; } = "#0f172a";
+    public int SplitPanelPercent { get; set; } = 40;
+    public FormSubmitLayout SubmitLayout { get; set; } = FormSubmitLayout.Full;
+    public List<FormAuxiliaryActionLayoutDto> AuxiliaryActionLayouts { get; set; } = new();
+}
+
+public class FormDesignSettingsDto
+{
+    // False is the backward-compatible deserialization default for forms saved
+    // before Theme inheritance existed. New forms opt in through CreateDefault.
+    public bool UseThemeDefaults { get; set; }
+    public int SchemaVersion { get; set; } = FormDesignPolicy.CurrentSchemaVersion;
+    public FormDesignShape Shape { get; set; } = FormDesignShape.Stacked;
+    public int WidthPx { get; set; } = FormDesignPolicy.StackedDefaultWidthPx;
+    public int CalculatedHeightPx { get; set; } = FormDesignPolicy.MinimumHeightPx;
+    public FormDesignBackgroundMode BackgroundMode { get; set; } = FormDesignBackgroundMode.Solid;
+    public string BackgroundColor { get; set; } = "#ffffff";
+    public string TextColor { get; set; } = "#0f172a";
+    public string AccentColor { get; set; } = "#1d4ed8";
+    public string BorderColor { get; set; } = "#dbe3ef";
+    public int BorderWidthPx { get; set; } = 1;
+    public int BorderRadiusPx { get; set; } = 16;
+    public string Shadow { get; set; } = "small";
+    public int PaddingPx { get; set; } = 32;
+    public int FieldGapPx { get; set; } = 16;
+    public FormDesignTextAlign TextAlign { get; set; } = FormDesignTextAlign.Left;
+    public FormLabelMode LabelMode { get; set; } = FormLabelMode.Visible;
+    public string ButtonStyle { get; set; } = "filled";
+    public FormDesignButtonWidth ButtonWidth { get; set; } = FormDesignButtonWidth.Full;
+    public FormDesignV2SettingsDto? V2 { get; set; }
 }
 
 public enum FormSubmissionStatus
@@ -49,8 +197,9 @@ public class FormDefinitionResponse
     public Dictionary<string, string> Name { get; set; } = new();
     public Dictionary<string, string> Introduction { get; set; } = new();
     public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
-    public FormDisplayMode DisplayMode { get; set; }
-    public FormLayout Layout { get; set; } = FormLayout.Stacked;
+    public List<FormInformationItemDto> InformationItems { get; set; } = new();
+    public List<FormAuxiliaryActionDto> AuxiliaryActions { get; set; } = new();
+    public FormDesignSettingsDto Design { get; set; } = new();
     public bool Active { get; set; }
     public List<FormFieldDefinitionDto> Fields { get; set; } = new();
     public DateTime CreatedAt { get; set; }
@@ -165,10 +314,25 @@ public class FormDefinitionUpsertRequest
     public Dictionary<string, string> Name { get; set; } = new();
     public Dictionary<string, string> Introduction { get; set; } = new();
     public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
-    public FormDisplayMode DisplayMode { get; set; } = FormDisplayMode.Embedded;
-    public FormLayout Layout { get; set; } = FormLayout.Stacked;
+    public List<FormInformationItemDto> InformationItems { get; set; } = new();
+    public List<FormAuxiliaryActionDto> AuxiliaryActions { get; set; } = new();
+    public FormDesignSettingsDto Design { get; set; } = new();
     public bool Active { get; set; } = true;
     public List<FormFieldDefinitionDto> Fields { get; set; } = new();
+}
+
+public class FormDefinitionOrderResponse
+{
+    public int Revision { get; set; }
+    public List<string> DefinitionIds { get; set; } = new();
+    public bool PersistentOrderAvailable { get; set; }
+    public bool WritesEnabled { get; set; }
+}
+
+public class FormDefinitionReorderRequest
+{
+    public int ExpectedRevision { get; set; }
+    public List<string> DefinitionIds { get; set; } = new();
 }
 
 public class PublicFormSubmitRequest

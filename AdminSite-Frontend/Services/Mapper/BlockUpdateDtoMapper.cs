@@ -72,16 +72,7 @@ public static class BlockUpdateDtoMapper
             "form" => new FormBlockUpdateDto
             {
                 FormDefinitionId = block.FormDefinitionId,
-                SubmitButtonLabel = block.SubmitButtonLabel ?? new(),
-                Fields = block.Fields?.Select(f => new FormFieldDto
-                {
-                    Name = f.Name ?? f.Id,
-                    Type = f.FieldType ?? "text",
-                    Label = f.Label ?? new(),
-                    Required = f.Required,
-                    Options = f.Options,
-                    Order = f.Order
-                }).ToList() ?? new(),
+                FormScale = block.FormScale,
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -168,6 +159,9 @@ public static class BlockUpdateDtoMapper
         };
 
         dto.Visible = block.Visible;
+        dto.EditorLabel = block.EditorLabel is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(block.EditorLabel);
         dto.Layout = layout;
         dto.BlockZone = NormalizeBlockZone(block.BlockZone);
         dto.PositionMode = NormalizePositionMode(block.PositionMode);

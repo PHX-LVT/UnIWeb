@@ -35,7 +35,7 @@ public sealed class ContentWorkflowPolicy
         {
             "my" => items.Where(item =>
                 IsOwner(user, actorId, item) &&
-                item.Status is not ContentStatus.Deleted and not ContentStatus.Archived),
+                IsMyContentStatus(item)),
 
             "submitted" => items.Where(item =>
                 item.Status == ContentStatus.Submitted &&
@@ -151,6 +151,12 @@ public sealed class ContentWorkflowPolicy
     public static bool IsOwner(ContentItem item, string actorId) =>
         !string.IsNullOrWhiteSpace(actorId) &&
         string.Equals(item.AuthorId, actorId, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsMyContentStatus(ContentItem item) =>
+        item.Status is ContentStatus.Draft or
+            ContentStatus.Submitted or
+            ContentStatus.Rejected or
+            ContentStatus.Published;
 
     private static bool IsOwner(ClaimsPrincipal user, string actorId, ContentItem item)
     {

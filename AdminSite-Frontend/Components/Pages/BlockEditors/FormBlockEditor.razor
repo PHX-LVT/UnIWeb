@@ -66,8 +66,6 @@
             var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new FormBlockUpdateDto
             {
                 FormDefinitionId = _formDefinitionId,
-                Fields = new(),
-                SubmitButtonLabel = new(),
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });

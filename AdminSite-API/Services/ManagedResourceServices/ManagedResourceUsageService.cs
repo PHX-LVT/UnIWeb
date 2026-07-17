@@ -41,6 +41,7 @@ namespace FullProject.Services
             references.AddRange(await GetBlockUsageAsync(_context.BlocksPublished, resource, "Block Published"));
             references.AddRange(await GetSectionPresetUsageAsync(resource));
             references.AddRange(await GetBrandingUsageAsync(resource));
+            references.AddRange(await GetFormDefinitionUsageAsync(resource));
 
             return new ManagedResourceUsageDto
             {
@@ -62,6 +63,29 @@ namespace FullProject.Services
             var filter = ManagedResourceReferenceHelper.ContentFilter(resource, resource.Url);
             var items = await collection.Find(filter).ToListAsync();
             return items.SelectMany(item => BuildContentReferences(item, resource, source)).ToList();
+        }
+
+        private async Task<List<ManagedResourceUsageReferenceDto>> GetFormDefinitionUsageAsync(ManagedResource resource)
+        {
+            var filter = Builders<FormDefinition>.Filter.Eq("AuxiliaryActions.Target.ResourceId", resource.Id);
+            var definitions = await _context.FormDefinitions.Find(filter).ToListAsync();
+            var references = new List<ManagedResourceUsageReferenceDto>();
+            foreach (var definition in definitions)
+            {
+                references.AddRange((definition.AuxiliaryActions ?? new())
+                    .Where(action => action.Target?.Type == Contracts.Forms.FormActionTargetType.ManagedResource &&
+                                     string.Equals(action.Target.ResourceId, resource.Id, StringComparison.Ordinal))
+                    .Select(action => UsageRef(
+                        resource,
+                        "Form Definition",
+                        definition.Id,
+                        definition.Id,
+                        FirstText(definition.Name),
+                        "Auxiliary action",
+                        FirstText(action.Label),
+                        definition.UpdatedAt)));
+            }
+            return references;
         }
 
         private async Task<List<ManagedResourceUsageReferenceDto>> GetContentRevisionUsageAsync(ManagedResource resource)

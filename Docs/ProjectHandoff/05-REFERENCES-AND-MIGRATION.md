@@ -1,264 +1,297 @@
 # References, Demo Sources And Migration
 
-## 1. Active And Reference Paths
+Last reconciled: **2026-07-16**
 
-| Purpose | Path |
+## 1. Purpose
+
+This document explains which projects and Pages are references, which are test sandboxes, how HTMLSection migration must proceed and which visual differences are intentional. It prevents a future session from editing the wrong copy or treating a test experiment as production content.
+
+## 2. Authoritative Paths
+
+| Purpose | Path | Rule |
+| --- | --- | --- |
+| Active source | `F:\0-Project\Test1\0-AdminSite-CompleteProject` | Make implementation changes here unless explicitly told otherwise. |
+| SVN handoff copy | `F:\0-Project\Test1\ProjectInSVN\UIWEB` | Synchronize only when explicitly requested. Exclude Git, `bin`, `obj`, `.codex-build`, AI caches and unrelated tool output. |
+| Assets | `F:\0-Project\Test1\0-AdminSite-CompleteProject\Assets` | Source for approved branding/login assets. |
+| Project docs | `Docs\ProjectHandoff` | Primary handoff pack. Begin at `00-START-HERE.md`. |
+| Demo import tool | `Tool\Tool For Demo Import` | User-operated import utility; never run it automatically. |
+| Historical maintenance scripts | `AI-Tools\phase0` | Historical, database-specific scripts. Do not run against the current database. |
+
+The IIS publish folders and SVN mirror are not authoritative development worktrees.
+
+## 3. Demo And Live References
+
+### 3.1 Demo1
+
+Demo1 is the earliest broad content/behavior reference. It is useful for intent, but newer data and Demo3 take priority where the implementations differ.
+
+### 3.2 Demo2 / ContractMaster
+
+Demo2 and ContractMaster were inspected for the video-backed login presentation and other visual references. They are reference implementations, not dependencies to copy wholesale.
+
+### 3.3 Demo3
+
+Demo3 is the strongest visual reference for the logistics public site. In particular:
+
+- `https://ui.eztec.id.vn/solution` was used for the “How Solution Work Together” composition;
+- the reference has a dark navy grid background, left-side eyebrow/heading/bullets and five icons in a right semicircle;
+- the migration intentionally permits a plain dark navy background;
+- eyebrow and heading are plain Text content, not special HTML;
+- the three benefit rows may be plain text rather than exact yellow-arrow bullets;
+- the icon choices and semicircle formation are the important right-side behavior;
+- icon background styling may use the product's governed style rather than pixel-copying Demo3.
+
+### 3.4 Deployed Test Domains
+
+| App | URL |
 | --- | --- |
-| Active project | `F:\0-Project\Test1\0-AdminSite-CompleteProject` |
-| Project-wide historical markdown | `F:\0-Project\0-0-Markdown` |
-| Company SVN working copy | `F:\0-Project\Test1\ProjectInSVN\UIWEB` |
-| Demo1 | `F:\Unilogistics.Web` |
-| Demo3 | `F:\0-Project\3-WebUI` |
-| Auth/user workflow reference | `F:\0-Project\1-ContractMaster 2\ContractMaster` or the locally available ContractMaster copy |
-| Live visual reference | `https://ui.eztec.id.vn/` |
+| UserSite | `https://ui.eztec.id.vn` |
+| AdminSite | `https://adminui.eztec.id.vn` |
+| API | `https://apiui.eztec.id.vn` |
 
-Never edit reference demos when implementing UIWEB. Never treat the SVN working copy as the active Git workspace unless explicitly asked to synchronize it.
+These domains are deployment targets and live diagnostics, not sources to scrape back into the repository.
 
-## 2. Demo Roles
+## 4. Test Page Ownership
 
-### 2.1 Demo1: Earliest Broad Reference
+### 4.1 Test-2
 
-Demo1 is the earliest page/demo reference. It informed:
+Test-2 is the historical BlockOverhaul QA page. Existing Block and Container examples there may be incomplete, synthetic or deliberately awkward. Earlier documents that say Blocks exist only on Test-2 describe the beginning of BlockOverhaul and are no longer globally true.
 
-- Home/Index;
-- Insights and Insight detail;
-- Industry;
-- Technology;
-- About;
-- Contact;
-- Shareholder Relations;
-- Solution detail.
+Use Test-2 to inspect:
 
-Use it to understand the origin of page content and early section composition. Do not assume its implementation architecture should be copied.
+- legacy Block examples;
+- Container arrangements and layer behavior;
+- old visual/authoring regression cases.
 
-### 2.2 Demo3: Current Visual Reference
+Do not bulk-migrate or “clean up” Test-2 without a specific request.
 
-Demo3 is the current preferred reference for:
+### 4.2 Test-3
 
-- current page composition;
-- desktop/mobile behavior;
-- LibrarySection media interactions;
-- video playlist modal with related videos;
-- image lightbox;
-- downloads/resources;
-- Shareholder Relations;
-- Contact/network layouts;
-- the Solutions integrated-flow composition;
-- overall visual parity.
+Test-3 is the clean HTML-to-Block migration sandbox. It was intentionally created without Sections/content so each migration can be evaluated independently.
 
-When Demo1 and Demo3 disagree visually, confirm with the user; Demo3 usually has priority because it is the current demo.
+Rules:
 
-### 2.3 Demo2 And ContractMaster
+- create the migrated reference as CanvasSection plus governed Blocks;
+- do not use scoped CSS;
+- do not paste custom HTML;
+- use toolbar-configurable settings only;
+- preserve translatable copy in proper content fields;
+- the owner performs final browser/visual verification;
+- do not run unnecessary smoke tests or bulk demo migrations.
 
-The old "Demo2" label was inconsistent across historical notes. Do not use it as a page-design authority.
+## 5. Why The Migration Exists
 
-ContractMaster is a workflow reference for:
+HTMLSection content can reproduce arbitrary visuals quickly, but its text is opaque to the CMS language/content systems and forces non-code editors to manipulate HTML/CSS. The target is not to delete HTML support indiscriminately. The target is to move ordinary repeatable marketing content into governed Sections/Blocks so it is:
 
-- users;
-- roles;
-- sessions;
-- token invalidation/blacklisting concepts;
-- authentication management.
+- editable without code;
+- translatable;
+- responsive through product policies;
+- cloneable/publishable as structured data;
+- safe from layout-breaking input;
+- reusable in saved Section presets.
 
-Its page visuals and architecture are not binding for UIWEB.
+Advanced one-off scenes may remain HTML until a clean reusable capability exists.
 
-### 2.4 Live Site
+## 6. Strict Migration Rules
 
-Useful URLs historically included:
+1. Start from the visual/content requirement, not the old markup.
+2. Try current Section and Block capabilities first.
+3. Use CanvasSection for free composition while ColumnSection is immature.
+4. Store visible wording in translatable content fields.
+5. Never introduce scoped CSS as a shortcut.
+6. Never expose raw code editing to ordinary Admin editors.
+7. Preserve the agreed mobile policy and visual boundary rules.
+8. Add a new Block type only if the capability audit approves a repeated product need.
+9. Migrate one Section at a time; do not mass-convert Pages.
+10. Compare Admin preview and UserSite because both must use shared rendering behavior.
 
-- `https://ui.eztec.id.vn/`
-- `https://ui.eztec.id.vn/share-holder-relations`
-- a Solution detail route under `/solution-detail/...`.
+## 7. One-Section Migration Protocol
 
-Cloudflare or environment availability may block browser inspection. Local demos are more reliable for implementation analysis.
+### Step 1: Capture Intent
 
-## 3. Current Database As Visual Source
+Record:
 
-The current active database is `FullProjectDb-UIWEB-3`.
+- content hierarchy;
+- foreground assets;
+- layout relationships;
+- important responsive behavior;
+- interactions/forms;
+- which details may vary without changing meaning.
 
-Database data owns:
+### Step 2: Capability Decision
 
-- Pages and hierarchy;
-- Section order and content;
-- Blocks and geometry;
-- Theme and global settings;
-- Content Types and records;
-- Form Definitions;
-- Resource metadata and Albums.
+Classify the reference:
 
-Source code owns:
+- **Direct**: existing Section/Blocks express it cleanly;
+- **Composition**: existing Blocks work with a Container/Canvas arrangement;
+- **Needs governed capability**: repeated behavior cannot be expressed without a new safe control;
+- **Retain HTML**: highly bespoke scene with no justified generic capability.
 
-- renderers;
-- validation;
-- CSS and JavaScript;
-- security and workflow rules;
-- importer behavior;
-- UI text catalogs.
+### Step 3: Build In Test-3
 
-Do not assume a Page visual can be reconstructed from source alone. Inspect MongoDB and the corresponding demo.
+- create a clean CanvasSection;
+- use current Block creation presets;
+- use Text/Image/Icon/Button/Form/Container and other governed types as applicable;
+- arrange inside the target Section only;
+- keep names and labels useful for authoring;
+- avoid hidden advanced controls.
 
-## 4. Current HTMLSection Inventory
+### Step 4: Compare
 
-The 2026-07-02 inventory found 22 draft HTMLSections.
+Compare content, hierarchy, spacing, clipping, mobile behavior and editor usability. Pixel identity is required only where the owner explicitly asks for it.
 
-### Insights
+### Step 5: Accept Or Record Gap
 
-- subscription/CTA HTML;
-- Insight detail hero variants;
-- article figure/body/report-download layouts.
+- if accepted, document the stable IDs/data operation needed for the real migration;
+- if a capability is missing, record it in `09-HTML-TO-BLOCK-CAPABILITY-AUDIT.md`;
+- never silently solve a gap with unmanaged HTML/CSS.
 
-### About
+### Step 6: Migrate Real Data Deliberately
 
-- company identity metrics/frame;
-- flags/coverage presentation.
+Use an API/data migration with stable identifiers and rollback awareness. Do not bulk-change unrelated Pages. The owner decides when seed collections are refreshed.
 
-### Contact And Network
+## 8. Current Migration Cases
 
-- hero plus contact card/form;
-- client support cards;
-- global partner flags.
+### 8.1 Solutions: How Solution Work Together
 
-### Technology
+The original first attempt used fabricated Columns + HTML and did not match the reference. The accepted direction is:
 
-- operating-system cards;
-- control timeline and mock table;
-- panel/table compositions;
-- architecture hub diagram;
-- dashboard/gauge/chart scene.
+- CanvasSection;
+- plain dark navy background;
+- TextBlock eyebrow: “HOW SOLUTION WORK TOGETHER”;
+- large white TextBlock heading: “One Integrated Flow. One Trusted Partner” on two lines;
+- three plain benefit rows;
+- right-side five-icon Container/composition in a semicircle;
+- no scoped CSS or HTML.
 
-### Sustainability
+This case validates free Block composition; it is not proof that current ColumnSection is sufficient.
 
-- ESG cards;
-- industrial symbiosis diagram and statistics;
-- case studies;
-- partner/steps/CTA composition.
+### 8.2 Insight: Stay Ahead With U&I Logistics Intelligence
 
-### Industry
+The reference immediately above the final CTA contains a custom-looking subscription Form. It exposed a genuine capability gap: Form Definition governed fields but not the actual embedded/modal design.
 
-- sticky logistics-matter card stack;
-- technology snapshots.
+The original v1 foundation added:
 
-The selector-to-file ownership map is maintained in `Docs/HtmlSectionStyles.md`.
+- one Form Design per Form Definition;
+- Stacked, Two Columns and CTA shape algorithms;
+- handle-based dimensions;
+- shared renderer across modal/embedded/preview;
+- a FormBlock that inherits the definition design and scales as a whole;
+- stable migration identifiers `insight-subscription` and `insight-stay-ahead-subscribe`.
 
-## 5. HTML Migration Classification
+Form Design v2 now replaces automatic CTA packing with explicit field rows and
+the canonical v2 renderer. The historical v1 worktree is archived in
+`History/10-CURRENT-WORKTREE-MANIFEST-2026-07-15.md`.
 
-### Good Early Candidates
+The Insight migration still requires v2 revalidation against current data and
+UserSite output before legacy HTML/CSS is considered removable.
 
-These are generally representable with current Blocks after the authoring UX is fixed:
+### 8.3 Contact Network: Quick Contact Split Form
 
-- ordinary headings, eyebrow, body copy and buttons;
-- static metric rows;
-- basic icon/card grids;
-- simple image/text splits;
-- bullet/check lists;
-- basic process steps;
-- simple orbit/semicircle icon diagrams;
-- basic CTA compositions.
+The Contact Network first Section contains a Form card whose important structure is:
 
-### Conditional Candidates
+- dark navy information panel on the left;
+- “Quick Contact” name/title;
+- phone, email, business-hours and address rows with icons;
+- Call Now and Email Now actions;
+- white Form panel on the right;
+- Full Name + Email row;
+- Phone + Service row;
+- full-width Message row;
+- full-width Submit.
 
-Require a validated preset or Container behavior:
+Form Design v2 can express this through the general Split Panel layout, explicit
+field rows, information items, independent surfaces and safe auxiliary actions.
+It is not a Page-specific Form or a new Block type.
 
-- integrated-flow orbit diagram;
-- connected process lines;
-- multi-panel visual comparisons;
-- repeated diagram nodes;
-- compositions that must remain intact as one responsive mobile unit.
+The target Page composition may use CanvasSection to position the resulting
+FormBlock. The capability is no longer blocked by Form implementation, but the
+Test-3 composition, responsive acceptance and real-page migration remain.
+Split Section redesign remains separate. Do not recreate this reference with
+HTML/scoped CSS.
 
-### Keep As HTML Until Further Notice
+## 9. Split Section Direction
 
-- advanced dashboard mockups;
-- sticky scroll narratives where cards stack based on viewport position;
-- complex pseudo-data tables/charts used purely as an illustration;
-- scenes requiring bespoke animation not represented by Block contracts;
-- highly specialized diagrams where forcing generic Blocks would reduce maintainability.
+The current source/persistence type remains `ColumnsSection`, but the proposed
+product name is **Split Section**. Its future intended design is narrower and
+more governed:
 
-Keeping an HTMLSection is not failure. It is preferable to a dishonest "generic" system full of hidden special cases.
+- two content regions, each capable of normal text/grid content; or
+- one governed content side and one Block free zone.
 
-## 6. One-Section Migration Protocol
+The redesign follows asset/revision/log work and targeted structural
+preparation. Until then, do not force migrations into the current
+ColumnsSection merely because a reference has two visual halves.
 
-1. Select one source HTMLSection.
-2. Record Page, StableId, order, content purpose and CSS root selectors.
-3. Inspect Demo3 desktop behavior.
-4. Inspect Demo3 mobile behavior.
-5. Identify semantic content units.
-6. Map each unit to an existing Block type.
-7. Map layout to Section, Container and responsive behavior.
-8. Use the Test-2 Page; do not replace the real Section.
-9. Create one candidate composition.
-10. Compare content, geometry, interaction, animation and responsive behavior.
-11. Record any capability gap.
-12. Apply the strict new Block type gate.
-13. Obtain user acceptance.
-14. Only then migrate the real Page.
-15. Publish and verify UserSite.
-16. Remove old HTML/CSS only after zero-use verification.
+Rename guidance:
 
-## 7. Test-2 Rules
+- update the user-facing name with the redesign;
+- keep the persisted `columns` discriminator compatible;
+- decide a coordinated C# class/DTO rename only after behavior is frozen;
+- do not migrate MongoDB solely for terminology.
 
-- Test-2 is disposable visual-development data, not a production Page.
-- Create only the Section currently under discussion.
-- Avoid automatically generating many candidate Sections.
-- Do not overwrite original Demo-derived Sections.
-- Keep draft-only until the user chooses to publish.
-- If a test Page is deleted, verify orphaned Sections and Blocks are removed.
-- If preview reconnects or remains loading, inspect API deserialization and Blazor circuit errors before recreating data.
+## 10. Saved Section Presets In Migration
 
-## 8. Existing Solutions Integrated-Flow Experiment
+Saved Section presets are user-saved complete Sections, including their content/images/Blocks. They are not hard-coded templates.
 
-The source Solutions Section used a ColumnsSection with HTML-like text blocks and a right-side visual shortcut. The Test-2 recreation uses:
+Current presentation is deliberately a metadata/icon hybrid:
 
-- three top-level Text Blocks for eyebrow, heading and supporting lines;
-- one top-level orbit Container;
-- five child Icon Blocks;
-- ring decorations;
-- compact-preserve mobile composition;
-- the original dark diagonal background direction (`135deg`).
+- name;
+- description;
+- Section type descriptor;
+- the same Section icon used in Add Section;
+- dark navy thumbnail outline;
+- separate preset-card hover treatment.
 
-`135deg` is a CSS gradient direction, not Block movement. It draws the gradient diagonally from upper-left toward lower-right under standard CSS angle semantics.
+Rendered thumbnail screenshots were explored and rejected because partial renderer snapshots were misleading: some variants showed only backgrounds/labels, HTML custom CSS could not be faithfully represented and complex grids/cards were omitted. Do not restart screenshot generation unless product priorities change.
 
-The experiment is structurally useful but visually exposed current defects:
+## 11. HTML Inventory And Capability Audit
 
-- Container has an unwanted white card surface;
-- icon content can appear inside a rectangular card;
-- creation/editor controls are too technical;
-- starter presets are absent;
-- responsive preview and editor scale differ.
+The authoritative per-Page classification is `09-HTML-TO-BLOCK-CAPABILITY-AUDIT.md`. Its broad rule is:
 
-Those findings produced the UX correction plan.
+- migrate ordinary content grids, headings, CTAs and governed Forms first;
+- keep unique maps/timelines/complex decorative scenes until an existing composition is sufficient or a reusable capability passes the gate;
+- do not create a new type for every historical HTMLSection.
 
-## 9. Demo Import And Future Database Migration
+`Docs/HtmlSectionStyles.md` records how legacy HTMLSection scoped styles work. It is maintenance documentation, not approval to use scoped CSS in new migrations.
 
-The existing DemoDbImporter creates/replaces `FullProjectDb-UIWEB-3` from bundled JSON. It is not the future company migration tool.
+## 12. New Block Type Gate
 
-After accepted HTML-to-Block migrations:
+A new Block type is justified only when all are true:
 
-1. Decide whether the new Page graph belongs in the official demo snapshot.
-2. Refresh only the seed collections that changed.
-3. Update manifest version.
-4. Rebuild/publish the importer.
-5. Test against a disposable MongoDB instance/database name allowed by the tool design.
-6. Verify imported draft/published pairs and assets.
+1. the requirement appears in multiple real Sections or represents a core interactive primitive;
+2. current Blocks/Containers cannot express it without code or fragile workarounds;
+3. its content, appearance, responsive and accessibility policy can be governed;
+4. Admin and UserSite can share rendering contracts;
+5. clone/publish/reset/revisions/import can preserve it;
+6. it does not expose HTML/CSS to non-code editors;
+7. the owner accepts the maintenance cost.
 
-Future R2-to-company migration needs a separate tool because it must:
+Otherwise, use composition or retain the advanced HTML scene.
 
-- enumerate asset metadata;
-- copy bytes from R2;
-- preserve Resource IDs;
-- write new storage keys/public URLs;
-- update direct references safely;
-- verify hashes and missing assets;
-- support resume and rollback reporting.
+## 13. Demo Import And Seed Collections
 
-## 10. Historical Documents
+Demo Import is destructive for its configured target and is user-operated only.
 
-Useful but outdated files under `F:\0-Project\0-0-Markdown`:
+- target database remains `FullProjectDb-UIWEB-3` unless intentionally revised;
+- only allowlisted UI/content collections are imported;
+- sessions, credentials/activity, submissions, metrics and revision history are excluded;
+- asset URLs may still reference existing object storage;
+- current runtime data can be newer than the checked-in seed;
+- active schema work, especially Form Design, means old seeds may omit new fields and rely on model defaults;
+- refresh seed data only after accepted migration and explicit approval.
 
-- `PROJECT HANDOFF DOCUMENT.txt`: broad historical state near LibraryFeature development;
-- `LibraryFeature_9Phase_Handoff.md`: authoritative original Library decisions, obsolete status;
-- `resource-library-unified-spec.md`: intermediate Resource Library UI, later superseded in several details;
-- `Active project path F0-ProjectTest1.txt`: historical path/reference map;
-- `Markdown.txt` and related copies: reference-folder notes.
+The two seed collection READMEs define the stored snapshot format. Never assume they describe the live database perfectly.
 
-Use them to understand why decisions were made, not to determine current phase status.
+## 14. Historical Documents
 
+| Document | How to read it now |
+| --- | --- |
+| `History/07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md` | Historical execution plan; phases are complete for agreed scope. |
+| `History/08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md` | Accepted control ownership and Container contract. |
+| `History/12-FORM-DESIGN-V2-REVISION-PLAN.md` | Completed Form Design v2 execution sequence. |
+| `09-HTML-TO-BLOCK-CAPABILITY-AUDIT.md` | Living migration decision record. |
+| `Docs/HtmlSectionStyles.md` | Legacy HTMLSection maintenance only. |
+| `AI-Tools/phase0/README.md` | Historical cleanup scripts; not current operations. |
+
+If a historical statement conflicts with `00-START-HERE.md`, the current worktree manifest or this document's dated rules, use the newer reconciled record.

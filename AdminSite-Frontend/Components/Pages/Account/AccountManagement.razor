@@ -14,7 +14,18 @@
         <div style="display:grid;gap:.5rem">
             <div><strong>@T("Name"):</strong> @Auth.CurrentUser?.FullName</div>
             <div><strong>@T("Email"):</strong> @Auth.CurrentUser?.Email</div>
-            <div><strong>@T("Role"):</strong> @Auth.CurrentUser?.RoleName</div>
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                <strong>@T("Role"):</strong>
+                <span>@Auth.CurrentUser?.RoleName</span>
+                <button type="button"
+                        class="btn-admin btn-ghost"
+                        style="padding:.3rem .55rem;min-height:auto"
+                        title="@T("ViewPermissions")"
+                        @onclick="() => _showPermissions = true">
+                    <i class="fas fa-shield-halved"></i>
+                    @T("ViewPermissions")
+                </button>
+            </div>
         </div>
 
         <hr />
@@ -82,12 +93,85 @@
     </div>
 </div>
 
+@if (_showPermissions)
+{
+    <div class="modal-backdrop" @onclick="ClosePermissions">
+        <div class="modal-box"
+             style="width:min(760px,calc(100vw - 2rem));max-height:min(760px,calc(100vh - 2rem));display:flex;flex-direction:column"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="account-permissions-title"
+             @onclick:stopPropagation="true">
+            <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+                <div>
+                    <div id="account-permissions-title">@T("AccountPermissions")</div>
+                    <div class="text-muted" style="font-size:.82rem;font-weight:500;margin-top:.2rem">
+                        @T("Role"): @Auth.CurrentUser?.RoleName · @string.Format(T("PermissionCount"), EffectivePermissions.Count)
+                    </div>
+                </div>
+                <button type="button" class="btn-admin btn-ghost content-icon-btn" title="@T("Close")" @onclick="ClosePermissions">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="overflow:auto">
+                <p class="text-muted" style="margin-top:0">@T("EffectivePermissionsHint")</p>
+
+                @if (EffectivePermissions.Count == 0)
+                {
+                    <div class="admin-data-empty">@T("NoAssignedPermissions")</div>
+                }
+                else
+                {
+                    <div style="display:grid;gap:.65rem">
+                        @foreach (var permission in EffectivePermissions)
+                        {
+                            <article style="display:grid;grid-template-columns:28px minmax(0,1fr);gap:.7rem;padding:.8rem;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+                                <span style="width:28px;height:28px;display:grid;place-items:center;border-radius:999px;background:#e8f5ee;color:#166534">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                <div>
+                                    <strong>@PermissionLabel(permission)</strong>
+                                    <div class="text-muted" style="font-size:.85rem;margin-top:.2rem">@PermissionDescription(permission)</div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+
+                @if (Auth.IsAdminAdmin)
+                {
+                    <div style="font-weight:750;margin:1.25rem 0 .35rem">@T("AdminExclusivePermissions")</div>
+                    <p class="text-muted" style="margin:.2rem 0 .75rem">@T("AdminExclusiveAccountHint")</p>
+                    <div style="display:grid;gap:.65rem">
+                        @foreach (var capability in AdminExclusiveCapabilityKeys.All)
+                        {
+                            <article style="display:grid;grid-template-columns:28px minmax(0,1fr);gap:.7rem;padding:.8rem;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc">
+                                <span style="width:28px;height:28px;display:grid;place-items:center;border-radius:999px;background:#dbeafe;color:#1d4ed8">
+                                    <i class="fas fa-lock"></i>
+                                </span>
+                                <div>
+                                    <strong>@AdminExclusiveLabel(capability)</strong>
+                                    <div class="text-muted" style="font-size:.85rem;margin-top:.2rem">@AdminExclusiveDescription(capability)</div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-admin btn-primary" @onclick="ClosePermissions">@T("Close")</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private readonly List<AdminLoginActivityResponse> _activity = new();
     private bool _loading = true;
     private bool _saving;
+    private bool _showPermissions;
     private string _currentPassword = string.Empty;
     private string _newPassword = string.Empty;
 
@@ -124,6 +208,77 @@
     }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private List<string> EffectivePermissions =>
+        AdminPermissionKeys.All.Where(Auth.HasPermission).ToList();
+
+    private void ClosePermissions() => _showPermissions = false;
+
+    private string PermissionLabel(string permission) => permission switch
+    {
+        AdminPermissionKeys.PageBuilder => T("PermissionPageBuilder"),
+        AdminPermissionKeys.ViewContent => T("PermissionViewContent"),
+        AdminPermissionKeys.CreateEditContent => T("PermissionCreateEditContent"),
+        AdminPermissionKeys.ApproveContent => T("PermissionApproveContent"),
+        AdminPermissionKeys.ManageUsers => T("PermissionManageUsers"),
+        AdminPermissionKeys.ManageSettings => T("PermissionManageSettings"),
+        AdminPermissionKeys.ViewLogs => T("PermissionViewLogs"),
+        AdminPermissionKeys.ViewFormDefinitions => T("PermissionViewFormDefinitions"),
+        AdminPermissionKeys.EditFormDefinitions => T("PermissionEditFormDefinitions"),
+        AdminPermissionKeys.ViewFormSubmissions => T("PermissionViewFormSubmissions"),
+        AdminPermissionKeys.ManageFormSubmissions => T("PermissionManageFormSubmissions"),
+        AdminPermissionKeys.ExportFormSubmissions => T("PermissionExportFormSubmissions"),
+        _ => permission
+    };
+
+    private string PermissionDescription(string permission) => permission switch
+    {
+        AdminPermissionKeys.PageBuilder => T("PermissionPageBuilderDescription"),
+        AdminPermissionKeys.ViewContent => T("PermissionViewContentDescription"),
+        AdminPermissionKeys.CreateEditContent => T("PermissionCreateEditContentDescription"),
+        AdminPermissionKeys.ApproveContent => T("PermissionApproveContentDescription"),
+        AdminPermissionKeys.ManageUsers => T("PermissionManageUsersDescription"),
+        AdminPermissionKeys.ManageSettings => T("PermissionManageSettingsDescription"),
+        AdminPermissionKeys.ViewLogs => T("PermissionViewLogsDescription"),
+        AdminPermissionKeys.ViewFormDefinitions => T("PermissionViewFormDefinitionsDescription"),
+        AdminPermissionKeys.EditFormDefinitions => T("PermissionEditFormDefinitionsDescription"),
+        AdminPermissionKeys.ViewFormSubmissions => T("PermissionViewFormSubmissionsDescription"),
+        AdminPermissionKeys.ManageFormSubmissions => T("PermissionManageFormSubmissionsDescription"),
+        AdminPermissionKeys.ExportFormSubmissions => T("PermissionExportFormSubmissionsDescription"),
+        _ => permission
+    };
+
+    private string AdminExclusiveLabel(string capability) => capability switch
+    {
+        AdminExclusiveCapabilityKeys.ManageContentConfiguration => T("AdminExclusiveManageContentConfiguration"),
+        AdminExclusiveCapabilityKeys.ViewEditAnyDraft => T("AdminExclusiveViewEditAnyDraft"),
+        AdminExclusiveCapabilityKeys.DirectPublishDraft => T("AdminExclusiveDirectPublishDraft"),
+        AdminExclusiveCapabilityKeys.ForceReturnContentToDraft => T("AdminExclusiveForceReturnContentToDraft"),
+        AdminExclusiveCapabilityKeys.DeleteAnyEligibleContent => T("AdminExclusiveDeleteAnyEligibleContent"),
+        AdminExclusiveCapabilityKeys.ViewDeletedContent => T("AdminExclusiveViewDeletedContent"),
+        AdminExclusiveCapabilityKeys.RestoreDeletedContent => T("AdminExclusiveRestoreDeletedContent"),
+        AdminExclusiveCapabilityKeys.PermanentlyDeleteContent => T("AdminExclusivePermanentlyDeleteContent"),
+        AdminExclusiveCapabilityKeys.ManageContentWorkflowHistory => T("AdminExclusiveManageContentWorkflowHistory"),
+        AdminExclusiveCapabilityKeys.ManageRoleDefinitions => T("AdminExclusiveManageRoleDefinitions"),
+        AdminExclusiveCapabilityKeys.ManageProtectedAdminAccounts => T("AdminExclusiveManageProtectedAdminAccounts"),
+        _ => capability
+    };
+
+    private string AdminExclusiveDescription(string capability) => capability switch
+    {
+        AdminExclusiveCapabilityKeys.ManageContentConfiguration => T("AdminExclusiveManageContentConfigurationDescription"),
+        AdminExclusiveCapabilityKeys.ViewEditAnyDraft => T("AdminExclusiveViewEditAnyDraftDescription"),
+        AdminExclusiveCapabilityKeys.DirectPublishDraft => T("AdminExclusiveDirectPublishDraftDescription"),
+        AdminExclusiveCapabilityKeys.ForceReturnContentToDraft => T("AdminExclusiveForceReturnContentToDraftDescription"),
+        AdminExclusiveCapabilityKeys.DeleteAnyEligibleContent => T("AdminExclusiveDeleteAnyEligibleContentDescription"),
+        AdminExclusiveCapabilityKeys.ViewDeletedContent => T("AdminExclusiveViewDeletedContentDescription"),
+        AdminExclusiveCapabilityKeys.RestoreDeletedContent => T("AdminExclusiveRestoreDeletedContentDescription"),
+        AdminExclusiveCapabilityKeys.PermanentlyDeleteContent => T("AdminExclusivePermanentlyDeleteContentDescription"),
+        AdminExclusiveCapabilityKeys.ManageContentWorkflowHistory => T("AdminExclusiveManageContentWorkflowHistoryDescription"),
+        AdminExclusiveCapabilityKeys.ManageRoleDefinitions => T("AdminExclusiveManageRoleDefinitionsDescription"),
+        AdminExclusiveCapabilityKeys.ManageProtectedAdminAccounts => T("AdminExclusiveManageProtectedAdminAccountsDescription"),
+        _ => capability
+    };
 
     private static string FormatDate(DateTime? value) =>
         value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";

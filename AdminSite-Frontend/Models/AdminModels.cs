@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Contracts.Forms;
 
 
 namespace AdminSite.Models 
@@ -46,6 +47,9 @@ namespace AdminSite.Models
         public string? ColorBackground { get; set; }
         public string? ColorText { get; set; }
         public string? BorderRadius { get; set; }
+        public string? ButtonStyle { get; set; }
+        public string? ButtonColorRole { get; set; }
+        public string? ButtonRadius { get; set; }
         public string? ButtonSizeScale { get; set; }
         public string? ButtonTextSize { get; set; }
         public bool? AnimationsEnabled { get; set; }
@@ -462,6 +466,7 @@ namespace AdminSite.Models
         public string SectionId { get; set; } = string.Empty;
         public bool Visible { get; set; }
         public int Order { get; set; }
+        public Dictionary<string, string> EditorLabel { get; set; } = new();
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
         public string? PositionMode { get; set; }
@@ -544,16 +549,10 @@ namespace AdminSite.Models
         public List<MapPinModel>? Pins { get; set; }
 
         // Form
+        public double FormScale { get; set; } = 1d;
         public int? FormDefaultWidthPx { get; set; }
         public double? FormDefaultWidthPercent { get; set; }
         public double? FormDefaultHeightPx { get; set; }
-        public Dictionary<string, string>? FormTitle { get; set; }
-        public Dictionary<string, string>? SubmitButtonLabel
-        {
-            get => FormTitle;
-            set => FormTitle = value;
-        }
-        public List<FormFieldModel>? Fields { get; set; }
     }
 
     public class BulletListItemModel
@@ -663,12 +662,6 @@ namespace AdminSite.Models
     }
 
     // -- Form Submissions --------------------------------------
-    public enum FormLayoutModel
-    {
-        Stacked,
-        TwoColumns
-    }
-
     public enum FormSubmissionStatusModel
     {
         New,
@@ -678,10 +671,59 @@ namespace AdminSite.Models
         Archived
     }
 
-    public enum FormDisplayModeModel
+    public enum FormDesignShapeModel
     {
-        Modal,
-        Embedded
+        Stacked,
+        TwoColumns,
+        Cta
+    }
+
+    public enum FormLabelModeModel
+    {
+        Visible,
+        InsideInputs
+    }
+
+    public enum FormDesignBackgroundModeModel
+    {
+        Transparent,
+        Solid
+    }
+
+    public enum FormDesignTextAlignModel
+    {
+        Left,
+        Center
+    }
+
+    public enum FormDesignButtonWidthModel
+    {
+        Content,
+        Full
+    }
+
+    public class FormDesignSettingsModel
+    {
+        public bool UseThemeDefaults { get; set; }
+        public int SchemaVersion { get; set; } = FormDesignPolicy.CurrentSchemaVersion;
+        public FormDesignShapeModel Shape { get; set; } = FormDesignShapeModel.Stacked;
+        public int WidthPx { get; set; } = FormDesignPolicy.StackedDefaultWidthPx;
+        public int CalculatedHeightPx { get; set; } = FormDesignPolicy.MinimumHeightPx;
+        public FormDesignBackgroundModeModel BackgroundMode { get; set; } = FormDesignBackgroundModeModel.Solid;
+        public string BackgroundColor { get; set; } = "#ffffff";
+        public string TextColor { get; set; } = "#0f172a";
+        public string AccentColor { get; set; } = "#1d4ed8";
+        public string BorderColor { get; set; } = "#dbe3ef";
+        public int BorderWidthPx { get; set; } = 1;
+        public int BorderRadiusPx { get; set; } = 16;
+        public string Shadow { get; set; } = "small";
+        public int PaddingPx { get; set; } = 32;
+        public int FieldGapPx { get; set; } = 16;
+        public FormDesignTextAlignModel TextAlign { get; set; } = FormDesignTextAlignModel.Left;
+        public FormLabelModeModel LabelMode { get; set; } = FormLabelModeModel.Visible;
+        public string ButtonStyle { get; set; } = "filled";
+        public FormDesignButtonWidthModel ButtonWidth { get; set; } = FormDesignButtonWidthModel.Full;
+        public FormDesignV2SettingsDto? V2 { get; set; }
     }
 
     public class FormDefinitionUsageItemModel
@@ -814,8 +856,9 @@ namespace AdminSite.Models
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Introduction { get; set; } = new();
         public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
-        public FormDisplayModeModel DisplayMode { get; set; }
-        public FormLayoutModel Layout { get; set; } = FormLayoutModel.Stacked;
+        public List<FormInformationItemDto> InformationItems { get; set; } = new();
+        public List<FormAuxiliaryActionDto> AuxiliaryActions { get; set; } = new();
+        public FormDesignSettingsModel Design { get; set; } = new();
         public bool Active { get; set; }
         public List<FormFieldDefinitionModel> Fields { get; set; } = new();
         public DateTime CreatedAt { get; set; }

@@ -100,30 +100,21 @@ namespace FullProject.Services.PublicService
             var validation = await ValidateFormSubmissionAsync(page, sectionId, form, dto);
             if (validation is not null) return validation;
 
-            var definition = string.IsNullOrWhiteSpace(form.FormDefinitionId)
-                ? null
-                : await _formDefinitionService.GetActiveByIdAsync(form.FormDefinitionId);
-            if (!string.IsNullOrWhiteSpace(form.FormDefinitionId) && definition is null)
+            if (string.IsNullOrWhiteSpace(form.FormDefinitionId))
+                return new NotFoundObjectResult(ApiResult.NotFound("Form definition is unavailable."));
+            var definition = await _formDefinitionService.GetActiveByIdAsync(form.FormDefinitionId);
+            if (definition is null)
                 return new NotFoundObjectResult(ApiResult.NotFound("Form definition is unavailable."));
 
             var inputTypeCapabilities = await _formInputTypes.GetCapabilityLookupAsync();
 
-            var fields = definition is not null
-                ? definition.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
+            var fields = definition.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
                     field.Key,
                     field.Type,
                     field.Label,
                     field.Required,
                     SubmissionMaximumLength(field.Type, field.MaxLength, inputTypeCapabilities),
                     field.Options.Select(option => option.Value).ToHashSet(StringComparer.OrdinalIgnoreCase),
-                    field.Order)).ToList()
-                : form.Fields.OrderBy(field => field.Order).Select(field => new SubmissionField(
-                    field.Name,
-                    field.Type,
-                    field.Label,
-                    field.Required,
-                    SubmissionMaximumLength(field.Type, 0, inputTypeCapabilities),
-                    field.Options?.ToHashSet(StringComparer.OrdinalIgnoreCase),
                     field.Order)).ToList();
 
             var securityInput = new Dictionary<string, string>(dto.Data, StringComparer.OrdinalIgnoreCase)
@@ -143,14 +134,12 @@ namespace FullProject.Services.PublicService
 
             await _submissionService.CreateAsync(new FormSubmission
             {
-                FormId = definition?.Id ?? string.Empty,
+                FormId = definition.Id,
                 PageId = page.Id,
                 SectionId = sectionId,
                 BlockId = blockId,
-                FormKey = definition?.Key ?? $"block:{blockId}",
-                FormName = definition is null
-                    ? "Page Form"
-                    : Localized(definition.Name, language, definition.Key),
+                FormKey = definition.Key,
+                FormName = Localized(definition.Name, language, definition.Key),
                 Language = language,
                 SourcePage = page.FullSlug ?? page.Slug,
                 Status = FormSubmissionStatus.New,

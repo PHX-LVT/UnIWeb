@@ -1,10 +1,13 @@
 # HTML-To-Block Capability Audit
 
+Last reconciled: **2026-07-16**
+Status: **living capability record; migration remains incremental**
+
 ## 1. Purpose And Scope
 
-This document is the Phase 14 strict new Block type gate for the original
-BlockOverhaul-3 program. It is analysis only. It does not migrate, replace,
-publish or delete any Section.
+This document originated as the strict new Block type gate for the completed
+BlockOverhaul-3 program and remains the living migration capability record. It
+does not itself migrate, replace, publish or delete any Section.
 
 The audit uses the 22 draft `HtmlSection` records in the Demo Import snapshot:
 
@@ -13,26 +16,29 @@ The audit uses the 22 draft `HtmlSection` records in the Demo Import snapshot:
 - the selector ownership map in `Docs/HtmlSectionStyles.md`;
 - the current Block, Container, diagram, animation and responsive contracts.
 
-The snapshot was inspected on 2026-07-06. The live database must be inventoried
-again before Phase 15 because Page content can change independently of this file.
+The snapshot was inspected on 2026-07-06. Form capability decisions were
+reconciled through 2026-07-16. The live database must be inventoried again
+before real migration because Page content can change independently of this
+file.
 
 ## 2. Decision Terms
 
 | Decision | Meaning |
 | --- | --- |
-| **Representable now** | Current Blocks and layouts can express the semantic content. Visual parity still requires a Test-2 composition and user acceptance. |
+| **Representable now** | Current Blocks and layouts can express the semantic content. Visual parity still requires a Test-3 composition and user acceptance. |
 | **Conditional** | Current contracts can express most or all content, but the composition requires a governed saved Section preset or an explicit acceptance of a simplified/non-editable visual asset. |
 | **Retain HTML** | Rebuilding now would hide a bespoke interaction or illustration behind fragile generic Blocks. Retaining HTML is intentional. |
 
 These decisions are capability decisions, not permission to migrate. All real
-Page replacement remains deferred to the separate Phase 15 program.
+Page replacement remains a separate incremental migration program.
 
 ## 3. Strict New Block Type Gate
 
 For every gap, answer in order:
 
 1. Can existing Block content represent the data?
-2. Can Canvas, Columns or a Container preset represent the geometry?
+2. Can Canvas, the current Columns/Split Section direction or a Container preset
+   represent the geometry?
 3. Can diagram decorations or connectors represent the visual relationship?
 4. Can a saved Section preset package the repeated composition?
 5. Is the missing capability genuinely reusable, interactive or data-specific?
@@ -59,15 +65,16 @@ CSS owner: `SharedComponents/wwwroot/css/html-sections/insights.css`.
 
 | Page / StableId | Current composition | Existing Block mapping | Decision |
 | --- | --- | --- | --- |
-| `insights` / `insight-stay-ahead-subscribe` | Subscription/CTA heading and supporting copy. | Text + Button, or Form when a real subscription Form Definition is connected; Stack/Split Container. | **Representable now.** No subscription-specific Block is needed. |
+| `insights` / `insight-stay-ahead-subscribe` | Subscription/CTA heading, supporting copy and managed subscription inputs. | Governed CTA Form Design rendered by the existing Form Block. | **Implemented capability; current-data v2 revalidation required.** Startup seeds the stable `insight-subscription` Form Definition and recognizes the Section/Block graph. CTA uses explicit field rows. Verify the live draft/published result before removing legacy HTML/CSS. |
 | `insights/vietnam-china-cross-border-logistics-2030-outlook` / `insight-detail-2030-hero` | Insight metadata, title, summary and back action. Selectors: `sc-insight-detail-hero`, `sc-insight-detail-meta`. | Text Blocks for metadata/title/summary + Button Block in a saved Canvas Section preset. | **Representable now.** |
 | Same Page / `insight-detail-2030-picture` | One article figure and caption. Selector: `sc-detail-figure`. | Image Block with alt text, caption and controlled aspect ratio. | **Representable now.** |
 | Same Page / `insight-detail-2030-body` | Rich article, bullet list, report CTA and share/back links. Selectors: `sc-detail-article`, `sc-article-back`, `sc-report-download`. | Text and Bullet List Blocks + File Block for the report + Button Blocks for navigation/share actions. | **Representable now.** Social actions must remain ordinary links until a reusable share interaction is explicitly required. |
-| `insights/vietnamchina-cross-border-logistics-2030-outlook` / `insight-detail-vietnam-china-figure` | Duplicate/variant article figure. | Image Block with caption. | **Representable now.** Evaluate duplication during Phase 15; do not merge records automatically. |
+| `insights/vietnamchina-cross-border-logistics-2030-outlook` / `insight-detail-vietnam-china-figure` | Duplicate/variant article figure. | Image Block with caption. | **Representable now.** Evaluate duplication during incremental migration; do not merge records automatically. |
 | Same Page / `insight-detail-vietnam-china-article` | Article body, bullet list and report download. | Text + Bullet List + File/Button Blocks. | **Representable now.** Preserve this variant independently until the two insight-detail Pages are deliberately reconciled. |
 
 Gate result: no Article, Figure, Report Download or Subscription Block type is
-justified. Existing semantic Blocks are sufficient.
+justified. Existing semantic Blocks are sufficient. The Insight subscription is
+the first audited case migrated through the governed Form Design system.
 
 ### 5.2 About
 
@@ -86,12 +93,14 @@ CSS owner: `SharedComponents/wwwroot/css/html-sections/contact-network.css`.
 
 | Page / StableId | Current composition | Existing Block mapping | Decision |
 | --- | --- | --- | --- |
-| `contact-network` / `contact-network-hero-card` | Hero copy/actions plus a quick-contact card containing three inputs and contact links. Selectors: `sc-contact-hero*`. | Text + Button Blocks + Form Block connected to a Form Definition, grouped in a Split Container. | **Conditional.** Requires a real Form Definition and saved Section preset; decorative input markup must not be copied as fake controls. |
+| `contact-network` / `contact-network-hero-card` | Hero copy/actions plus a quick-contact card: dark information panel with contact rows/actions on the left; grouped fields and Submit on the right. Selectors: `sc-contact-hero*`. | Canvas/hero composition plus one governed Form Block using the implemented general Split Panel Form layout, explicit field rows, information items and auxiliary actions. | **Conditional on Test-3 composition and responsive acceptance.** The Form capability exists. Do not copy decorative inputs or overload Introduction with HTML. This is not justification for a ContactHeroBlock. |
 | `contact-network` / `contact-network-client-support` | Three support cards, icons, lists and one action. Selectors: `sc-contact-support*`. | Text + Card/Icon + Bullet List + Button Blocks in a Grid Container. | **Representable now.** |
 | `contact-network` / `contact-network-global-partners` | Heading and eight partner/country flags. Selectors: `sc-contact-global*`, `sc-contact-flags`. | Text + Image/Icon Blocks in a Grid/Row Container. | **Representable now.** |
 
 Gate result: no Contact Hero, Support Center or Partner Flags Block type is
-justified. Form behavior belongs to the existing Form Block.
+justified. Form behavior belongs to the existing Form Block. The previously
+missing Form design/layout capability is implemented; composition and migration
+acceptance remain.
 
 ### 5.4 Technology
 
@@ -176,13 +185,12 @@ Do not add the following based on the current inventory:
 If a later requirement is genuinely reusable and data-backed, reopen the gate
 with an API/editor/renderer/responsive/accessibility proposal.
 
-## 8. Phase 15 Handoff
+## 8. Incremental Migration Handoff
 
-Phase 15 remains a separate, deferred action program. For each
-**Representable now** or **Conditional** entry:
+For each **Representable now** or **Conditional** entry:
 
 1. re-read the live draft record;
-2. recreate only that Section on Test-2;
+2. recreate only that Section on Test-3;
 3. save the accepted result as a Section preset when reusable;
 4. obtain user visual acceptance;
 5. migrate the real Page only with explicit approval;
@@ -190,4 +198,5 @@ Phase 15 remains a separate, deferred action program. For each
 7. leave all old HTML/CSS in place until zero-use verification.
 
 The four **Retain HTML** decisions are intentional and must not be treated as
-unfinished migration work.
+unfinished migration work. Reopen them only when a repeated, data-backed Table,
+Chart or sticky-narrative requirement passes the new capability gate.

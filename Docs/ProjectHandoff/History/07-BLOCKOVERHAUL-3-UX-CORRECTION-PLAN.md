@@ -1,5 +1,9 @@
 # BlockOverhaul-3 UX Correction Plan
 
+Historical execution plan. Last status reconciliation: **2026-07-15**.
+
+This archived plan is complete for the agreed implementation scope. It is retained to explain why current controls and contracts exist; it is not the active roadmap. Broad authenticated/device/accessibility QA remains an explicit manual acceptance activity. Use `../04-FEATURE-STATUS-AND-ROADMAP.md` for current priorities.
+
 ## 1. Objective
 
 Preserve the powerful Block contracts introduced by BlockOverhaul-3 while replacing the technical, input-heavy authoring experience with visual starter presets, focused inspectors and contextual Canvas controls.
@@ -8,13 +12,13 @@ The phases are ordered from easiest/lowest risk to hardest/highest risk. Complet
 
 ## Current Execution Status
 
-Reconciled 2026-07-03:
+Historical status at 2026-07-03, reaffirmed 2026-07-15:
 
-- Phase 0 was removed as a standalone phase because all current persisted Blocks are confined to the Test-2 sandbox.
+- Phase 0 was removed as a standalone phase because persisted Blocks were confined to the Test-2 sandbox at that time. This is historical; Test-3 and later Form migration work now also use Blocks.
 - Phases 1-16 have implementation complete in the active worktree.
 - A final Arrange correction batch completed Container placeholder sizing, localized visual Text editing, the one-line toolbar, dropdown-owned layer order, live non-reloading appearance updates, persistent rotation, two-toggle locks and graph-aware deletion.
 - SharedComponents, AdminSite and API builds, JavaScript syntax and diff checks pass.
-- Authenticated visual/runtime verification and the broad workflow matrix in Phase 17 remain pending.
+- The owner retained authenticated visual/runtime/device verification. It is QA debt, not a missing implementation phase.
 
 ## Phase 0: Removed As A Standalone Phase
 

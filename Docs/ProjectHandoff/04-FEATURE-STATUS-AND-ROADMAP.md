@@ -1,394 +1,347 @@
 # Feature Status And Roadmap
 
-Status labels:
+Last reconciled: **2026-07-16**
 
-- **Complete:** intended core behavior is implemented and merged into `Indev-3`.
-- **Complete with QA debt:** core implementation exists, but full-system verification remains.
-- **Active:** implementation is present in the current `Indev3-Overhaul3` worktree and is not yet closed.
-- **Deferred:** explicitly planned but not started or intentionally postponed.
-- **Superseded:** old plan or UI direction replaced by a newer decision.
+This is the active product and engineering roadmap. Completed phase plans are
+stored under [History](History/README.md).
 
-## 1. Completed Major Programs
+## 1. Current Executive Status
 
-### 1.1 Original LibraryFeature: Complete
+| Program | Status | Current Meaning |
+| --- | --- | --- |
+| Library and Resource Management | Complete; operational QA continues | Reusable assets, albums, pickers, usage checks and guarded deletion are established. |
+| Content Management | Complete | Dynamic roles, ownership-aware workflow, revisions and resource behaviors are established. |
+| Page graph clone/publish/reset | Complete architecture | Serializer-backed clone profiles and granular publish diff replaced manual clone mapping. |
+| FormOverhaul-3 | Complete | Definitions, submissions, permissions, public endpoints and modal/embedded rendering are established. |
+| Form Design v2 | Implemented; observation/closure remains | V2 authoring, rendering, ordering and writes exist. Device/accessibility acceptance, deployment observation and eventual v1 cleanup remain. |
+| BlockOverhaul-3 | Complete historical program | Accepted authoring and Container contracts remain in force. Future work is a new Block Authoring Refinement program. |
+| Saved Section presets | Complete | Database-backed full Section presets use metadata and icons. |
+| Language Health | Complete for current scope | Source-owned EN/VI/CN catalogs and read-only health reporting are established. |
+| Immediate Admin feedback | Complete | Request feedback is semantic and localized. It is not a persistent inbox. |
+| HttpOnly Admin authentication | Complete | Secure cookie and server-side bearer forwarding replace browser JWT storage. |
+| Strict HTML-to-Block migration | Active incremental program | Test-3 remains the controlled migration sandbox. |
+| Upload Protection | Next program | Quarantine, malware scanning and archive-bomb controls are not implemented. |
+| Asset Lifecycle Reliability | Planned | Revision retention, retryable cleanup, orphan reconciliation and precise asset diffs require work. |
+| Log Overhaul | Planned | Login Activity and Audit Trail need structured retention/archive/export governance. |
+| Page Revision History | Planned | Backend exists; full inspection, preview and restore UX does not. |
+| Split Section | Planned | Product redesign of the current ColumnSection concept; internal rename remains undecided. |
+| Block Authoring Refinement | Planned after Split Section | Must be driven by real authoring pain points, not feature accumulation. |
+| Website Activity Overhaul | Planned later | Current counters work, but presentation and analysis remain limited. |
+| Data-backed visual capabilities | Strategic long-term | Requires governed data binding, not visual-only chart Blocks. |
+| Persistent Notification Platform | Deferred | Depends on structured domain events and Log Overhaul. |
+| Advanced Form Platform | Parked | One design per Form is permanent; reopen only for a concrete business requirement. |
+| Advanced Translation Platform | Parked | Current source catalogs fit present product needs. |
 
-The original nine phases are complete:
+Production cutover/hardening and company-local storage remain valid work, but the
+owner may execute them manually and they are not used to order the active
+feature-development queue.
 
-1. Asset paths.
-2. Content Type Behavior.
-3. Resource Management base.
-4. Resource Picker.
-5. behavior-driven Content Editor.
-6. LibrarySection integration.
-7. resource/media preview direction.
-8. GallerySection deprecation/removal after database verification.
-9. usage safety, cleanup and QA implementation.
+## 2. Completed Programs Moved To History
 
-The old markdown that says "currently at Phase 4" is obsolete.
+The following are complete and must not be restarted as unfinished phase plans:
 
-### 1.2 Resource Manager Overhaul 2: Complete With QA Debt
+- clone architecture redesign;
+- BlockOverhaul-3;
+- Block editor redesign;
+- Form Design v2 phases 0-17;
+- the dated 2026-07-15 Form worktree baseline.
 
-Implemented outcomes include:
+See [History](History/README.md).
 
-- unified Resource Library rather than a separate Resource Preview nav page;
-- Image, Video and File modes;
-- professional single/bulk upload queue;
-- server-configured upload constraints;
-- Albums with one-resource/one-album organization;
-- no forced Album and no automatic Unsorted Album;
-- add existing Resources to an Album;
-- usage sidebar;
-- individual and bulk delete;
-- uploaded-by human display;
-- file-type placeholders;
-- real uploaded video support;
-- explicit YouTube external-video exception;
-- URL/storage internals hidden from non-code users;
-- server-authoritative usage and deletion checks;
-- Resource Picker reuse across Content, Sections and Blocks;
-- asset replacement and cleanup integration.
+Form Design still has an operational closure boundary:
 
-Older specifications that describe multilingual Resource names, disable states or a narrow left list/right editor are superseded by later decisions.
+- observe deployment behavior;
+- validate real definitions, submissions and renderer parity;
+- complete device, keyboard and accessibility acceptance;
+- retain rollback compatibility during the observation window;
+- remove v1-only behavior only after explicit acceptance.
 
-### 1.3 Content Management And Content Services: Complete With QA Debt
+These are closure activities, not missing Form Design phases.
 
-Implemented:
+## 3. Active Implementation Order
 
-- All, My, Submitted, Published and Deleted workflows;
-- Page versus resource Content behavior;
-- behavior-aware validation;
-- Page-only Content Preview;
-- files open directly from Content lists instead of routing to an article page;
-- revisions and audit history for Content;
-- service split into type, validation, workflow, revision, mapping and asset metadata responsibilities;
-- role-aware Writer/Manager workflow rules;
-- ResourceId/source/storage metadata across Content assets.
+### 3.1 Upload Protection
 
-Remaining structural debt: some content-specific authorization state-machine logic still belongs outside the controller and should move to a dedicated policy/service during structural cleanup.
+Implement first:
 
-### 1.4 Clone Redesign And Granular Publish: Complete With QA Debt
+- quarantine before permanent storage;
+- extension, MIME, signature and size validation;
+- antivirus/malware scanning;
+- archive/database-bomb protection;
+- safe generated filenames;
+- failed/abandoned quarantine cleanup;
+- safe audit records for scan decisions;
+- a synchronous-first design that can later move to background processing.
 
-Implemented:
+Keep this separate from Resource Library redesign and company-local storage.
 
-- serializer-backed cloning;
-- explicit CloneProfile intent;
-- graph identity remapping;
-- publish diff service;
-- preset capture/apply profiles;
-- coverage tool for model-field preservation;
-- fixes for silent fields such as `ColumnSlotId` and `ParentBlockId` representation.
+### 3.2 Asset Lifecycle Reliability And Clone Audit
 
-The Publish UI still appears page-level by design. Granular behavior is service architecture, not a per-Block Publish button.
+The primary work is asset reliability:
 
-### 1.5 FormOverhaul-3 Core: Complete
+- define asset retention across Page and Content revisions;
+- prevent revision restore from reviving already-deleted assets;
+- calculate removed/replaced assets precisely;
+- retain global reference checking as the final delete guard;
+- add retry/backoff or a cleanup work queue;
+- expose cleanup failure state;
+- add dry-run orphan and reconciliation tooling;
+- verify managed-resource replacement propagation;
+- define cleanup behavior when revisions expire.
 
-Implemented:
+Clone work is bounded:
 
-- Form Management navigation split into Submissions, Definitions and Types;
-- submission grid, filters, bulk actions, assignment, timeline and export;
-- definition editor layout and field drag ordering;
-- built-in Form-Field Type governance;
-- input-box size parameter for applicable field types;
-- collapsed nested Select options;
-- public field type validation and inline messages;
-- active-language Form rendering;
-- sticky/unique Form Key;
-- governed Field Key suggestions;
-- locked Field Key and Type after save;
-- duplicate key rejection;
-- saved-field delete confirmation;
-- usage-aware Form deletion;
-- old submission snapshots retained after field deletion;
-- removal of obsolete hard-coded modal definitions except the deliberately retained Sync Hub path.
+- decide preset-capture stable-id behavior;
+- extend clone coverage for identity-sensitive fields;
+- verify publish/reset/preset/import profiles during later model changes;
+- prevent duplicate stable identities.
 
-Deferred: administrator creation of entirely new custom Form-Field Types from a reusable base type.
+Do not design a second clone framework without a demonstrated defect in the
+current `PageGraphCloneService` approach.
 
-### 1.6 Global Theme, Background Media And Shared Data Surface: Complete
+### 3.3 Log Overhaul Foundation
 
-Implemented:
+Establish the event contract before Page Revision UI:
 
-- Theme-controlled navigation color;
-- Section background `Theme` option;
-- real uploaded/managed Section background video;
-- muted autoplay loop video rendering;
-- background image fit controls;
-- shared stat/grid visual language across Content, Form Submissions and Website Activity.
+- separate Login Activity and Audit Trail;
+- structured actor/action/target/result/context records;
+- safe categories and filters;
+- date-range search;
+- retention and archive policy;
+- governed export;
+- remove casual permanent bulk deletion;
+- avoid raw exceptions and internal identifiers in ordinary UI;
+- capture upload scan, cleanup failure and revision-restore events.
 
-### 1.7 Demo Database Import Tool: Complete
+This event foundation is also required before Persistent Notifications.
 
-Implemented:
+### 3.4 Page Revision History
 
-- one-click executable/batch workflow;
-- import-only bundle;
-- fixed safe target database;
-- allowlisted collections;
-- optional target replacement;
-- demo Admin creation;
-- import metadata;
-- no export step;
-- no operational logs/submissions/revisions import.
+Build on the existing Page revision backend:
 
-The seed snapshot must be refreshed after database-driven page migrations or new persisted contracts become part of the desired demo.
-
-## 2. Active Program: BlockOverhaul-3
-
-### 2.1 Original 17 Phases
-
-| Phase | Name | Status |
-| ---: | --- | --- |
-| 1 | Baseline and migration inventory | Active implementation complete; inventory script exists. |
-| 2 | Unified Block contracts | Active implementation complete. |
-| 3 | Responsive composition rules | Active implementation complete. |
-| 4 | Shared rendering foundation | Active implementation complete. |
-| 5 | Responsive authoring UI | Active implementation complete, but UX now judged too technical. |
-| 6 | Appearance and shape system | Active implementation complete. |
-| 7 | Container layout expansion | Active implementation complete. |
-| 8 | Connectors and diagram composition | Active implementation complete. |
-| 9 | Animation system | Active implementation complete. |
-| 10 | Media and functional Block completion | Active implementation complete. |
-| 11 | Canvas authoring tools | Active implementation complete. |
-| 12 | Preset governance | Active implementation complete. |
-| 13 | Reference preset library | Not complete; Test-2 experiments have begun. |
-| 14 | Strict new Block type gate | Pending. |
-| 15 | Page-by-page HTML migration | Pending; no bulk migration allowed. |
-| 16 | Responsive/accessibility/workflow/compatibility verification | Pending. |
-| 17 | Legacy cleanup and documentation | Pending. |
-
-### 2.2 Test-2 Sandbox
-
-`test-2` currently contains Canvas experiments, including an orbit recreation of the Solutions "One Integrated Flow. One Trusted Partner" composition. The original Solutions ColumnsSection remains untouched.
-
-The experiment established:
-
-- left semantic text Blocks;
-- right Container with orbit layout;
-- five Icon children;
-- diagram ring decorations;
-- compact-preserve mobile direction.
-
-It also exposed the issues that drove the UX correction plan: visible Container cards, blank starters, an overloaded editor, disconnected Block-list ordering and inconsistent Canvas scale. The correction implementation now addresses those issues; authenticated Test-2 acceptance remains the verification gate.
-
-## 3. Immediate Roadmap: Block Editor Redesign
-
-The earlier correction plan is in [07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md](07-BLOCKOVERHAUL-3-UX-CORRECTION-PLAN.md). The newer Preview/Edit, Section-scoped Arrange and governed-Container direction is audited in [08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md](08-BLOCK-EDITOR-REDESIGN-ACCEPTANCE.md).
-
-The standalone safety baseline was removed because current persisted Blocks exist only on Test-2. The earlier UX correction phases and the newer ten-phase redesign are implemented in the active worktree. The redesign now has the canonical Container preset-key and named-slot contract, Section dirty-state guard before Arrange, one-owner control split, Section-scoped Block list, enforced containment and recursive Container deletion. Phase 9 used the user-approved no-data path: no bulk Test-2 migration was run, and compatibility is handled by `legacy-freeform` for old missing/unknown Container presets.
-
-Next execution order after the completed redesign:
-
-1. Use Test-2 for any future destructive Page Builder QA unless the user approves another Page.
-2. Continue the reference preset library and strict new Block type gate audit.
-3. Begin page-by-page HTML migration only after explicit approval.
-4. Keep desktop/tablet/physical-phone and keyboard/focus checks in the standard Page Builder acceptance pass for future UI changes.
-
-Do not begin page-wide HTML migration before creation UX, Container semantics and responsive behavior are understandable.
-
-## 4. Remaining Original Block Phases
-
-After the authoring correction is stable:
-
-### 4.1 Reference Preset Library
-
-- Build reusable basic and advanced compositions from Demo1, Demo3 and current Pages.
-- Presets must include editable-slot governance.
-- Include representative responsive behavior.
-- Start with real needs already found in HTML inventory.
-
-### 4.2 Strict New Block Type Gate
-
-For every remaining HTML gap, ask:
-
-1. Can existing Block content represent the data?
-2. Can Container/Canvas layout represent the geometry?
-3. Can decorations/connectors represent the diagram?
-4. Can a preset represent the repeated pattern?
-5. Is the missing behavior genuinely interactive or data-specific?
-
-Only add a Block type after all five fail.
-
-### 4.3 Page-By-Page HTML Migration
-
-- Strictly target HTMLSections.
-- Do not alter unrelated Sections.
-- Recreate one Section on Test-2.
-- Compare Demo3 desktop and mobile.
-- Compare current UserSite behavior.
-- Publish only after acceptance.
-- Migrate the real Page only with explicit approval.
-- Keep advanced dashboard/sticky scenes as HTML when Blocks cannot reproduce them honestly.
-
-### 4.4 Verification And Cleanup
-
-- desktop/tablet/mobile;
-- English/Vietnamese/Chinese content;
-- Preview/UserSite parity;
-- keyboard and focus behavior;
-- reduced motion;
-- publish/reset/revision/clone/preset/import;
-- old document compatibility;
-- remove only zero-use HTML/CSS/contracts;
-- document intentionally retained HTMLSections.
-
-## 5. Near-Future Cross-System Roadmap
-
-These phases should follow current Block closure, in order unless the user explicitly changes priority.
-
-### Phase A: Full-System QA
-
-Test the real demo database with AdminAdmin, Manager, Writer and Viewer:
-
-- draft, granular publish, reset and preview;
-- Content workflows and direct file opening;
-- LibrarySection files/images/videos/galleries/YouTube;
-- resource replacement, cleanup, usage and deletion;
-- Forms, multilingual modal, type settings and Excel export;
-- Preview/UserSite parity;
-- desktop/tablet/mobile.
-
-### Phase B: Page Revision History UI
-
-- Page Management Revision History button;
-- date, actor, reason and version;
-- revision preview;
+- revision timeline and pagination;
+- actor, reason, version and timestamp;
+- preview before restore;
+- current-versus-selected comparison;
 - restore confirmation;
-- explain that restore creates a new draft;
-- permission and retention display.
+- automatic before-restore snapshot;
+- authorization and concurrency handling;
+- audit event emission;
+- asset availability validation;
+- explicit retention behavior.
 
-### Phase C: Audit/Login Log Overhaul
+Evaluate separately whether Page revisions should evolve from Page metadata
+snapshots into full Page/Section/Block graph snapshots.
 
-This remains separate and deferred:
+### 3.5 Targeted Structural Refactoring
 
-- separate Login Activity from Audit Trail;
-- human-readable action labels;
-- actor, target, result, IP/device and timestamp;
-- retention, archive and export;
-- no casual permanent deletion;
-- DTOs separate from database models;
-- readable UI for non-code Admin users.
+Refactor only the domains needed for the next authoring work:
 
-Do not touch this during Block or ordinary cleanup work.
+- Section and Block contracts;
+- Section/Block mapping and policies;
+- Canvas and Block editor ownership boundaries;
+- shared layout and responsive policies;
+- relevant CSS ownership.
 
-### Phase D: Upload Deep Security
+Preserve BSON/JSON discriminators and API compatibility.
 
-Already present:
+### 3.6 Split Section Redesign
 
-- role authorization;
-- size limits;
-- extension/MIME validation;
-- file signature checks.
+The proposed product name is **Split Section**.
 
-Still future:
+Target behavior:
 
-- antivirus scanning;
-- quarantine before publication;
-- archive/decompression bomb detection;
-- scan status and failure handling;
-- scheduled cleanup for rejected uploads.
+- two governed content regions; or
+- one governed content region plus one free Block zone;
+- adjustable split ratio;
+- explicit mobile stacking order;
+- clear Block ownership and movement boundaries;
+- shared Admin/User rendering;
+- only the independent surfaces and spacing that real references require.
 
-### Phase E: Authentication Hardening
+Naming policy:
 
-- completed: move admin authentication from JavaScript-readable localStorage to an encrypted Secure, HttpOnly, SameSite cookie, with server-side bearer forwarding, antiforgery-protected login/logout and periodic session revalidation;
-- session/device management and revocation UX;
-- stronger password/change-password workflow;
-- security-header and CSP review;
-- sanitizer audit for every rich HTML input;
-- 2FA remains excluded unless explicitly requested.
+- change the user-facing label during the redesign;
+- retain the current persisted `columns` discriminator;
+- decide a coordinated C# class/DTO rename only after the behavior is frozen;
+- do not migrate MongoDB merely for terminology.
 
-### Phase F: Company Deployment And Storage Migration
+### 3.7 Block Authoring Refinement
 
-Pending company infrastructure details:
+This is a new program, not an unfinished BlockOverhaul-3 phase.
 
-- MongoDB host, replica configuration, authentication, TLS and backup;
-- company asset filesystem/object storage location;
-- public asset URL/reverse proxy;
-- service account and permissions;
-- local `IAssetStorage`-style provider beneath existing abstraction;
-- separate R2-to-company-storage migration tool;
-- preserve Resource IDs while updating URL/storage metadata;
-- HTTPS and environment secrets;
-- retain one-click demo importer for test installations.
+Start with a problem inventory:
 
-### Phase G: Structural Cleanup
+- creation friction;
+- selection and focus;
+- Arrange workflow;
+- inspector ownership;
+- Container authoring;
+- responsive behavior;
+- preset reuse;
+- real HTML migration gaps;
+- controls that are present but difficult to understand;
+- controls that should remain internal.
 
-- split `Models.cs` by domain;
-- split `AdminDtos.cs` and `AdminModels.cs` into precise folders;
-- split large Section, Block, public assembly and auth services where responsibility is still broad;
-- move inline Content authorization state rules into policy/service ownership;
-- split large CSS by component/domain;
-- split Admin UI catalogs into language folders;
-- remove obsolete base64 and legacy fallbacks only after database audit;
-- avoid broad namespace churn.
+Do not begin with a goal of exposing every existing model field.
 
-### Phase H: Engineering Infrastructure
+### 3.8 Structural Consolidation
 
-- integration tests for page graph, resources, content and forms;
-- index verification tests;
-- configuration validation;
-- CI build/test pipeline;
-- optional Docker support only if company deployment uses containers;
-- documented release and rollback process.
+After Split Section and Block behavior stabilize:
 
-## 6. Far-Future Product Features
+- split oversized domain models and DTOs into real folders;
+- split oversized Razor components and services;
+- centralize remaining shared editor policies;
+- reduce CSS ownership ambiguity;
+- reorganize language catalogs only without changing runtime lookup behavior;
+- add focused tests around the moved contracts.
 
-### 6.1 Custom Form-Field Types
+Large candidates include:
 
-- Add New Form-Field Type;
-- unique key and multilingual name;
-- select an existing base renderer/validator such as Text, Long Text or Dropdown;
-- reuse security and editor behavior;
-- protect built-ins;
-- hard-block deletion while used;
-- include custom types in demo import/export strategy.
+- `AdminSite-API/Models.cs`;
+- `Contracts/Admin/AdminDtos.cs`;
+- `AdminSite-Frontend/Models/AdminModels.cs`;
+- `Canvas.razor`;
+- `BlockEditor.razor`;
+- `ContentEditorShell.razor`;
+- `FormDefinitions.razor`;
+- shared component CSS;
+- the language catalogs.
 
-### 6.2 Translation Health
+### 3.9 Website Activity Overhaul
 
-First stage:
+Use the existing real metrics as an internal visualization proving ground:
 
-- read-only Settings > Languages health grid;
-- compare configured fallback catalog against each enabled language;
-- show missing and empty keys;
-- source code remains the place translations are fixed.
+- date ranges;
+- trends;
+- top Pages, Content and Downloads;
+- period comparison;
+- clear metric definitions;
+- aggregation endpoints;
+- filters, empty states and export;
+- retention/consolidation rules.
 
-Later stage:
+Do not claim unique visitors unless the data model records them accurately.
 
-- governed translation input for non-code Admin;
-- database-backed overrides, not runtime source-code rewriting;
-- audit and export/import support.
+### 3.10 Richer Data-Backed Visual Capabilities
 
-### 6.3 Advanced Enterprise Form Governance
+Build a governed data-binding platform before adding Chart/Table Blocks:
 
-Potential future capabilities:
+- registered and allowlisted data sources;
+- typed schemas;
+- query and aggregation rules;
+- field/series mapping;
+- formatting and units;
+- refresh and cache policy;
+- permissions;
+- loading, empty and failure states;
+- Admin preview and UserSite parity;
+- accessible table/text fallbacks;
+- versioned public contracts.
 
-- schema versions;
-- explicit field deprecation rather than deletion;
-- purpose/key registry across Forms;
-- compatibility warnings;
-- submission schema version snapshots;
-- migration tooling for renamed/replaced purposes;
-- governance audit reports.
+Begin with one repeated real requirement. Do not create a visual-only Block that
+has no honest data contract.
 
-### 6.4 Visual Authoring Maturity
+### 3.11 Persistent Notification Platform
 
-- Advanced Block controls are intentionally postponed until after the Notification Overhaul. Do not revive the removed inline BlockEditor advanced panels; any return should be a designed modal with a new UX contract.
-- richer starter/preset library;
-- visual connector drawing;
-- focal-point media tools;
-- stronger snapping/guides;
-- breakpoint inspection;
-- accessible animation previews;
-- governed design tokens rather than arbitrary raw values.
+Begin only after structured log/domain events exist:
 
-## 7. Superseded Or Obsolete Plans
+- in-app inbox;
+- read/unread state;
+- permission-aware recipients;
+- categories and retention;
+- links to the relevant Page, submission, asset or user;
+- events such as approval requests, failed cleanup or completed background scans.
 
-- LibraryFeature "Phase 4 current" status.
-- Separate Resource Preview dashboard page.
-- automatic Resource record for every upload.
-- permanent GallerySection retention.
-- manually expanding CloneUtility for every field.
-- top-level Form Submissions page mixing definitions and submissions.
-- freely editable Form/Field keys.
-- automatically generated Field Key solely from arbitrary labels.
-- Unsorted Albums.
-- configurable Resource URL/storage key shown to non-code Admin users.
-- YouTube URL as Section background video.
-- bulk automatic HTMLSection migration.
+Email, web push, PWA service workers and multi-server delivery are later
+extensions, not the first implementation.
+
+## 4. Parked Platforms
+
+### 4.1 Advanced Form Platform
+
+One Form Definition owning exactly one design is a product invariant, not a
+temporary limitation.
+
+Do not add multiple designs per Form.
+
+Reopen advanced Form work only for a concrete repeated requirement such as:
+
+- governed conditional behavior;
+- approval/version release rules;
+- a genuinely reusable new field type.
+
+### 4.2 Advanced Translation Platform
+
+Current source-owned catalogs and Translation Health are sufficient for the
+present website.
+
+Database editing, automatic translation and translator approval workflows remain
+parked until the organization has a real non-developer translation workflow.
+
+## 5. Active Incremental Migration
+
+Continue strict HTML-to-Block migration through Test-3:
+
+- recreate one Section;
+- use current Blocks and saved Section presets;
+- obtain visual acceptance;
+- migrate the real Page only with explicit approval;
+- publish and verify UserSite;
+- retain old HTML/CSS until zero-use verification.
+
+The Contact Network Split Form is no longer blocked by missing Form Design v2
+contracts. It still requires an accepted Test-3 composition and real-page
+migration approval.
+
+The following intentionally remain HTML until reusable data-backed capabilities
+exist:
+
+- Technology control tower/pseudo-table;
+- Technology decorative operations panels;
+- Technology dashboard/chart scene;
+- Industry sticky-scroll narrative.
+
+See [09-HTML-TO-BLOCK-CAPABILITY-AUDIT.md](09-HTML-TO-BLOCK-CAPABILITY-AUDIT.md).
+
+## 6. Production And Operational Work
+
+These requirements remain valid even when executed manually:
+
+- fail-closed Production CORS;
+- restricted `AllowedHosts`;
+- secrets in environment/company vault;
+- no reusable production seed password;
+- protected persistent Data Protection keys;
+- MongoDB auth/TLS/least privilege/firewall/backups/restore testing;
+- public metrics rate limiting;
+- HTTPS/proxy/header verification;
+- compatible API/Admin/User/SharedComponents publish outputs;
+- health checks, monitoring and rollback.
+
+See [06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md](06-DEVELOPMENT-OPERATIONS-AND-SECURITY.md)
+and [11-IIS-DEPLOYMENT-RUNBOOK.md](11-IIS-DEPLOYMENT-RUNBOOK.md).
+
+## 7. Conditional Scaling Work
+
+Caching and Redis are not independent product goals.
+
+- Add targeted published-data caching only after measuring repeated expensive
+  reads.
+- Use in-process memory caching for a single API instance where sufficient.
+- Introduce Redis when multiple instances, a shared cache, a distributed
+  session-revocation signal or background coordination creates a real need.
+- Keep MongoDB and authoritative session validation as the source of truth.
+
+## 8. Explicitly Not Active
+
+- multiple Form designs;
+- automatic mass HTMLSection migration;
+- Page-specific Block types for one-off scenes;
+- raw HTML/CSS as ordinary authoring;
+- screenshot thumbnails for saved Section presets;
+- Group/Ungroup/detach/ordinary Container reassignment;
+- a second clone architecture rewrite;
+- Redis without measured need;
+- 2FA without explicit request;
+- automatic translation without a business workflow.

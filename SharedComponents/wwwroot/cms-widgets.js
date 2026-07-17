@@ -1,4 +1,34 @@
 window.cmsWidgets = window.cmsWidgets || {};
+window.cmsFormHost = window.cmsFormHost || {
+    dotNetRef: null,
+    trigger: null,
+    keyHandler: null,
+    register(dotNetRef) {
+        this.dotNetRef = dotNetRef;
+        this.keyHandler = event => {
+            if (event.key === "Escape" && document.body.classList.contains("sc-modal-open")) {
+                this.dotNetRef?.invokeMethodAsync("CloseFromJs");
+            }
+        };
+        document.addEventListener("keydown", this.keyHandler);
+    },
+    unregister() {
+        if (this.keyHandler) document.removeEventListener("keydown", this.keyHandler);
+        this.keyHandler = null;
+        this.dotNetRef = null;
+        this.setOpen(false);
+    },
+    setOpen(open) {
+        document.body.classList.toggle("sc-modal-open", !!open);
+        if (!open && this.trigger?.isConnected) this.trigger.focus();
+        if (!open) this.trigger = null;
+    },
+    focusDialog() {
+        window.requestAnimationFrame(() => {
+            document.querySelector(".sc-public-modal.open .sc-public-modal__close, .sc-public-modal.open input, .sc-public-modal.open button")?.focus();
+        });
+    }
+};
 
 window.cmsWidgets.init = () => {
     initCounters();
@@ -188,9 +218,14 @@ function initPublicModals() {
 
         e.preventDefault();
         e.stopPropagation();
+        if (window.cmsFormHost) window.cmsFormHost.trigger = trigger;
 
         if (formId) {
-            await openPublicFormModalById(formId);
+            if (window.cmsFormHost?.dotNetRef) {
+                await window.cmsFormHost.dotNetRef.invokeMethodAsync("OpenById", formId);
+                return;
+            }
+            console.warn("The shared Form modal host is not ready.");
             return;
         }
 
@@ -199,7 +234,11 @@ function initPublicModals() {
             return;
         }
 
-        await openPublicFormModalByKey(formKey);
+        if (window.cmsFormHost?.dotNetRef) {
+            await window.cmsFormHost.dotNetRef.invokeMethodAsync("OpenByKey", formKey);
+            return;
+        }
+        console.warn("The shared Form modal host is not ready.");
     });
 }
 
@@ -223,33 +262,6 @@ function ensurePublicModal() {
         }
     });
     return modal;
-}
-
-async function openPublicFormModalById(formId) {
-    await openPublicFormModalFromEndpoint(`api/public/forms/by-id/${encodeURIComponent(formId)}`);
-}
-
-async function openPublicFormModalByKey(formKey) {
-    await openPublicFormModalFromEndpoint(`api/public/forms/${encodeURIComponent(formKey)}`);
-}
-
-async function openPublicFormModalFromEndpoint(endpoint) {
-    const modal = ensurePublicModal();
-    try {
-        modal.replaceChildren(buildPublicModalLoadingDialog());
-        document.body.classList.add("sc-modal-open");
-        modal.classList.add("open");
-
-        const response = await fetch(buildPublicApiUrl(endpoint));
-        const result = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(result?.message || result?.Message || "Form not found");
-
-        const definition = result?.data || result?.Data;
-        if (!definition) throw new Error("Form not found");
-        modal.replaceChildren(buildPublicModalDialog(getPublicModalConfigFromDefinition(definition)));
-    } catch (error) {
-        modal.replaceChildren(buildPublicModalErrorDialog(error?.message || publicUiText("SubmitError", getPublicUiLanguage())));
-    }
 }
 
 function openSyncModal() {
@@ -601,62 +613,6 @@ function getSyncModalConfig() {
             { name: "Password", label: publicUiText("Password", lang), type: "password", autocomplete: "current-password", required: true }
         ]
     };
-}
-
-function getPublicModalConfigFromDefinition(definition) {
-    const lang = getPublicUiLanguage();
-    return {
-        type: definition.key || definition.Key,
-        title: localizeText(definition.name || definition.Name, definition.key || definition.Key || "Form"),
-        intro: localizeText(definition.introduction || definition.Introduction, ""),
-        submit: localizeText(definition.submitButtonLabel || definition.SubmitButtonLabel, publicUiText("Submit", lang)),
-        layout: normalizePublicFormLayout(definition.layout ?? definition.Layout),
-        fields: (definition.fields || definition.Fields || [])
-            .slice()
-            .sort((a, b) => (a.order ?? a.Order ?? 0) - (b.order ?? b.Order ?? 0))
-            .map(field => {
-                const type = normalizePublicFieldType(field.type || field.Type);
-                return {
-                    name: field.key || field.Key,
-                    label: localizeText(field.label || field.Label, field.key || field.Key || ""),
-                    type,
-                    required: !!(field.required ?? field.Required),
-                    maxLength: normalizePublicMaxLength(type, field.maxLength ?? field.MaxLength),
-                    inputBoxSize: normalizePublicInputBoxSize(type, field.inputBoxSize ?? field.InputBoxSize),
-                    options: field.options || field.Options || []
-                };
-            })
-    };
-}
-
-function buildPublicModalLoadingDialog() {
-    const dialog = document.createElement("div");
-    dialog.className = "sc-public-modal__dialog";
-    const text = document.createElement("p");
-    text.className = "sc-public-modal__intro";
-    text.textContent = publicUiText("Submitting", getPublicUiLanguage());
-    dialog.appendChild(text);
-    return dialog;
-}
-
-function buildPublicModalErrorDialog(message) {
-    const dialog = document.createElement("div");
-    dialog.className = "sc-public-modal__dialog";
-    const header = document.createElement("div");
-    header.className = "sc-public-modal__header";
-    const title = document.createElement("h2");
-    title.textContent = publicUiText("SubmitError", getPublicUiLanguage());
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "sc-public-modal__close";
-    close.setAttribute("aria-label", "Close");
-    close.textContent = "x";
-    header.append(title, close);
-    const text = document.createElement("p");
-    text.className = "sc-public-modal__intro";
-    text.textContent = message;
-    dialog.append(header, text);
-    return dialog;
 }
 
 function normalizePublicFieldType(type) {

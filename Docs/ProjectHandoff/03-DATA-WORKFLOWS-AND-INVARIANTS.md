@@ -1,45 +1,44 @@
 # Data Workflows And Invariants
 
+Last reconciled: **2026-07-16**
+
 ## 1. Page Graph Identity
 
-A Page is not one MongoDB document. Its rendered graph is:
+A rendered Page is a graph, not one document:
 
 ```text
 Page
- |- Sections ordered by PageStableId + Order
- |   |- Section-specific items
- |   |- ColumnSlots where applicable
- |   \- Blocks ordered by SectionStableId + Order
- |       \- nested Blocks linked by ParentBlockId
+ |- ordered Sections by PageStableId
+ |   |- Section-specific embedded items/slots
+ |   \- ordered Blocks by SectionStableId
+ |       \- governed descendants by ParentBlockId
  \- global Theme/Branding/Footer/Social/Button context
 ```
 
-Identity fields have different meanings:
-
 | Field | Meaning |
 | --- | --- |
-| `_id` / `Id` | Mongo document instance. It may change across clone profiles. |
-| `StableId` | Logical Page/Section/Block identity across draft, published and revisions. |
+| `_id` / `Id` | Mongo document instance; may change across snapshot/clone operations. |
+| `StableId` | Logical identity across draft/published/revision/clone meaning. |
 | `PageStableId` | Parent Page graph identity. |
 | `SectionStableId` | Parent Section graph identity. |
 | `ColumnSlotId` | ColumnsSection slot ownership. |
-| `ParentBlockId` | Nested Block ownership under a Container. This currently refers to the parent document ID. |
-| `SourceId` | Source document used to create a snapshot. |
-| `Version`, `PublishedAt`, `UpdatedAt` | Workflow and history metadata. |
+| `ParentBlockId` | Nested ownership under a Container; currently parent document ID. |
+| `SourceId` | Source document used for a snapshot. |
+| `Version`, `PublishedAt`, `CreatedAt`, `UpdatedAt` | Workflow/history metadata. |
 
-Any new graph relationship must be covered by clone, publish diff, reset, preset capture/apply and importer verification.
+Every new relationship must be considered in publish diff, reset, clone profiles, revisions, presets, import, usage discovery, and deletion.
 
-Block `Order` is meaningful within a peer scope, not across the whole Section. The current peer identity is:
+### Block peer scope
+
+Block `Order` is local to:
 
 ```text
 ParentBlockId + BlockZone + ColumnSlotId
 ```
 
-Reorder requests must contain the complete peer set for exactly one scope. The API rejects partial, duplicate, missing or mixed-scope requests. Drag ordering never reparents a Block or moves it to another zone/slot.
+Reorder requests must contain the complete peer set for one scope. Reorder never reparents a Block. Container membership cannot be changed by drag order.
 
-Default freeform placement is service-owned: a new freeform Block is centered and clamped using its starter geometry, with a small alternating offset for later peers. Flow Blocks append within their peer scope. A Container child follows its Container layout and defaults to flow unless that Container explicitly uses freeform layout.
-
-## 2. Edit And Preview Workflow
+## 2. Admin Preview, Edit, And UserSite
 
 ```mermaid
 sequenceDiagram
@@ -47,289 +46,567 @@ sequenceDiagram
     participant AF as AdminSite
     participant API as API
     participant D as Draft collections
-    participant P as Preview iframe
-    participant S as Shared renderer
+    participant PR as Shared renderer
+    participant U as UserSite
+    participant P as Published collections
 
     A->>AF: Edit Page/Section/Block
-    AF->>API: Authenticated admin request
-    API->>D: Validate and update draft
-    API-->>AF: Updated DTO/result
-    AF->>P: Reload /preview/{pageId}
-    P->>API: Load draft Page graph
-    API-->>P: Draft Page/Sections/Blocks
-    P->>S: Render Public DTO graph
-    S-->>A: Admin preview
+    AF->>API: Authenticated mutation
+    API->>D: Validate and persist draft
+    AF->>API: Load draft Preview graph
+    API-->>AF: Draft Public DTO data
+    AF->>PR: Render draft
+    U->>API: Load public route
+    API->>P: Read published graph only
+    API-->>U: Published Public DTO data
+    U->>PR: Render published graph
 ```
 
-Admin Preview loads draft data. UserSite loads published data. A change visible in the editor but not after reload usually means the save did not persist, the wrong draft record was addressed, or preview data mapping omitted the field.
+Admin Preview and UserSite must use the same Public DTO shapes and SharedComponents. If they differ, inspect both model-to-Public mappings before changing CSS.
 
-## 3. Publish Workflow
+## 3. Page Builder Interaction Model
 
-The user still publishes at Page level. Granular behavior is internal.
+### Global mode
+
+- **Preview:** navigation and interactive draft view; users without `page-builder` stay here.
+- **Edit:** Page/Section editing for users with `page-builder`.
+
+Arrange is not a third global toggle state. It is entered from one selected Section's Blocks tab.
+
+### Arrange workflow
+
+1. Select a Section in Edit.
+2. Open Blocks tab.
+3. Resolve unsaved Section changes: save, discard, or cancel.
+4. Enter Arrange Blocks for that Section.
+5. Use the Section-scoped Block dropdown/list, Canvas zones, handles, and toolbar.
+6. Use the content edit pencil for the selected Block when required.
+7. Choose Done Arranging at any time. If an authoring operation is still completing, exit is queued and completed immediately afterward.
+8. Return to the same Section, Blocks tab, and stable selected Block where possible.
+
+Canvas/zone click targeting is authoritative during Arrange. A user does not need to exit Arrange to target another zone inside the same Section.
+
+### Preview scale
+
+- desktop logical width 1440 at 80% Canvas scale;
+- tablet logical width 768 at 70%;
+- mobile logical width 375 at 70%.
+
+The shell width is calculated from scaled width so desktop should not create an unnecessary horizontal scrollbar. Tablet/mobile are width-based responsive previews, not device simulators.
+
+### Page tab reveal
+
+Selecting a clipped root Page tab scrolls only enough to reveal the complete selected tab and its actions. Already fully visible tabs do not move, and tabs are not forcibly centered.
+
+## 4. Publish Workflow
+
+The user publishes at Page level; the service writes granular graph differences.
 
 ```mermaid
 flowchart TD
-    D["Load draft Page graph"] --> Diff["Compare by StableId and normalized data"]
-    Diff --> Added["Added records"]
-    Diff --> Changed["Changed records"]
-    Diff --> Removed["Removed records"]
-    Diff --> Same["Unchanged records"]
-    Added --> Clone["CloneProfile.PublishSnapshot"]
-    Changed --> Clone
-    Removed --> Delete["Remove obsolete published graph records"]
-    Same --> Keep["Preserve unchanged published meaning"]
-    Clone --> Pub[("Published collections")]
-    Delete --> Pub
-    Keep --> Pub
+    Draft["Load draft graph"] --> Diff["Compare by StableId and normalized BSON"]
+    Diff --> Added["Added"]
+    Diff --> Changed["Changed"]
+    Diff --> Removed["Removed"]
+    Diff --> Same["Unchanged"]
+    Added --> Clone["PublishSnapshot clone"]
+    Changed --> Replace["Replace changed published instance while preserving intended identity"]
+    Removed --> Delete["Delete obsolete published record"]
+    Same --> Keep["Leave untouched"]
 ```
 
-Important invariants:
+Invariants:
 
-- Stable identity is preserved.
-- Published Mongo IDs are snapshot instances, not draft IDs.
-- New model fields should automatically survive serializer cloning.
-- Identity/workflow fields are the only intentionally transformed data.
-- Public Pages never read drafts.
+- published Pages never read draft records;
+- StableId meaning survives;
+- serializer cloning retains normal new fields automatically;
+- only identity/workflow fields are intentionally transformed;
+- duplicate StableIds or graph integrity errors block publish;
+- asset cleanup examines only replaced/deleted old records and still checks global references.
 
-## 4. Reset Workflow
+## 5. Reset And Revision
 
-Reset restores published graph data into draft:
+Reset:
 
-1. Load published Page, Sections and Blocks.
-2. Clone with `DraftResetSnapshot`.
-3. Regenerate draft document IDs as required.
-4. Preserve StableIds and relationships.
-5. Replace the editable draft graph.
-6. Keep the result as draft, not published state.
+1. load published Page/Sections/Blocks;
+2. clone with `DraftResetSnapshot`;
+3. regenerate draft instance IDs;
+4. preserve stable graph relationships;
+5. replace draft graph;
+6. keep result editable, not published.
 
-Reset can destroy unpublished edits. The UI must require deliberate confirmation.
+Reset destroys unpublished edits and requires confirmation.
 
-## 5. Revision Workflow
+Page and Content revision backends exist. Content history UI exists. Full Page
+Revision History/preview/restore UI remains future. Restoring a revision creates
+a new draft state; it never rewrites the historical record.
 
-Page and Content revision models/services exist.
+Before Page Revision History is promoted broadly:
 
-- Content revision UI is established.
-- Page revision backend exists.
-- Administrative Page Revision History UI remains a planned feature.
-- Restoring a revision must create a new draft state; it must not rewrite historical records.
-- Revision retention should be displayed and governed, not silently deleted.
+- define whether revision snapshots guarantee asset recoverability;
+- prevent cleanup from deleting a direct-upload asset that a retained revision
+  is expected to restore;
+- validate restored asset availability;
+- emit a structured audit event;
+- retain a before-restore snapshot;
+- define revision pagination and retention rather than silently relying on a
+  small fixed history window.
 
-## 6. Section And Block Rendering
+## 6. Section Preset Workflow
 
-API/admin preview/public assembly maps Mongo models to Public DTOs. SharedComponents renders those DTOs.
+Saved Section presets are database-backed complete Section snapshots with associated Blocks where applicable.
 
-```mermaid
-flowchart LR
-    M["Mongo model"] --> Map["PublicPageAssemblyService or Admin Preview mapper"]
-    Map --> DTO["Public DTO"]
-    DTO --> PR["PageRenderer"]
-    PR --> SR["Section component"]
-    SR --> SB["SectionBlocks"]
-    SB --> BR["Block component"]
+```text
+Section editor / Section edge action
+    -> Save as Preset dialog
+    -> name + description + source Section type/item summary
+    -> PresetCapture clone
+    -> canvas_section_presets
+    -> Add Section > Saved Presets centered modal
+    -> PresetApply clone with new identities
 ```
 
-When a field works in UserSite but not Admin Preview, compare the two model-to-Public-DTO mapping paths before changing CSS.
+Rules:
 
-## 7. Responsive Composition
+- a preset is a saved reusable Section, not a Page template;
+- it may contain normal Section content, images, items, and Blocks;
+- assets remain references and participate in usage/deletion checks;
+- applying regenerates graph identities and parent references;
+- preset preview uses the original Section icon and metadata, not a generated screenshot;
+- a misleading background-only or incomplete renderer snapshot must not return;
+- preset outer hover animation and inner dark-blue icon outline are separate visuals.
 
-Current contracts support desktop layout, tablet/mobile overrides, layout modes, shapes, freeform geometry and Container responsive modes.
+## 7. Block Creation, Naming, And Geometry
 
-The newly agreed UX direction simplifies what normal administrators see:
+### Creation
 
-- ordinary root Blocks stack automatically on narrow screens;
-- grid/row layouts reflow automatically;
-- media, map and forms become full width;
-- Collection Containers stack children;
-- orbit/semicircle/diagram Containers behave as one compact-preserve composition;
-- advanced overrides remain stored for compatibility and governed presets.
+- Add Block opens one centered Canvas-owned modal even when invoked from a Section panel.
+- Step 1 chooses type; Step 2 chooses a relevant starter only when the type has meaningful variants.
+- Text has one starter.
+- Form has no visual starter variants; it requires an active Form Definition.
+- Database creation happens only after confirmation.
+- freeform root Blocks are centered/clamped with small alternating offsets;
+- flow Blocks append;
+- Container children occupy governed next slots.
 
-Do not delete old responsive fields merely because the normal UI stops exposing them.
+### Naming
 
-## 8. Asset Paths
+- `EditorLabel` is private authoring metadata.
+- Rename pencil is available in BlockEditor and Arrange content modal.
+- Empty labels display `Untitled 1`, `Untitled 2`, etc., numbered by type for human naming while real list/order identity remains unchanged.
+- public Text content never displays `EditorLabel` or legacy `Title` as content.
 
-### 8.1 Direct Upload
+### Absolute geometry rule
 
-Use for one-off assets owned by a specific field, such as a Section background or decorative Block image.
+- the authoring drag/resize outline represents the actual Block border;
+- the selected overlay/handles may rise above overlapping rendered Blocks, but the rendered Block's layer is unchanged;
+- rotation transforms renderer and outline together and updates continuously while press/holding rotation;
+- Canvas empty-area clicks clear or retarget selection according to the active zone;
+- generic Blocks do not auto-shrink their internal content to conceal bad geometry;
+- FormBlock is a deliberate governed scaling exception.
 
-Stored data typically includes:
+## 8. Container Ownership And Layout
+
+Container is a governed Block graph, not a temporary grouping operation.
+
+Canonical presets include Stack, Row, Grid, Split, Orbit, Semi-circle, Advanced freeform, and compatibility-only Legacy freeform. Each preset specifies capacity, allowed child types, ordering policy, and named/fixed slots where required.
+
+Invariants:
+
+- no Group existing Blocks action;
+- no Ungroup action;
+- no parent reassignment or “move child to Canvas” action;
+- children cannot move between Containers through ordinary APIs;
+- nested Containers are blocked for new ordinary creation;
+- API and UI both enforce capacity and allowed types;
+- required fixed-slot children cannot be directly deleted;
+- deleting a Container recursively counts and atomically deletes descendants;
+- confirmation explains that descendants cannot be preserved;
+- asset cleanup runs after graph deletion succeeds;
+- old unknown/missing preset keys resolve to `legacy-freeform` for compatibility, but new legacy-freeform creation is rejected.
+
+## 9. Responsive Composition
+
+Normal behavior:
+
+- root Blocks stack/reflow on narrow screens;
+- grid/row layouts reduce columns;
+- media, map, and Forms become full-width;
+- collection Containers stack/reflow children;
+- orbit/semicircle/diagram compositions use compact-preserve governance;
+- Form desktop `FormScale` is ignored on mobile; the Form becomes full-width and natural-height.
+
+Advanced responsive fields remain in persisted contracts for compatibility and preset governance even when not exposed in the normal BlockEditor.
+
+## 10. Asset Paths
+
+### Direct Upload
+
+One-off field-owned asset:
 
 - URL;
 - storage key where available;
 - source mode `DirectUpload`;
 - no ResourceId.
 
-Direct uploads do not automatically appear in Resource Library.
+It does not automatically appear in Resource Library.
 
-### 8.2 Managed Resource
+### Managed Resource
 
-Use for reusable images, files, real videos and deliberate YouTube video records.
-
-Stored reference metadata includes:
+Reusable governed asset:
 
 - `ResourceId`;
-- `ResourceSource` / managed source marker;
+- managed source marker;
 - current URL;
-- storage key for uploaded assets;
-- file metadata.
+- storage key for uploaded bytes;
+- metadata/kind/Album.
 
-The URL may be copied for rendering compatibility, but ResourceId is the precise governance reference.
+The copied URL supports rendering compatibility; `ResourceId` is the precise governance reference.
 
-```mermaid
-flowchart TD
-    Field["Asset field"] --> Choice{"Upload path"}
-    Choice --> Direct["Direct Upload"]
-    Choice --> Managed["Managed Resource"]
-    Direct --> Store["Storage provider"]
-    Direct --> Meta["Field URL/key metadata"]
-    Managed --> RL["managed_resources record"]
-    RL --> Store
-    RL --> Ref["Field ResourceId + URL metadata"]
-```
+## 11. Asset Replacement, Usage, And Cleanup
 
-## 9. Asset Replacement And Cleanup
+1. Save the new reference.
+2. Capture old URL/key/ResourceId.
+3. Search every known reference through asset/resource usage services.
+4. Delete old bytes only when no live reference remains.
+5. Hard-block Managed Resource deletion while used.
+6. Treat R2 and future company storage through the provider boundary.
+7. Include revision-retention policy when an old snapshot is expected to remain
+   restorable.
+8. Persist cleanup failures for retry or reconciliation instead of relying only
+   on a warning log.
+9. Provide a dry-run orphan scanner before destructive reconciliation.
 
-Replacement does not immediately assume the old URL is disposable.
+Any new asset field absent from reference discovery is a release-blocking defect.
 
-1. Save the new asset/reference.
-2. Gather the old URL/storage key.
-3. Search all supported references through `AssetReferenceService` and resource usage services.
-4. Delete the old binary only when no live reference remains.
-5. Keep managed Resource deletion hard-blocked while used.
-6. Treat R2 and future local storage through the same provider boundary.
+## 12. Resource Library Rules
 
-Any new asset-bearing field must be added to reference discovery. Otherwise the cleanup service can undercount usage and delete a still-used asset.
+- kinds: Image, Video, File;
+- Video may be uploaded bytes or a deliberately validated YouTube video URL;
+- YouTube playlists/channels/search URLs are rejected;
+- Section background video must be a real upload/managed video, not YouTube;
+- one Resource belongs to zero or one Album;
+- no automatic Unsorted Album;
+- Albums are organization, not usage ownership;
+- Album deletion is blocked while non-empty;
+- Resource deletion is blocked while referenced;
+- bulk delete uses the same server checks;
+- upload limits come from current Settings/policy, not documentation estimates;
+- uploader display resolves a human name where possible.
 
-## 10. Resource Library Rules
+## 13. Content Type Behavior
 
-- Resource kinds are Image, Video and File.
-- Resource Library videos may be real uploads or a deliberate YouTube external-link exception.
-- Playlist, channel and search URLs are rejected; supported complete YouTube video URLs are normalized.
-- Section background video is a real uploaded video, not YouTube.
-- Albums are folder-like organization, not usage constraints.
-- One Resource belongs to zero or one Album.
-- Media albums contain Image/Video; File albums contain File.
-- Resources do not need an Album.
-- No automatic "Unsorted" Album exists.
-- Album deletion is hard-blocked while it contains Resources.
-- Resource deletion is hard-blocked while used anywhere.
-- Bulk delete follows the same server checks as individual delete.
-- Current default limits are approximately Image 20 MB, File 50-100 MB according to configured policy, and Video 250 MB; the actual authoritative values come from Resource Library settings and upload policy.
-- Only authorized Admin users can change upload limits.
-- Uploaded-by display uses a human name where available, not a raw database ID.
-
-## 11. Content Type Behavior
-
-| Behavior | Required meaning | Public action |
+| Behavior | Meaning | Public action |
 | --- | --- | --- |
-| `Page` | Body/page content | Open Content detail Page. |
-| `FileResource` | Primary managed/direct file | Open file in a new tab. |
-| `VideoResource` | Uploaded/managed video or supported external video | Open media player/modal. |
-| `ImageResource` | Primary image | Open lightbox/modal. |
-| `Gallery` | Image/video collection | Display gallery and open media viewer. |
+| `Page` | Article/body content | Open Content detail Page. |
+| `FileResource` | Primary file | Open/download file. |
+| `VideoResource` | Uploaded/managed/supported video | Open media player/modal. |
+| `ImageResource` | Primary image | Open image/lightbox. |
+| `Gallery` | Image/video collection | Render gallery and media viewer. |
 
-Content Page Preview must render only `Page` behavior. Resource content is monitored from Content lists and rendered through LibrarySection/Resource Library behavior.
+Content Page Preview renders only `Page` behavior. Resource-like content appears through lists/LibrarySection behavior rather than pretending to be an article.
 
-## 12. LibrarySection Workflow
+## 14. Content Permissions And Workflow
 
-LibrarySection reads Content Types and behavior, not arbitrary Resource Library inventory.
+### Assignable permission groups
 
-- Content Management chooses which editorial records are public.
-- Resource Library governs a broader reusable asset pool.
-- A Content file can reference the same managed Resource without the two modules becoming duplicates.
-- File opens new tab.
-- Image opens lightbox.
-- Video opens the Section playlist modal when multiple videos belong to that Section.
-- Gallery uses horizontal/gallery presentation with media interaction.
-- Existing layouts remain Card, Grid, Rows, List and Gallery.
+- `view-content` — access Content Management;
+- `create-edit-content` — create/edit own Draft/Rejected Content and includes View Content;
+- `approve-content` — review/edit Submitted/Published Content and includes View Content.
 
-## 13. Form Definition And Submission Workflow
+Old `manage-content`, `publish-content`, and `delete-content` are migration-only keys and cannot be assigned again.
 
-```mermaid
-flowchart TD
-    FT["Built-in Form-Field Type"] --> FD["Form Definition"]
-    FD --> Fields["Ordered fields with locked Key and Type"]
-    FD --> Button["Button/FormBlock references Form Definition"]
-    Button --> Public["UserSite renders active language"]
-    Public --> Validate["Client format checks + backend authoritative validation"]
-    Validate --> Submission[("Form Submission + field snapshots")]
-    Submission --> Admin["Form Management: filter, assign, status, timeline, export"]
-```
+### Status representation
 
-Form invariants:
+- **Draft** — normal editable draft;
+- **Pending Review** — persisted as `ContentStatus.Submitted`;
+- **Rejected** — new rejections use Draft plus `ReviewStatus=Rejected`; legacy `ContentStatus.Rejected` remains deserializable;
+- **Published**;
+- **Deleted**;
+- `Archived` remains compatibility-only.
 
-- Form Key is unique and sticky after creation.
-- Creating with an existing Form Key must reject, never silently merge.
-- Field Key is manually chosen from governed suggestions or created intentionally.
-- Key suggestions exclude keys already used in the same Form.
-- Field Key and Field Type lock after first save.
-- Change Type/Key by deleting the field and creating a new one.
-- Deleting a saved field requires warning; old submissions retain historical field snapshots.
-- A Form Definition cannot be deleted while any button or Block uses it.
-- Deleting a Form clears/requires re-selection of its action reference; recreating the same textual key must not silently reconnect old references.
-- Public submission accepts only fields in the current definition.
-- Metadata such as honeypot/source is not treated as a user Form field.
+### Visibility scopes
 
-## 14. Authentication And Authorization
+| Scope | Writer/Create-Edit | Approver/Manager | AdminAdmin |
+| --- | --- | --- | --- |
+| All Content | published content; no other writers' drafts | all non-deleted/non-archived | all non-deleted/non-archived |
+| My Content | own Draft, Submitted, Rejected, Published | own supported statuses | own supported statuses |
+| Submitted | own Submitted | all Submitted | all Submitted |
+| Published | own Published | own Published | own Published |
+| Deleted | hidden | hidden | all Deleted |
 
-Current login flow:
+Deleted items never also appear in My Content.
 
-1. Admin submits credentials through an antiforgery-protected Razor Page.
-2. API rate-limits login by IP.
-3. AuthService verifies BCrypt password and user status/lockout.
-4. API creates a database session and JWT containing role/permissions/token version.
-5. AdminSite validates the response and creates an encrypted Secure/HttpOnly/SameSite session cookie. The JWT is a private claim inside that protected ticket, not browser storage.
-6. Server-side HttpService reads the authenticated principal and sends the Bearer token to the API. Browser JavaScript never receives it.
-7. API JWT validation checks signature, issuer, audience and lifetime.
-8. `AdminSessionValidationMiddleware` verifies the database session/token state.
-9. Controller policy checks role/permission.
-10. API 401 responses, account mutations and 30-second periodic revalidation invalidate the Blazor circuit and submit an antiforgery-protected cookie sign-out.
+### Actions
 
-Roles:
+| State | Owner with Create/Edit | Approver | AdminAdmin |
+| --- | --- | --- | --- |
+| Draft | edit, save, submit, delete own | no other-writer draft edit | edit, save, direct publish, delete |
+| Submitted | read own; withdraw to Draft before editing; cannot delete | edit, publish, reject | edit, publish, reject, withdraw/force Draft, delete |
+| Rejected | edit own; save returns normal Draft; then submit again; delete own | read according to review scope | edit/delete/force transitions |
+| Published | read/preview; no edit/delete | edit, return to Pending | edit, return Pending or force Draft |
+| Deleted | unavailable | unavailable | read-only, restore to Draft, or permanently delete |
 
-- **AdminAdmin:** bypasses ordinary permission lists and has full administrative authority.
-- **Manager:** content publishing/deletion and Form Management defaults.
-- **Writer:** content creation/editing defaults, Form Management defaults, Resource Library access; no unrestricted system management.
-- **Viewer:** preview/read-oriented access; explicitly excluded from Form Management and Resource Library.
+Only Published Content exposes public Content Preview. Status transitions are explicit workflow commands, not a raw status dropdown for ordinary users.
 
-Authentication does not read or write `localStorage`. Two temporary cleanup statements only delete the former `admin_session` key during migration. Immediate cross-circuit invalidation uses an in-process event bus and therefore assumes one IIS worker; API rejection plus periodic revalidation remains authoritative. Persist and protect the configured Data Protection key ring so cookies survive recycle and deployment.
+Author ownership is stored by Admin ID. UI mapping resolves a human full name; it must not show ObjectId hashes or email when a known name exists. Legacy email ownership comparison remains only for compatibility.
 
-## 15. Language Workflow
+## 15. Roles, Account Permissions, And Session Impact
 
-- UserSite language lives in `LanguageService` and `localStorage["lang"]`.
-- Language settings come from API and identify active/user-enabled/fallback languages.
-- Blazor publishes the active language to JavaScript so modal forms use the same source of truth.
-- JavaScript fallback order is intended to be active Blazor language, document language, parsed localStorage, then configured fallback.
-- Public Form Definition labels, introduction, fields and submit label are resolved from the active language.
-- English is current fallback, but fallback ownership must be configurable so Vietnamese can become primary later.
-- Translation Health is future read-only reporting; it does not auto-translate.
+### Role model
 
-## 16. Theme And Style Precedence
+- AdminAdmin: protected, system, always all assignable permissions;
+- Manager/Writer/Viewer: seeded defaults only when role collection is empty; afterward editable/deletable;
+- custom roles: name, description, mandatory permission set.
+
+Effective user permission:
 
 ```text
-Global Theme variables
-        v baseline
-Section Style overrides
-        v local background/layout/text behavior
-Block Appearance overrides
-        v local frame/media/shape behavior
-Component semantic CSS
-        v final rendering
+Role.Permissions
+    UNION
+User.ExtraPermissions
+    EXPAND dependency graph
 ```
 
-Theme must control navigation color and the Section `Theme` background option. Section/Block overrides should not be overwritten by later Theme saves.
+Role permissions appear locked for an assigned user; an Admin can add extras but cannot remove the role's mandatory permissions from that account. Deleting a role with users requires an explicit replacement role and updates all affected users atomically enough to avoid role-less accounts.
 
-## 17. Database Import Workflow
+### Dependency graph
 
-The Demo Import Tool is import-only.
+- Create/Edit Content -> View Content;
+- Approve Content -> View Content;
+- Edit Form Definitions -> View Form Definitions;
+- Manage Form Submissions -> View Form Submissions;
+- Export Form Submissions -> View Form Submissions.
 
-- Target database is hard-locked to `FullProjectDb-UIWEB-3`.
-- It can create the database automatically; the tester does not pre-create it.
-- With `DropExistingTargetDatabase=true`, it replaces only that exact database.
-- It refuses MongoDB reserved databases.
-- It imports an allowlisted set of UI/content collections.
-- It excludes submissions, metrics, revisions and operational logs.
-- It creates a demo Admin user separately.
-- It writes import metadata.
-- It does not duplicate R2 objects; imported URL metadata points to the existing asset URLs.
+### Admin-exclusive capabilities
 
-The application must use the same database name in its API configuration after import.
+These are descriptive full-Admin powers, not assignable checkboxes:
+
+1. manage Content configuration/types;
+2. view/edit any Draft;
+3. directly publish a Draft;
+4. force Content back to Draft;
+5. delete any eligible Content;
+6. view Deleted Content;
+7. restore Deleted Content;
+8. permanently delete Content;
+9. manage Content workflow/revision history;
+10. manage role definitions;
+11. manage protected Admin accounts.
+
+### Security mutation effects
+
+Disabling, deleting, password-resetting, role-changing, or permission-changing an account increments token/session validity state and revokes relevant sessions. The AdminSite invalidates active circuits immediately within one process and revalidates against API at most every 30 seconds.
+
+Protection of the last active AdminAdmin account must be based on its true protected role, not old enum ordinals or a missing legacy role field.
+
+## 16. Admin Authentication Workflow
+
+1. Browser GETs server-rendered `/login` Razor Page.
+2. Page loads public Admin appearance and active Admin-enabled language list from API.
+3. POST submits credentials with antiforgery token.
+4. API login limiter applies by IP.
+5. API checks BCrypt, status, lockout, role, and creates DB session/JWT.
+6. AdminSite validates returned JWT metadata and writes encrypted Secure/HttpOnly/SameSite cookie.
+7. JWT remains a private protected ticket claim.
+8. Blazor `HttpService` reads the server principal and forwards Bearer token to API.
+9. API validates JWT, token version/session, and endpoint permission.
+10. Logout/401/revocation uses full-page sign-out and deletes the cookie.
+
+Authentication localStorage is forbidden. Temporary migration cleanup may delete the old `admin_session` key; language preferences may still use localStorage.
+
+Admin login/logout are full-page navigation because cookie headers are an HTTP response concern, not an in-circuit JavaScript storage action.
+
+## 17. Form Definition, Design, Block, And Submission Workflow
+
+```mermaid
+flowchart TD
+    Type["Built-in Form field type"] --> Definition["Form Definition"]
+    Definition --> Fields["Ordered locked-key fields"]
+    Definition --> Design["One governed design"]
+    Definition --> Ref["Buttons/Form Blocks store FormDefinitionId"]
+    Fields --> Renderer["Shared PublicFormRenderer"]
+    Design --> Renderer
+    Ref --> Renderer
+    Renderer --> Validate["Client format + authoritative API validation"]
+    Validate --> Submission[("Submission + historical field snapshots")]
+    Submission --> Admin["Filter, assign, status, notes, export"]
+```
+
+### Definition invariants
+
+- Form Key is unique and locked after creation;
+- Form Definition display order is persisted and server-authoritative;
+- authorized whole-row drag ordering uses revisioned conflict protection;
+- duplicate creation rejects instead of merging;
+- Field Key and Field Type lock after first save;
+- type/key change requires delete + new field;
+- current definition is the public allowlist;
+- deleted fields remain only in old submission snapshots;
+- definition deletion is blocked while referenced;
+- recreated textual key never reconnects old ID references silently;
+- active/inactive is respected by public lookup.
+
+### Design invariants
+
+- exactly one design per definition;
+- accepted v2 outer layouts: Standard, Split Panel, CTA;
+- v1 Stacked/Two Columns/CTA algorithms remain compatibility input, not the
+  current authoring contract;
+- outer layout is independent from explicit field rows;
+- every active field appears exactly once in one row;
+- one row contains one to three compatible fields;
+- wide fields default to their own row;
+- mobile stacks every persisted desktop row to one column;
+- Split Panel owns an information surface and a Form surface with independent colors and a governed divider ratio;
+- optional localized information items model icon/text/action rows without HTML;
+- exactly one semantic Submit action remains mandatory;
+- up to three auxiliary link/file/phone/email actions may be governed separately and can never become accidental Submit actions;
+- modal/embedded is usage context, not a design toggle;
+- width is drag-edited and layout-clamped; Split Panel also exposes a governed divider handle;
+- height is calculated from localized headings, explicit field rows, information items, actions, labels, independent spacing, reserved validation/status space and the taller Split side;
+- field-row spacing is 1–16px in v2 and does not control label/header/button/validation spacing;
+- maximum definition height is 1800px; too-tall save rejects;
+- design save propagates Form Block baselines to draft/published collections with rollback;
+- propagation never resizes non-Form buttons/cards that happen to store `FormDefinitionId`.
+
+### Authoring invariants
+
+- existing-definition navigation preserves Content or Form Design;
+- New Form begins on Content;
+- dirty navigation requires Save, Discard or Cancel;
+- the definition rail exposes at most six rows before scrolling;
+- the whole definition row is draggable, but click remains selection and order persists through an authorized API operation;
+- Live Preview is first in Form Design;
+- Design Settings opens a scrollable Theme-style drawer over the definition rail and never pushes the preview;
+- grouping/ungrouping fields updates the preview immediately but persists only through Save Definition.
+- row order is changed by dragging the row surface;
+- fields within one row can be reordered by dragging;
+- dragging a field outside its row creates a new row;
+- grouped fields remain an explicit row until the user ungroups or moves them;
+- Reset restores the last saved definition state.
+
+### FormBlock invariants
+
+- selects one active definition;
+- owns no field list, independent submit label, or shape variant;
+- initial width/height equals definition design within Section available width;
+- maximum scale 100%, minimum 50%; width/height resize together;
+- resize stops at 50%; it does not pass the threshold and later block enlargement;
+- all fields/buttons remain in scaled content;
+- Section may grow downward only, capped at 3000px;
+- mobile renders full width/natural height without desktop transform scaling;
+- authoring rename changes only `EditorLabel`.
+
+### Public renderer invariants
+
+- embedded and modal output uses `PublicFormRenderer`;
+- real labels remain for accessibility;
+- inside-input labels are visually hidden only where appropriate;
+- textarea/checkbox labels stay visible;
+- error/status areas reserve layout space;
+- public submit sends only current definition fields and allowed metadata;
+- missing/inactive definition produces explicit unavailable state.
+
+## 18. Language Workflow
+
+### Configured languages
+
+Language Settings controls active, Admin-enabled, User-enabled, order, names/native names/direction, and system fallback. Content dictionaries may include languages without an Admin UI catalog.
+
+Compiled Admin UI catalogs currently exist for:
+
+- `en` — English;
+- `vi` — Vietnamese with proper diacritics;
+- `cn` — Chinese.
+
+Japanese or future Spanish can be enabled and shown in login/Admin selectors without a compiled catalog; their UI text falls back according to policy.
+
+### Lookup and validation
+
+```text
+requested language
+    -> configured fallback language
+    -> raw translation key
+```
+
+The fallback/key language is system-wide and changes only through Language Settings, not when one user changes their dropdown.
+
+Translation Health checks:
+
+- missing fallback catalog (critical);
+- fallback missing/empty keys (critical);
+- duplicate declarations (error);
+- secondary missing/empty keys (warning);
+- enabled language without compiled catalog (unsupported/grey);
+- coverage count and expandable issue lists.
+
+It is read-only. Fix source catalogs and redeploy. No automatic translation, database override, or runtime source modification exists.
+
+### Login language
+
+The login dropdown reads every active Admin-enabled language from the public Settings endpoint. EN/VI/CN have compiled login labels. Unsupported languages display in the list but use configured fallback UI text. Successful login preserves the selected UI language as a non-secret preference; it does not change the system fallback.
+
+## 19. Immediate Feedback Workflow
+
+API responses may carry:
+
+- `Success`;
+- `StatusCode`;
+- human fallback `Message`;
+- `NotificationKey`;
+- `NotificationArgs`.
+
+Admin feedback resolves localized key first, then fallback message.
+
+Default severity:
+
+- 2xx: success;
+- 400/404/409/422: warning;
+- 401/403: warning plus auth/permission handling;
+- other failures/5xx/no response: error.
+
+Display modes:
+
+- **Toast** for important discrete feedback;
+- **Inline** near a repetitive control/progress surface;
+- **Silent success** for routine operations while still surfacing failure;
+- **Modal** exists as a message contract value but is not a general persistent system.
+
+Toast host caps visible notifications at three, times them out after four seconds, and removes them on navigation. No dedupe/throttle suppresses accurate independent events.
+
+This workflow is not persisted and cannot notify an offline user.
+
+## 20. Theme, Font, And Style Precedence
+
+```text
+Theme variables + body/heading fonts
+    -> Section style/background/spacing/content-width
+    -> Block appearance/font override
+    -> semantic component CSS
+    -> retained HTMLSection page-family CSS where applicable
+```
+
+Theme controls header colors, Section Theme background, body font, heading font, and size scale. Text Block may inherit or override with an allowlisted font. Arbitrary font-family input is not accepted.
+
+## 21. UserSite Header Workflow
+
+- top threshold: header surface transparent, controls unchanged and visible;
+- downward travel beyond threshold: entire header slides upward out of view;
+- upward travel: header slides down;
+- absolute top always wins and reveals header;
+- responsive mobile menu retains an opaque usable surface when open.
+
+## 22. Database Import Workflow
+
+Demo Import is import-only:
+
+- fixed target `FullProjectDb-UIWEB-3`;
+- exact database can be dropped/recreated when configured;
+- reserved DBs and non-target names rejected;
+- allowlisted content/UI collections only;
+- no sessions, login activity, audit, submissions, metrics, or revisions;
+- demo Admin created separately;
+- asset bytes are not duplicated; URLs may still point at existing R2 objects.
+
+The current active database and official seed can diverge. Refresh the seed only after an accepted data migration and explicit user decision.

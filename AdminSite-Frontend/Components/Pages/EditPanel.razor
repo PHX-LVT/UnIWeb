@@ -172,7 +172,9 @@
                          SectionBlockLayoutMode="@Section.Style?.BlockLayoutMode"
                          UseArrangeWorkspace="@CanArrangeBlocks"
                          InitialBlockId="@InitialBlockId"
+                         RefreshVersion="@BlockEditorRefreshVersion"
                          Languages="_languages"
+                         AddRequested="OnAddBlockRequested"
                          ActiveBlockChanged="OnActiveBlockChanged"
                          OnChanged="OnBlocksChanged" />
         }
@@ -229,6 +231,8 @@
     [Parameter] public bool CanArrangeBlocks { get; set; }
     [Parameter] public string InitialTab { get; set; } = "style";
     [Parameter] public string? InitialBlockId { get; set; }
+    [Parameter] public int BlockEditorRefreshVersion { get; set; }
+    [Parameter] public EventCallback<BlockCreationRequest> OnAddBlockRequested { get; set; }
 
     private string _tab = "style";
     private List<string> _languages = new() { "en" };

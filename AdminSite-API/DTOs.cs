@@ -66,6 +66,9 @@ namespace FullProject.DTOs
         public string? ColorBackground { get; set; }
         public string? ColorText { get; set; }
         public string? BorderRadius { get; set; }
+        public string? ButtonStyle { get; set; }
+        public string? ButtonColorRole { get; set; }
+        public string? ButtonRadius { get; set; }
         public string? ButtonSizeScale { get; set; }
         public string? ButtonTextSize { get; set; }
         public bool? AnimationsEnabled { get; set; }
@@ -89,6 +92,9 @@ namespace FullProject.DTOs
         public string ColorBackground { get; set; } = "#ffffff";
         public string ColorText { get; set; } = "#111827";
         public string BorderRadius { get; set; } = "10px";
+        public string ButtonStyle { get; set; } = "filled";
+        public string ButtonColorRole { get; set; } = "accent";
+        public string ButtonRadius { get; set; } = "6px";
         public string ButtonSizeScale { get; set; } = "1";
         public string ButtonTextSize { get; set; } = "15px";
         public bool AnimationsEnabled { get; set; } = true;

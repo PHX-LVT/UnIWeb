@@ -37,6 +37,7 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
         "subtitle",
         "email",
         "password",
+        "rememberMe",
         "submit",
         "language",
         "emailRequired",
@@ -67,6 +68,7 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
             ["subtitle"] = "AdminLoginSubtitle",
             ["email"] = "AdminLoginEmail",
             ["password"] = "AdminLoginPassword",
+            ["rememberMe"] = "AdminLoginRememberMe",
             ["submit"] = "AdminLoginSubmit",
             ["language"] = "AdminLoginLanguage",
             ["emailRequired"] = "AdminLoginEmailRequired",
@@ -181,7 +183,7 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
             {
                 AllowRefresh = false,
                 ExpiresUtc = expiresUtc,
-                IsPersistent = false,
+                IsPersistent = Input.RememberMe,
                 IssuedUtc = DateTimeOffset.UtcNow,
                 RedirectUri = ReturnUrl
             });
@@ -392,6 +394,8 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
         public string Email { get; set; } = string.Empty;
 
         public string Password { get; set; } = string.Empty;
+
+        public bool RememberMe { get; set; }
     }
 
     public sealed record LoginLanguageOption(string Code, string Name, string NativeName, string Direction);

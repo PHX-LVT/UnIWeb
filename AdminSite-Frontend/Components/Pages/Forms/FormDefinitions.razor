@@ -1,8 +1,14 @@
 @page "/forms/definitions"
+@implements IAsyncDisposable
 @using Contracts.Forms
+@using System.Text.Json
 @inject AdminFormSubmissionService FormService
 @inject IHttpService Http
 @inject AdminAuthService Auth
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<NavigationLock ConfirmExternalNavigation="@IsDirty" OnBeforeInternalNavigation="HandleInternalNavigation" />
 
 <div class="page-header">
     <h1 class="page-title">@T("FormDefinitions")</h1>
@@ -61,8 +67,8 @@ else
                 }
             </div>
             <div class="definition-toolbar__actions">
-                <button class="btn-admin btn-primary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="NewDefinition">@T("NewForm")</button>
-                <button class="btn-admin btn-danger" disabled="@(!CanDeleteDefinition)" @onclick="DeleteDefinition">@T("PermanentDelete")</button>
+                <button class="btn-admin btn-primary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="RequestNewDefinition">@T("NewForm")</button>
+                <button class="btn-admin btn-danger" disabled="@(!CanDeleteDefinition)" @onclick="RequestDeleteDefinition">@T("PermanentDelete")</button>
             </div>
         </div>
     </div>
@@ -73,25 +79,45 @@ else
     }
     else
     {
-        <div class="definition-shell">
-            <div class="definition-list">
+        <div class="definition-shell @(DesignSettingsOpen ? "definition-shell--settings-open" : null)">
+            <div class="definition-rail"
+                 aria-hidden="@(DesignSettingsOpen ? "true" : null)"
+                 inert="@(DesignSettingsOpen ? "inert" : null)">
+                <div class="definition-list" tabindex="0" aria-label="@T("FormDefinitions")" @ref="_definitionListElement">
                 @if (_definitions.Count == 0)
                 {
                     <div class="definition-list__empty">@T("NoFormDefinitionsYet")</div>
                 }
                 @foreach (var definition in _definitions)
                 {
-                    <button class="definition-row @(_editingDefinition?.Id == definition.Id ? "active" : null)"
-                            @onclick="() => EditDefinition(definition)">
-                        <strong>@Text(definition.Name, definition.Key)</strong>
-                        <span>@definition.Key - @(definition.Active ? T("Active") : T("Disabled"))</span>
-                    </button>
+                    <div class="definition-row-shell"
+                         data-definition-id="@definition.Id"
+                         @key="definition.Id">
+                        <button class="definition-row @(_editingDefinition?.Id == definition.Id ? "active" : null)"
+                                title="@(CanReorderDefinitions ? T("DragToReorderDefinitions") : null)"
+                                @onkeydown="args => HandleDefinitionKeyDown(args, definition.Id)"
+                                @onclick="() => RequestEditDefinition(definition)">
+                            <strong>@Text(definition.Name, definition.Key)</strong>
+                            <span>@definition.Key - @(definition.Active ? T("Active") : T("Disabled"))</span>
+                        </button>
+                    </div>
+                }
+                </div>
+                @if (_definitionOrder is not null && !_definitionOrder.WritesEnabled && Auth.CanEditFormDefinitions)
+                {
+                    <div class="definition-order-status">@T("DefinitionOrderingUnavailable")</div>
                 }
             </div>
 
             @if (_editingDefinition is not null)
             {
-                <div class="definition-editor">
+                <div class="definition-editor" @oninput="MarkInputActivity" @onchange="CommitInputActivity">
+                    <div class="definition-editor__tabs" role="tablist" aria-label="@T("FormDefinitionEditor")">
+                        <button type="button" class="definition-editor__tab @(_editorTab == "content" ? "active" : null)" @onclick="ShowContentTab">@T("Content")</button>
+                        <button type="button" class="definition-editor__tab @(_editorTab == "design" ? "active" : null)" @onclick="ShowDesignTab">@T("FormDesign")</button>
+                    </div>
+                    @if (_editorTab == "content")
+                    {
                     <div class="definition-editor__identity">
                         <label class="form-filter">
                             <span>@T("FormKey") <strong class="required-mark">*</strong></span>
@@ -120,17 +146,10 @@ else
                         <textarea class="form-control" rows="2" @onchange="e => SetText(_editingDefinition.Introduction, e.Value)">@Text(_editingDefinition.Introduction, string.Empty)</textarea>
                     </label>
 
-                    <div class="definition-settings-row">
+                    <div class="definition-settings-row definition-settings-row--single">
                         <label class="form-filter">
                             <span>@T("SubmitButtonLabel") <strong class="required-mark">*</strong></span>
                             <input class="form-control" required value="@Text(_editingDefinition.SubmitButtonLabel, string.Empty)" @onchange="e => SetText(_editingDefinition.SubmitButtonLabel, e.Value)" />
-                        </label>
-                        <label class="form-filter">
-                            <span>@T("ModalLayout")</span>
-                            <select class="form-control" @bind="_editingDefinition.Layout">
-                                <option value="@FormLayoutModel.Stacked">@T("Stacked")</option>
-                                <option value="@FormLayoutModel.TwoColumns">@T("TwoColumns")</option>
-                            </select>
                         </label>
                     </div>
 
@@ -274,16 +293,53 @@ else
                             </div>
                         }
                     </div>
+                    }
+                    else
+                    {
+                        <FormDesignEditor Definition="@_editingDefinition"
+                                          AdminLanguage="@AdminLanguage"
+                                          UsageCount="@(_usage?.TotalCount ?? 0)"
+                                          Disabled="@(!Auth.CanEditFormDefinitions)"
+                                          ResetDisabled="@(!CanResetDesign)"
+                                          SettingsOpen="@DesignSettingsOpen"
+                                          Changed="HandleDesignChanged"
+                                          SettingsOpenChanged="HandleDesignSettingsOpenChanged"
+                                          ResetRequested="ResetDesignToLastSaved" />
+                    }
 
                     <div class="definition-save-row">
-                        <button class="btn-admin btn-primary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="SaveDefinition">@T("SaveDefinition")</button>
-                        <button class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="AddField">@T("AddField")</button>
+                        <button class="btn-admin btn-primary" disabled="@(!Auth.CanEditFormDefinitions || _saving)" @onclick="SaveCurrentDefinition">@T("SaveDefinition")</button>
+                        @if (_editorTab == "content")
+                        {
+                            <button class="btn-admin btn-secondary" disabled="@(!Auth.CanEditFormDefinitions)" @onclick="AddField">@T("AddField")</button>
+                        }
+                        @if (IsDirty)
+                        {
+                            <span class="definition-dirty-indicator" role="status">@T("UnsavedChanges")</span>
+                        }
                     </div>
                 </div>
             }
         </div>
     }
 </div>
+}
+
+@if (_pendingTransition is not null)
+{
+    <div class="modal-backdrop" @onclick="CancelPendingTransition">
+        <div class="modal-box" style="max-width:500px" role="alertdialog" aria-modal="true" aria-labelledby="unsaved-form-title" @onclick:stopPropagation="true">
+            <div class="modal-header" id="unsaved-form-title">@T("UnsavedFormChanges")</div>
+            <div class="modal-body">
+                <p>@T("UnsavedFormChangesHint")</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-admin btn-ghost" disabled="@_saving" @onclick="CancelPendingTransition">@T("Cancel")</button>
+                <button type="button" class="btn-admin btn-secondary" disabled="@_saving" @onclick="DiscardAndContinue">@T("DiscardAndContinue")</button>
+                <button type="button" class="btn-admin btn-primary" disabled="@_saving" @onclick="SaveAndContinue">@T("SaveAndContinue")</button>
+            </div>
+        </div>
+    </div>
 }
 
 @if (_fieldPendingRemoval is not null)
@@ -386,6 +442,8 @@ else
     private const string CreateNewFieldKeySelection = "__create_new_field_key__";
     private List<FormDefinitionModel> _definitions = new();
     private FormDefinitionModel? _editingDefinition;
+    private ElementReference _definitionListElement;
+    private DotNetObjectReference<FormDefinitions>? _sortableReference;
     private FormFieldDefinitionModel? _draggedField;
     private FormFieldDefinitionModel? _fieldPendingRemoval;
     private readonly HashSet<FormFieldDefinitionModel> _expandedOptionFields = new();
@@ -396,8 +454,39 @@ else
     private bool _loading = true;
     private bool _usageExpanded;
     private bool _usageLoading;
+    private bool _saving;
+    private bool _allowNavigation;
+    private bool _hasInputActivity;
+    private bool _definitionSortableRefreshPending = true;
+    private bool _designSettingsOpen;
+    private string _editorTab = "content";
+    private string? _savedSnapshot;
+    private FormDefinitionOrderResponse? _definitionOrder;
+    private PendingTransition? _pendingTransition;
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private bool DesignSettingsOpen => _editorTab == "design" && _designSettingsOpen;
+    private void ShowContentTab()
+    {
+        _designSettingsOpen = false;
+        _editorTab = "content";
+    }
+    private void ShowDesignTab() => _editorTab = "design";
+    private Task HandleDesignSettingsOpenChanged(bool open)
+    {
+        _designSettingsOpen = open;
+        return InvokeAsync(StateHasChanged);
+    }
+    private bool IsDirty => _editingDefinition is not null &&
+        (_hasInputActivity || _savedSnapshot is null || !string.Equals(_savedSnapshot, DefinitionSnapshot(_editingDefinition), StringComparison.Ordinal));
+    private bool CanReorderDefinitions => Auth.CanEditFormDefinitions && _definitionOrder?.WritesEnabled == true;
+    private bool CanResetDesign => Auth.CanEditFormDefinitions &&
+        SavedDefinition is { } saved &&
+        _editingDefinition is not null &&
+        !string.Equals(DesignStateSnapshot(saved), DesignStateSnapshot(_editingDefinition), StringComparison.Ordinal);
+    private FormDefinitionModel? SavedDefinition => _editingDefinition is null
+        ? null
+        : _definitions.FirstOrDefault(definition => string.Equals(definition.Id, _editingDefinition.Id, StringComparison.Ordinal));
 
     private bool CanShowUsage => _editingDefinition is not null && !string.IsNullOrWhiteSpace(_editingDefinition.Id);
 
@@ -435,6 +524,26 @@ else
         await LoadDefinitionsAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_hasAccess || _loading || !_definitionSortableRefreshPending) return;
+        _definitionSortableRefreshPending = false;
+        _sortableReference ??= DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "formDesignEditor.initDefinitionSortable",
+                _definitionListElement,
+                _sortableReference,
+                CanReorderDefinitions);
+        }
+        catch (JSException)
+        {
+            // A tab opened before deployment may still hold the previous script.
+            // The versioned script is loaded on the next normal page refresh.
+        }
+    }
+
     private async Task LoadInputTypesAsync()
     {
         var result = await FormService.GetInputTypesAsync();
@@ -448,7 +557,7 @@ else
         Http.Notify(result.Message, result.StatusCode);
     }
 
-    private async Task LoadDefinitionsAsync()
+    private async Task LoadDefinitionsAsync(string? preferredDefinitionId = null)
     {
         _loading = true;
         var definitions = await FormService.GetDefinitionsAsync();
@@ -462,21 +571,47 @@ else
         }
 
         _definitions = definitions.Data ?? new();
+        var orderResult = await FormService.GetDefinitionOrderAsync();
+        if (orderResult.Success && orderResult.Data is not null)
+        {
+            _definitionOrder = orderResult.Data;
+            ApplyDefinitionOrder(orderResult.Data.DefinitionIds);
+        }
+        else
+        {
+            _definitionOrder = new FormDefinitionOrderResponse
+            {
+                Revision = 0,
+                DefinitionIds = _definitions.Select(definition => definition.Id).ToList(),
+                PersistentOrderAvailable = false,
+                WritesEnabled = false
+            };
+        }
         _expandedOptionFields.Clear();
         _newUnsavedFields.Clear();
         _fieldsCreatingNewKey.Clear();
         _fieldPendingRemoval = null;
 
-        var selectedDefinition = _editingDefinition is null
+        var selectedId = preferredDefinitionId ?? _editingDefinition?.Id;
+        var selectedDefinition = string.IsNullOrWhiteSpace(selectedId)
             ? _definitions.FirstOrDefault()
-            : _definitions.FirstOrDefault(definition => definition.Id == _editingDefinition.Id) ?? _definitions.FirstOrDefault();
+            : _definitions.FirstOrDefault(definition => definition.Id == selectedId) ?? _definitions.FirstOrDefault();
         _editingDefinition = selectedDefinition is null ? null : Clone(selectedDefinition);
         NormalizeEditingFields();
+        _savedSnapshot = _editingDefinition is null ? null : DefinitionSnapshot(_editingDefinition);
+        _hasInputActivity = false;
+        _definitionSortableRefreshPending = true;
         _loading = false;
         await LoadUsageAsync();
     }
 
-    private void NewDefinition()
+    private Task RequestNewDefinition()
+    {
+        if (!Auth.CanEditFormDefinitions) return Task.CompletedTask;
+        return RequestTransitionAsync(PendingTransition.New());
+    }
+
+    private void StartNewDefinition()
     {
         if (!Auth.CanEditFormDefinitions) return;
         _usage = null;
@@ -501,15 +636,26 @@ else
         _editingDefinition = new FormDefinitionModel
         {
             Active = true,
-            Layout = FormLayoutModel.Stacked,
+            Design = CreateDefaultDesign(FormDesignShapeModel.Stacked),
             SubmitButtonLabel = new() { [AdminLanguage] = "Submit" },
             Name = new() { [AdminLanguage] = "New form" },
             Fields = [initialField]
         };
         NormalizeEditingFields();
+        _savedSnapshot = null;
+        _hasInputActivity = false;
+        _designSettingsOpen = false;
+        _editorTab = "content";
     }
 
-    private async Task EditDefinition(FormDefinitionModel definition)
+    private Task RequestEditDefinition(FormDefinitionModel definition)
+    {
+        if (string.Equals(_editingDefinition?.Id, definition.Id, StringComparison.Ordinal))
+            return Task.CompletedTask;
+        return RequestTransitionAsync(PendingTransition.Select(definition.Id));
+    }
+
+    private async Task SelectDefinition(FormDefinitionModel definition)
     {
         _usageExpanded = false;
         _expandedOptionFields.Clear();
@@ -518,7 +664,181 @@ else
         _fieldPendingRemoval = null;
         _editingDefinition = Clone(definition);
         NormalizeEditingFields();
+        _savedSnapshot = DefinitionSnapshot(_editingDefinition);
+        _hasInputActivity = false;
+        _designSettingsOpen = false;
         await LoadUsageAsync();
+    }
+
+    private async Task RequestTransitionAsync(PendingTransition transition)
+    {
+        if (!IsDirty)
+        {
+            await ExecuteTransitionAsync(transition);
+            return;
+        }
+
+        _pendingTransition = transition;
+    }
+
+    private async Task HandleInternalNavigation(LocationChangingContext context)
+    {
+        if (_allowNavigation || !IsDirty) return;
+        context.PreventNavigation();
+        _pendingTransition = PendingTransition.Navigate(context.TargetLocation);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelPendingTransition() => _pendingTransition = null;
+
+    private async Task DiscardAndContinue()
+    {
+        if (_pendingTransition is null) return;
+        var transition = _pendingTransition;
+        _pendingTransition = null;
+        await ExecuteTransitionAsync(transition);
+    }
+
+    private async Task SaveAndContinue()
+    {
+        if (_pendingTransition is null) return;
+        var transition = _pendingTransition;
+        if (!await SaveDefinitionAsync()) return;
+        _pendingTransition = null;
+        await ExecuteTransitionAsync(transition);
+    }
+
+    private async Task ExecuteTransitionAsync(PendingTransition transition)
+    {
+        switch (transition.Kind)
+        {
+            case PendingTransitionKind.New:
+                StartNewDefinition();
+                break;
+            case PendingTransitionKind.Select:
+            {
+                var definition = _definitions.FirstOrDefault(item => item.Id == transition.Value);
+                if (definition is not null) await SelectDefinition(definition);
+                break;
+            }
+            case PendingTransitionKind.Delete:
+            {
+                var definition = _definitions.FirstOrDefault(item => item.Id == transition.Value);
+                if (definition is not null && !string.Equals(_editingDefinition?.Id, definition.Id, StringComparison.Ordinal))
+                    await SelectDefinition(definition);
+                await DeleteCurrentDefinition();
+                break;
+            }
+            case PendingTransitionKind.Navigate:
+                _allowNavigation = true;
+                Nav.NavigateTo(transition.Value);
+                break;
+        }
+    }
+
+    private Task HandleDesignChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task ResetDesignToLastSaved()
+    {
+        if (!Auth.CanEditFormDefinitions || _editingDefinition is null || SavedDefinition is not { } saved) return;
+        var savedClone = Clone(saved);
+        _editingDefinition.Design = savedClone.Design;
+        _editingDefinition.InformationItems = savedClone.InformationItems;
+        _editingDefinition.AuxiliaryActions = savedClone.AuxiliaryActions;
+        EnsureEditingV2Coverage();
+        _hasInputActivity = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void MarkInputActivity() => _hasInputActivity = true;
+    private void CommitInputActivity() => _hasInputActivity = false;
+
+    private void ApplyDefinitionOrder(IReadOnlyList<string> definitionIds)
+    {
+        if (definitionIds.Count == 0) return;
+        var byId = _definitions.ToDictionary(definition => definition.Id, StringComparer.Ordinal);
+        var ordered = definitionIds.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+        var seen = ordered.Select(definition => definition.Id).ToHashSet(StringComparer.Ordinal);
+        ordered.AddRange(_definitions.Where(definition => seen.Add(definition.Id)).OrderBy(definition => definition.Key, StringComparer.OrdinalIgnoreCase));
+        _definitions = ordered;
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnDefinitionOrderDropped(string[] orderedDefinitionIds)
+    {
+        if (!CanReorderDefinitions || _definitionOrder is null) return false;
+        var byId = _definitions.ToDictionary(definition => definition.Id, StringComparer.Ordinal);
+        if (orderedDefinitionIds.Length != _definitions.Count ||
+            orderedDefinitionIds.Distinct(StringComparer.Ordinal).Count() != _definitions.Count ||
+            orderedDefinitionIds.Any(id => !byId.ContainsKey(id))) return false;
+
+        var previous = _definitions.ToList();
+        _definitions = orderedDefinitionIds.Select(id => byId[id]).ToList();
+        await InvokeAsync(StateHasChanged);
+
+        var result = await FormService.ReorderDefinitionsAsync(_definitionOrder.Revision, orderedDefinitionIds);
+        if (result.Success && result.Data is not null)
+        {
+            _definitionOrder = result.Data;
+            ApplyDefinitionOrder(result.Data.DefinitionIds);
+            return true;
+        }
+
+        _definitions = previous;
+        if (result.Data is not null) _definitionOrder = result.Data;
+        _definitionSortableRefreshPending = true;
+        Http.Notify(result.Message, result.StatusCode);
+        await InvokeAsync(StateHasChanged);
+        return false;
+    }
+
+    private async Task MoveDefinition(string definitionId, int delta)
+    {
+        if (!CanReorderDefinitions) return;
+        var index = _definitions.FindIndex(definition => definition.Id == definitionId);
+        var next = index + delta;
+        if (index < 0 || next < 0 || next >= _definitions.Count) return;
+        await ReorderDefinitionAsync(definitionId, null, next);
+    }
+
+    private async Task ReorderDefinitionAsync(string sourceId, string? targetId, int? targetIndex)
+    {
+        if (!CanReorderDefinitions || _definitionOrder is null) return;
+        var previous = _definitions.ToList();
+        var sourceIndex = _definitions.FindIndex(definition => definition.Id == sourceId);
+        var destination = targetIndex ?? _definitions.FindIndex(definition => definition.Id == targetId);
+        if (sourceIndex < 0 || destination < 0 || sourceIndex == destination) return;
+
+        var moving = _definitions[sourceIndex];
+        _definitions.RemoveAt(sourceIndex);
+        if (targetIndex is null && sourceIndex < destination) destination--;
+        destination = Math.Clamp(destination, 0, _definitions.Count);
+        _definitions.Insert(destination, moving);
+        await InvokeAsync(StateHasChanged);
+
+        var result = await FormService.ReorderDefinitionsAsync(_definitionOrder.Revision, _definitions.Select(definition => definition.Id));
+        if (result.Success && result.Data is not null)
+        {
+            _definitionOrder = result.Data;
+            ApplyDefinitionOrder(result.Data.DefinitionIds);
+            return;
+        }
+
+        _definitions = previous;
+        if (result.Data is not null) _definitionOrder = result.Data;
+        _definitionSortableRefreshPending = true;
+        Http.Notify(result.Message, result.StatusCode);
+    }
+
+    private Task HandleDefinitionKeyDown(KeyboardEventArgs args, string definitionId)
+    {
+        if (!args.AltKey) return Task.CompletedTask;
+        return args.Key switch
+        {
+            "ArrowUp" => MoveDefinition(definitionId, -1),
+            "ArrowDown" => MoveDefinition(definitionId, 1),
+            _ => Task.CompletedTask
+        };
     }
 
     private async Task ToggleUsage()
@@ -569,6 +889,7 @@ else
         _editingDefinition.Fields.Add(field);
         _newUnsavedFields.Add(field);
         NormalizeEditingFields();
+        EnsureEditingV2Coverage();
     }
 
     private void RequestRemoveField(FormFieldDefinitionModel field)
@@ -602,6 +923,7 @@ else
         _expandedOptionFields.Remove(field);
         _newUnsavedFields.Remove(field);
         _fieldsCreatingNewKey.Remove(field);
+        RemoveFieldKeyFromRows(field.Key);
         _editingDefinition.Fields.Remove(field);
         for (var i = 0; i < _editingDefinition.Fields.Count; i++)
             _editingDefinition.Fields[i].Order = i;
@@ -617,28 +939,46 @@ else
                 : T("Field");
     }
 
-    private async Task SaveDefinition()
+    private async Task SaveCurrentDefinition()
     {
-        if (!Auth.CanEditFormDefinitions) return;
-        if (_editingDefinition is null) return;
+        await SaveDefinitionAsync();
+    }
+
+    private async Task<bool> SaveDefinitionAsync()
+    {
+        if (!Auth.CanEditFormDefinitions || _editingDefinition is null || _saving) return false;
 
         NormalizeEditingFields();
+        EnsureEditingV2Coverage();
         var validationErrors = ValidateDefinition(_editingDefinition);
         if (validationErrors.Count > 0)
         {
             Http.Notify($"{T("PleaseCompleteRequiredFields")} {string.Join(" | ", validationErrors)}", 400);
-            return;
+            return false;
         }
 
-        var res = await FormService.SaveDefinitionAsync(_editingDefinition);
-        Http.Notify(res.Message, res.StatusCode);
-        if (res.StatusCode is >= 200 and < 300)
+        _saving = true;
+        try
         {
-            await LoadDefinitionsAsync();
+            var res = await FormService.SaveDefinitionAsync(_editingDefinition);
+            Http.Notify(res.Message, res.StatusCode);
+            if (res.StatusCode is not (>= 200 and < 300)) return false;
+            await LoadDefinitionsAsync(res.Data?.Id);
+            return true;
+        }
+        finally
+        {
+            _saving = false;
         }
     }
 
-    private async Task DeleteDefinition()
+    private Task RequestDeleteDefinition()
+    {
+        if (!CanDeleteDefinition || _editingDefinition is null) return Task.CompletedTask;
+        return RequestTransitionAsync(PendingTransition.Delete(_editingDefinition.Id));
+    }
+
+    private async Task DeleteCurrentDefinition()
     {
         if (!CanDeleteDefinition || _editingDefinition is null) return;
         var res = await FormService.DeleteDefinitionAsync(_editingDefinition.Id);
@@ -695,6 +1035,39 @@ else
         if (definition.Fields.Any(field => !field.Label.Values.Any(value => !string.IsNullOrWhiteSpace(value))))
             errors.Add("Every field must have a label.");
         AddCapabilityValidation(definition.Fields, errors);
+        var designDto = ToDesignDto(definition.Design);
+        if (designDto.V2 is not null)
+        {
+            errors.AddRange(FormDesignV2Policy.Validate(
+                designDto.V2!,
+                definition.Fields.Select(ToFieldDto),
+                definition.InformationItems,
+                definition.AuxiliaryActions));
+        }
+        var legacyProjection = designDto.V2 is null ||
+                               (definition.InformationItems.Count == 0 &&
+                                definition.AuxiliaryActions.Count == 0 &&
+                                FormDesignV2Policy.MatchesLegacyProjection(definition.Id, designDto, definition.Fields.Select(ToFieldDto)));
+        var requiredHeight = legacyProjection
+            ? FormDesignPolicy.CalculateRequiredHeight(
+                designDto,
+                definition.Fields.Select(ToFieldDto),
+                definition.Name,
+                definition.Introduction,
+                definition.SubmitButtonLabel)
+            : FormDesignV2Policy.CalculateRequiredHeight(
+                designDto,
+                designDto.V2!,
+                definition.Fields.Select(ToFieldDto),
+                definition.Name,
+                definition.Introduction,
+                definition.SubmitButtonLabel,
+                definition.InformationItems,
+                definition.AuxiliaryActions);
+        if (requiredHeight > FormDesignPolicy.MaximumHeightPx)
+        {
+            errors.Add(string.Format(T("FormDesignTooTall"), FormDesignPolicy.MaximumHeightPx));
+        }
 
         return errors;
     }
@@ -729,7 +1102,9 @@ else
     private void SetFieldKey(FormFieldDefinitionModel field, object? value)
     {
         if (!CanEditFieldIdentity(field)) return;
+        var previous = field.Key;
         field.Key = value?.ToString()?.Trim() ?? string.Empty;
+        ReplaceFieldKeyInRows(previous, field.Key);
     }
 
     private void SelectFieldKey(FormFieldDefinitionModel field, string? selection)
@@ -744,12 +1119,15 @@ else
         }
 
         _fieldsCreatingNewKey.Remove(field);
+        var previous = field.Key;
         field.Key = selection?.Trim() ?? string.Empty;
+        ReplaceFieldKeyInRows(previous, field.Key);
     }
 
     private void ReturnToExistingFieldKeys(FormFieldDefinitionModel field)
     {
         if (!CanEditFieldIdentity(field)) return;
+        RemoveFieldKeyFromRows(field.Key);
         field.Key = string.Empty;
         _fieldsCreatingNewKey.Remove(field);
     }
@@ -814,8 +1192,14 @@ else
         if (!Auth.CanEditFormDefinitions) return;
         var oldCapability = Capability(field);
         var nextType = FormInputTypeCatalog.NormalizeType(type);
+        if (FormDesignPolicy.IsWideField(nextType) && FieldSharesRow(field.Key))
+        {
+            Http.Notify(T("WideFieldMustUseOwnRow"), 400);
+            return;
+        }
         if (!string.Equals(field.Type, nextType, StringComparison.OrdinalIgnoreCase))
         {
+            RemoveFieldKeyFromRows(field.Key);
             field.Key = string.Empty;
             _fieldsCreatingNewKey.Remove(field);
         }
@@ -871,22 +1255,151 @@ else
         if (_editingDefinition is null || _draggedField is null || ReferenceEquals(_draggedField, target))
             return;
 
-        var ordered = _editingDefinition.Fields.OrderBy(field => field.Order).ToList();
-        var sourceIndex = ordered.IndexOf(_draggedField);
-        var targetIndex = ordered.IndexOf(target);
-        if (sourceIndex < 0 || targetIndex < 0)
+        EnsureEditingV2Coverage();
+        var rows = _editingDefinition.Design.V2?.FieldRows;
+        var sourceSlot = rows?.SelectMany(row => row.FieldKeys.Select((key, index) => new { row, key, index }))
+            .FirstOrDefault(slot => string.Equals(slot.key, _draggedField.Key, StringComparison.OrdinalIgnoreCase));
+        var targetSlot = rows?.SelectMany(row => row.FieldKeys.Select((key, index) => new { row, key, index }))
+            .FirstOrDefault(slot => string.Equals(slot.key, target.Key, StringComparison.OrdinalIgnoreCase));
+        if (sourceSlot is null || targetSlot is null) return;
+        var sourceKey = sourceSlot.row.FieldKeys[sourceSlot.index];
+        var targetKey = targetSlot.row.FieldKeys[targetSlot.index];
+        sourceSlot.row.FieldKeys[sourceSlot.index] = targetKey;
+        targetSlot.row.FieldKeys[targetSlot.index] = sourceKey;
+        var v2Errors = FormDesignV2Policy.Validate(
+            _editingDefinition.Design.V2,
+            _editingDefinition.Fields.Select(ToFieldDto),
+            _editingDefinition.InformationItems,
+            _editingDefinition.AuxiliaryActions);
+        if (v2Errors.Count > 0)
+        {
+            sourceSlot.row.FieldKeys[sourceSlot.index] = sourceKey;
+            targetSlot.row.FieldKeys[targetSlot.index] = targetKey;
+            Http.Notify(v2Errors[0], 400);
             return;
-
-        ordered.RemoveAt(sourceIndex);
-        if (sourceIndex < targetIndex)
-            targetIndex--;
-        ordered.Insert(targetIndex, _draggedField);
-
-        for (var i = 0; i < ordered.Count; i++)
-            ordered[i].Order = i;
-
-        _editingDefinition.Fields = ordered;
+        }
+        NormalizeFieldOrderFromRows();
         _draggedField = null;
+    }
+
+    private void EnsureEditingV2Coverage()
+    {
+        if (_editingDefinition is null) return;
+        _editingDefinition.Design ??= CreateDefaultDesign(FormDesignShapeModel.Stacked);
+        _editingDefinition.Design.V2 ??= FormDesignV2Policy.ProjectFromV1(
+            _editingDefinition.Id,
+            ToDesignDto(_editingDefinition.Design),
+            _editingDefinition.Fields.Select(ToFieldDto));
+
+        var fieldKeys = _editingDefinition.Fields
+            .Where(field => !string.IsNullOrWhiteSpace(field.Key))
+            .OrderBy(field => field.Order)
+            .Select(field => field.Key.Trim())
+            .ToList();
+        var valid = fieldKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rows = _editingDefinition.Design.V2.FieldRows
+            .OrderBy(row => row.Order)
+            .Select(row => new FormFieldRowDto
+            {
+                Id = string.IsNullOrWhiteSpace(row.Id) ? NewEditorId("row") : row.Id,
+                FieldKeys = (row.FieldKeys ?? new())
+                    .Where(key => valid.Contains(key) && seen.Add(key))
+                    .ToList()
+            })
+            .Where(row => row.FieldKeys.Count > 0)
+            .ToList();
+        foreach (var key in fieldKeys.Where(key => seen.Add(key)))
+            rows.Add(new FormFieldRowDto { Id = NewEditorId("row"), FieldKeys = [key] });
+        for (var index = 0; index < rows.Count; index++) rows[index].Order = index;
+        _editingDefinition.Design.V2.FieldRows = rows;
+        var actionIds = _editingDefinition.AuxiliaryActions.Select(action => action.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _editingDefinition.Design.V2.AuxiliaryActionLayouts = _editingDefinition.Design.V2.AuxiliaryActionLayouts
+            .Where(layout => actionIds.Contains(layout.ActionId))
+            .GroupBy(layout => layout.ActionId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+        foreach (var action in _editingDefinition.AuxiliaryActions.Where(action =>
+                     _editingDefinition.Design.V2.AuxiliaryActionLayouts.All(layout => !string.Equals(layout.ActionId, action.Id, StringComparison.OrdinalIgnoreCase))))
+        {
+            _editingDefinition.Design.V2.AuxiliaryActionLayouts.Add(new FormAuxiliaryActionLayoutDto
+            {
+                ActionId = action.Id,
+                Style = FormAuxiliaryActionStyle.Outline,
+                Placement = FormAuxiliaryActionPlacement.BelowFields
+            });
+        }
+        var normalizedV2 = FormDesignV2Policy.Normalize(_editingDefinition.Design.V2);
+        _editingDefinition.Design.V2 = normalizedV2;
+        NormalizeFieldOrderFromRows();
+    }
+
+    private void ReplaceFieldKeyInRows(string? previous, string? next)
+    {
+        if (_editingDefinition?.Design.V2 is null) return;
+        var oldKey = previous?.Trim() ?? string.Empty;
+        var newKey = next?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(oldKey))
+        {
+            foreach (var row in _editingDefinition.Design.V2.FieldRows)
+            {
+                var index = row.FieldKeys.FindIndex(key => string.Equals(key, oldKey, StringComparison.OrdinalIgnoreCase));
+                if (index >= 0)
+                {
+                    if (string.IsNullOrWhiteSpace(newKey)) row.FieldKeys.RemoveAt(index);
+                    else row.FieldKeys[index] = newKey;
+                    break;
+                }
+            }
+            _editingDefinition.Design.V2.FieldRows.RemoveAll(row => row.FieldKeys.Count == 0);
+        }
+        if (!string.IsNullOrWhiteSpace(newKey) &&
+            _editingDefinition.Design.V2.FieldRows.All(row => row.FieldKeys.All(key => !string.Equals(key, newKey, StringComparison.OrdinalIgnoreCase))))
+        {
+            _editingDefinition.Design.V2.FieldRows.Add(new FormFieldRowDto
+            {
+                Id = NewEditorId("row"),
+                Order = _editingDefinition.Design.V2.FieldRows.Count,
+                FieldKeys = [newKey]
+            });
+        }
+        NormalizeV2RowOrders();
+    }
+
+    private void RemoveFieldKeyFromRows(string? key)
+    {
+        if (_editingDefinition?.Design.V2 is null || string.IsNullOrWhiteSpace(key)) return;
+        foreach (var row in _editingDefinition.Design.V2.FieldRows)
+            row.FieldKeys.RemoveAll(value => string.Equals(value, key, StringComparison.OrdinalIgnoreCase));
+        _editingDefinition.Design.V2.FieldRows.RemoveAll(row => row.FieldKeys.Count == 0);
+        NormalizeV2RowOrders();
+    }
+
+    private bool FieldSharesRow(string? key) =>
+        _editingDefinition?.Design.V2?.FieldRows.Any(row =>
+            row.FieldKeys.Count > 1 &&
+            row.FieldKeys.Any(value => string.Equals(value, key, StringComparison.OrdinalIgnoreCase))) == true;
+
+    private void NormalizeV2RowOrders()
+    {
+        if (_editingDefinition?.Design.V2 is null) return;
+        var rows = _editingDefinition.Design.V2.FieldRows.OrderBy(row => row.Order).ToList();
+        for (var index = 0; index < rows.Count; index++) rows[index].Order = index;
+        _editingDefinition.Design.V2.FieldRows = rows;
+    }
+
+    private void NormalizeFieldOrderFromRows()
+    {
+        if (_editingDefinition?.Design.V2 is null) return;
+        var flattened = _editingDefinition.Design.V2.FieldRows
+            .OrderBy(row => row.Order)
+            .SelectMany(row => row.FieldKeys)
+            .Select((key, index) => new { key, index })
+            .ToDictionary(pair => pair.key, pair => pair.index, StringComparer.OrdinalIgnoreCase);
+        var next = flattened.Count;
+        foreach (var field in _editingDefinition.Fields)
+            field.Order = flattened.TryGetValue(field.Key, out var index) ? index : next++;
+        _editingDefinition.Fields = _editingDefinition.Fields.OrderBy(field => field.Order).ToList();
     }
 
     private void NormalizeEditingFields()
@@ -901,6 +1414,7 @@ else
         }
 
         _editingDefinition.Fields = ordered;
+        EnsureEditingV2Coverage();
     }
 
     private void ApplyFieldDefaults(FormFieldDefinitionModel field)
@@ -1022,8 +1536,31 @@ else
         Name = new(source.Name),
         Introduction = new(source.Introduction),
         SubmitButtonLabel = new(source.SubmitButtonLabel),
-        DisplayMode = source.DisplayMode,
-        Layout = source.Layout,
+        InformationItems = source.InformationItems.Select(CloneInformationItem).ToList(),
+        AuxiliaryActions = source.AuxiliaryActions.Select(CloneAuxiliaryAction).ToList(),
+        Design = new FormDesignSettingsModel
+        {
+            UseThemeDefaults = source.Design?.UseThemeDefaults ?? false,
+            SchemaVersion = source.Design?.SchemaVersion ?? FormDesignPolicy.CurrentSchemaVersion,
+            Shape = source.Design?.Shape ?? FormDesignShapeModel.Stacked,
+            WidthPx = source.Design?.WidthPx ?? FormDesignPolicy.StackedDefaultWidthPx,
+            CalculatedHeightPx = source.Design?.CalculatedHeightPx ?? FormDesignPolicy.MinimumHeightPx,
+            BackgroundMode = source.Design?.BackgroundMode ?? FormDesignBackgroundModeModel.Solid,
+            BackgroundColor = source.Design?.BackgroundColor ?? "#ffffff",
+            TextColor = source.Design?.TextColor ?? "#0f172a",
+            AccentColor = source.Design?.AccentColor ?? "#1d4ed8",
+            BorderColor = source.Design?.BorderColor ?? "#dbe3ef",
+            BorderWidthPx = source.Design?.BorderWidthPx ?? 1,
+            BorderRadiusPx = source.Design?.BorderRadiusPx ?? 16,
+            Shadow = source.Design?.Shadow ?? "small",
+            PaddingPx = source.Design?.PaddingPx ?? 32,
+            FieldGapPx = source.Design?.FieldGapPx ?? 16,
+            TextAlign = source.Design?.TextAlign ?? FormDesignTextAlignModel.Left,
+            LabelMode = source.Design?.LabelMode ?? FormLabelModeModel.Visible,
+            ButtonStyle = source.Design?.ButtonStyle ?? "filled",
+            ButtonWidth = source.Design?.ButtonWidth ?? FormDesignButtonWidthModel.Full,
+            V2 = CloneV2(source.Design?.V2)
+        },
         Active = source.Active,
         Fields = source.Fields.Select(f => new FormFieldDefinitionModel
         {
@@ -1046,6 +1583,234 @@ else
         CreatedAt = source.CreatedAt,
         UpdatedAt = source.UpdatedAt
     };
+
+    private static FormDesignSettingsModel CreateDefaultDesign(FormDesignShapeModel shape) => new()
+    {
+        UseThemeDefaults = true,
+        Shape = shape,
+        WidthPx = FormDesignPolicy.DefaultWidth((FormDesignShape)shape)
+    };
+
+    private static FormDesignSettingsDto ToDesignDto(FormDesignSettingsModel design) => new()
+    {
+        UseThemeDefaults = design.UseThemeDefaults,
+        SchemaVersion = design.SchemaVersion,
+        Shape = (FormDesignShape)design.Shape,
+        WidthPx = design.WidthPx,
+        CalculatedHeightPx = design.CalculatedHeightPx,
+        BackgroundMode = (FormDesignBackgroundMode)design.BackgroundMode,
+        BackgroundColor = design.BackgroundColor,
+        TextColor = design.TextColor,
+        AccentColor = design.AccentColor,
+        BorderColor = design.BorderColor,
+        BorderWidthPx = design.BorderWidthPx,
+        BorderRadiusPx = design.BorderRadiusPx,
+        Shadow = design.Shadow,
+        PaddingPx = design.PaddingPx,
+        FieldGapPx = design.FieldGapPx,
+        TextAlign = (FormDesignTextAlign)design.TextAlign,
+        LabelMode = (FormLabelMode)design.LabelMode,
+        ButtonStyle = design.ButtonStyle,
+        ButtonWidth = (FormDesignButtonWidth)design.ButtonWidth,
+        V2 = design.V2
+    };
+
+    private static FormDesignV2SettingsDto? CloneV2(FormDesignV2SettingsDto? source) => source is null
+        ? null
+        : new FormDesignV2SettingsDto
+        {
+            OuterLayout = source.OuterLayout,
+            FieldRows = source.FieldRows.Select(row => new FormFieldRowDto
+            {
+                Id = row.Id,
+                Order = row.Order,
+                FieldKeys = new(row.FieldKeys)
+            }).ToList(),
+            InformationBackgroundColor = source.InformationBackgroundColor,
+            InformationTextColor = source.InformationTextColor,
+            FormBackgroundColor = source.FormBackgroundColor,
+            FormTextColor = source.FormTextColor,
+            SplitPanelPercent = source.SplitPanelPercent,
+            SubmitLayout = source.SubmitLayout,
+            AuxiliaryActionLayouts = source.AuxiliaryActionLayouts.Select(layout => new FormAuxiliaryActionLayoutDto
+            {
+                ActionId = layout.ActionId,
+                Style = layout.Style,
+                Placement = layout.Placement
+            }).ToList()
+        };
+
+    private static FormInformationItemDto CloneInformationItem(FormInformationItemDto source) => new()
+    {
+        Id = source.Id,
+        Icon = source.Icon,
+        Text = new(source.Text),
+        Target = CloneTarget(source.Target),
+        Order = source.Order
+    };
+
+    private static FormAuxiliaryActionDto CloneAuxiliaryAction(FormAuxiliaryActionDto source) => new()
+    {
+        Id = source.Id,
+        Label = new(source.Label),
+        Target = CloneTarget(source.Target) ?? new FormActionTargetDto(),
+        Order = source.Order
+    };
+
+    private static FormActionTargetDto? CloneTarget(FormActionTargetDto? source) => source is null
+        ? null
+        : new FormActionTargetDto
+        {
+            Type = source.Type,
+            PageId = source.PageId,
+            Path = source.Path,
+            Url = source.Url,
+            ResourceId = source.ResourceId,
+            Phone = source.Phone,
+            Email = source.Email,
+            ResolvedHref = source.ResolvedHref
+        };
+
+    private static FormFieldDefinitionDto ToFieldDto(FormFieldDefinitionModel field) => new()
+    {
+        Key = field.Key,
+        Type = field.Type,
+        Label = field.Label,
+        Placeholder = field.Placeholder,
+        Required = field.Required,
+        MinLength = field.MinLength,
+        MaxLength = field.MaxLength,
+        InputBoxSize = field.InputBoxSize,
+        Order = field.Order,
+        Options = field.Options.Select(option => new FormFieldOptionDto
+        {
+            Value = option.Value,
+            Label = option.Label,
+            Order = option.Order
+        }).ToList()
+    };
+
+    private static string DefinitionSnapshot(FormDefinitionModel definition)
+    {
+        var design = ToDesignDto(definition.Design);
+        design.V2 = design.V2 is null ? null : FormDesignV2Policy.Normalize(design.V2);
+        var snapshot = new
+        {
+            Key = definition.Key?.Trim() ?? string.Empty,
+            Name = CanonicalMap(definition.Name),
+            Introduction = CanonicalMap(definition.Introduction),
+            SubmitButtonLabel = CanonicalMap(definition.SubmitButtonLabel),
+            InformationItems = definition.InformationItems.OrderBy(item => item.Order).Select(item => new
+            {
+                item.Id,
+                item.Icon,
+                Text = CanonicalMap(item.Text),
+                Target = CanonicalTarget(item.Target),
+                item.Order
+            }),
+            AuxiliaryActions = definition.AuxiliaryActions.OrderBy(action => action.Order).Select(action => new
+            {
+                action.Id,
+                Label = CanonicalMap(action.Label),
+                Target = CanonicalTarget(action.Target),
+                action.Order
+            }),
+            Design = design,
+            definition.Active,
+            Fields = definition.Fields.OrderBy(field => field.Order).Select(field => new
+            {
+                Key = field.Key?.Trim() ?? string.Empty,
+                Type = FormInputTypeCatalog.NormalizeType(field.Type),
+                Label = CanonicalMap(field.Label),
+                Placeholder = CanonicalMap(field.Placeholder),
+                field.Required,
+                field.MinLength,
+                field.MaxLength,
+                field.InputBoxSize,
+                Options = field.Options.OrderBy(option => option.Order).Select(option => new
+                {
+                    option.Value,
+                    Label = CanonicalMap(option.Label),
+                    option.Order
+                }),
+                field.Order
+            })
+        };
+        return JsonSerializer.Serialize(snapshot);
+    }
+
+    private static string DesignStateSnapshot(FormDefinitionModel definition)
+    {
+        var design = ToDesignDto(definition.Design);
+        design.V2 = design.V2 is null ? null : FormDesignV2Policy.Normalize(design.V2);
+        var snapshot = new
+        {
+            InformationItems = definition.InformationItems.OrderBy(item => item.Order).Select(item => new
+            {
+                item.Id,
+                item.Icon,
+                Text = CanonicalMap(item.Text),
+                Target = CanonicalTarget(item.Target),
+                item.Order
+            }),
+            AuxiliaryActions = definition.AuxiliaryActions.OrderBy(action => action.Order).Select(action => new
+            {
+                action.Id,
+                Label = CanonicalMap(action.Label),
+                Target = CanonicalTarget(action.Target),
+                action.Order
+            }),
+            Design = design
+        };
+        return JsonSerializer.Serialize(snapshot);
+    }
+
+    private static SortedDictionary<string, string> CanonicalMap(Dictionary<string, string>? source) =>
+        new((source ?? new())
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+            .GroupBy(pair => pair.Key.Trim().ToLowerInvariant(), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Last().Value ?? string.Empty),
+            StringComparer.Ordinal);
+
+    private static object? CanonicalTarget(FormActionTargetDto? target) => target is null
+        ? null
+        : new
+        {
+            target.Type,
+            PageId = target.PageId?.Trim(),
+            Path = target.Path?.Trim(),
+            Url = target.Url?.Trim(),
+            ResourceId = target.ResourceId?.Trim(),
+            Phone = target.Phone?.Trim(),
+            Email = target.Email?.Trim()
+        };
+
+    private static string NewEditorId(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("formDesignEditor.destroyDefinitionSortable", _definitionListElement); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        catch (InvalidOperationException) { }
+        _sortableReference?.Dispose();
+    }
+
+    private enum PendingTransitionKind
+    {
+        New,
+        Select,
+        Delete,
+        Navigate
+    }
+
+    private sealed record PendingTransition(PendingTransitionKind Kind, string Value)
+    {
+        public static PendingTransition New() => new(PendingTransitionKind.New, string.Empty);
+        public static PendingTransition Select(string id) => new(PendingTransitionKind.Select, id);
+        public static PendingTransition Delete(string id) => new(PendingTransitionKind.Delete, id);
+        public static PendingTransition Navigate(string location) => new(PendingTransitionKind.Navigate, location);
+    }
 
     private sealed record FieldKeySuggestion(string Key, int FormCount);
 }

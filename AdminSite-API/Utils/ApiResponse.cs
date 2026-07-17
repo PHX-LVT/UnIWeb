@@ -64,6 +64,29 @@ namespace FullProject.Utils
             Errors = errors
         };
 
+        public static ApiResponse<T> Conflict<T>(T data, string message) => new()
+        {
+            Success = false,
+            Data = data,
+            StatusCode = 409,
+            Message = message
+        };
+
+        public static ApiResponse<T> Unavailable<T>(T data, string message) => new()
+        {
+            Success = false,
+            Data = data,
+            StatusCode = 503,
+            Message = message
+        };
+
+        public static ApiResponse Unavailable(string message) => new()
+        {
+            Success = false,
+            StatusCode = 503,
+            Message = message
+        };
+
         public static ApiResponse<T> Unauthorized<T>(string message = "Unauthorized.") => new()
         {
             Success = false,

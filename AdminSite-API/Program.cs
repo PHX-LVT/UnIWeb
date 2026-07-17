@@ -39,6 +39,8 @@ builder.Services.Configure<R2StorageSettings>(
     builder.Configuration.GetSection("R2Storage"));
 builder.Services.Configure<FormSecuritySettings>(
     builder.Configuration.GetSection("FormSecurity"));
+builder.Services.Configure<FormDesignV2RuntimeSettings>(
+    builder.Configuration.GetSection("FormDesignV2"));
 
 // --- MongoDB ---
 var mongoSettings = builder.Configuration
@@ -87,8 +89,10 @@ builder.Services.AddScoped<FormSubmissionService>();
 builder.Services.AddScoped<FormSubmissionExportService>();
 builder.Services.AddScoped<FormSubmissionSecurityService>();
 builder.Services.AddScoped<FormInputTypeService>();
+builder.Services.AddScoped<FormDefinitionOrderService>();
 builder.Services.AddScoped<FormDefinitionService>();
 builder.Services.AddScoped<FormValidationService>();
+builder.Services.AddScoped<FormDesignV2MigrationPlanner>();
 builder.Services.AddScoped<PublicFormSubmissionService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ContentAssetMetadataService>();
