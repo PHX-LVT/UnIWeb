@@ -1,0 +1,90 @@
+@page "/logs/archives"
+@inject LogManagementService Logs
+@inject AdminAuthService Auth
+@inject IHttpService Http
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="fas fa-box-archive"></i> @T("ArchivesAndRetention")</h1>
+        <p class="log-management__subtitle">@T("ArchivesDescription")</p>
+    </div>
+    <button class="btn-admin btn-primary" disabled="@(_running || !Auth.IsAdminAdmin)" @onclick="RunAsync">
+        <i class="fas fa-rotate"></i> @(_running ? T("Running") : T("RunRetentionNow"))
+    </button>
+</div>
+
+@if (!Auth.IsAdminAdmin)
+{
+    <div class="alert alert-danger">@T("PermissionDenied")</div>
+}
+else
+{
+    <section class="admin-card">
+        <div class="admin-card-title">@T("RetentionPolicy")</div>
+        <div class="log-management__policy-grid">
+            <div><strong>@T("AuditTrail")</strong><span>@TF("AuditRetentionSummary", AuditActiveDays, AuditTotalDays)</span></div>
+            <div><strong>@T("LoginActivity")</strong><span>@TF("LoginRetentionSummary", LoginActiveDays, LoginTotalDays)</span></div>
+            <div><strong>@T("CriticalSecurityEvents")</strong><span>@TF("CriticalRetentionSummary", CriticalTotalDays)</span></div>
+        </div>
+    </section>
+    <section class="admin-card">
+        <div class="admin-card-title">@T("LastRetentionRun")</div>
+        @if (_loading)
+        {
+            <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
+        }
+        else if (_status is not null)
+        {
+            <div class="log-management__policy-grid">
+                <div><strong>@T("Status")</strong><span>@_status.Status</span></div>
+                <div><strong>@T("CompletedAt")</strong><span>@FormatDate(_status.LastRunAtUtc)</span></div>
+                <div><strong>@T("AuditArchived")</strong><span>@_status.AuditEventsArchived</span></div>
+                <div><strong>@T("LoginArchived")</strong><span>@_status.LoginEventsArchived</span></div>
+                <div><strong>@T("AuditPurged")</strong><span>@_status.AuditEventsPurged</span></div>
+                <div><strong>@T("LoginPurged")</strong><span>@_status.LoginEventsPurged</span></div>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    private AdminLogRetentionStatusResponse? _status;
+    private bool _loading = true;
+    private bool _running;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await Auth.RefreshSessionAsync();
+        if (Auth.IsAdminAdmin) await LoadAsync();
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var response = await Logs.GetRetentionAsync();
+        if (response.Success) _status = response.Data;
+        else Http.Notify(response.Message, response.StatusCode);
+        _loading = false;
+    }
+
+    private async Task RunAsync()
+    {
+        _running = true;
+        var response = await Logs.RunRetentionAsync();
+        Http.Notify(response.Message, response.StatusCode);
+        if (response.Success) _status = response.Data;
+        _running = false;
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string TF(string key, params object[] args) => string.Format(T(key), args);
+    private int AuditActiveDays => _status?.AuditActiveDays ?? 365;
+    private int AuditTotalDays => _status?.AuditTotalDays ?? 1095;
+    private int LoginActiveDays => _status?.LoginActiveDays ?? 90;
+    private int LoginTotalDays => _status?.LoginTotalDays ?? 365;
+    private int CriticalTotalDays => _status?.CriticalSecurityTotalDays ?? 1095;
+    private static string FormatDate(DateTime? value) => value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
+}

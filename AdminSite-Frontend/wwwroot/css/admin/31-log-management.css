@@ -1,0 +1,168 @@
+.log-management__subtitle {
+    margin: .3rem 0 0;
+    max-width: 760px;
+    color: var(--text-muted);
+    font-size: .86rem;
+}
+
+.log-management__filters {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(140px, 1fr)) auto;
+    gap: .75rem;
+    align-items: end;
+}
+
+.log-management__filters label {
+    display: grid;
+    gap: .35rem;
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.log-management__filter-actions,
+.log-management__pager {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.log-management__surface {
+    padding: 0;
+    overflow: hidden;
+}
+
+.log-management__surface .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.log-management__table,
+.log-management__event-table {
+    width: 100%;
+    min-width: 980px;
+    border-collapse: collapse;
+    color: var(--text);
+    font-size: .82rem;
+}
+
+.log-management__table th,
+.log-management__table td,
+.log-management__event-table th,
+.log-management__event-table td {
+    padding: .72rem .8rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.log-management__table th,
+.log-management__event-table th {
+    background: color-mix(in srgb, var(--bg) 72%, var(--surface));
+    color: var(--text-muted);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.log-management__table td small,
+.log-management__event-table td small {
+    display: block;
+    margin-top: .2rem;
+    color: var(--text-muted);
+    font-size: .72rem;
+}
+
+.log-management__detail-row > td {
+    padding: .75rem 1rem 1rem 3rem;
+    background: color-mix(in srgb, var(--primary) 3%, var(--surface));
+}
+
+.log-management__event-table {
+    min-width: 760px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+}
+
+.log-management__expand {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--primary);
+    cursor: pointer;
+}
+
+.log-management__empty {
+    padding: 2.5rem 1rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.log-management__pager {
+    justify-content: flex-end;
+    padding: .85rem 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.log-status {
+    display: inline-flex;
+    align-items: center;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    background: #eef2f7;
+    color: #475569;
+    font-size: .72rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.log-status--succeeded { background: #dcfce7; color: #166534; }
+.log-status--failed { background: #fee2e2; color: #991b1b; }
+.log-status--denied { background: #ffedd5; color: #9a3412; }
+.log-status--partial { background: #fef3c7; color: #92400e; }
+.log-status--nochange { background: #e2e8f0; color: #475569; }
+
+.log-management__table code,
+.log-management__event-table code {
+    font-size: .74rem;
+    color: color-mix(in srgb, var(--primary) 82%, var(--text));
+}
+
+.log-management__policy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: .75rem;
+}
+
+.log-management__policy-grid > div {
+    display: grid;
+    gap: .35rem;
+    padding: .85rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--bg) 60%, var(--surface));
+}
+
+.log-management__policy-grid span {
+    color: var(--text-muted);
+    font-size: .82rem;
+}
+
+@media (max-width: 1280px) {
+    .log-management__filters {
+        grid-template-columns: repeat(3, minmax(180px, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .log-management__filters { grid-template-columns: 1fr; }
+    .log-management__filter-actions .btn-admin { flex: 1 1 0; }
+    .log-management__detail-row > td { padding-left: .75rem; }
+}

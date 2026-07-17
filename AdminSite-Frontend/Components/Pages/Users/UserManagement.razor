@@ -708,7 +708,10 @@ else
         AdminPermissionKeys.ApproveContent => T("PermissionApproveContent"),
         AdminPermissionKeys.ManageUsers => T("PermissionManageUsers"),
         AdminPermissionKeys.ManageSettings => T("PermissionManageSettings"),
-        AdminPermissionKeys.ViewLogs => T("PermissionViewLogs"),
+        AdminPermissionKeys.ViewAuditTrail => T("PermissionViewAuditTrail"),
+        AdminPermissionKeys.ViewLoginActivity => T("PermissionViewLoginActivity"),
+        AdminPermissionKeys.ViewWebsiteActivity => T("PermissionViewWebsiteActivity"),
+        AdminPermissionKeys.ExportLogs => T("PermissionExportLogs"),
         AdminPermissionKeys.ViewFormDefinitions => T("PermissionViewFormDefinitions"),
         AdminPermissionKeys.EditFormDefinitions => T("PermissionEditFormDefinitions"),
         AdminPermissionKeys.ViewFormSubmissions => T("PermissionViewFormSubmissions"),
@@ -730,6 +733,7 @@ else
         AdminExclusiveCapabilityKeys.ManageContentWorkflowHistory => T("AdminExclusiveManageContentWorkflowHistory"),
         AdminExclusiveCapabilityKeys.ManageRoleDefinitions => T("AdminExclusiveManageRoleDefinitions"),
         AdminExclusiveCapabilityKeys.ManageProtectedAdminAccounts => T("AdminExclusiveManageProtectedAdminAccounts"),
+        AdminExclusiveCapabilityKeys.ManageLogRetention => T("AdminExclusiveManageLogRetention"),
         _ => capability.Replace("-", " ", StringComparison.OrdinalIgnoreCase)
     };
 

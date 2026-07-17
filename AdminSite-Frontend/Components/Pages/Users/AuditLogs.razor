@@ -1,208 +1,326 @@
+@page "/logs/audit"
 @page "/users/audit"
-@inject AdminUserService Users
+@inject LogManagementService Logs
 @inject AdminAuthService Auth
 @inject IHttpService Http
+@inject IJSRuntime JS
 
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-clipboard-list"></i> @T("AuditLogs")</h1>
-    @if (Auth.IsAdminAdmin && _logs.Any())
+    <div>
+        <h1 class="page-title"><i class="fas fa-clipboard-list"></i> @T("AuditTrail")</h1>
+        <p class="log-management__subtitle">@T("AuditTrailDescription")</p>
+    </div>
+    @if (Auth.CanExportLogs)
     {
-        <button class="btn-admin btn-danger"
-                disabled="@(!_selectedAuditIds.Any() || _deleting)"
-                @onclick="DeleteSelectedAuditLogs">
-            <i class="fas fa-trash"></i> @T("DeleteSelectedLogs")
+        <button class="btn-admin btn-ghost" disabled="@_exporting" @onclick="ExportAsync">
+            <i class="fas fa-file-export"></i> @(_exporting ? T("Exporting") : T("Export"))
         </button>
     }
 </div>
 
-<div class="admin-card">
-    @if (!Auth.CanViewLogs)
-    {
-        <p class="text-muted">@T("NoPermission")</p>
-    }
-    else if (_loading)
-    {
-        <p class="text-muted">@T("Loading")</p>
-    }
-    else if (!_logs.Any())
-    {
-        <p class="text-muted">@T("NoAuditLogs")</p>
-    }
-    else
-    {
-        <div style="overflow:auto">
-            <table class="table" style="width:100%">
-                <thead>
-                    <tr>
-                        @if (Auth.IsAdminAdmin)
-                        {
-                            <th style="width:42px">
-                                <input type="checkbox" checked="@AllAuditLogsSelected" @onchange="ToggleAllAuditLogs" />
-                            </th>
-                        }
-                        <th>@T("Time")</th>
-                        <th>@T("Area")</th>
-                        <th>@T("Action")</th>
-                        <th>@T("Actor")</th>
-                        <th>@T("Target")</th>
-                        <th>@T("Message")</th>
-                        <th>@T("IpAddress")</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in _logs)
-                    {
-                        <tr>
-                            @if (Auth.IsAdminAdmin)
-                            {
-                                <td>
-                                    <input type="checkbox"
-                                           checked="@_selectedAuditIds.Contains(item.Id)"
-                                           @onchange="e => ToggleAuditLog(item.Id, e)" />
-                                </td>
-                            }
-                            <td>@FormatDate(item.CreatedAt)</td>
-                            <td><span class="content-type-badge">@item.Area</span></td>
-                            <td>@item.Action</td>
-                            <td>@item.ActorEmail</td>
-                            <td>@(string.IsNullOrWhiteSpace(item.TargetEmail) ? "-" : item.TargetEmail)</td>
-                            <td>@item.Message</td>
-                            <td>@item.IpAddress</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-        <div class="admin-pagination">
-            <span class="text-muted">@ShowingText</span>
-            <div class="admin-pagination__buttons">
-                <button class="btn-admin btn-ghost" disabled="@(_page <= 1)" @onclick="() => SetPage(_page - 1)" aria-label="Previous page">&lsaquo;</button>
-                @foreach (var page in VisiblePages)
+@if (!Auth.CanViewAuditTrail)
+{
+    <div class="alert alert-danger">@T("PermissionDenied")</div>
+}
+else
+{
+    <section class="admin-card log-management__filters" aria-label="@T("Filters")">
+        <label>
+            <span>@T("Search")</span>
+            <input class="form-control" @bind="_search" placeholder="@T("SearchAuditPlaceholder")" />
+        </label>
+        <label>
+            <span>@T("Section")</span>
+            <select class="form-control" @bind="_domain">
+                <option value="">@T("All")</option>
+                @foreach (var domain in Domains)
                 {
-                    var pageNumber = page;
-                    <button class="btn-admin @(_page == pageNumber ? "btn-primary" : "btn-ghost")" @onclick="() => SetPage(pageNumber)">@pageNumber</button>
+                    <option value="@domain">@DomainLabel(domain)</option>
                 }
-                <button class="btn-admin btn-ghost" disabled="@(_page >= _totalPages)" @onclick="() => SetPage(_page + 1)" aria-label="Next page">&rsaquo;</button>
-            </div>
+            </select>
+        </label>
+        <label>
+            <span>@T("Result")</span>
+            <select class="form-control" @bind="_outcome">
+                <option value="">@T("All")</option>
+                @foreach (var outcome in Enum.GetValues<AdminAuditOutcome>())
+                {
+                    <option value="@outcome">@T($"AuditOutcome{outcome}")</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span>@T("From")</span>
+            <input class="form-control" type="date" value="@_fromDate" @onchange="OnFromDateChanged" />
+        </label>
+        <label>
+            <span>@T("To")</span>
+            <input class="form-control" type="date" value="@_toDate" @onchange="OnToDateChanged" />
+        </label>
+        <div class="log-management__filter-actions">
+            <button class="btn-admin btn-primary" @onclick="ApplyFiltersAsync">@T("Apply")</button>
+            <button class="btn-admin btn-ghost" @onclick="ClearFiltersAsync">@T("Clear")</button>
         </div>
-    }
-</div>
+    </section>
+
+    <section class="admin-card log-management__surface">
+        @if (_loading)
+        {
+            <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
+        }
+        else if (_sessions.Count == 0)
+        {
+            <div class="log-management__empty">@T("NoAuditLogs")</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="admin-data-table log-management__table">
+                    <thead>
+                        <tr>
+                            <th aria-label="@T("Details")"></th>
+                            <th>@T("Session")</th>
+                            <th>@T("TimeInSession")</th>
+                            <th>@T("Account")</th>
+                            <th>@T("Role")</th>
+                            <th>@T("Changes")</th>
+                            <th>@T("AffectedAreas")</th>
+                            <th>@T("Result")</th>
+                            <th>@T("LastActivity")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var session in _sessions)
+                        {
+                            <tr>
+                                <td>
+                                    <button class="log-management__expand" @onclick="() => ToggleSessionAsync(session)" aria-expanded="@_expanded.Contains(session.SessionKey)">
+                                        <i class="fas @(_expanded.Contains(session.SessionKey) ? "fa-chevron-down" : "fa-chevron-right")"></i>
+                                    </button>
+                                </td>
+                                <td><code>@SessionLabel(session)</code></td>
+                                <td>@FormatDuration(session.DurationSeconds)</td>
+                                <td>
+                                    <strong>@DisplayAccount(session)</strong>
+                                    <small>@session.ActorEmail</small>
+                                </td>
+                                <td>@Fallback(session.ActorRoleName)</td>
+                                <td>@session.EventCount</td>
+                                <td>@string.Join(", ", session.DomainCodes.Select(DomainLabel))</td>
+                                <td><span class="log-status log-status--@session.OverallOutcome.ToString().ToLowerInvariant()">@T($"AuditOutcome{session.OverallOutcome}")</span></td>
+                                <td>@FormatDate(session.LastEventAtUtc)</td>
+                            </tr>
+                            @if (_expanded.Contains(session.SessionKey))
+                            {
+                                <tr class="log-management__detail-row">
+                                    <td colspan="9">
+                                        @if (_loadingSessions.Contains(session.SessionKey))
+                                        {
+                                            <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
+                                        }
+                                        else if (_eventsBySession.TryGetValue(session.SessionKey, out var events))
+                                        {
+                                            <div class="table-responsive">
+                                                <table class="admin-data-table log-management__event-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>@T("EventTime")</th>
+                                                            <th>@T("Section")</th>
+                                                            <th>@T("Change")</th>
+                                                            <th>@T("Target")</th>
+                                                            <th>@T("Result")</th>
+                                                            <th>@T("Correlation")</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var auditEvent in events)
+                                                        {
+                                                            <tr>
+                                                                <td>@FormatDate(auditEvent.OccurredAtUtc)</td>
+                                                                <td>@DomainLabel(auditEvent.DomainCode)</td>
+                                                                <td>
+                                                                    <strong>@Humanize(auditEvent.ActionCode)</strong>
+                                                                    <small>@auditEvent.ActionCode</small>
+                                                                </td>
+                                                                <td>@DisplayTarget(auditEvent)</td>
+                                                                <td><span class="log-status log-status--@auditEvent.Outcome.ToString().ToLowerInvariant()">@T($"AuditOutcome{auditEvent.Outcome}")</span></td>
+                                                                <td><code title="@auditEvent.CorrelationId">@ShortCode(auditEvent.CorrelationId)</code></td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="log-management__pager">
+                <button class="btn-admin btn-ghost" disabled="@(_cursorHistory.Count == 0 || _loading)" @onclick="PreviousAsync">
+                    <i class="fas fa-chevron-left"></i> @T("Previous")
+                </button>
+                <button class="btn-admin btn-ghost" disabled="@(!_hasMore || _loading)" @onclick="NextAsync">
+                    @T("Next") <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        }
+    </section>
+}
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
-    private readonly List<AdminAuditLogResponse> _logs = new();
-    private readonly HashSet<string> _selectedAuditIds = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly string[] Domains =
+        ["authentication", "user-management", "role-management", "page-builder", "content", "forms", "assets", "settings", "website-activity", "system"];
+    private readonly List<AdminAuditSessionSummaryResponse> _sessions = new();
+    private readonly Dictionary<string, List<AdminAuditEventResponse>> _eventsBySession = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _loadingSessions = new(StringComparer.Ordinal);
+    private readonly List<string?> _cursorHistory = new();
+    private string? _cursor;
+    private string? _nextCursor;
+    private string _search = string.Empty;
+    private string _domain = string.Empty;
+    private string _outcome = string.Empty;
+    private string _fromDate = DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd");
+    private string _toDate = DateTime.Today.ToString("yyyy-MM-dd");
+    private bool _hasMore;
     private bool _loading = true;
-    private bool _deleting;
-    private const int PageSize = 20;
-    private int _page = 1;
-    private int _totalPages = 1;
-    private long _totalCount;
-
-    private bool AllAuditLogsSelected =>
-        _logs.Any() && _logs.All(item => _selectedAuditIds.Contains(item.Id));
+    private bool _exporting;
 
     protected override async Task OnInitializedAsync()
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
-
-        if (Auth.CanViewLogs)
-        {
-            await LoadAsync();
-        }
-
+        if (Auth.CanViewAuditTrail) await LoadAsync();
         _loading = false;
     }
+
+    private AdminAuditFilterRequest Filter() => new()
+    {
+        FromUtc = ParseDate(_fromDate, false),
+        ToUtc = ParseDate(_toDate, true),
+        DomainCode = EmptyToNull(_domain),
+        Outcome = Enum.TryParse<AdminAuditOutcome>(_outcome, out var parsed) ? parsed : null,
+        Search = EmptyToNull(_search),
+        Cursor = _cursor,
+        PageSize = 25
+    };
 
     private async Task LoadAsync()
     {
         _loading = true;
-        var res = await Users.GetAuditLogsAsync(_page, PageSize);
-        if (res.Success && res.Data is not null)
+        var response = await Logs.GetAuditSessionsAsync(Filter());
+        if (response.Success && response.Data is not null)
         {
-            _logs.Clear();
-            _logs.AddRange(res.Data.Items);
-            _page = res.Data.Page;
-            _totalPages = res.Data.TotalPages;
-            _totalCount = res.Data.TotalCount;
-            _selectedAuditIds.RemoveWhere(id => _logs.All(item => item.Id != id));
+            _sessions.Clear();
+            _sessions.AddRange(response.Data.Items);
+            _hasMore = response.Data.HasMore;
+            _nextCursor = response.Data.NextCursor;
+            _expanded.Clear();
         }
-        else
-        {
-            Http.Notify(res.Message, res.StatusCode);
-        }
+        else Http.Notify(response.Message, response.StatusCode);
         _loading = false;
     }
 
-    private IEnumerable<int> VisiblePages
+    private async Task ToggleSessionAsync(AdminAuditSessionSummaryResponse session)
     {
-        get
+        if (!_expanded.Add(session.SessionKey))
         {
-            var start = Math.Max(1, _page - 2);
-            var end = Math.Min(_totalPages, start + 4);
-            start = Math.Max(1, end - 4);
-            return Enumerable.Range(start, end - start + 1);
+            _expanded.Remove(session.SessionKey);
+            return;
         }
+        if (_eventsBySession.ContainsKey(session.SessionKey)) return;
+        _loadingSessions.Add(session.SessionKey);
+        var response = await Logs.GetSessionEventsAsync(session.SessionKey);
+        if (response.Success && response.Data is not null) _eventsBySession[session.SessionKey] = response.Data;
+        else Http.Notify(response.Message, response.StatusCode);
+        _loadingSessions.Remove(session.SessionKey);
     }
 
-    private string ShowingText
+    private async Task ApplyFiltersAsync()
     {
-        get
-        {
-            if (_totalCount == 0) return string.Format(T("ShowingRange"), 0, 0, 0);
-            var start = ((_page - 1) * PageSize) + 1;
-            var end = Math.Min(start + _logs.Count - 1, _totalCount);
-            return string.Format(T("ShowingRange"), start, end, _totalCount);
-        }
-    }
-
-    private async Task SetPage(int page)
-    {
-        var next = Math.Clamp(page, 1, _totalPages);
-        if (next == _page) return;
-        _page = next;
-        _selectedAuditIds.Clear();
+        ResetPaging();
         await LoadAsync();
     }
 
-    private void ToggleAuditLog(string id, ChangeEventArgs e)
+    private async Task ClearFiltersAsync()
     {
-        var selected = e.Value is bool value && value;
-        if (selected)
-            _selectedAuditIds.Add(id);
-        else
-            _selectedAuditIds.Remove(id);
-    }
-
-    private void ToggleAllAuditLogs(ChangeEventArgs e)
-    {
-        var selected = e.Value is bool value && value;
-        _selectedAuditIds.Clear();
-        if (selected)
-        {
-            foreach (var item in _logs)
-                _selectedAuditIds.Add(item.Id);
-        }
-    }
-
-    private async Task DeleteSelectedAuditLogs()
-    {
-        if (!_selectedAuditIds.Any()) return;
-
-        _deleting = true;
-        var res = await Users.DeleteAuditLogsAsync(_selectedAuditIds);
-        Http.Notify(res.Message, res.StatusCode);
-        _deleting = false;
-        if (!res.Success) return;
-
-        _selectedAuditIds.Clear();
+        _search = _domain = _outcome = string.Empty;
+        _fromDate = DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd");
+        _toDate = DateTime.Today.ToString("yyyy-MM-dd");
+        ResetPaging();
         await LoadAsync();
     }
+
+    private async Task NextAsync()
+    {
+        if (!_hasMore || string.IsNullOrWhiteSpace(_nextCursor)) return;
+        _cursorHistory.Add(_cursor);
+        _cursor = _nextCursor;
+        await LoadAsync();
+    }
+
+    private async Task PreviousAsync()
+    {
+        if (_cursorHistory.Count == 0) return;
+        _cursor = _cursorHistory[^1];
+        _cursorHistory.RemoveAt(_cursorHistory.Count - 1);
+        await LoadAsync();
+    }
+
+    private async Task ExportAsync()
+    {
+        _exporting = true;
+        try
+        {
+            var filter = Filter();
+            var result = await Logs.ExportAsync(new AdminLogExportRequest
+            {
+                LogType = "audit",
+                Format = "csv",
+                FromUtc = filter.FromUtc ?? DateTime.UtcNow.AddDays(-30),
+                ToUtc = filter.ToUtc ?? DateTime.UtcNow,
+                DomainCode = filter.DomainCode,
+                Outcome = filter.Outcome,
+                Search = filter.Search
+            });
+            if (result.Success)
+                await JS.InvokeVoidAsync("adminDownloads.downloadBase64", result.FileName, result.ContentType, Convert.ToBase64String(result.Bytes));
+            else Http.Notify(result.Message, result.StatusCode);
+        }
+        finally { _exporting = false; }
+    }
+
+    private void ResetPaging()
+    {
+        _cursor = _nextCursor = null;
+        _cursorHistory.Clear();
+        _eventsBySession.Clear();
+    }
+
+    private void OnFromDateChanged(ChangeEventArgs e) => _fromDate = e.Value?.ToString() ?? string.Empty;
+    private void OnToDateChanged(ChangeEventArgs e) => _toDate = e.Value?.ToString() ?? string.Empty;
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
-
-    private static string FormatDate(DateTime value) =>
-        value.ToLocalTime().ToString("dd MMM yyyy HH:mm");
+    private string DomainLabel(string code) => T("AuditDomain" + string.Concat(code.Split('-').Select(part => char.ToUpperInvariant(part[0]) + part[1..])));
+    private string DisplayAccount(AdminAuditSessionSummaryResponse item) => Fallback(item.ActorDisplayName, item.ActorEmail);
+    private static string SessionLabel(AdminAuditSessionSummaryResponse item) => item.SessionId is { Length: > 8 } id ? id[..8] : item.SessionKey.Replace("event:", "legacy-")[..Math.Min(15, item.SessionKey.Replace("event:", "legacy-").Length)];
+    private static string DisplayTarget(AdminAuditEventResponse item) => Fallback(item.TargetLabel, item.TargetId, item.TargetTypeCode, "-");
+    private static string Fallback(params string?[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? "-";
+    private static string? EmptyToNull(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string ShortCode(string value) => value.Length > 10 ? value[..10] : value;
+    private static string Humanize(string value) => string.Join(' ', value.Split('.', '-').Select(part => part.Length == 0 ? part : char.ToUpperInvariant(part[0]) + part[1..]));
+    private static string FormatDate(DateTime value) => value.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss");
+    private static string FormatDuration(long seconds) => seconds < 60 ? $"{seconds}s" : seconds < 3600 ? $"{seconds / 60}m" : $"{seconds / 3600}h {(seconds % 3600) / 60}m";
+    private static DateTime? ParseDate(string value, bool endOfDay)
+    {
+        if (!DateTime.TryParse(value, out var date)) return null;
+        var local = endOfDay ? date.Date.AddDays(1).AddTicks(-1) : date.Date;
+        return local.ToUniversalTime();
+    }
 }

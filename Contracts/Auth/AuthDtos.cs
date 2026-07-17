@@ -25,6 +25,22 @@ public enum AdminAuditArea
     Settings
 }
 
+public enum AdminAuditOutcome
+{
+    Succeeded,
+    Failed,
+    Denied,
+    Partial,
+    NoChange
+}
+
+public enum AdminAuditSeverity
+{
+    Information,
+    Warning,
+    Critical
+}
+
 public static class AdminPermissionKeys
 {
     public const string PageBuilder = "page-builder";
@@ -40,7 +56,13 @@ public static class AdminPermissionKeys
 
     public const string ManageUsers = "manage-users";
     public const string ManageSettings = "manage-settings";
+    // Legacy key. Existing roles/sessions are migrated one-way by
+    // ExpandDependencies and the role bootstrap process.
     public const string ViewLogs = "view-logs";
+    public const string ViewAuditTrail = "view-audit-trail";
+    public const string ViewLoginActivity = "view-login-activity";
+    public const string ViewWebsiteActivity = "view-website-activity";
+    public const string ExportLogs = "export-logs";
     public const string ViewFormDefinitions = "view-form-definitions";
     public const string EditFormDefinitions = "edit-form-definitions";
     public const string ViewFormSubmissions = "view-form-submissions";
@@ -55,7 +77,10 @@ public static class AdminPermissionKeys
         ApproveContent,
         ManageUsers,
         ManageSettings,
-        ViewLogs,
+        ViewAuditTrail,
+        ViewLoginActivity,
+        ViewWebsiteActivity,
+        ExportLogs,
         ViewFormDefinitions,
         EditFormDefinitions,
         ViewFormSubmissions,
@@ -89,6 +114,9 @@ public static class AdminPermissionKeys
             string.Equals(permission, ExportFormSubmissions, StringComparison.OrdinalIgnoreCase))
             return SubmissionActionRequirements;
 
+        if (string.Equals(permission, ViewLogs, StringComparison.OrdinalIgnoreCase))
+            return [ViewAuditTrail, ViewLoginActivity, ViewWebsiteActivity];
+
         return NoRequirements;
     }
 
@@ -119,9 +147,19 @@ public static class AdminPermissionKeys
 
     public static List<string> ExpandDependencies(IEnumerable<string>? permissions)
     {
+        var source = (permissions ?? [])
+            .Where(permission => !string.IsNullOrWhiteSpace(permission))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (source.Contains(ViewLogs))
+        {
+            source.Add(ViewAuditTrail);
+            source.Add(ViewLoginActivity);
+            source.Add(ViewWebsiteActivity);
+        }
+
         var allowed = All.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var expanded = (permissions ?? [])
-            .Where(permission => !string.IsNullOrWhiteSpace(permission) && allowed.Contains(permission))
+        var expanded = source
+            .Where(allowed.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<string>(expanded);
 
@@ -156,6 +194,7 @@ public static class AdminExclusiveCapabilityKeys
     public const string ManageContentWorkflowHistory = "manage-content-workflow-history";
     public const string ManageRoleDefinitions = "manage-role-definitions";
     public const string ManageProtectedAdminAccounts = "manage-protected-admin-accounts";
+    public const string ManageLogRetention = "manage-log-retention";
 
     public static readonly string[] All =
     [
@@ -169,7 +208,8 @@ public static class AdminExclusiveCapabilityKeys
         PermanentlyDeleteContent,
         ManageContentWorkflowHistory,
         ManageRoleDefinitions,
-        ManageProtectedAdminAccounts
+        ManageProtectedAdminAccounts,
+        ManageLogRetention
     ];
 }
 

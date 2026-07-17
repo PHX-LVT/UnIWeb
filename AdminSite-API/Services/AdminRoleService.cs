@@ -1,6 +1,8 @@
 using FullProject.Models;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Contracts.Auth;
+using FullProject.Services.LogManagement;
 
 namespace FullProject.Services;
 
@@ -12,15 +14,15 @@ public sealed class AdminRoleService
     private readonly IMongoCollection<AdminUser> _users;
     private readonly IMongoCollection<BsonDocument> _userDocuments;
     private readonly IMongoCollection<AdminSessionRecord> _sessions;
-    private readonly IMongoCollection<AdminAuditLog> _auditLogs;
+    private readonly IAuditTrailWriter _auditWriter;
 
-    public AdminRoleService(IMongoDatabase database)
+    public AdminRoleService(IMongoDatabase database, IAuditTrailWriter auditWriter)
     {
         _roles = database.GetCollection<AdminRoleDefinition>("admin_roles");
         _users = database.GetCollection<AdminUser>("admin_users");
         _userDocuments = database.GetCollection<BsonDocument>("admin_users");
         _sessions = database.GetCollection<AdminSessionRecord>("admin_sessions");
-        _auditLogs = database.GetCollection<AdminAuditLog>("admin_audit_logs");
+        _auditWriter = auditWriter;
     }
 
     public async Task EnsureInitializedAsync()
@@ -95,6 +97,7 @@ public sealed class AdminRoleService
         }
 
         await MigrateLegacyContentPermissionsAsync();
+        await MigrateLegacyLogPermissionsAsync();
 
         var adminRole = await GetProtectedAdminRoleAsync();
         if (adminRole is null)
@@ -174,6 +177,43 @@ public sealed class AdminRoleService
         await _users.UpdateManyAsync(user => ids.Contains(user.Id),
             Builders<AdminUser>.Update.Inc(user => user.TokenVersion, 1));
         await RevokeSessionsForUsersAsync(ids, "system-content-permission-migration", AdminSessionRevokeReason.RoleChanged);
+    }
+
+    private async Task MigrateLegacyLogPermissionsAsync()
+    {
+        var affectedUserIds = new HashSet<string>(StringComparer.Ordinal);
+        var roles = await _roles.Find(role => role.Permissions.Contains(AdminPermissionKeys.ViewLogs)).ToListAsync();
+        foreach (var role in roles)
+        {
+            var migrated = AdminPermissionKeys.ExpandDependencies(role.Permissions);
+            await _roles.UpdateOneAsync(current => current.Id == role.Id,
+                Builders<AdminRoleDefinition>.Update
+                    .Set(current => current.Permissions, migrated)
+                    .Set(current => current.UpdatedAt, DateTime.UtcNow));
+            var userIds = await _users.Find(user => user.RoleId == role.Id).Project(user => user.Id).ToListAsync();
+            foreach (var userId in userIds) affectedUserIds.Add(userId);
+        }
+
+        var users = await _users.Find(user =>
+            user.ExtraPermissions.Contains(AdminPermissionKeys.ViewLogs) ||
+            user.Permissions.Contains(AdminPermissionKeys.ViewLogs)).ToListAsync();
+        foreach (var user in users)
+        {
+            var source = user.ExtraPermissions.Count > 0 ? user.ExtraPermissions : user.Permissions;
+            var migrated = AdminPermissionKeys.ExpandDependencies(source);
+            await _users.UpdateOneAsync(current => current.Id == user.Id,
+                Builders<AdminUser>.Update.Combine(
+                    Builders<AdminUser>.Update.Set(current => current.ExtraPermissions, migrated),
+                    Builders<AdminUser>.Update.Set(current => current.Permissions, migrated),
+                    Builders<AdminUser>.Update.Set(current => current.UpdatedAt, DateTime.UtcNow)));
+            affectedUserIds.Add(user.Id);
+        }
+
+        if (affectedUserIds.Count == 0) return;
+        var ids = affectedUserIds.ToList();
+        await _users.UpdateManyAsync(user => ids.Contains(user.Id),
+            Builders<AdminUser>.Update.Inc(user => user.TokenVersion, 1));
+        await RevokeSessionsForUsersAsync(ids, "system-log-permission-migration", AdminSessionRevokeReason.RoleChanged);
     }
 
     private static List<string> MigrateLegacyContentPermissionSet(
@@ -563,17 +603,27 @@ public sealed class AdminRoleService
         string message,
         string ipAddress,
         string userAgent) =>
-        await _auditLogs.InsertOneAsync(new AdminAuditLog
+        await _auditWriter.WriteAsync(new AuditWriteRequest
         {
-            Area = AdminAuditArea.UserManagement,
-            Action = action,
+            DomainCode = "role-management",
+            ActionCode = action switch
+            {
+                "role-created" => "role.created",
+                "role-updated" => "role.updated",
+                "role-deleted" => "role.deleted",
+                _ => $"role.{action.Replace('-', '.')}"
+            },
+            Outcome = AdminAuditOutcome.Succeeded,
+            Severity = action == "role-deleted" ? AdminAuditSeverity.Warning : AdminAuditSeverity.Information,
             ActorId = actor.Id,
             ActorEmail = actor.Email,
             TargetId = targetId,
-            TargetEmail = targetName,
-            Message = message,
+            TargetTypeCode = "role",
+            TargetLabel = targetName,
+            ResultMessage = message,
             IpAddress = ipAddress,
-            UserAgent = userAgent
+            UserAgent = userAgent,
+            RetentionClass = action == "role-deleted" ? "critical" : "standard"
         });
 
     private static string NormalizeName(string value) => value.Trim().ToUpperInvariant();

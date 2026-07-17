@@ -59,36 +59,8 @@ namespace AdminSite.Services
             return _http.GetAsync<AdminPagedResponse<AdminSessionResponse>>($"api/admin/users/sessions{query}");
         }
 
-        public Task<ApiResponse<AdminPagedResponse<AdminLoginActivityResponse>>> GetLoginActivityAsync(int page, int pageSize, string? adminId = null)
-        {
-            var query = $"?page={page}&pageSize={pageSize}";
-            if (!string.IsNullOrWhiteSpace(adminId))
-                query += $"&adminId={Uri.EscapeDataString(adminId)}";
-            return _http.GetAsync<AdminPagedResponse<AdminLoginActivityResponse>>($"api/admin/users/login-activity{query}");
-        }
-
         public Task<ApiResponse<long>> DeleteSessionsAsync(IEnumerable<string> ids) =>
             _http.PostAsync<long>("api/admin/users/sessions/delete", new AdminBulkDeleteRequest
-            {
-                Ids = ids.ToList()
-            });
-
-        public Task<ApiResponse<long>> DeleteLoginActivityAsync(IEnumerable<string> ids) =>
-            _http.PostAsync<long>("api/admin/users/login-activity/delete", new AdminBulkDeleteRequest
-            {
-                Ids = ids.ToList()
-            });
-
-        public Task<ApiResponse<AdminPagedResponse<AdminAuditLogResponse>>> GetAuditLogsAsync(int page, int pageSize, string? targetId = null)
-        {
-            var query = $"?page={page}&pageSize={pageSize}";
-            if (!string.IsNullOrWhiteSpace(targetId))
-                query += $"&targetId={Uri.EscapeDataString(targetId)}";
-            return _http.GetAsync<AdminPagedResponse<AdminAuditLogResponse>>($"api/admin/users/audit{query}");
-        }
-
-        public Task<ApiResponse<long>> DeleteAuditLogsAsync(IEnumerable<string> ids) =>
-            _http.PostAsync<long>("api/admin/users/audit/delete", new AdminBulkDeleteRequest
             {
                 Ids = ids.ToList()
             });

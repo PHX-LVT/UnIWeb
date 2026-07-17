@@ -6,6 +6,8 @@ using MongoDB.Driver;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Contracts.Auth;
+using FullProject.Services.LogManagement;
 
 namespace FullProject.Services
 {
@@ -16,19 +18,27 @@ namespace FullProject.Services
 
         private readonly IMongoCollection<AdminUser> _users;
         private readonly IMongoCollection<AdminSessionRecord> _sessions;
-        private readonly IMongoCollection<AdminLoginActivityRecord> _loginActivity;
-        private readonly IMongoCollection<AdminAuditLog> _auditLogs;
         private readonly AdminRoleService _roles;
         private readonly JwtSettings _jwt;
+        private readonly IAuditTrailWriter _auditWriter;
+        private readonly ILoginActivityWriter _loginWriter;
+        private readonly ILogger<AuthService> _logger;
 
-        public AuthService(IMongoDatabase db, IOptions<JwtSettings> jwt, AdminRoleService roles)
+        public AuthService(
+            IMongoDatabase db,
+            IOptions<JwtSettings> jwt,
+            AdminRoleService roles,
+            IAuditTrailWriter auditWriter,
+            ILoginActivityWriter loginWriter,
+            ILogger<AuthService> logger)
         {
             _users = db.GetCollection<AdminUser>("admin_users");
             _sessions = db.GetCollection<AdminSessionRecord>("admin_sessions");
-            _loginActivity = db.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
-            _auditLogs = db.GetCollection<AdminAuditLog>("admin_audit_logs");
             _roles = roles;
             _jwt = jwt.Value;
+            _auditWriter = auditWriter;
+            _loginWriter = loginWriter;
+            _logger = logger;
         }
 
         public async Task<LoginResponseDto?> LoginAsync(string email, string password, string ipAddress, string userAgent)
@@ -38,7 +48,6 @@ namespace FullProject.Services
             if (user is null)
             {
                 await RecordLoginActivityAsync(null, normalizedEmail, "login-denied", false, "Unknown admin email.", ipAddress, userAgent);
-                await LogAsync(AdminAuditArea.Auth, "login-denied", "anonymous", string.Empty, null, normalizedEmail, "Unknown admin email.", ipAddress, userAgent);
                 return null;
             }
 
@@ -46,7 +55,6 @@ namespace FullProject.Services
             if (!CanLogin(user))
             {
                 await RecordLoginActivityAsync(user, user.Email, "login-denied", false, "Account is disabled or locked.", ipAddress, userAgent);
-                await LogAsync(AdminAuditArea.Auth, "login-denied", user.Id, user.Email, user.Id, user.Email, "Account is disabled or locked.", ipAddress, userAgent);
                 return null;
             }
 
@@ -93,8 +101,7 @@ namespace FullProject.Services
             user.Status = AdminUserStatus.Active;
             user.FailedLoginAttempts = 0;
             user.LockedUntil = null;
-            await RecordLoginActivityAsync(user, user.Email, "login-success", true, "Admin logged in.", ipAddress, userAgent);
-            await LogAsync(AdminAuditArea.Auth, "login-success", user.Id, user.Email, user.Id, user.Email, "Admin logged in.", ipAddress, userAgent);
+            await RecordLoginActivityAsync(user, user.Email, "login-success", true, "Admin logged in.", ipAddress, userAgent, tokenId);
 
             return new LoginResponseDto
             {
@@ -146,8 +153,7 @@ namespace FullProject.Services
         {
             await RevokeSessionByTokenIdAsync(tokenId, adminId, AdminSessionRevokeReason.Logout, ipAddress);
             var user = await GetByIdAsync(adminId);
-            await RecordLoginActivityAsync(user, user?.Email ?? string.Empty, "logout", true, "Admin logged out.", ipAddress, userAgent);
-            await LogAsync(AdminAuditArea.Auth, "logout", adminId, user?.Email ?? string.Empty, adminId, user?.Email, "Admin logged out.", ipAddress, userAgent);
+            await RecordLoginActivityAsync(user, user?.Email ?? string.Empty, "logout", true, "Admin logged out.", ipAddress, userAgent, tokenId);
         }
 
         public async Task<AdminUser?> GetByIdAsync(string adminId) =>
@@ -421,76 +427,6 @@ namespace FullProject.Services
             return (items, totalCount, page, pageSize);
         }
 
-        public async Task<List<AdminAuditLog>> GetAuditLogsAsync(string? targetId = null)
-        {
-            var filter = Builders<AdminAuditLog>.Filter.Empty;
-            if (!string.IsNullOrWhiteSpace(targetId))
-                filter &= Builders<AdminAuditLog>.Filter.Eq(l => l.TargetId, targetId);
-
-            return await _auditLogs.Find(filter)
-                .SortByDescending(l => l.CreatedAt)
-                .Limit(500)
-                .ToListAsync();
-        }
-
-        public async Task<(List<AdminAuditLog> Items, long TotalCount, int Page, int PageSize)> GetAuditLogsPageAsync(
-            int page,
-            int pageSize,
-            string? targetId = null)
-        {
-            var filter = Builders<AdminAuditLog>.Filter.Empty;
-            if (!string.IsNullOrWhiteSpace(targetId))
-                filter &= Builders<AdminAuditLog>.Filter.Eq(l => l.TargetId, targetId);
-
-            pageSize = Math.Clamp(pageSize, 10, 100);
-            var totalCount = await _auditLogs.CountDocumentsAsync(filter);
-            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-            page = Math.Clamp(page, 1, totalPages);
-
-            var items = await _auditLogs.Find(filter)
-                .SortByDescending(l => l.CreatedAt)
-                .Skip((page - 1) * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
-
-            return (items, totalCount, page, pageSize);
-        }
-
-        public async Task<(List<AdminLoginActivityRecord> Items, long TotalCount, int Page, int PageSize)> GetLoginActivityPageAsync(
-            int page,
-            int pageSize,
-            string? adminId = null)
-        {
-            var filter = Builders<AdminLoginActivityRecord>.Filter.Empty;
-            if (!string.IsNullOrWhiteSpace(adminId))
-                filter &= Builders<AdminLoginActivityRecord>.Filter.Eq(l => l.AdminId, adminId);
-
-            pageSize = Math.Clamp(pageSize, 10, 100);
-            var totalCount = await _loginActivity.CountDocumentsAsync(filter);
-            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-            page = Math.Clamp(page, 1, totalPages);
-
-            var items = await _loginActivity.Find(filter)
-                .SortByDescending(l => l.OccurredAt)
-                .Skip((page - 1) * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
-
-            return (items, totalCount, page, pageSize);
-        }
-
-        public async Task<List<AdminLoginActivityRecord>> GetLoginActivityAsync(string? adminId = null)
-        {
-            var filter = Builders<AdminLoginActivityRecord>.Filter.Empty;
-            if (!string.IsNullOrWhiteSpace(adminId))
-                filter &= Builders<AdminLoginActivityRecord>.Filter.Eq(l => l.AdminId, adminId);
-
-            return await _loginActivity.Find(filter)
-                .SortByDescending(l => l.OccurredAt)
-                .Limit(300)
-                .ToListAsync();
-        }
-
         public async Task<long> DeleteSessionsAsync(IEnumerable<string> ids, AdminUser actor, string ipAddress, string userAgent)
         {
             var selectedIds = NormalizeIds(ids);
@@ -505,26 +441,6 @@ namespace FullProject.Services
 
             var result = await _sessions.DeleteManyAsync(filter);
             await LogAsync(AdminAuditArea.UserManagement, "sessions-deleted", actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} inactive session record(s).", ipAddress, userAgent);
-            return result.DeletedCount;
-        }
-
-        public async Task<long> DeleteLoginActivityAsync(IEnumerable<string> ids, AdminUser actor, string ipAddress, string userAgent)
-        {
-            var selectedIds = NormalizeIds(ids);
-            if (selectedIds.Count == 0) return 0;
-
-            var result = await _loginActivity.DeleteManyAsync(Builders<AdminLoginActivityRecord>.Filter.In(l => l.Id, selectedIds));
-            await LogAsync(AdminAuditArea.UserManagement, "login-activity-deleted", actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} login activity log(s).", ipAddress, userAgent);
-            return result.DeletedCount;
-        }
-
-        public async Task<long> DeleteAuditLogsAsync(IEnumerable<string> ids, AdminUser actor, string ipAddress, string userAgent)
-        {
-            var selectedIds = NormalizeIds(ids);
-            if (selectedIds.Count == 0) return 0;
-
-            var result = await _auditLogs.DeleteManyAsync(Builders<AdminAuditLog>.Filter.In(l => l.Id, selectedIds));
-            await LogAsync(AdminAuditArea.UserManagement, "audit-logs-deleted", actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} audit log(s).", ipAddress, userAgent);
             return result.DeletedCount;
         }
 
@@ -618,7 +534,6 @@ namespace FullProject.Services
 
             await _users.UpdateOneAsync(u => u.Id == user.Id, update);
             await RecordLoginActivityAsync(user, user.Email, "login-denied", false, "Invalid password.", ipAddress, userAgent);
-            await LogAsync(AdminAuditArea.Auth, "login-denied", user.Id, user.Email, user.Id, user.Email, "Invalid password.", ipAddress, userAgent);
         }
 
         private static bool CanLogin(AdminUser user)
@@ -652,38 +567,80 @@ namespace FullProject.Services
                     .Set(s => s.RevokeReason, reason));
         }
 
-        private async Task LogAsync(AdminAuditArea area, string action, string actorId, string actorEmail, string? targetId, string? targetEmail, string message, string ipAddress, string userAgent)
+        private async Task LogAsync(AdminAuditArea area, string action, string actorId, string actorEmail, string? targetId, string? targetEmail, string message, string ipAddress, string userAgent, string? sessionId = null)
         {
-            await _auditLogs.InsertOneAsync(new AdminAuditLog
+            var mapping = AuditActionCatalog.ResolveLegacy(area.ToString(), action);
+            try
             {
-                Area = area,
-                Action = action,
-                ActorId = actorId,
-                ActorEmail = actorEmail,
-                TargetId = targetId,
-                TargetEmail = targetEmail,
-                Message = message,
-                IpAddress = ipAddress,
-                UserAgent = userAgent,
-                CreatedAt = DateTime.UtcNow
-            });
+                await _auditWriter.WriteAsync(new AuditWriteRequest
+                {
+                    DomainCode = mapping.DomainCode,
+                    ActionCode = mapping.ActionCode,
+                    Outcome = action.Contains("denied", StringComparison.OrdinalIgnoreCase)
+                        ? AdminAuditOutcome.Denied
+                        : AdminAuditOutcome.Succeeded,
+                    Severity = mapping.Critical ? AdminAuditSeverity.Warning : AdminAuditSeverity.Information,
+                    ActorId = actorId,
+                    ActorEmail = actorEmail,
+                    SessionId = sessionId,
+                    TargetTypeCode = mapping.TargetTypeCode,
+                    TargetId = targetId,
+                    TargetLabel = targetEmail,
+                    ChangeCount = action.Contains("denied", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
+                    MessageKey = $"audit.{mapping.ActionCode}",
+                    ResultMessage = message,
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent,
+                    RetentionClass = mapping.Critical ? "critical" : "standard"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to write audit event {ActionCode} for {ActorId}.", mapping.ActionCode, actorId);
+            }
         }
 
-        private async Task RecordLoginActivityAsync(AdminUser? user, string email, string eventType, bool success, string message, string ipAddress, string userAgent)
+        private async Task RecordLoginActivityAsync(AdminUser? user, string email, string eventType, bool success, string message, string ipAddress, string userAgent, string? sessionId = null)
         {
-            await _loginActivity.InsertOneAsync(new AdminLoginActivityRecord
+            var eventCode = eventType switch
             {
-                AdminId = user?.Id,
-                Email = NormalizeEmail(email),
-                EventType = eventType,
-                Success = success,
-                Message = message,
-                IpAddress = ipAddress,
-                UserAgent = userAgent,
-                BrowserName = ParseBrowser(userAgent),
-                OperatingSystem = ParseOperatingSystem(userAgent),
-                OccurredAt = DateTime.UtcNow
-            });
+                "login-success" => "login.succeeded",
+                "login-denied" => "login.denied",
+                "logout" => "session.logged-out",
+                _ => eventType.Replace('-', '.')
+            };
+            var reasonCode = message switch
+            {
+                var value when value.Contains("Unknown admin", StringComparison.OrdinalIgnoreCase) => "unknown-account",
+                var value when value.Contains("disabled or locked", StringComparison.OrdinalIgnoreCase) => "account-unavailable",
+                var value when value.Contains("role", StringComparison.OrdinalIgnoreCase) => "role-unavailable",
+                var value when value.Contains("Invalid password", StringComparison.OrdinalIgnoreCase) => "invalid-credential",
+                _ when eventType == "logout" => "user-requested",
+                _ when success => "authenticated",
+                _ => "rejected"
+            };
+            try
+            {
+                await _loginWriter.WriteAsync(new LoginActivityWriteRequest
+                {
+                    EventCode = eventCode,
+                    Outcome = success ? AdminAuditOutcome.Succeeded : AdminAuditOutcome.Denied,
+                    ReasonCode = reasonCode,
+                    AdminId = user?.Id,
+                    AccountEmail = user?.Email,
+                    AccountDisplayName = user?.FullName,
+                    AttemptedIdentifier = email,
+                    SessionId = sessionId,
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent,
+                    MessageKey = $"login-activity.{eventCode}",
+                    ResultMessage = message
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to write login activity event {EventCode}.", eventCode);
+            }
         }
 
         private static List<string> ValidateUserCreate(AdminUserCreateRequest dto)

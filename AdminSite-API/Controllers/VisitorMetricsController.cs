@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FullProject.Controllers;
 
 [ApiController]
-[Authorize(Policy = AdminPermissionKeys.ViewLogs)]
+[Authorize(Policy = AdminPermissionKeys.ViewWebsiteActivity)]
 [Route("api/admin/visitor-metrics")]
 public sealed class VisitorMetricsController : ControllerBase
 {
@@ -22,7 +22,7 @@ public sealed class VisitorMetricsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] string? metricType, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
-        if (!AdminAuthorization.HasPermission(User, AdminPermissionKeys.ViewLogs))
+        if (!AdminAuthorization.HasPermission(User, AdminPermissionKeys.ViewWebsiteActivity))
             return Forbid();
 
         var metrics = await _metrics.GetAsync(metricType, from, to);

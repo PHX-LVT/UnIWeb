@@ -76,7 +76,7 @@
     </nav>
 }
 
-@if (Auth.CanViewLogs)
+@if (Auth.CanViewWebsiteActivity)
 {
     <nav class="ez-nav-section">
         <NavLink class="ez-nav-link" href="/website-activity" @onclick="CollapseGroups">
@@ -136,11 +136,42 @@
     </nav>
 }
 
-@if (Auth.CanManageUsers || Auth.CanViewLogs || Auth.CanManageSettings)
+@if (Auth.CanUseLogManagement)
+{
+    <nav class="ez-nav-section">
+        <button class="ez-nav-toggle @ToggleClass("logs")" type="button" @onclick='() => ToggleGroup("logs")'>
+            <span>@T("LogManagement")</span>
+            <i class="fas fa-chevron-down"></i>
+        </button>
+        @if (_expandedGroup == "logs")
+        {
+            @if (Auth.CanViewAuditTrail)
+            {
+                <NavLink class="ez-nav-link ez-nav-child" href="/logs/audit" @onclick='() => ExpandGroup("logs")'>
+                    <span>@T("AuditTrail")</span>
+                </NavLink>
+            }
+            @if (Auth.CanViewLoginActivity)
+            {
+                <NavLink class="ez-nav-link ez-nav-child" href="/logs/login-activity" @onclick='() => ExpandGroup("logs")'>
+                    <span>@T("LoginActivity")</span>
+                </NavLink>
+            }
+            @if (Auth.IsAdminAdmin)
+            {
+                <NavLink class="ez-nav-link ez-nav-child" href="/logs/archives" @onclick='() => ExpandGroup("logs")'>
+                    <span>@T("ArchivesAndRetention")</span>
+                </NavLink>
+            }
+        }
+    </nav>
+}
+
+@if (Auth.CanManageUsers || Auth.CanManageSettings)
 {
     <nav class="ez-nav-section">
     <div class="ez-nav-label">@T("System")</div>
-    @if (Auth.CanManageUsers || Auth.CanViewLogs)
+    @if (Auth.CanManageUsers)
     {
         <button class="ez-nav-toggle @ToggleClass("users")" type="button" @onclick='() => ToggleGroup("users")'>
             <span>@T("UserManagement")</span>
@@ -155,15 +186,9 @@
                     <span>@T("Users")</span>
                 </NavLink>
             }
-            @if (Auth.CanViewLogs)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/users/sessions" @onclick='() => ExpandGroup("users")'>
-                    <span>@T("LoginActivity")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/users/audit" @onclick='() => ExpandGroup("users")'>
-                    <span>@T("AuditLogs")</span>
-                </NavLink>
-            }
+            <NavLink class="ez-nav-link ez-nav-child" href="/users/sessions" @onclick='() => ExpandGroup("users")'>
+                <span>@T("ActiveSessions")</span>
+            </NavLink>
         }
     }
     @if (Auth.CanManageSettings)
@@ -199,6 +224,10 @@
         else if (path.StartsWith("/users", StringComparison.OrdinalIgnoreCase))
         {
             _expandedGroup = "users";
+        }
+        else if (path.StartsWith("/logs", StringComparison.OrdinalIgnoreCase))
+        {
+            _expandedGroup = "logs";
         }
     }
 

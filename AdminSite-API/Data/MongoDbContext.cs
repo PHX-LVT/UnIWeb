@@ -33,6 +33,13 @@ namespace FullProject.Data
         public IMongoCollection<AdminUser> AdminUsers => _database.GetCollection<AdminUser>("admin_users");
         public IMongoCollection<AdminRoleDefinition> AdminRoles => _database.GetCollection<AdminRoleDefinition>("admin_roles");
         public IMongoCollection<AdminLoginActivityRecord> AdminLoginActivity => _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
+        public IMongoCollection<AdminAuditEvent> AdminAuditEvents => _database.GetCollection<AdminAuditEvent>("admin_audit_events");
+        public IMongoCollection<AdminLoginActivityEvent> AdminLoginActivityEvents => _database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_events");
+        public IMongoCollection<AdminAuditEvent> AdminAuditEventArchives => _database.GetCollection<AdminAuditEvent>("admin_audit_event_archives");
+        public IMongoCollection<AdminLoginActivityEvent> AdminLoginActivityEventArchives => _database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_event_archives");
+        public IMongoCollection<AdminLogMigrationCheckpoint> AdminLogArchiveCheckpoints => _database.GetCollection<AdminLogMigrationCheckpoint>("admin_log_archive_checkpoints");
+        public IMongoCollection<AdminLogExportRecord> AdminLogExportRecords => _database.GetCollection<AdminLogExportRecord>("admin_log_export_records");
+        public IMongoCollection<AdminLogRetentionLedger> AdminLogRetentionLedger => _database.GetCollection<AdminLogRetentionLedger>("admin_log_retention_ledger");
         public IMongoCollection<FormDefinition> FormDefinitions => _database.GetCollection<FormDefinition>("form_definitions");
         public IMongoCollection<FormDefinitionOrderDocument> FormDefinitionOrder => _database.GetCollection<FormDefinitionOrderDocument>("form_definition_order");
         public IMongoCollection<FormDesignV2MigrationLease> FormDesignV2MigrationLeases => _database.GetCollection<FormDesignV2MigrationLease>("form_design_migration_leases");

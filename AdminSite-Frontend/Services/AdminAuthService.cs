@@ -71,7 +71,15 @@ public sealed class AdminAuthService
 
     public bool CanManageUsers => HasPermission(AdminPermissionKeys.ManageUsers);
 
-    public bool CanViewLogs => HasPermission(AdminPermissionKeys.ViewLogs);
+    public bool CanViewAuditTrail => HasPermission(AdminPermissionKeys.ViewAuditTrail);
+
+    public bool CanViewLoginActivity => HasPermission(AdminPermissionKeys.ViewLoginActivity);
+
+    public bool CanViewWebsiteActivity => HasPermission(AdminPermissionKeys.ViewWebsiteActivity);
+
+    public bool CanExportLogs => HasPermission(AdminPermissionKeys.ExportLogs);
+
+    public bool CanUseLogManagement => CanViewAuditTrail || CanViewLoginActivity;
 
     public bool CanViewFormDefinitions => HasPermission(AdminPermissionKeys.ViewFormDefinitions);
 

@@ -254,9 +254,22 @@ else if (Auth.IsAuthenticated)
         if (path.StartsWith("/forms", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (path.StartsWith("/users/sessions", StringComparison.OrdinalIgnoreCase) ||
+        if (path.StartsWith("/website-activity", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanViewWebsiteActivity;
+
+        if (path.StartsWith("/logs/audit", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/users/audit", StringComparison.OrdinalIgnoreCase))
-            return Auth.CanViewLogs;
+            return Auth.CanViewAuditTrail;
+
+        if (path.StartsWith("/logs/login-activity", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/users/login-activity", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanViewLoginActivity;
+
+        if (path.StartsWith("/logs/archives", StringComparison.OrdinalIgnoreCase))
+            return Auth.IsAdminAdmin;
+
+        if (path.StartsWith("/users/sessions", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanManageUsers;
 
         if (path.StartsWith("/users", StringComparison.OrdinalIgnoreCase))
             return Auth.CanManageUsers;

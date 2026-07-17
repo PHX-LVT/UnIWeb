@@ -119,6 +119,7 @@ builder.Services.AddScoped<AdminFormSubmissionService>();
 builder.Services.AddScoped<AdminLanguageService>();
 builder.Services.AddScoped<AdminContentService>();
 builder.Services.AddScoped<AdminUserService>();
+builder.Services.AddScoped<LogManagementService>();
 
 var app = builder.Build();
 

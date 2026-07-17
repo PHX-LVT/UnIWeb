@@ -27,6 +27,7 @@ namespace FullProject.Services
             await EnsureContentIndexesAsync();
             await EnsureManagedResourceIndexesAsync();
             await EnsureUserIndexesAsync();
+            await EnsureLogManagementIndexesAsync();
             await EnsureSystemIndexesAsync();
             await EnsureRevisionIndexesAsync();
             await EnsureVisitorMetricIndexesAsync();
@@ -276,6 +277,65 @@ namespace FullProject.Services
                     .Descending(m => m.Day)
                     .Ascending(m => m.MetricType)
                     .Descending(m => m.Count)));
+        }
+
+        private async Task EnsureLogManagementIndexesAsync()
+        {
+            var audit = _database.GetCollection<AdminAuditEvent>("admin_audit_events");
+            await EnsureIndexAsync(audit,
+                Builders<AdminAuditEvent>.IndexKeys.Descending(item => item.OccurredAtUtc).Descending(item => item.Id),
+                IndexOptions("ix_admin_audit_time_id"));
+            await EnsureIndexAsync(audit,
+                Builders<AdminAuditEvent>.IndexKeys.Ascending(item => item.SessionId).Ascending(item => item.OccurredAtUtc),
+                IndexOptions("ix_admin_audit_session_time"));
+            await EnsureIndexAsync(audit,
+                Builders<AdminAuditEvent>.IndexKeys.Ascending(item => item.ActorId).Descending(item => item.OccurredAtUtc),
+                IndexOptions("ix_admin_audit_actor_time"));
+            await EnsureIndexAsync(audit,
+                Builders<AdminAuditEvent>.IndexKeys
+                    .Ascending(item => item.DomainCode)
+                    .Ascending(item => item.ActionCode)
+                    .Ascending(item => item.Outcome)
+                    .Descending(item => item.OccurredAtUtc),
+                IndexOptions("ix_admin_audit_domain_action_outcome_time"));
+            await EnsureIndexAsync(audit,
+                Builders<AdminAuditEvent>.IndexKeys.Ascending(item => item.LegacySourceId),
+                new CreateIndexOptions { Name = "ux_admin_audit_legacy", Unique = true, Sparse = true });
+
+            var login = _database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_events");
+            await EnsureIndexAsync(login,
+                Builders<AdminLoginActivityEvent>.IndexKeys.Descending(item => item.OccurredAtUtc).Descending(item => item.Id),
+                IndexOptions("ix_admin_login_time_id"));
+            await EnsureIndexAsync(login,
+                Builders<AdminLoginActivityEvent>.IndexKeys.Ascending(item => item.AdminId).Descending(item => item.OccurredAtUtc),
+                IndexOptions("ix_admin_login_admin_time"));
+            await EnsureIndexAsync(login,
+                Builders<AdminLoginActivityEvent>.IndexKeys
+                    .Ascending(item => item.EventCode)
+                    .Ascending(item => item.Outcome)
+                    .Descending(item => item.OccurredAtUtc),
+                IndexOptions("ix_admin_login_event_outcome_time"));
+            await EnsureIndexAsync(login,
+                Builders<AdminLoginActivityEvent>.IndexKeys.Ascending(item => item.LegacySourceId),
+                new CreateIndexOptions { Name = "ux_admin_login_legacy", Unique = true, Sparse = true });
+
+            var auditArchive = _database.GetCollection<AdminAuditEvent>("admin_audit_event_archives");
+            await EnsureIndexAsync(auditArchive,
+                Builders<AdminAuditEvent>.IndexKeys.Descending(item => item.OccurredAtUtc),
+                IndexOptions("ix_admin_audit_archive_time"));
+            var loginArchive = _database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_event_archives");
+            await EnsureIndexAsync(loginArchive,
+                Builders<AdminLoginActivityEvent>.IndexKeys.Descending(item => item.OccurredAtUtc),
+                IndexOptions("ix_admin_login_archive_time"));
+
+            var exports = _database.GetCollection<AdminLogExportRecord>("admin_log_export_records");
+            await EnsureIndexAsync(exports,
+                Builders<AdminLogExportRecord>.IndexKeys.Descending(item => item.RequestedAtUtc),
+                IndexOptions("ix_admin_log_exports_requested"));
+            var ledger = _database.GetCollection<AdminLogRetentionLedger>("admin_log_retention_ledger");
+            await EnsureIndexAsync(ledger,
+                Builders<AdminLogRetentionLedger>.IndexKeys.Descending(item => item.StartedAtUtc),
+                IndexOptions("ix_admin_log_retention_started"));
         }
         private async Task EnsureRevisionIndexesAsync()
         {

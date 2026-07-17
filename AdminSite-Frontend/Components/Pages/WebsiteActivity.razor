@@ -6,7 +6,7 @@
 <div class="page-header website-activity__header">
     <h1 class="page-title">@T("WebsiteActivity")</h1>
 
-    @if (Auth.CanViewLogs)
+    @if (Auth.CanViewWebsiteActivity)
     {
         <div class="website-activity__filters admin-data-toolbar__row">
             <label>
@@ -24,7 +24,7 @@
     }
 </div>
 
-@if (!Auth.CanViewLogs)
+@if (!Auth.CanViewWebsiteActivity)
 {
     <div class="admin-data-table-card">
         <div class="admin-data-empty">@T("NoPermission")</div>
@@ -141,7 +141,7 @@ else
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
 
-        if (Auth.CanViewLogs)
+        if (Auth.CanViewWebsiteActivity)
             await LoadAsync();
 
         _loading = false;

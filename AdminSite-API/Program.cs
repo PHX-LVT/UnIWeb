@@ -23,6 +23,7 @@ using FullProject.Services.CloneServices;
 using FullProject.Services.BlockServices;
 using Contracts.Auth;
 using FullProject.Security;
+using FullProject.Services.LogManagement;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,6 +42,19 @@ builder.Services.Configure<FormSecuritySettings>(
     builder.Configuration.GetSection("FormSecurity"));
 builder.Services.Configure<FormDesignV2RuntimeSettings>(
     builder.Configuration.GetSection("FormDesignV2"));
+builder.Services.AddOptions<LogManagementSettings>()
+    .Bind(builder.Configuration.GetSection("LogManagement"))
+    .Validate(settings =>
+        settings.AuditActiveDays > 0 &&
+        settings.AuditTotalDays >= settings.AuditActiveDays &&
+        settings.LoginActiveDays > 0 &&
+        settings.LoginTotalDays >= settings.LoginActiveDays &&
+        settings.CriticalSecurityTotalDays >= settings.AuditTotalDays &&
+        settings.ExportMaximumRows is >= 1 and <= 1_000_000 &&
+        settings.RetentionBatchSize is >= 100 and <= 10_000 &&
+        settings.MigrationBatchSize is >= 100 and <= 5_000,
+        "LogManagement retention, export, or batch settings are invalid.")
+    .ValidateOnStart();
 
 // --- MongoDB ---
 var mongoSettings = builder.Configuration
@@ -115,6 +129,13 @@ builder.Services.AddHttpClient<R2StorageService>();
 builder.Services.AddScoped<AssetReferenceService>();
 builder.Services.AddScoped<AssetCleanupService>();
 builder.Services.AddScoped<R2AssetService>();
+builder.Services.AddSingleton<AuditRedactionPolicy>();
+builder.Services.AddScoped<IAuditTrailWriter, AuditTrailWriter>();
+builder.Services.AddScoped<ILoginActivityWriter, LoginActivityWriter>();
+builder.Services.AddScoped<LogManagementQueryService>();
+builder.Services.AddScoped<LogExportService>();
+builder.Services.AddScoped<LogRetentionService>();
+builder.Services.AddHostedService<LegacyLogMigrationService>();
 
 // --- Memory Cache (Phase 1 - Maybe Redis in Phase 2) ---
 builder.Services.AddMemoryCache();
@@ -428,6 +449,7 @@ app.UseCors("AllowFrontends");
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<AdminMutationAuditMiddleware>();
 app.UseMiddleware<AdminSessionValidationMiddleware>();
 app.UseAuthorization();
 app.MapControllers();

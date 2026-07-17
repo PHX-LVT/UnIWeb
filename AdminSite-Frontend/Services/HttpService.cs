@@ -19,6 +19,7 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         Task<FileDownloadResult> GetFileAsync(string uri);
+        Task<FileDownloadResult> PostFileDownloadAsync(string uri, object body);
         void Toast(string? message, int statusCode);
         void Notify(string? message, int statusCode);
         void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null);
@@ -137,6 +138,17 @@ namespace AdminSite.Services
         public async Task<FileDownloadResult> GetFileAsync(string uri)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            return await DownloadAsync(request);
+        }
+
+        public async Task<FileDownloadResult> PostFileDownloadAsync(string uri, object body)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, uri) { Content = Json(body) };
+            return await DownloadAsync(request);
+        }
+
+        private async Task<FileDownloadResult> DownloadAsync(HttpRequestMessage request)
+        {
 
             try
             {

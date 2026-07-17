@@ -222,7 +222,10 @@
         AdminPermissionKeys.ApproveContent => T("PermissionApproveContent"),
         AdminPermissionKeys.ManageUsers => T("PermissionManageUsers"),
         AdminPermissionKeys.ManageSettings => T("PermissionManageSettings"),
-        AdminPermissionKeys.ViewLogs => T("PermissionViewLogs"),
+        AdminPermissionKeys.ViewAuditTrail => T("PermissionViewAuditTrail"),
+        AdminPermissionKeys.ViewLoginActivity => T("PermissionViewLoginActivity"),
+        AdminPermissionKeys.ViewWebsiteActivity => T("PermissionViewWebsiteActivity"),
+        AdminPermissionKeys.ExportLogs => T("PermissionExportLogs"),
         AdminPermissionKeys.ViewFormDefinitions => T("PermissionViewFormDefinitions"),
         AdminPermissionKeys.EditFormDefinitions => T("PermissionEditFormDefinitions"),
         AdminPermissionKeys.ViewFormSubmissions => T("PermissionViewFormSubmissions"),
@@ -239,7 +242,10 @@
         AdminPermissionKeys.ApproveContent => T("PermissionApproveContentDescription"),
         AdminPermissionKeys.ManageUsers => T("PermissionManageUsersDescription"),
         AdminPermissionKeys.ManageSettings => T("PermissionManageSettingsDescription"),
-        AdminPermissionKeys.ViewLogs => T("PermissionViewLogsDescription"),
+        AdminPermissionKeys.ViewAuditTrail => T("PermissionViewAuditTrailDescription"),
+        AdminPermissionKeys.ViewLoginActivity => T("PermissionViewLoginActivityDescription"),
+        AdminPermissionKeys.ViewWebsiteActivity => T("PermissionViewWebsiteActivityDescription"),
+        AdminPermissionKeys.ExportLogs => T("PermissionExportLogsDescription"),
         AdminPermissionKeys.ViewFormDefinitions => T("PermissionViewFormDefinitionsDescription"),
         AdminPermissionKeys.EditFormDefinitions => T("PermissionEditFormDefinitionsDescription"),
         AdminPermissionKeys.ViewFormSubmissions => T("PermissionViewFormSubmissionsDescription"),
@@ -261,6 +267,7 @@
         AdminExclusiveCapabilityKeys.ManageContentWorkflowHistory => T("AdminExclusiveManageContentWorkflowHistory"),
         AdminExclusiveCapabilityKeys.ManageRoleDefinitions => T("AdminExclusiveManageRoleDefinitions"),
         AdminExclusiveCapabilityKeys.ManageProtectedAdminAccounts => T("AdminExclusiveManageProtectedAdminAccounts"),
+        AdminExclusiveCapabilityKeys.ManageLogRetention => T("AdminExclusiveManageLogRetention"),
         _ => capability
     };
 
@@ -277,6 +284,7 @@
         AdminExclusiveCapabilityKeys.ManageContentWorkflowHistory => T("AdminExclusiveManageContentWorkflowHistoryDescription"),
         AdminExclusiveCapabilityKeys.ManageRoleDefinitions => T("AdminExclusiveManageRoleDefinitionsDescription"),
         AdminExclusiveCapabilityKeys.ManageProtectedAdminAccounts => T("AdminExclusiveManageProtectedAdminAccountsDescription"),
+        AdminExclusiveCapabilityKeys.ManageLogRetention => T("AdminExclusiveManageLogRetentionDescription"),
         _ => capability
     };
 

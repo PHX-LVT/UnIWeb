@@ -3,6 +3,8 @@ using FullProject.Services;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FullProject.Services.LogManagement;
+using Contracts.Auth;
 
 namespace FullProject.Controllers
 {
@@ -13,11 +15,13 @@ namespace FullProject.Controllers
     {
         private readonly AuthService _auth;
         private readonly AdminRoleService _roles;
+        private readonly LogManagementQueryService _logs;
 
-        public AdminUsersController(AuthService auth, AdminRoleService roles)
+        public AdminUsersController(AuthService auth, AdminRoleService roles, LogManagementQueryService logs)
         {
             _auth = auth;
             _roles = roles;
+            _logs = logs;
         }
 
         [HttpGet]
@@ -112,7 +116,7 @@ namespace FullProject.Controllers
             [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanViewLogs()) return Forbid();
+            if (!CanManageUsers()) return Forbid();
 
             var result = await _auth.GetSessionsPageAsync(page, pageSize, adminId);
             var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
@@ -133,16 +137,17 @@ namespace FullProject.Controllers
             [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanViewLogs()) return Forbid();
+            if (!CanViewLoginActivity()) return Forbid();
 
-            var result = await _auth.GetLoginActivityPageAsync(page, pageSize, adminId);
-            var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
+            var result = await _logs.GetLoginOffsetPageAsync(page, pageSize, adminId, HttpContext.RequestAborted);
+            pageSize = Math.Clamp(pageSize, 10, 100);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(result.Total / (double)pageSize));
             return Ok(ApiResult.Ok(new AdminPagedResponse<AdminLoginActivityResponse>
             {
-                Items = result.Items.Select(MapLoginActivity).ToList(),
-                Page = result.Page,
-                PageSize = result.PageSize,
-                TotalCount = result.TotalCount,
+                Items = result.Items.Select(item => MapLoginActivityV2(item, IsAdminAdmin())).ToList(),
+                Page = Math.Clamp(page, 1, totalPages),
+                PageSize = pageSize,
+                TotalCount = result.Total,
                 TotalPages = totalPages
             }));
         }
@@ -160,11 +165,9 @@ namespace FullProject.Controllers
         [HttpPost("login-activity/delete")]
         public async Task<IActionResult> DeleteLoginActivity([FromBody] AdminBulkDeleteRequest dto)
         {
-            var actor = await CurrentAdminAsync();
-            if (!IsAdminAdmin()) return Forbid();
-
-            var count = await _auth.DeleteLoginActivityAsync(dto.Ids, actor!, ClientIp, UserAgent);
-            return Ok(ApiResult.Ok(count, $"Deleted {count} login activity log(s)."));
+            await Task.CompletedTask;
+            return StatusCode(StatusCodes.Status410Gone,
+                ApiResult.BadRequest("Permanent login-activity deletion was retired. Records are governed by retention policy."));
         }
 
         [HttpGet("audit")]
@@ -174,16 +177,17 @@ namespace FullProject.Controllers
             [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanViewLogs()) return Forbid();
+            if (!CanViewAuditTrail()) return Forbid();
 
-            var result = await _auth.GetAuditLogsPageAsync(page, pageSize, targetId);
-            var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
+            var result = await _logs.GetAuditOffsetPageAsync(page, pageSize, targetId, HttpContext.RequestAborted);
+            pageSize = Math.Clamp(pageSize, 10, 100);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(result.Total / (double)pageSize));
             return Ok(ApiResult.Ok(new AdminPagedResponse<AdminAuditLogResponse>
             {
-                Items = result.Items.Select(MapAudit).ToList(),
-                Page = result.Page,
-                PageSize = result.PageSize,
-                TotalCount = result.TotalCount,
+                Items = result.Items.Select(item => MapAuditV2(item, IsAdminAdmin())).ToList(),
+                Page = Math.Clamp(page, 1, totalPages),
+                PageSize = pageSize,
+                TotalCount = result.Total,
                 TotalPages = totalPages
             }));
         }
@@ -191,11 +195,9 @@ namespace FullProject.Controllers
         [HttpPost("audit/delete")]
         public async Task<IActionResult> DeleteAuditLogs([FromBody] AdminBulkDeleteRequest dto)
         {
-            var actor = await CurrentAdminAsync();
-            if (!IsAdminAdmin()) return Forbid();
-
-            var count = await _auth.DeleteAuditLogsAsync(dto.Ids, actor!, ClientIp, UserAgent);
-            return Ok(ApiResult.Ok(count, $"Deleted {count} audit log(s)."));
+            await Task.CompletedTask;
+            return StatusCode(StatusCodes.Status410Gone,
+                ApiResult.BadRequest("Permanent audit deletion was retired. Audit evidence is immutable and governed by retention policy."));
         }
 
         [HttpGet("me/sessions")]
@@ -214,8 +216,8 @@ namespace FullProject.Controllers
             var actor = await CurrentAdminAsync();
             if (actor is null) return Unauthorized(ApiResult.Unauthorized<List<AdminLoginActivityResponse>>());
 
-            var activity = await _auth.GetLoginActivityAsync(actor.Id);
-            return Ok(ApiResult.Ok(activity.Select(MapLoginActivity).ToList()));
+            var activity = await _logs.GetLoginOffsetPageAsync(1, 100, actor.Id, HttpContext.RequestAborted);
+            return Ok(ApiResult.Ok(activity.Items.Select(item => MapLoginActivityV2(item, true)).ToList()));
         }
 
         [HttpGet("me/audit")]
@@ -224,8 +226,8 @@ namespace FullProject.Controllers
             var actor = await CurrentAdminAsync();
             if (actor is null) return Unauthorized(ApiResult.Unauthorized<List<AdminAuditLogResponse>>());
 
-            var logs = await _auth.GetAuditLogsAsync(actor.Id);
-            return Ok(ApiResult.Ok(logs.Select(MapAudit).ToList()));
+            var logs = await _logs.GetAuditOffsetPageAsync(1, 100, actor.Id, HttpContext.RequestAborted);
+            return Ok(ApiResult.Ok(logs.Items.Select(item => MapAuditV2(item, true)).ToList()));
         }
 
         private async Task<AdminUser?> CurrentAdminAsync()
@@ -241,8 +243,11 @@ namespace FullProject.Controllers
         private bool CanManageUsers() =>
             FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageUsers);
 
-        private bool CanViewLogs() =>
-            FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.ViewLogs);
+        private bool CanViewAuditTrail() =>
+            FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.ViewAuditTrail);
+
+        private bool CanViewLoginActivity() =>
+            FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.ViewLoginActivity);
 
         private bool IsAdminAdmin() =>
             FullProject.Security.AdminAuthorization.IsAdminAdmin(User);
@@ -331,6 +336,50 @@ namespace FullProject.Controllers
             UserAgent = log.UserAgent,
             CreatedAt = log.CreatedAt
         };
+
+        private static AdminLoginActivityResponse MapLoginActivityV2(AdminLoginActivityEvent activity, bool includeSensitive) => new()
+        {
+            Id = activity.Id,
+            AdminId = activity.AdminId,
+            Email = string.IsNullOrWhiteSpace(activity.AccountEmail) ? activity.AccountDisplayName : activity.AccountEmail,
+            EventType = activity.EventCode,
+            Success = activity.Outcome == AdminAuditOutcome.Succeeded,
+            Message = activity.ResultMessage,
+            IpAddress = includeSensitive ? activity.IpAddress : MaskIp(activity.IpAddress),
+            UserAgent = includeSensitive ? activity.UserAgent : string.Empty,
+            BrowserName = activity.BrowserName,
+            OperatingSystem = activity.OperatingSystem,
+            OccurredAt = activity.OccurredAtUtc
+        };
+
+        private static AdminAuditLogResponse MapAuditV2(AdminAuditEvent log, bool includeSensitive) => new()
+        {
+            Id = log.Id,
+            Area = log.DomainCode switch
+            {
+                "authentication" => AdminAuditArea.Auth,
+                "user-management" or "role-management" => AdminAuditArea.UserManagement,
+                "content" or "forms" or "page-builder" or "assets" => AdminAuditArea.Content,
+                _ => AdminAuditArea.Settings
+            },
+            Action = log.ActionCode,
+            ActorId = log.ActorId,
+            ActorEmail = log.ActorEmail,
+            TargetId = log.TargetId,
+            TargetEmail = log.TargetLabel,
+            Message = log.ResultMessage,
+            IpAddress = includeSensitive ? log.IpAddress : MaskIp(log.IpAddress),
+            UserAgent = includeSensitive ? log.UserAgent : string.Empty,
+            CreatedAt = log.OccurredAtUtc
+        };
+
+        private static string MaskIp(string value)
+        {
+            var segments = value.Split('.');
+            if (segments.Length == 4) return $"{segments[0]}.{segments[1]}.{segments[2]}.*";
+            var separator = value.LastIndexOf(':');
+            return separator > 0 ? value[..separator] + ":*" : string.IsNullOrWhiteSpace(value) ? string.Empty : "masked";
+        }
 
         private string ClientIp =>
             HttpContext.Connection.RemoteIpAddress?.ToString() is { Length: > 0 } ip && ip != "::1"

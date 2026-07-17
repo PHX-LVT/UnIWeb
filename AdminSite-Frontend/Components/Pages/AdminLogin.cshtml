@@ -205,15 +205,30 @@
             select?.addEventListener("change", event => applyLanguage(event.target.value));
         })();
 
-        // One-release migration cleanup. Authentication no longer reads or writes
-        // browser storage; remove the legacy bearer-token container only.
+        // One-release migration cleanup. Authentication material no longer reads
+        // or writes browser storage; remove the legacy bearer-token container only.
         try { localStorage.removeItem("admin_session"); } catch { }
 
         (function () {
+            const preferenceKey = "admin-login-remember-preference";
             const form = document.querySelector("[data-login-credential-form]");
             const email = document.querySelector("[data-login-email]");
             const password = document.querySelector("[data-login-password]");
             const remember = document.querySelector("[data-login-remember]");
+
+            function readRememberPreference() {
+                try {
+                    const stored = localStorage.getItem(preferenceKey);
+                    return stored === null ? null : stored === "true";
+                } catch {
+                    return null;
+                }
+            }
+
+            function persistRememberPreference() {
+                if (!remember) return;
+                try { localStorage.setItem(preferenceKey, remember.checked ? "true" : "false"); } catch { }
+            }
 
             function applyCredentialPreference() {
                 const allowRemembering = remember?.checked === true;
@@ -226,9 +241,20 @@
                 }
             }
 
+            const storedPreference = readRememberPreference();
+            if (remember && storedPreference !== null && remember.checked !== true) {
+                remember.checked = storedPreference;
+            }
+
             applyCredentialPreference();
-            remember?.addEventListener("change", applyCredentialPreference);
-            form?.addEventListener("submit", applyCredentialPreference);
+            remember?.addEventListener("change", function () {
+                persistRememberPreference();
+                applyCredentialPreference();
+            });
+            form?.addEventListener("submit", function () {
+                persistRememberPreference();
+                applyCredentialPreference();
+            });
         })();
     </script>
 </body>
