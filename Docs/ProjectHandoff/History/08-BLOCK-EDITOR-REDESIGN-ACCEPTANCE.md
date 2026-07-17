@@ -1,7 +1,9 @@
-# Block Editor Redesign: Contract And Acceptance
+# Block Editor Redesign: Archived Contract And Acceptance
 
-Last audited: 2026-07-06  
+Last audited: 2026-07-15
 Canonical plan: the ten-phase Block Editor Redesign agreed after the original BlockOverhaul-3 UX correction.
+
+Status: **implemented for the agreed scope; retained as the accepted ownership contract.** Manual browser/device/accessibility QA is tracked separately and does not reopen removed control paths.
 
 ## 1. Current Direction
 
@@ -22,6 +24,11 @@ Canonical plan: the ten-phase Block Editor Redesign agreed after the original Bl
 | BlockEditor | Multilingual content, labels, media, links/actions, map/form data, accessibility, visibility, Content Lock, Geometry Lock, Full Lock and Container preset/slot rules. |
 
 The user-facing copy now follows this ownership split: content/governance stays in BlockEditor, while visual arrangement stays in Arrange Blocks.
+
+FormBlock is a governed exception within BlockEditor: its focused pen editor
+selects a Form Definition and saves; Form fields, design, Submit meaning and v2
+row/action controls stay in Form Management. FormBlock geometry/scale stays in
+Arrange. See `12-FORM-DESIGN-V2-REVISION-PLAN.md`.
 
 ## 3. Arrange Blocks Workflow
 

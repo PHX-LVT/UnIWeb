@@ -1,4 +1,4 @@
-﻿@using SharedComponents.Helpers
+@using SharedComponents.Helpers
 @using Contracts.Admin
 @using Microsoft.AspNetCore.Components.Web
 @using AdminSite.Components.Pages.CanvasAuthoring
@@ -115,6 +115,10 @@
         </div>
     </div>
 
+    <div class="ez-canvas__feedback-row">
+        <AdminInlineStatus TargetId="canvas-authoring" />
+    </div>
+
     <CanvasArrangeToolbar Visible="CanArrange"
                           SelectionCount="_selectedBlockIds.Count"
                           SelectedLabel="@SelectedBlockLabel"
@@ -146,7 +150,7 @@
                           Command="RunAuthoringCommand"
                           BreadcrumbSelected="SelectBreadcrumb" />
 
-    @if (CanArrange && _showArrangeBlockWizard)
+    @if (_showArrangeBlockWizard && _blockCreationRequest is not null)
     {
         <div class="ez-modal-overlay ez-arrange-create-modal-overlay" @onclick="CloseArrangeBlockWizard">
             <div class="ez-modal ez-arrange-create-modal"
@@ -157,13 +161,13 @@
                 <div class="ez-arrange-create-panel">
                     <div class="ez-arrange-create-panel__target">
                         <i class="fas fa-crosshairs"></i>
-                        <span id="ez-arrange-create-modal-title">@T("CreateBlockIn"): <strong>@ArrangeCreateTargetLabel</strong></span>
+                        <span id="ez-arrange-create-modal-title">@T("CreateBlockIn"): <strong>@_blockCreationRequest.TargetLabel</strong></span>
                     </div>
                     <BlockCreationWizard Open="true"
                                          Busy="_creatingArrangeBlock"
                                          AdminLanguage="@AdminLanguage"
-                                         AllowedTypes="@ArrangeCreateAllowedTypes"
-                                         ConstraintLabel="@ArrangeCreateConstraintLabel"
+                                         AllowedTypes="@_blockCreationRequest.AllowedTypes"
+                                         ConstraintLabel="@_blockCreationRequest.ConstraintLabel"
                                          Confirmed="CreateArrangeBlock"
                                          Cancelled="CloseArrangeBlockWizard" />
                 </div>
@@ -320,6 +324,8 @@
                                      data-block-shape="@blockShape"
                                      data-block-radius="@blockRadius"
                                      data-block-rotation="@blockRotation"
+                                     data-block-min-scale="@(block.Type == "form" ? "0.5" : null)"
+                                     data-block-grow-section="@(block.Type == "form" ? "true" : null)"
                                      data-geometry-locked="@geometryLocked.ToString().ToLowerInvariant()"
                                      data-section-left="@block.SectionLeft"
                                      data-section-top="@block.SectionTop"
@@ -398,12 +404,14 @@
                            PageId="@Page.Id"
                            InitialTab="@_editPanelInitialTab"
                            InitialBlockId="@_editPanelSelectedBlockId"
+                           BlockEditorRefreshVersion="@_blockEditorRefreshVersion"
                            CanArrangeBlocks="@IsArrangeCompatible(_selectedSection)"
                            OnClose="ClosePanel"
                            OnSectionSaved="HandleSectionSaved"
                            OnSectionsChanged="OnSectionsChanged"
                            OnBlocksChanged="HandleBlocksChanged"
                            OnActiveBlockChanged="HandleEditorActiveBlockChanged"
+                           OnAddBlockRequested="OpenBlockCreationModal"
                            OnArrangeBlocksRequested="EnterArrangeBlocks"
                            OnDiscardAndArrangeRequested="DiscardSectionChangesAndEnterArrangeBlocks"
                            OnSaveAsPresetRequested="OpenSectionPresetDialog" />
@@ -436,8 +444,37 @@
         {
             <div class="ez-arrange-content-editor" @key="editBlock.Id">
                 <header class="ez-arrange-content-editor__header">
-                    <span>
-                        <strong><i class="fas @BlockIcon(editBlock.Type)"></i> @BlockDisplayLabel(editBlock.Id)</strong>
+                    <span class="ez-arrange-content-editor__identity">
+                        <span class="ez-arrange-content-editor__title-row" @onclick:stopPropagation="true">
+                            <i class="fas @BlockIcon(editBlock.Type)" aria-hidden="true"></i>
+                            @if (_arrangeRenamingBlockId == editBlock.Id)
+                            {
+                                <input class="ez-arrange-content-editor__name-input"
+                                       value="@_arrangeRenameDraft"
+                                       autofocus
+                                       placeholder="@BlockDisplayLabel(editBlock.Id)"
+                                       aria-label="@T("BlockName")"
+                                       @oninput="SetArrangeBlockNameDraft"
+                                       @onblur="() => FinishArrangeBlockNameEdit(editBlock)"
+                                       @onkeydown="eventArgs => HandleArrangeBlockNameKey(eventArgs, editBlock)"
+                                       @onkeydown:stopPropagation="true" />
+                            }
+                            else
+                            {
+                                <strong>@BlockDisplayLabel(editBlock.Id)</strong>
+                                @if (SupportsArrangeBlockNameRename(editBlock))
+                                {
+                                    <button type="button"
+                                            class="ez-arrange-content-editor__rename"
+                                            title="@(CanRenameArrangeBlockName(editBlock) ? T("EditBlockName") : T("ContentLockedHint"))"
+                                            aria-label="@T("EditBlockName")"
+                                            disabled="@(!CanRenameArrangeBlockName(editBlock))"
+                                            @onclick="() => StartArrangeBlockNameEdit(editBlock)">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                }
+                            }
+                        </span>
                         <small>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</small>
                     </span>
                     <button type="button" class="ez-icon-btn" @onclick="CloseArrangeContentEditor" aria-label="@T("Close")">
@@ -543,6 +580,8 @@
     private bool _resetting = false;
     private const double DesktopCanvasScale = 0.8;
     private const double DevicePreviewScale = 0.7;
+    private const int ArrangeSectionMaxHeightPx = 3000;
+    private const int ArrangeFormSectionPaddingPx = 40;
     private double _iframeHeight = 2000;
     private List<SectionPosition> _sectionPositions = new();
     private List<BlockPosition> _blockPositions = new();
@@ -556,6 +595,8 @@
     private bool _runningAuthoringCommand;
     private bool _showArrangeBlockWizard;
     private bool _creatingArrangeBlock;
+    private BlockCreationRequest? _blockCreationRequest;
+    private int _blockEditorRefreshVersion;
     private bool _arrangeBlocksActive;
     private bool _restoreSectionEditorOnEdit;
     private string? _arrangeReturnSectionId;
@@ -568,6 +609,9 @@
     private string? _activeArrangeColumnSlotId;
     private bool _pendingArrangeExit;
     private string? _arrangeContentEditBlockId;
+    private string? _arrangeRenamingBlockId;
+    private string _arrangeRenameDraft = string.Empty;
+    private string _arrangeRenameBeforeEdit = string.Empty;
     private List<string> _languages = new() { "en" };
     private DotNetObjectReference<Canvas>? _dotNetRef;
     private SectionModel? _presetSection;
@@ -868,7 +912,7 @@
             }
             catch
             {
-                Http.Toast("Canvas overlay failed to initialize.", 500);
+                Http.Notify(T("NotificationCanvasOverlayInitFailed"), 500);
             }
         }
 
@@ -881,7 +925,7 @@
             }
             catch
             {
-                Http.Toast("Section drag sorting failed to initialize.", 500);
+                Http.Notify(T("NotificationSectionSortingInitFailed"), 500);
             }
         }
 
@@ -894,7 +938,7 @@
             }
             catch
             {
-                Http.Toast("Block arranging failed to initialize.", 500);
+                Http.Notify(T("NotificationBlockArrangingInitFailed"), 500);
             }
         }
     }
@@ -966,6 +1010,7 @@
         _activeArrangeColumnSlotId = null;
         _pendingArrangeExit = false;
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
         _arrangeBlocks.Clear();
         _arrangeBlocksLoadedForPage = null;
         _undoHistory.Clear();
@@ -1176,7 +1221,8 @@
     {
         var block = ArrangeBlock(blockId);
         if (block is null) return T("Block");
-        var title = LangValue(block.Title)
+        var title = LangValue(block.EditorLabel)
+            ?? LangValue(block.Title)
             ?? LangValue(block.Label)
             ?? LangValue(block.StepLabel)
             ?? LangValue(block.ButtonLabel)
@@ -1341,6 +1387,7 @@
         _selectedBlockIds.Clear();
         _editPanelSelectedBlockId = null;
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
     }
 
     private void TargetArrangeZone(ZonePosition zone)
@@ -1359,6 +1406,7 @@
         _selectedBlockIds.Clear();
         _editPanelSelectedBlockId = null;
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
     }
 
     private bool IsArrangeTargetZone(ZonePosition zone) =>
@@ -1501,52 +1549,88 @@
 
     private void OpenArrangeBlockWizard()
     {
-        if (CurrentArrangeCreateTarget is null)
+        var target = CurrentArrangeCreateTarget;
+        if (target is null)
         {
-            Http.Toast(T("SelectSectionFirst"), 400);
+            Http.Notify(T("SelectSectionFirst"), 400);
             return;
         }
         if (!ArrangeCreateHasCapacity)
         {
-            Http.Toast(ArrangeAddTitle, 400);
+            Http.Notify(ArrangeAddTitle, 400);
             return;
         }
+        _blockCreationRequest = new BlockCreationRequest(
+            Page.Id,
+            target.SectionId,
+            target.ColumnSlotId,
+            target.ParentBlockId,
+            target.Zone,
+            target.PositionMode,
+            ArrangeCreateAllowedTypes?.ToList(),
+            ArrangeCreateConstraintLabel,
+            target.Label,
+            true);
+        _showArrangeBlockWizard = true;
+    }
+
+    private void OpenBlockCreationModal(BlockCreationRequest request)
+    {
+        if (!CanModify) return;
+        _blockCreationRequest = request;
         _showArrangeBlockWizard = true;
     }
 
     private void CloseArrangeBlockWizard()
     {
         if (!_creatingArrangeBlock)
+        {
             _showArrangeBlockWizard = false;
+            _blockCreationRequest = null;
+        }
     }
 
     private async Task CreateArrangeBlock(BlockStarterSelection selection)
     {
-        var target = CurrentArrangeCreateTarget;
-        if (target is null || _creatingArrangeBlock || !ArrangeCreateHasCapacity) return;
+        var request = _blockCreationRequest;
+        if (request is null || _creatingArrangeBlock) return;
+        if (request.ReturnToArrange && !ArrangeCreateHasCapacity) return;
         _creatingArrangeBlock = true;
         var created = false;
         try
         {
-            var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey);
-            dto.ParentBlockId = target.ParentBlockId;
-            dto.BlockZone = target.Zone;
-            dto.ZoneId = target.Zone;
-            dto.ColumnSlotId = target.ColumnSlotId;
-            dto.PositionMode = target.PositionMode;
-            var response = await BlockService.CreateAsync(Page.Id, target.SectionId, dto);
-            Http.Toast(response.Message, response.StatusCode);
+            var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey, selection.FormDefinitionId);
+            dto.ParentBlockId = request.ParentBlockId;
+            dto.BlockZone = request.BlockZone;
+            dto.ZoneId = request.BlockZone;
+            dto.ColumnSlotId = request.SlotId;
+            dto.PositionMode = request.PositionMode;
+            var response = string.IsNullOrWhiteSpace(request.SlotId)
+                ? await BlockService.CreateAsync(request.PageId, request.SectionId, dto)
+                : await BlockService.CreateInSlotAsync(request.PageId, request.SectionId, request.SlotId, dto);
+            Http.Notify(response, T("NotificationBlockCreated"));
             if (!response.Success || response.Data is null) return;
             _showArrangeBlockWizard = false;
-            _activeArrangeSectionId = target.SectionId;
+            _blockCreationRequest = null;
+            _activeArrangeSectionId = request.SectionId;
             _editPanelSelectedBlockId = response.Data.Id;
-            await RefreshAuthoringAsync([response.Data.Id]);
+            if (request.ReturnToArrange)
+            {
+                await RefreshAuthoringAsync([response.Data.Id]);
+            }
+            else
+            {
+                _editPanelInitialTab = "blocks";
+                _blockEditorRefreshVersion++;
+                await HandleBlocksChanged();
+            }
             created = true;
         }
         finally
         {
             _creatingArrangeBlock = false;
-            await CompleteArrangeBusyStateAsync(created);
+            if (request.ReturnToArrange)
+                await CompleteArrangeBusyStateAsync(created);
         }
     }
 
@@ -1566,7 +1650,7 @@
         async Task<bool> Apply(IReadOnlyList<string> ids)
         {
             var response = await BlockService.ReorderAsync(Page.Id, request.SectionId, ids.ToList());
-            Http.Toast(response.Message, response.StatusCode);
+            Http.NotifyInline(response, "canvas-authoring", T("NotificationOrderSaved"), T("NotificationReorderFailed"));
             if (!response.Success) return false;
             await RefreshAuthoringAsync(_selectedBlockIds.ToList());
             return true;
@@ -1671,7 +1755,7 @@
                 var response = await BlockService.UpdateAsync(Page.Id, state.SectionId, state.BlockId, state.Dto);
                 if (!response.Success || response.Data is null)
                 {
-                    Http.Toast(response.Message, response.StatusCode);
+                    Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
                     return false;
                 }
                 updatedBlocks.Add(response.Data);
@@ -1805,7 +1889,7 @@
         try
         {
             var response = await BlockService.DeleteGraphsAsync(Page.Id, sectionId, selected.Select(block => block.Id));
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response, T("NotificationBlockDeleted"));
             if (!response.Success) return;
             if (!string.IsNullOrWhiteSpace(_editPanelSelectedBlockId) && deletingIds.Contains(_editPanelSelectedBlockId))
                 _editPanelSelectedBlockId = null;
@@ -1904,21 +1988,31 @@
             });
             if (!response.Success)
             {
-                Http.Toast(response.Message, response.StatusCode);
+                Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
                 return false;
             }
             foreach (var state in states)
-            {
                 ApplyStateLocally(state);
-                try
-                {
-                    await JS.InvokeVoidAsync("patchPreviewBlockLayout",
-                        state.BlockId, state.X, state.Y, state.W, state.H,
-                        state.LeftPercent, state.TopPx, state.WidthPercent, state.HeightPx, state.ZIndex);
-                }
-                catch { }
+
+            var sectionGrew = await GrowArrangeSectionForFormBlocksAsync(sectionId, states);
+            if (sectionGrew)
+            {
+                await ReloadPreviewSafelyAsync();
             }
-            await InvokeAsync(StateHasChanged);
+            else
+            {
+                foreach (var state in states)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("patchPreviewBlockLayout",
+                            state.BlockId, state.X, state.Y, state.W, state.H,
+                            state.LeftPercent, state.TopPx, state.WidthPercent, state.HeightPx, state.ZIndex);
+                    }
+                    catch { }
+                }
+                await InvokeAsync(StateHasChanged);
+            }
             succeeded = true;
             return true;
         }
@@ -1944,7 +2038,7 @@
                 var response = await BlockService.DuplicateAsync(Page.Id, sectionId, originals);
                 if (!response.Success || response.Data is null)
                 {
-                    Http.Toast(response.Message, response.StatusCode);
+                    Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
                     return false;
                 }
                 currentIds = response.Data.BlockIds;
@@ -1954,7 +2048,7 @@
             async Task<bool> Remove()
             {
                 var response = await BlockService.DeleteGraphsAsync(Page.Id, sectionId, currentIds);
-                if (!response.Success) { Http.Toast(response.Message, response.StatusCode); return false; }
+                if (!response.Success) { Http.Notify(response, failureFallback: T("NotificationSaveFailed")); return false; }
                 await RefreshAuthoringAsync(originals);
                 return true;
             }
@@ -2031,6 +2125,79 @@
         }
     };
 
+    private async Task<bool> GrowArrangeSectionForFormBlocksAsync(
+        string sectionId,
+        IReadOnlyList<CanvasLayoutState> states)
+    {
+        var formBottomPx = states
+            .Where(state => string.Equals(ArrangeBlock(state.BlockId)?.Type, "form", StringComparison.OrdinalIgnoreCase))
+            .Select(state => state.TopPx + state.HeightPx)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (formBottomPx <= 0)
+            return false;
+
+        var section = Sections.FirstOrDefault(item => item.Id == sectionId);
+        if (section is null)
+            return false;
+
+        var measuredSection = _sectionPositions.FirstOrDefault(item => item.Id == sectionId);
+        var currentHeight = Math.Max(section.Style?.CustomMinHeightPx ?? 0, measuredSection?.Height ?? 0);
+        var desiredHeight = Math.Clamp(
+            (int)Math.Ceiling(formBottomPx + ArrangeFormSectionPaddingPx),
+            120,
+            ArrangeSectionMaxHeightPx);
+        if (desiredHeight <= currentHeight + 1)
+            return false;
+
+        var style = ToSectionStyleDto(section.Style);
+        style.Height = "custom";
+        style.CustomMinHeightPx = desiredHeight;
+
+        var response = await SectionService.UpdateStyleAsync(Page.Id, sectionId, style);
+        if (!response.Success || response.Data is null)
+        {
+            Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
+            return false;
+        }
+
+        if (response.Data.Style is not null)
+        {
+            section.Style = response.Data.Style;
+        }
+        else
+        {
+            section.Style ??= new SectionStyleModel();
+            section.Style.Height = "custom";
+            section.Style.CustomMinHeightPx = desiredHeight;
+        }
+        return true;
+    }
+
+    private static SectionStyleDto ToSectionStyleDto(SectionStyleModel? style) => new()
+    {
+        BackgroundType = style?.BackgroundType,
+        BackgroundColor = style?.BackgroundColor,
+        BackgroundImageUrl = style?.BackgroundImageUrl,
+        BackgroundVideoUrl = style?.BackgroundVideoUrl,
+        BackgroundImageFit = style?.BackgroundImageFit,
+        BackgroundImagePosition = style?.BackgroundImagePosition,
+        GradientFrom = style?.GradientFrom,
+        GradientTo = style?.GradientTo,
+        GradientDirection = style?.GradientDirection,
+        OverlayColor = style?.OverlayColor,
+        OverlayOpacity = style?.OverlayOpacity,
+        Height = style?.Height,
+        CustomMinHeightPx = style?.CustomMinHeightPx,
+        Padding = style?.Padding,
+        ContentWidth = style?.ContentWidth,
+        TextColor = style?.TextColor,
+        MobileLayout = style?.MobileLayout,
+        BlockLayoutMode = style?.BlockLayoutMode,
+        BlockGridColumns = style?.BlockGridColumns,
+        BlockGap = style?.BlockGap
+    };
+
     private void ApplyStateLocally(CanvasLayoutState state)
     {
         var position = _blockPositions.FirstOrDefault(item => item.Id == state.BlockId);
@@ -2086,7 +2253,7 @@
     private async Task DiscardSectionChangesAndEnterArrangeBlocks(string sectionId)
     {
         var response = await SectionService.GetByIdAsync(Page.Id, sectionId);
-        Http.Toast(response.Message, response.StatusCode);
+        Http.SilentSuccess(response);
         if (!response.Success || response.Data is null)
             return;
 
@@ -2155,6 +2322,7 @@
         _iframeHeight = 2000;
         _selectedBlockIds.Clear();
         _showArrangeBlockWizard = false;
+        _blockCreationRequest = null;
         _arrangeBlocks.Clear();
         _arrangeBlocksLoadedForPage = null;
         _undoHistory.Clear();
@@ -2233,10 +2401,14 @@
         _selectedBlockIds.Add(blockId);
         _editPanelSelectedBlockId = blockId;
         _arrangeContentEditBlockId = blockId;
+        ResetArrangeRenameState();
     }
 
-    private void CloseArrangeContentEditor() =>
+    private void CloseArrangeContentEditor()
+    {
         _arrangeContentEditBlockId = null;
+        ResetArrangeRenameState();
+    }
 
     private Task OnArrangeContentEditorVisibilityChanged(bool visible)
     {
@@ -2257,13 +2429,109 @@
             _selectedBlockIds.Clear();
             _selectedBlockIds.Add(editedId);
             _editPanelSelectedBlockId = editedId;
+            await RefreshSectionModelAsync(block.SectionId);
         }
         else
         {
             _arrangeContentEditBlockId = null;
         }
 
+        ResetArrangeRenameState();
         await ReloadPreviewSafelyAsync();
+    }
+
+    private static bool SupportsArrangeBlockNameRename(BlockModel block) => true;
+
+    private bool CanRenameArrangeBlockName(BlockModel block) =>
+        SupportsArrangeBlockNameRename(block) &&
+        !block.Authoring.FullLocked &&
+        !block.Authoring.ContentLocked;
+
+    private string ActiveArrangeBlockLanguage =>
+        _languages.Contains(AdminLanguage, StringComparer.OrdinalIgnoreCase)
+            ? AdminLanguage
+            : _languages.Contains("en", StringComparer.OrdinalIgnoreCase)
+                ? "en"
+                : _languages.FirstOrDefault() ?? "en";
+
+    private void StartArrangeBlockNameEdit(BlockModel block)
+    {
+        if (!CanRenameArrangeBlockName(block))
+            return;
+
+        _arrangeRenamingBlockId = block.Id;
+        _arrangeRenameDraft = LangValue(block.EditorLabel) ?? string.Empty;
+        _arrangeRenameBeforeEdit = _arrangeRenameDraft;
+    }
+
+    private void SetArrangeBlockNameDraft(ChangeEventArgs e)
+    {
+        _arrangeRenameDraft = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task FinishArrangeBlockNameEdit(BlockModel block)
+    {
+        if (!string.Equals(_arrangeRenamingBlockId, block.Id, StringComparison.Ordinal))
+            return;
+
+        _arrangeRenamingBlockId = null;
+        var before = block.EditorLabel is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(block.EditorLabel);
+        ApplyArrangeBlockName(block, _arrangeRenameDraft);
+        var response = await BlockService.UpdateAsync(
+            Page.Id,
+            block.SectionId,
+            block.Id,
+            BlockUpdateDtoMapper.Build(block));
+        if (!response.Success)
+        {
+            block.EditorLabel = before;
+            if (_arrangeBlocks.TryGetValue(block.Id, out var failedStored))
+                failedStored.EditorLabel = new Dictionary<string, string>(before);
+            Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
+            return;
+        }
+
+        await ReloadPreviewSafelyAsync();
+    }
+
+    private async Task HandleArrangeBlockNameKey(KeyboardEventArgs e, BlockModel block)
+    {
+        if (string.Equals(e.Key, "Enter", StringComparison.OrdinalIgnoreCase))
+        {
+            await FinishArrangeBlockNameEdit(block);
+        }
+        else if (string.Equals(e.Key, "Escape", StringComparison.OrdinalIgnoreCase))
+        {
+            _arrangeRenameDraft = _arrangeRenameBeforeEdit;
+            _arrangeRenamingBlockId = null;
+        }
+    }
+
+    private void ApplyArrangeBlockName(BlockModel block, string value)
+    {
+        var language = ActiveArrangeBlockLanguage;
+        var trimmed = value.Trim();
+        var title = block.EditorLabel is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(block.EditorLabel);
+
+        if (string.IsNullOrWhiteSpace(trimmed))
+            title.Remove(language);
+        else
+            title[language] = trimmed;
+
+        block.EditorLabel = title;
+        if (_arrangeBlocks.TryGetValue(block.Id, out var stored))
+            stored.EditorLabel = new Dictionary<string, string>(title);
+    }
+
+    private void ResetArrangeRenameState()
+    {
+        _arrangeRenamingBlockId = null;
+        _arrangeRenameDraft = string.Empty;
+        _arrangeRenameBeforeEdit = string.Empty;
     }
 
     private void HandleEditorActiveBlockChanged(string? blockId) =>
@@ -2296,13 +2564,28 @@
 
     private async Task HandleBlocksChanged()
     {
+        if (_selectedSection is not null)
+            await RefreshSectionModelAsync(_selectedSection.Id);
         await ReloadPreviewSafelyAsync();
+    }
+
+    private async Task RefreshSectionModelAsync(string sectionId)
+    {
+        var response = await SectionService.GetByIdAsync(Page.Id, sectionId);
+        if (!response.Success || response.Data is null)
+            return;
+
+        var index = Sections.FindIndex(section => section.Id == sectionId);
+        if (index >= 0)
+            Sections[index] = response.Data;
+        if (_selectedSection?.Id == sectionId)
+            _selectedSection = response.Data;
     }
 
     private async Task ToggleVisibility(SectionModel section)
     {
         var res = await SectionService.SetVisibilityAsync(Page.Id, section.Id, !section.Visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.NotifyInline(res, "canvas-authoring", T("NotificationSectionVisibilityUpdated"));
         if (!res.Success)
         {
             return;
@@ -2316,7 +2599,7 @@
     private async Task DeleteSection(SectionModel section)
     {
         var res = await SectionService.DeleteAsync(Page.Id, section.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (!res.Success)
         {
             return;
@@ -2331,7 +2614,7 @@
     public async Task OnReordered(List<string> orderedIds)
     {
         var res = await SectionService.ReorderAsync(Page.Id, orderedIds);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.NotifyInline(res, "canvas-authoring", T("NotificationOrderSaved"), T("NotificationReorderFailed"));
         if (res.Success)
         {
             await OnSectionsChanged.InvokeAsync();
@@ -2347,7 +2630,7 @@
         try
         {
             var res = await PageService.PublishAsync(Page.Id);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res, T("NotificationPublished"));
             if (res.Success)
             {
                 await OnPageStatusChanged.InvokeAsync();
@@ -2366,7 +2649,7 @@
         try
         {
             var res = await PageService.ResetAsync(Page.Id);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res, T("NotificationResetComplete"));
             if (res.Success)
             {
                 await OnSectionsChanged.InvokeAsync();

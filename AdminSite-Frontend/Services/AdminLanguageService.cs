@@ -27,11 +27,13 @@ namespace AdminSite.Services
         public IReadOnlyList<string> SupportedLanguages => _supportedLanguages.Select(l => l.Code).ToList();
         public IReadOnlyList<LanguageOption> SupportedLanguageOptions => _supportedLanguages;
         public string FallbackLanguage => _fallbackLanguage;
+        public string CurrentLanguage => _lang ?? _fallbackLanguage;
 
         public async Task<string> GetAsync()
         {
+            var requestedLanguage = _lang ?? await _storage.GetItemAsync<string>(StorageKey);
             await LoadSettingsAsync();
-            _lang ??= Normalize(await _storage.GetItemAsync<string>(StorageKey));
+            _lang = Normalize(requestedLanguage);
             return _lang;
         }
 
@@ -54,7 +56,8 @@ namespace AdminSite.Services
 
             _fallbackLanguage = string.IsNullOrWhiteSpace(settings.DefaultLanguage)
                 ? "en"
-                : settings.DefaultLanguage;
+                : settings.DefaultLanguage.Trim().ToLowerInvariant();
+            AdminUiLocalizer.SetFallbackLanguage(_fallbackLanguage);
 
             var options = settings.Languages
                 .Where(l => l.Active && l.AdminEnabled)
@@ -68,7 +71,8 @@ namespace AdminSite.Services
             if (options.Count > 0)
                 _supportedLanguages = options;
 
-            _lang = Normalize(_lang);
+            if (!string.IsNullOrWhiteSpace(_lang))
+                _lang = Normalize(_lang);
         }
 
         private string Normalize(string? lang)

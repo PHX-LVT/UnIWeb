@@ -9,7 +9,6 @@
 .sc-showcase__eyebrow,
 .sc-library__eyebrow,
 .sc-testimonial__eyebrow,
-.sc-insight-subscribe__eyebrow,
 .sc-about-identity__eyebrow,
 .sc-about-flags__eyebrow,
 .sc-sustain__eyebrow,
@@ -67,7 +66,7 @@
 .sc-showcase__content,
 .sc-cta p,
 .sc-block__content {
-    font-size: var(--theme-text-body, 16px);
+    font-size: var(--sc-block-font-size, var(--theme-text-body, 16px));
 }
 
 .sc-library__meta,
@@ -87,7 +86,7 @@
 .sc-showcase__item-title,
 .sc-list__card-title,
 .sc-block__title {
-    font-size: var(--theme-text-item-title, 20px);
+    font-size: var(--sc-block-font-size, var(--theme-text-item-title, 20px));
 }
 
 @media (max-width: 900px) {

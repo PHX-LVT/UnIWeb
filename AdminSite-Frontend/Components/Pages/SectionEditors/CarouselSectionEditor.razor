@@ -172,11 +172,11 @@
         if (res.Success && res.Data is not null)
         {
             item.ImageUrl = res.Data.Url;
-            Http.Toast("Carousel image uploaded.", res.StatusCode);
+            Http.Notify(T("NotificationImageUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? "Carousel image upload failed.", res.StatusCode);
+            Http.Notify(res.Message ?? T("NotificationImageUploadFailed"), res.StatusCode);
         }
     }
 
@@ -219,7 +219,7 @@
                 Items = _items.Select(MapItem).ToList(),
                 Visible = Section.Visible
             });
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

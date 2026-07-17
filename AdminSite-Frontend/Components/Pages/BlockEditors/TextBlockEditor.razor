@@ -1,19 +1,34 @@
-﻿@inject AdminBlockService BlockService
+@inject AdminBlockService BlockService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
 @using Contracts.Admin
+@using Contracts.Global
 
-<div class="form-group">
-    <label class="form-label">@T("Title")</label>
-    <LangField @bind-Value="_title" Languages="Languages" />
-</div>
-
-<div class="form-group">
-    <label class="form-label">@T("Content")</label>
-    <ContentRichTextEditor @key="ActiveLanguage"
-                           Value="@ActiveContent"
-                           ValueChanged="SetActiveContent"
-                           Placeholder="@T("Content")" />
+<div class="text-block-editor">
+    <div class="form-group">
+        <label class="form-label">@T("Content")</label>
+        <ContentRichTextEditor @key="ActiveLanguage"
+                               Value="@ActiveContent"
+                               ValueChanged="SetActiveContent"
+                               Placeholder="@T("Content")"
+                               ShowTypographyTools="false"
+                               ShowBlockAppearanceTools="true"
+                               ShowLinkTool="false"
+                               ShowClearFormattingTool="false"
+                               FontFamily="@_fontFamily"
+                               FontFamilyChanged="SetFontFamily"
+                               FontSizePx="@_fontSizePx"
+                               FontSizePxChanged="SetFontSizePx"
+                               FontWeight="@_fontWeight"
+                               TextColor="@_textColor"
+                               TextColorChanged="SetTextColor"
+                               TransparentBackground="@_transparentBackground"
+                               TransparentBackgroundChanged="SetTransparentBackground"
+                               BackgroundColor="@_backgroundColor"
+                               BackgroundColorChanged="SetBackgroundColor"
+                               TextAlign="@_textAlign"
+                               TextAlignChanged="SetTextAlign" />
+    </div>
 </div>
 
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
@@ -29,8 +44,15 @@
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
 
-    private Dictionary<string, string> _title = new();
     private Dictionary<string, string> _content = new();
+    private BlockAppearanceModel _appearance = new();
+    private bool _transparentBackground = true;
+    private string _backgroundColor = "#ffffff";
+    private string _textColor = "#0f172a";
+    private string? _fontFamily;
+    private int _fontSizePx = 16;
+    private int _fontWeight = 400;
+    private string _textAlign = "inherit";
     private bool _saving;
     private BlockModel? _loadedBlock;
 
@@ -42,8 +64,8 @@
     {
         if (ReferenceEquals(_loadedBlock, Block)) return;
         _loadedBlock = Block;
-        _title = new(Block.Title ?? new());
         _content = new(Block.Content ?? new());
+        LoadAppearance();
     }
 
     private string ActiveLanguage =>
@@ -65,6 +87,43 @@
         return Task.CompletedTask;
     }
 
+    private Task SetFontSizePx(int value)
+    {
+        _fontSizePx = Math.Clamp(value, 10, 96);
+        return Task.CompletedTask;
+    }
+
+    private Task SetFontFamily(string? value)
+    {
+        _fontFamily = ThemeFontCatalog.NormalizeOptionalName(value);
+        _appearance.FontFamily = _fontFamily;
+        return Task.CompletedTask;
+    }
+
+    private Task SetTextColor(string value)
+    {
+        _textColor = ColorOrDefault(value, "#0f172a");
+        return Task.CompletedTask;
+    }
+
+    private Task SetTransparentBackground(bool value)
+    {
+        _transparentBackground = value;
+        return Task.CompletedTask;
+    }
+
+    private Task SetBackgroundColor(string value)
+    {
+        _backgroundColor = ColorOrDefault(value, "#ffffff");
+        return Task.CompletedTask;
+    }
+
+    private Task SetTextAlign(string value)
+    {
+        _textAlign = NormalizeTextAlign(value);
+        return Task.CompletedTask;
+    }
+
     private async Task Save()
     {
         _saving = true;
@@ -72,12 +131,13 @@
         {
             var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new TextBlockUpdateDto
             {
-                Title = _title,
+                Title = new Dictionary<string, string>(Block.Title ?? new Dictionary<string, string>()),
                 Content = _content,
                 Visible = Block.Visible,
+                Appearance = BuildAppearanceDto(),
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally
@@ -85,4 +145,181 @@
             _saving = false;
         }
     }
+
+    private void LoadAppearance()
+    {
+        _appearance = CopyAppearance(Block.Appearance);
+        _transparentBackground = NormalizeBackgroundMode(_appearance.BackgroundMode) == "none";
+        _backgroundColor = ColorOrDefault(_appearance.BackgroundColor, "#ffffff");
+        _textColor = ColorOrDefault(_appearance.TextColor, "#0f172a");
+        _fontFamily = ThemeFontCatalog.NormalizeOptionalName(_appearance.FontFamily);
+        _appearance.FontFamily = _fontFamily;
+        _fontSizePx = Math.Clamp(_appearance.FontSizePx ?? 16, 10, 96);
+        _fontWeight = NormalizeFontWeight(_appearance.FontWeight ?? 400);
+        _textAlign = NormalizeTextAlign(_appearance.TextAlign);
+    }
+
+    private BlockAppearanceDto BuildAppearanceDto()
+    {
+        var backgroundMode = _transparentBackground ? "none" : "color";
+        return new BlockAppearanceDto
+        {
+            SchemaVersion = 2,
+            BackgroundMode = backgroundMode,
+            BackgroundColor = _transparentBackground ? null : ColorOrDefault(_backgroundColor, "#ffffff"),
+            TextColor = ColorOrDefault(_textColor, "#0f172a"),
+            TextAlign = NormalizeTextAlign(_textAlign),
+            FontSizePx = Math.Clamp(_fontSizePx, 10, 96),
+            FontWeight = NormalizeFontWeight(_fontWeight),
+            FontFamily = ThemeFontCatalog.NormalizeOptionalName(_fontFamily),
+            LineHeight = _appearance.LineHeight,
+            LetterSpacingPx = _appearance.LetterSpacingPx,
+            Opacity = Math.Clamp(_appearance.Opacity, 0, 1),
+            BorderColor = OptionalText(_appearance.BorderColor),
+            BorderWidth = Math.Clamp(_appearance.BorderWidth, 0, 20),
+            BorderStyle = NormalizeBorderStyle(_appearance.BorderStyle),
+            BorderRadius = NormalizeRadius(_appearance.BorderRadius),
+            Shadow = NormalizeShadow(_appearance.Shadow),
+            Shape = NormalizeShape(_appearance.Shape),
+            AspectRatio = NormalizeAspectRatio(_appearance.AspectRatio),
+            RotationDeg = _appearance.RotationDeg,
+            MediaFit = NormalizeMediaFit(_appearance.MediaFit),
+            MediaPosition = NormalizeMediaPosition(_appearance.MediaPosition),
+            Padding = NormalizeSpacing(_appearance.Padding),
+            Margin = NormalizeSpacing(_appearance.Margin),
+            Decorative = _appearance.Decorative,
+            InheritFromContainer = _appearance.InheritFromContainer
+        };
+    }
+
+    private static BlockAppearanceModel CopyAppearance(BlockAppearanceModel? source) => new()
+    {
+        SchemaVersion = Math.Max(source?.SchemaVersion ?? 0, 2),
+        BackgroundMode = NormalizeBackgroundMode(source?.BackgroundMode),
+        BackgroundColor = source?.BackgroundColor,
+        TextColor = source?.TextColor,
+        TextAlign = NormalizeTextAlign(source?.TextAlign),
+        FontSizePx = source?.FontSizePx,
+        FontWeight = source?.FontWeight,
+        FontFamily = ThemeFontCatalog.NormalizeOptionalName(source?.FontFamily),
+        LineHeight = source?.LineHeight,
+        LetterSpacingPx = source?.LetterSpacingPx,
+        Opacity = source?.Opacity ?? 1,
+        BorderColor = source?.BorderColor,
+        BorderWidth = source?.BorderWidth ?? 0,
+        BorderStyle = NormalizeBorderStyle(source?.BorderStyle),
+        BorderRadius = NormalizeRadius(source?.BorderRadius),
+        Shadow = NormalizeShadow(source?.Shadow),
+        Shape = NormalizeShape(source?.Shape),
+        AspectRatio = NormalizeAspectRatio(source?.AspectRatio),
+        RotationDeg = source?.RotationDeg ?? 0,
+        MediaFit = NormalizeMediaFit(source?.MediaFit),
+        MediaPosition = NormalizeMediaPosition(source?.MediaPosition),
+        Padding = NormalizeSpacing(source?.Padding),
+        Margin = NormalizeSpacing(source?.Margin),
+        Decorative = source?.Decorative ?? false,
+        InheritFromContainer = source?.InheritFromContainer ?? false
+    };
+
+    private static string? OptionalText(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string ColorOrDefault(string? value, string fallback) =>
+        IsHexColor(value) ? value!.Trim() : fallback;
+
+    private static bool IsHexColor(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        System.Text.RegularExpressions.Regex.IsMatch(value.Trim(), "^#[0-9a-fA-F]{6}$");
+
+    private static int NormalizeFontWeight(int value)
+    {
+        var clamped = Math.Clamp(value, 100, 900);
+        return Math.Clamp((int)Math.Round(clamped / 100d) * 100, 100, 900);
+    }
+
+    private static string NormalizeBackgroundMode(string? value) =>
+        string.Equals(value, "color", StringComparison.OrdinalIgnoreCase) ? "color" : "none";
+
+    private static string NormalizeTextAlign(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "left" => "left",
+            "center" => "center",
+            "right" => "right",
+            _ => "inherit"
+        };
+
+    private static string NormalizeSpacing(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "small" => "small",
+            "medium" => "medium",
+            "large" => "large",
+            _ => "none"
+        };
+
+    private static string NormalizeBorderStyle(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "dashed" => "dashed",
+            "dotted" => "dotted",
+            "none" => "none",
+            _ => "solid"
+        };
+
+    private static string NormalizeRadius(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "small" => "small",
+            "medium" => "medium",
+            "large" => "large",
+            "pill" => "pill",
+            "circle" => "circle",
+            _ => "none"
+        };
+
+    private static string NormalizeShadow(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "small" => "small",
+            "medium" => "medium",
+            "large" => "large",
+            _ => "none"
+        };
+
+    private static string NormalizeShape(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "circle" => "circle",
+            "pill" => "pill",
+            _ => "rectangle"
+        };
+
+    private static string NormalizeAspectRatio(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "square" => "square",
+            "landscape" => "landscape",
+            "portrait" => "portrait",
+            "widescreen" => "widescreen",
+            _ => "auto"
+        };
+
+    private static string NormalizeMediaFit(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "contain" => "contain",
+            "fill" => "fill",
+            _ => "cover"
+        };
+
+    private static string NormalizeMediaPosition(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "top" => "top",
+            "bottom" => "bottom",
+            "left" => "left",
+            "right" => "right",
+            _ => "center"
+        };
 }

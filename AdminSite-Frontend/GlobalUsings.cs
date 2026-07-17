@@ -4,3 +4,4 @@ global using Contracts.Common;
 global using Contracts.Global;
 global using Contracts.Public;
 global using Contracts.Admin;
+global using AdminSite.Services.Notifications;

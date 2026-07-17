@@ -95,18 +95,18 @@
         var file = e.File;
         if (file.Size > MaxImageBytes)
         {
-            Http.Toast(T("ImageTooLarge"), 400);
+            Http.Notify(T("ImageTooLarge"), 400);
             return;
         }
         var response = await Http.PostFileAsync<AssetUploadModel>(
             "api/admin/assets/upload?folder=image-blocks", file, maxBytes: MaxImageBytes);
         if (!response.Success || response.Data is null)
         {
-            Http.Toast(response.Message ?? T("ImageUploadFailed"), response.StatusCode);
+            Http.Notify(response.Message ?? T("ImageUploadFailed"), response.StatusCode);
             return;
         }
         _asset = DirectAsset(response.Data);
-        Http.Toast(T("ImageUploaded"), response.StatusCode);
+        Http.Notify(T("ImageUploaded"), response.StatusCode);
     }
 
     private void SelectResourceImage(ManagedResourceModel resource)
@@ -135,7 +135,7 @@
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Toast(response.Message, response.StatusCode);
+            Http.Notify(response.Message, response.StatusCode);
             if (response.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }

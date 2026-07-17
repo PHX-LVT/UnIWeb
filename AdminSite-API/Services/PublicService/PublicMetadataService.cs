@@ -1,3 +1,4 @@
+using Contracts.Global;
 using Contracts.Public;
 using FullProject.DTOs;
 
@@ -133,8 +134,8 @@ namespace FullProject.Services.PublicService
             var theme = await _themeService.GetAsync();
             return new ThemeResponseDto
             {
-                FontBody = theme.FontBody,
-                FontHeading = theme.FontHeading,
+                FontBody = ThemeFontCatalog.NormalizeNameOrDefault(theme.FontBody),
+                FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(theme.FontHeading),
                 TextSizeBase = theme.TextSizeBase,
                 TextSizeEyebrow = theme.TextSizeEyebrow,
                 TextSizeHeading = theme.TextSizeHeading,
@@ -147,12 +148,21 @@ namespace FullProject.Services.PublicService
                 ColorBackground = theme.ColorBackground,
                 ColorText = theme.ColorText,
                 BorderRadius = theme.BorderRadius,
+                ButtonStyle = theme.ButtonStyle,
+                ButtonColorRole = theme.ButtonColorRole,
+                ButtonRadius = theme.ButtonRadius,
                 ButtonSizeScale = theme.ButtonSizeScale,
                 ButtonTextSize = theme.ButtonTextSize,
                 AnimationsEnabled = theme.AnimationsEnabled,
                 AnimationSpeed = theme.AnimationSpeed,
                 SpacingScale = theme.SpacingScale
             };
+        }
+
+        public async Task<AdminAppearanceResponseDto> GetAdminAppearanceAsync()
+        {
+            var preset = await _settingsService.GetAdminAppearancePresetAsync();
+            return new AdminAppearanceResponseDto { Preset = preset };
         }
 
         public async Task<SiteSettingsResponseDto> GetLanguagesAsync()
@@ -163,6 +173,32 @@ namespace FullProject.Services.PublicService
                 DefaultLanguage = settings.DefaultLanguage,
                 Languages = settings.Languages
                     .Where(l => l.Active && l.UserEnabled)
+                    .OrderBy(l => l.Order)
+                    .Select(l => new LanguageResponseDto
+                    {
+                        Slug = l.Slug,
+                        Label = l.Label,
+                        NativeName = l.NativeName,
+                        Active = l.Active,
+                        AdminEnabled = l.AdminEnabled,
+                        UserEnabled = l.UserEnabled,
+                        IsFallback = l.Slug == settings.DefaultLanguage,
+                        Protected = l.Slug == settings.DefaultLanguage,
+                        Direction = l.Direction,
+                        Order = l.Order
+                    })
+                    .ToList()
+            };
+        }
+
+        public async Task<SiteSettingsResponseDto> GetAdminLanguagesAsync()
+        {
+            var settings = await _settingsService.GetAsync();
+            return new SiteSettingsResponseDto
+            {
+                DefaultLanguage = settings.DefaultLanguage,
+                Languages = settings.Languages
+                    .Where(l => l.Active && l.AdminEnabled)
                     .OrderBy(l => l.Order)
                     .Select(l => new LanguageResponseDto
                     {

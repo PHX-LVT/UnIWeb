@@ -1,7 +1,6 @@
 ﻿using AdminSite.Models;
-using Blazored.LocalStorage;
-using Blazored.Toast.Services;
-using Microsoft.AspNetCore.Components;
+using AdminSite.Services.Authentication;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using System.Net;
 using System.Net.Http.Headers;
@@ -21,6 +20,12 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         Task<FileDownloadResult> GetFileAsync(string uri);
         void Toast(string? message, int statusCode);
+        void Notify(string? message, int statusCode);
+        void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null);
+        void NotifyInline<T>(ApiResponse<T>? response, string targetId, string? successFallback = null, string? failureFallback = null);
+        void SilentSuccess<T>(ApiResponse<T>? response, string? failureFallback = null);
+        void SetInlineStatus(string targetId, AdminFeedbackSeverity severity, string message, string? technicalDetail = null);
+        void ClearInlineStatus(string targetId);
     }
 
     public sealed class FileDownloadResult
@@ -43,9 +48,9 @@ namespace AdminSite.Services
     public class HttpService : IHttpService
     {
         private readonly HttpClient _http;
-        private readonly ILocalStorageService _storage;
-        private readonly IToastService _toast;
-        private readonly NavigationManager _nav;
+        private readonly AuthenticationStateProvider _authenticationStateProvider;
+        private readonly AdminSessionInvalidationService _invalidations;
+        private readonly IAdminNotificationService _notifications;
 
         private static readonly JsonSerializerOptions _json = new()
         {
@@ -56,14 +61,14 @@ namespace AdminSite.Services
 
         public HttpService(
             HttpClient http,
-            ILocalStorageService storage,
-            IToastService toast,
-            NavigationManager nav)
+            AuthenticationStateProvider authenticationStateProvider,
+            AdminSessionInvalidationService invalidations,
+            IAdminNotificationService notifications)
         {
             _http = http;
-            _storage = storage;
-            _toast = toast;
-            _nav = nav;
+            _authenticationStateProvider = authenticationStateProvider;
+            _invalidations = invalidations;
+            _notifications = notifications;
         }
 
         public Task<ApiResponse<T>> GetAsync<T>(string uri) =>
@@ -135,20 +140,18 @@ namespace AdminSite.Services
 
             try
             {
-                var session = await _storage.GetItemAsync<AdminSession>("admin_session");
-                var hasSessionToken = !string.IsNullOrWhiteSpace(session?.Token);
-                if (hasSessionToken)
+                var auth = await GetAuthenticationContextAsync();
+                if (auth.HasToken)
                     request.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", session!.Token);
+                        new AuthenticationHeaderValue("Bearer", auth.Token);
 
                 using var response = await _http.SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized &&
-                    ShouldExpireSession(request, response, hasSessionToken))
+                    ShouldExpireSession(request, response, auth.IsAuthenticated))
                 {
-                    await _storage.RemoveItemAsync("admin_session");
-                    _nav.NavigateTo("/login");
-                    return FileDownloadResult.Fail("Session expired.", 401);
+                    PublishSessionInvalidation(auth);
+                    return FileDownloadResult.Fail(AdminUiLocalizer.T("NotificationSessionExpired", "en"), 401);
                 }
 
                 if (!response.IsSuccessStatusCode)
@@ -177,7 +180,14 @@ namespace AdminSite.Services
             }
             catch (Exception ex)
             {
-                return FileDownloadResult.Fail(ex.Message, 500);
+                _notifications.Notify(new AdminFeedbackMessage
+                {
+                    Severity = AdminFeedbackSeverity.Error,
+                    MessageKey = "NotificationDownloadFailed",
+                    MessageFallback = "Download failed.",
+                    TechnicalDetail = ex.Message
+                });
+                return FileDownloadResult.Fail(AdminUiLocalizer.T("NotificationDownloadFailed", "en"), 500);
             }
         }
 
@@ -185,47 +195,80 @@ namespace AdminSite.Services
         {
             try
             {
-                var session = await _storage.GetItemAsync<AdminSession>("admin_session");
-                var hasSessionToken = !string.IsNullOrWhiteSpace(session?.Token);
-                if (hasSessionToken && !IsLoginRequest(request))
+                var auth = await GetAuthenticationContextAsync();
+                if (auth.HasToken && !IsLoginRequest(request))
                     request.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", session!.Token);
+                        new AuthenticationHeaderValue("Bearer", auth.Token);
 
                 using var response = await _http.SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
-                    if (ShouldExpireSession(request, response, hasSessionToken))
+                    if (ShouldExpireSession(request, response, auth.IsAuthenticated))
                     {
-                        await _storage.RemoveItemAsync("admin_session");
-                        _nav.NavigateTo("/login");
-                        return ApiResponse<T>.Fail("Session expired.", 401);
+                        PublishSessionInvalidation(auth);
+                        return ApiResponse<T>.Fail(
+                            "Session expired.",
+                            401,
+                            notificationKey: "NotificationSessionExpired");
                     }
 
                     return await ReadApiResponse<T>(response)
-                           ?? ApiResponse<T>.Fail("Unauthorized.", 401);
+                           ?? ApiResponse<T>.Fail(
+                               "Unauthorized.",
+                               401,
+                               notificationKey: "NotificationUnauthorized");
                 }
 
                 return await ReadApiResponse<T>(response)
-                       ?? ApiResponse<T>.Fail("No response from server.", 500);
+                       ?? ApiResponse<T>.Fail(
+                           "No response from server.",
+                           500,
+                           notificationKey: "NotificationNoResponse");
             }
             catch (Exception ex)
             {
-                return ApiResponse<T>.Fail(ex.Message, 500);
+                return ApiResponse<T>.Fail(
+                    "Request failed.",
+                    500,
+                    errors: [ex.Message],
+                    notificationKey: "NotificationRequestFailed");
             }
         }
 
-        public void Toast(string? message, int statusCode)
-        {
-            if (string.IsNullOrEmpty(message)) return;
+        public void Toast(string? message, int statusCode) =>
+            Notify(message, statusCode);
 
-            if (statusCode is >= 200 and < 300)
-                _toast.ShowSuccess(message);
-            else if (statusCode is 400 or 404 or 422)
-                _toast.ShowWarning(message);
-            else
-                _toast.ShowError(message);
-        }
+        public void Notify(string? message, int statusCode) =>
+            _notifications.Notify(message, statusCode);
+
+        public void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null) =>
+            _notifications.NotifyResponse(response, successFallback, failureFallback);
+
+        public void NotifyInline<T>(
+            ApiResponse<T>? response,
+            string targetId,
+            string? successFallback = null,
+            string? failureFallback = null) =>
+            _notifications.NotifyResponse(
+                response,
+                successFallback,
+                failureFallback,
+                AdminFeedbackDisplayMode.Inline,
+                targetId);
+
+        public void SilentSuccess<T>(ApiResponse<T>? response, string? failureFallback = null) =>
+            _notifications.SilentSuccess(response, failureFallback);
+
+        public void SetInlineStatus(
+            string targetId,
+            AdminFeedbackSeverity severity,
+            string message,
+            string? technicalDetail = null) =>
+            _notifications.SetInlineStatus(targetId, severity, message, technicalDetail);
+
+        public void ClearInlineStatus(string targetId) =>
+            _notifications.ClearInlineStatus(targetId);
 
         private static StringContent Json(object body) =>
             new(JsonSerializer.Serialize(body, body.GetType(), _json), Encoding.UTF8, "application/json");
@@ -243,7 +286,10 @@ namespace AdminSite.Services
             }
             catch (JsonException)
             {
-                return ApiResponse<T>.Fail("Unexpected response format.", statusCode);
+                return ApiResponse<T>.Fail(
+                    "Unexpected response format.",
+                    statusCode,
+                    notificationKey: "NotificationUnexpectedResponse");
             }
 
             if (result is { Success: false, Errors.Count: > 0 })
@@ -255,20 +301,52 @@ namespace AdminSite.Services
         private static bool ShouldExpireSession(
             HttpRequestMessage request,
             HttpResponseMessage response,
-            bool hasSessionToken)
+            bool isAuthenticated)
         {
             var sessionInvalid = response.Headers.TryGetValues("X-Admin-Session-Invalid", out var values) &&
                                  values.Any(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
             if (sessionInvalid) return true;
-            if (!hasSessionToken) return false;
+            if (!isAuthenticated) return false;
 
             return !IsLoginRequest(request);
+        }
+
+        private async Task<AdminRequestAuthentication> GetAuthenticationContextAsync()
+        {
+            var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+            var principal = state.User;
+            return new AdminRequestAuthentication(
+                principal.Identity?.IsAuthenticated == true,
+                AdminAuthConstants.GetApiToken(principal),
+                AdminAuthConstants.GetAdminId(principal),
+                AdminAuthConstants.GetTokenId(principal));
+        }
+
+        private void PublishSessionInvalidation(AdminRequestAuthentication auth)
+        {
+            if (!string.IsNullOrWhiteSpace(auth.AdminId) &&
+                !string.IsNullOrWhiteSpace(auth.TokenId))
+            {
+                _invalidations.InvalidateToken(
+                    auth.AdminId,
+                    auth.TokenId,
+                    "session-expired");
+            }
         }
 
         private static bool IsLoginRequest(HttpRequestMessage request)
         {
             var uri = request.RequestUri?.OriginalString ?? string.Empty;
             return uri.Contains("api/auth/login", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed record AdminRequestAuthentication(
+            bool IsAuthenticated,
+            string? Token,
+            string? AdminId,
+            string? TokenId)
+        {
+            public bool HasToken => !string.IsNullOrWhiteSpace(Token);
         }
     }
 }

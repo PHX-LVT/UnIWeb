@@ -189,7 +189,7 @@
                 Buttons = mappedButtons,
                 Visible = Section.Visible
             });
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

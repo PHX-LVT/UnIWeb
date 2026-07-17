@@ -8,13 +8,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
 using Contracts.Auth;
+using Contracts.Forms;
 using FullProject.Services.SectionServices;
 
 namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/sections/{sectionId}/blocks")]
-    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+    [Authorize]
     public class BlocksController : ControllerBase
     {
         private readonly BlockService _service;
@@ -78,6 +79,7 @@ namespace FullProject.Controllers
         }
 
         // POST api/admin/pages/:pageId/sections/:sectionId/blocks
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost]
         public async Task<IActionResult> Create(string pageId, string sectionId,
             [FromBody] BlockCreateDto dto)
@@ -117,10 +119,12 @@ namespace FullProject.Controllers
             }
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId, blockId = created.Id },
-                ApiResult.Created(MapToDto(pageId, sectionId, created), "Block created."));
+                ApiResult.Created(MapToDto(pageId, sectionId, created), "Block created.")
+                    .WithNotification("NotificationBlockCreated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{blockId}")]
         public async Task<IActionResult> Update(string pageId, string sectionId, string blockId,
             [FromBody] BlockUpdateDto dto)
@@ -162,10 +166,12 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest(exception.Message));
             }
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
-            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block updated.")
+                .WithNotification("NotificationBlockUpdated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId/layout
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{blockId}/layout")]
         public async Task<IActionResult> UpdateLayout(string pageId, string sectionId, string blockId,
             [FromBody] BlockLayoutDto dto)
@@ -176,10 +182,12 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest(lockError));
             var updated = await _service.UpdateLayoutAsync(pageId, sectionId, blockId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
-            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block layout updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block layout updated.")
+                .WithNotification("NotificationLayoutSaved"));
         }
 
         // DELETE api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpDelete("{blockId}")]
         public async Task<IActionResult> Delete(string pageId, string sectionId, string blockId)
         {
@@ -187,10 +195,12 @@ namespace FullProject.Controllers
             var error = await _authoring.DeleteGraphsAsync(pageId, sectionId, [blockId]);
             if (error is not null)
                 return BadRequest(ApiResult.BadRequest(error));
-            return Ok(ApiResult.Ok("Block graph deleted."));
+            return Ok(ApiResult.Ok("Block graph deleted.")
+                .WithNotification("NotificationBlockDeleted"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/:blockId/visibility
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{blockId}/visibility")]
         public async Task<IActionResult> SetVisibility(string pageId, string sectionId,
             string blockId, [FromBody] VisibilityDto dto)
@@ -201,10 +211,12 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest(lockError));
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, blockId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Block not found."));
-            return Ok(ApiResult.Ok($"Block {(dto.Visible ? "shown" : "hidden")}."));
+            return Ok(ApiResult.Ok($"Block {(dto.Visible ? "shown" : "hidden")}.")
+                .WithNotification("NotificationBlockUpdated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/blocks/reorder
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder(string pageId, string sectionId,
             [FromBody] ReorderDto dto)
@@ -214,10 +226,13 @@ namespace FullProject.Controllers
             if (lockError is not null)
                 return BadRequest(ApiResult.BadRequest(lockError));
             var ok = await _service.ReorderAsync(pageId, sectionId, dto.OrderedIds);
-            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
-            return Ok(ApiResult.Ok("Blocks reordered."));
+            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed.")
+                .WithNotification("NotificationReorderFailed"));
+            return Ok(ApiResult.Ok("Blocks reordered.")
+                .WithNotification("NotificationOrderSaved"));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("authoring/layouts")]
         public async Task<IActionResult> UpdateLayouts(
             string pageId,
@@ -230,9 +245,11 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(new BlockAuthoringOperationResponseDto
             {
                 BlockIds = blocks!.Select(block => block.Id).ToList()
-            }, "Block layouts updated."));
+            }, "Block layouts updated.")
+                .WithNotification("NotificationLayoutSaved"));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost("authoring/duplicate")]
         public async Task<IActionResult> Duplicate(
             string pageId,
@@ -248,6 +265,7 @@ namespace FullProject.Controllers
             }, "Blocks duplicated."));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost("authoring/delete-graphs")]
         public async Task<IActionResult> DeleteGraphs(
             string pageId,
@@ -314,6 +332,7 @@ namespace FullProject.Controllers
                 },
                 Visible = b.Visible,
                 Order = b.Order,
+                EditorLabel = b.EditorLabel ?? new Dictionary<string, string>(),
                 Layout = MapLayoutToDto(b.Layout),
                 CreatedAt = b.CreatedAt,
                 UpdatedAt = b.UpdatedAt,
@@ -401,16 +420,16 @@ namespace FullProject.Controllers
                 // Form: fields returned as embedded array â€” no separate form endpoints
                 case FormBlock form:
                     dto.FormDefinitionId = form.FormDefinitionId;
-                    dto.Fields = form.Fields.Select(f => new FormFieldDto
-                    {
-                        Name = f.Name,
-                        Type = f.Type,
-                        Label = f.Label,
-                        Required = f.Required,
-                        Options = f.Options,
-                        Order = f.Order
-                    }).ToList();
-                    dto.SubmitButtonLabel = form.SubmitButtonLabel;
+                    dto.FormScale = Math.Clamp(form.FormScale, FormBlockLayoutPolicy.MinimumScale, FormBlockLayoutPolicy.MaximumScale);
+                    dto.FormDefaultWidthPx = form.DefaultWidthPx > 0
+                        ? form.DefaultWidthPx
+                        : null;
+                    dto.FormDefaultWidthPercent = form.DefaultWidthPercent > 0
+                        ? form.DefaultWidthPercent
+                        : null;
+                    dto.FormDefaultHeightPx = form.DefaultHeightPx > 0
+                        ? form.DefaultHeightPx
+                        : null;
                     break;
 
                 case CardBlock card:

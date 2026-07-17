@@ -2,10 +2,6 @@
 @using SharedComponents.Helpers
 
 <div class="sc-block sc-block--text">
-    @if (Block.Title is not null)
-    {
-        <h3 class="sc-block__title">@StyleHelper.Lang(Block.Title, Lang)</h3>
-    }
     @if (Block.Content is not null)
     {
         <div class="sc-block__content">

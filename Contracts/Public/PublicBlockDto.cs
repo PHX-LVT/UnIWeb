@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Contracts.Admin;
+using Contracts.Forms;
 
 namespace Contracts.Public
 {
@@ -84,9 +85,16 @@ namespace Contracts.Public
     public class PublicFormBlockDto : PublicBlockDto
     {
         public string? FormDefinitionId { get; set; }
+        public bool FormDefinitionAvailable { get; set; } = true;
+        public double FormScale { get; set; } = 1d;
+        public int? DefaultWidthPx { get; set; }
+        public double? DefaultWidthPercent { get; set; }
+        public double? DefaultHeightPx { get; set; }
         public Dictionary<string, string>? Name { get; set; }
         public Dictionary<string, string>? Introduction { get; set; }
-        public string FormLayoutMode { get; set; } = "stacked";
+        public List<FormInformationItemDto> InformationItems { get; set; } = new();
+        public List<FormAuxiliaryActionDto> AuxiliaryActions { get; set; } = new();
+        public FormDesignSettingsDto Design { get; set; } = new();
         public Dictionary<string, string>? SubmitButtonLabel { get; set; }
         public List<PublicFormFieldDto>? Fields { get; set; }
     }

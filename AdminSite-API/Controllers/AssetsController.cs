@@ -107,20 +107,25 @@ namespace FullProject.Controllers
                     AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageSettings),
 
                 "content-hero" or "content-thumbnails" or "content-body" or "content-files" or "managed-resources" =>
-                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageContent),
+                    CanManageContentAssets,
 
                 "sections" or "blocks" or "hero" or "gallery" or "carousel" or "showcase" or "list-items" or
                 "section-backgrounds" or "image-blocks" or "video-blocks" or "file-blocks" or "card-blocks" =>
                     AdminAuthorization.HasPermission(User, AdminPermissionKeys.PageBuilder),
 
                 "uploads" =>
-                    AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageContent) ||
+                    CanManageContentAssets ||
                     AdminAuthorization.HasPermission(User, AdminPermissionKeys.PageBuilder) ||
                     AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageSettings),
 
                 _ => false
             };
         }
+
+        private bool CanManageContentAssets =>
+            AdminAuthorization.IsAdminAdmin(User) ||
+            AdminAuthorization.HasPermission(User, AdminPermissionKeys.CreateEditContent) ||
+            AdminAuthorization.HasPermission(User, AdminPermissionKeys.ApproveContent);
 
     }
 }

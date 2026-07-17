@@ -15,7 +15,8 @@
                 Lang="@_lang"
                 Languages="_langs"
                 OnLanguageChanged="SwitchLang"
-                Scrolled="@(_headerScrolled || IsSolidHeaderPath)" />
+                Scrolled="@_headerScrolled"
+                Hidden="@_headerHidden" />
 
     <main>
         @Body
@@ -27,6 +28,8 @@
     {
         <SocialFloat Buttons="_socialButtons" />
     }
+
+    <PublicFormModalHost Lang="@_lang" />
 }
 else
 {
@@ -38,7 +41,9 @@ else
     private bool _ready = false;
     private bool _disposed = false;
     private bool _headerScrolled = false;
+    private bool _headerHidden = false;
     private bool _scrollInitialized = false;
+    private bool _resetHeaderScrollPending = false;
     private bool _widgetsInitialized = false;
     private string _lang = "en";
     private DotNetObjectReference<MainLayout>? _dotNetRef;
@@ -51,16 +56,6 @@ else
     private List<PublicSocialButton> _socialButtons = new();
 
     private List<string> _langs = new() { "en", "vi", "cn" };
-
-    private bool IsSolidHeaderPath
-    {
-        get
-        {
-            var path = new Uri(Navigation.Uri).AbsolutePath.Trim('/');
-            return path.StartsWith("insights/", StringComparison.OrdinalIgnoreCase) &&
-                   path.Split('/', StringSplitOptions.RemoveEmptyEntries).Length >= 3;
-        }
-    }
 
     private async Task SwitchLang(string lang)
     {
@@ -77,6 +72,12 @@ else
             if (_ready && !_scrollInitialized && !_disposed)
             {
                 await InitializeHeaderScrollAsync();
+            }
+
+            if (_ready && _scrollInitialized && _resetHeaderScrollPending && !_disposed)
+            {
+                _resetHeaderScrollPending = false;
+                await JS.InvokeVoidAsync("userSiteShell.resetHeaderScroll");
             }
 
             if (_ready && !_widgetsInitialized && !_disposed)
@@ -139,20 +140,36 @@ else
     }
 
     [JSInvokable]
-    public async Task SetHeaderScrolled(bool scrolled)
+    public async Task SetHeaderState(bool scrolled, bool hidden)
     {
-        if (_disposed || _headerScrolled == scrolled)
+        var nextHidden = scrolled && hidden;
+        if (_disposed || (_headerScrolled == scrolled && _headerHidden == nextHidden))
         {
             return;
         }
 
         _headerScrolled = scrolled;
+        _headerHidden = nextHidden;
         await InvokeAsync(StateHasChanged);
     }
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            // MainLayout persists between routes. Make a newly navigated page start
+            // with a visible header, then let the browser re-sync its real position
+            // after FocusOnNavigate has moved the viewport.
+            _headerScrolled = false;
+            _headerHidden = false;
+            _resetHeaderScrollPending = _scrollInitialized;
+            StateHasChanged();
+        });
     }
 
     public async ValueTask DisposeAsync()

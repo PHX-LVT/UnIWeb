@@ -12,93 +12,97 @@ namespace FullProject.Controllers
     public class AdminUsersController : ControllerBase
     {
         private readonly AuthService _auth;
+        private readonly AdminRoleService _roles;
 
-        public AdminUsersController(AuthService auth)
+        public AdminUsersController(AuthService auth, AdminRoleService roles)
         {
             _auth = auth;
+            _roles = roles;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetUsers()
         {
             var actor = await CurrentAdminAsync();
-            if (!CanManageUsers(actor)) return Forbid();
+            if (!CanManageUsers()) return Forbid();
 
             var users = await _auth.GetUsersAsync();
-            return Ok(ApiResult.Ok(users.Select(MapUser).ToList()));
+            var mapped = new List<AdminUserResponse>();
+            foreach (var user in users) mapped.Add(await MapUserAsync(user));
+            return Ok(ApiResult.Ok(mapped));
         }
 
         [HttpPost]
         public async Task<IActionResult> CreateUser([FromBody] AdminUserCreateRequest dto)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanManageUsers(actor)) return Forbid();
+            if (!CanManageUsers()) return Forbid();
 
             var (user, errors) = await _auth.CreateUserAsync(dto, actor!, ClientIp, UserAgent);
             if (errors.Count > 0) return UnprocessableEntity(ApiResult.Unprocessable<AdminUserResponse>(errors));
 
-            return Ok(ApiResult.Created(MapUser(user!), "Admin user created."));
+            return Ok(ApiResult.Created(await MapUserAsync(user!), "Admin user created."));
         }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateUser(string id, [FromBody] AdminUserUpdateRequest dto)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanManageUsers(actor)) return Forbid();
+            if (!CanManageUsers()) return Forbid();
 
             var (user, errors) = await _auth.UpdateUserAsync(id, dto, actor!, ClientIp, UserAgent);
             if (errors.Count > 0) return ToErrorResult<AdminUserResponse>(errors);
 
-            return Ok(ApiResult.Ok(MapUser(user!), "Admin user updated."));
+            return Ok(ApiResult.Ok(await MapUserAsync(user!), "Admin user updated."));
         }
 
         [HttpPost("{id}/enable")]
         public async Task<IActionResult> EnableUser(string id)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanManageUsers(actor)) return Forbid();
+            if (!CanManageUsers()) return Forbid();
 
             var (user, errors) = await _auth.SetUserEnabledAsync(id, true, actor!, ClientIp, UserAgent);
             if (errors.Count > 0) return ToErrorResult<AdminUserResponse>(errors);
 
-            return Ok(ApiResult.Ok(MapUser(user!), "Admin user enabled."));
+            return Ok(ApiResult.Ok(await MapUserAsync(user!), "Admin user enabled."));
         }
 
         [HttpPost("{id}/disable")]
         public async Task<IActionResult> DisableUser(string id)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanManageUsers(actor)) return Forbid();
+            if (!CanManageUsers()) return Forbid();
             if (actor!.Id == id) return BadRequest(ApiResult.BadRequest("You cannot disable your own account."));
 
             var (user, errors) = await _auth.SetUserEnabledAsync(id, false, actor, ClientIp, UserAgent);
             if (errors.Count > 0) return ToErrorResult<AdminUserResponse>(errors);
 
-            return Ok(ApiResult.Ok(MapUser(user!), "Admin user disabled."));
+            return Ok(ApiResult.Ok(await MapUserAsync(user!), "Admin user disabled."));
         }
 
         [HttpPost("{id}/reset-password")]
         public async Task<IActionResult> ResetPassword(string id, [FromBody] AdminPasswordResetRequest dto)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanManageUsers(actor)) return Forbid();
+            if (!CanManageUsers()) return Forbid();
 
             var (user, errors) = await _auth.ResetPasswordAsync(id, dto.NewPassword, actor!, ClientIp, UserAgent);
             if (errors.Count > 0) return ToErrorResult<AdminUserResponse>(errors);
 
-            return Ok(ApiResult.Ok(MapUser(user!), "Password reset. Existing sessions were revoked."));
+            return Ok(ApiResult.Ok(await MapUserAsync(user!), "Password reset. Existing sessions were revoked."));
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(string id)
         {
             var actor = await CurrentAdminAsync();
-            if (!IsAdminAdmin(actor)) return Forbid();
+            if (!IsAdminAdmin()) return Forbid();
 
             var (user, errors) = await _auth.DeleteUserAsync(id, actor!, ClientIp, UserAgent);
             if (errors.Count > 0) return ToErrorResult<AdminUserResponse>(errors);
 
-            return Ok(ApiResult.Ok(MapUser(user!), "Admin account deleted. Existing sessions were revoked."));
+            return Ok(ApiResult.Ok(await MapUserAsync(user!), "Admin account deleted. Existing sessions were revoked."));
         }
 
         [HttpGet("sessions")]
@@ -108,7 +112,7 @@ namespace FullProject.Controllers
             [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanViewLogs(actor)) return Forbid();
+            if (!CanViewLogs()) return Forbid();
 
             var result = await _auth.GetSessionsPageAsync(page, pageSize, adminId);
             var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
@@ -129,7 +133,7 @@ namespace FullProject.Controllers
             [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanViewLogs(actor)) return Forbid();
+            if (!CanViewLogs()) return Forbid();
 
             var result = await _auth.GetLoginActivityPageAsync(page, pageSize, adminId);
             var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
@@ -147,7 +151,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> DeleteSessions([FromBody] AdminBulkDeleteRequest dto)
         {
             var actor = await CurrentAdminAsync();
-            if (!IsAdminAdmin(actor)) return Forbid();
+            if (!IsAdminAdmin()) return Forbid();
 
             var count = await _auth.DeleteSessionsAsync(dto.Ids, actor!, ClientIp, UserAgent);
             return Ok(ApiResult.Ok(count, $"Deleted {count} inactive session record(s)."));
@@ -157,7 +161,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> DeleteLoginActivity([FromBody] AdminBulkDeleteRequest dto)
         {
             var actor = await CurrentAdminAsync();
-            if (!IsAdminAdmin(actor)) return Forbid();
+            if (!IsAdminAdmin()) return Forbid();
 
             var count = await _auth.DeleteLoginActivityAsync(dto.Ids, actor!, ClientIp, UserAgent);
             return Ok(ApiResult.Ok(count, $"Deleted {count} login activity log(s)."));
@@ -170,7 +174,7 @@ namespace FullProject.Controllers
             [FromQuery] int pageSize = 20)
         {
             var actor = await CurrentAdminAsync();
-            if (!CanViewLogs(actor)) return Forbid();
+            if (!CanViewLogs()) return Forbid();
 
             var result = await _auth.GetAuditLogsPageAsync(page, pageSize, targetId);
             var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
@@ -188,7 +192,7 @@ namespace FullProject.Controllers
         public async Task<IActionResult> DeleteAuditLogs([FromBody] AdminBulkDeleteRequest dto)
         {
             var actor = await CurrentAdminAsync();
-            if (!IsAdminAdmin(actor)) return Forbid();
+            if (!IsAdminAdmin()) return Forbid();
 
             var count = await _auth.DeleteAuditLogsAsync(dto.Ids, actor!, ClientIp, UserAgent);
             return Ok(ApiResult.Ok(count, $"Deleted {count} audit log(s)."));
@@ -234,18 +238,14 @@ namespace FullProject.Controllers
             return admin;
         }
 
-        private static bool CanManageUsers(AdminUser? user) =>
-            user is not null &&
-            (user.Role == AdminRole.AdminAdmin ||
-             AuthService.GetEffectivePermissions(user).Contains(AdminPermissionKeys.ManageUsers));
+        private bool CanManageUsers() =>
+            FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.ManageUsers);
 
-        private static bool CanViewLogs(AdminUser? user) =>
-            user is not null &&
-            (user.Role == AdminRole.AdminAdmin ||
-             AuthService.GetEffectivePermissions(user).Contains(AdminPermissionKeys.ViewLogs));
+        private bool CanViewLogs() =>
+            FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.ViewLogs);
 
-        private static bool IsAdminAdmin(AdminUser? user) =>
-            user?.Role == AdminRole.AdminAdmin;
+        private bool IsAdminAdmin() =>
+            FullProject.Security.AdminAuthorization.IsAdminAdmin(User);
 
         private ObjectResult ToErrorResult<T>(List<string> errors)
         {
@@ -254,17 +254,26 @@ namespace FullProject.Controllers
             return UnprocessableEntity(ApiResult.Unprocessable<T>(errors));
         }
 
-        private static AdminUserResponse MapUser(AdminUser user)
+        private async Task<AdminUserResponse> MapUserAsync(AdminUser user)
         {
             AuthService.NormalizeUserDefaults(user);
+            var role = await _roles.GetRoleForUserAsync(user);
+            var rolePermissions = AdminRoleService.NormalizePermissions(role?.Permissions);
+            var extras = role is null
+                ? AdminRoleService.NormalizePermissions(user.ExtraPermissions)
+                : _roles.NormalizeExtraPermissions(user.ExtraPermissions.Count > 0 ? user.ExtraPermissions : user.Permissions, role);
             return new AdminUserResponse
             {
                 Id = user.Id,
                 Email = user.Email,
                 FullName = user.FullName,
-                Role = user.Role,
+                RoleId = role?.Id ?? string.Empty,
+                RoleName = role?.Name ?? user.LegacyRole,
+                IsAdminAdmin = role?.IsProtected == true,
                 Status = user.Status,
-                Permissions = user.Permissions,
+                RolePermissions = rolePermissions,
+                ExtraPermissions = extras,
+                Permissions = await _auth.GetEffectivePermissionsAsync(user),
                 TokenVersion = user.TokenVersion,
                 FailedLoginAttempts = user.FailedLoginAttempts,
                 LockedUntil = user.LockedUntil,

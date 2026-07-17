@@ -1,8 +1,10 @@
 using Contracts.Admin;
+using Contracts.Forms;
 using FullProject.Data;
 using FullProject.Models;
 using FullProject.Services.CloneServices;
 using FullProject.Services.AssetService;
+using FullProject.Services.FormServices;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -116,6 +118,7 @@ public sealed class SectionPresetService
                 block.ColumnSlotId = targetSlotId;
         }
         _contracts.ApplyPolicy(preset, blocks);
+        await GovernAppliedFormBlocksAsync(section, blocks);
 
         await _context.SectionsDraft.InsertOneAsync(section);
         try
@@ -130,6 +133,103 @@ public sealed class SectionPresetService
             throw;
         }
         return (section, null);
+    }
+
+    private async Task GovernAppliedFormBlocksAsync(Section section, IReadOnlyCollection<Block> blocks)
+    {
+        var forms = blocks.OfType<FormBlock>()
+            .Where(form => !string.IsNullOrWhiteSpace(form.FormDefinitionId))
+            .ToList();
+        if (forms.Count == 0) return;
+
+        var ids = forms.Select(form => form.FormDefinitionId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var definitions = await _context.FormDefinitions
+            .Find(definition => definition.Active && ids.Contains(definition.Id))
+            .ToListAsync();
+        var byId = definitions.ToDictionary(definition => definition.Id, StringComparer.Ordinal);
+        var requiredSectionHeight = section.Style?.CustomMinHeightPx ?? 0;
+
+        foreach (var form in forms)
+        {
+            if (!byId.TryGetValue(form.FormDefinitionId!, out var definition))
+                continue;
+
+            var source = FormDefinitionService.MapDesign(definition.Design);
+            var fields = definition.Fields.Select(field => new FormFieldDefinitionDto
+                {
+                    Key = field.Key,
+                    Type = field.Type,
+                    Label = field.Label,
+                    Placeholder = field.Placeholder,
+                    Required = field.Required,
+                    InputBoxSize = field.InputBoxSize,
+                    Order = field.Order
+                }).ToList();
+            var design = source.V2 is not null
+                ? FormDefinitionService.NormalizeV2WriteDesign(
+                    definition.Id,
+                    source,
+                    fields,
+                    definition.Name,
+                    definition.Introduction,
+                    definition.SubmitButtonLabel,
+                    FormDefinitionService.MapInformationItems(definition.InformationItems),
+                    FormDefinitionService.MapAuxiliaryActions(definition.AuxiliaryActions))
+                : FormDesignPolicy.Normalize(
+                    source,
+                    fields,
+                    definition.Name,
+                    definition.Introduction,
+                    definition.SubmitButtonLabel);
+            var baseline = FormBlockLayoutPolicy.CalculateDefaultSize(
+                design,
+                FormBlockLayoutPolicy.AvailableContentWidthPx(section.Style?.ContentWidth));
+            var scale = Math.Clamp(form.FormScale, FormBlockLayoutPolicy.MinimumScale, FormBlockLayoutPolicy.MaximumScale);
+            var widthPercent = baseline.WidthPercent * scale;
+            var heightPx = baseline.HeightPx * scale;
+            var layout = form.Layout ?? new BlockLayout();
+            var leftPercent = Math.Clamp(
+                layout.LeftPercent ?? (Math.Clamp(layout.X, 0, 11) / 12d * 100d),
+                0d,
+                Math.Max(0d, 100d - widthPercent));
+            var topPx = Math.Clamp(
+                layout.TopPx ?? (Math.Clamp(layout.Y, 0, 60) * 48d),
+                0d,
+                Math.Max(0d, FormBlockLayoutPolicy.MaximumSectionHeightPx - FormBlockLayoutPolicy.SectionBottomPaddingPx - heightPx));
+            var widthUnits = Math.Clamp((int)Math.Round(widthPercent / 100d * 12d), 1, 12);
+
+            layout.Width = "custom";
+            layout.ColumnSpan = widthUnits;
+            layout.X = Math.Clamp((int)Math.Round(leftPercent / 100d * 12d), 0, Math.Max(0, 12 - widthUnits));
+            layout.Y = Math.Clamp((int)Math.Round(topPx / 48d), 0, 60);
+            layout.W = widthUnits;
+            layout.H = Math.Clamp((int)Math.Ceiling(heightPx / 48d), 1, 40);
+            layout.LeftPercent = leftPercent;
+            layout.TopPx = topPx;
+            layout.WidthPercent = widthPercent;
+            layout.HeightPx = heightPx;
+            form.Layout = layout;
+            form.FormScale = scale;
+            form.DesignSchemaVersion = design.SchemaVersion;
+            form.DefaultWidthPx = baseline.WidthPx;
+            form.DefaultWidthPercent = baseline.WidthPercent;
+            form.DefaultHeightPx = baseline.HeightPx;
+            requiredSectionHeight = Math.Max(
+                requiredSectionHeight,
+                Math.Clamp(
+                    (int)Math.Ceiling(topPx + heightPx + FormBlockLayoutPolicy.SectionBottomPaddingPx),
+                    120,
+                    FormBlockLayoutPolicy.MaximumSectionHeightPx));
+        }
+
+        if (requiredSectionHeight > (section.Style?.CustomMinHeightPx ?? 0))
+        {
+            section.Style ??= new SectionStyle();
+            section.Style.Height = "custom";
+            section.Style.CustomMinHeightPx = requiredSectionHeight;
+        }
     }
 
     public async Task<bool> DeleteAsync(string presetId)
@@ -251,13 +351,13 @@ public sealed class SectionPresetService
         if (formIds.Count == 0) return null;
 
         var existingFormIds = await _context.FormDefinitions
-            .Find(definition => formIds.Contains(definition.Id))
+            .Find(definition => definition.Active && formIds.Contains(definition.Id))
             .Project(definition => definition.Id)
             .ToListAsync();
         var missingFormIds = formIds.Except(existingFormIds, StringComparer.OrdinalIgnoreCase).ToList();
         return missingFormIds.Count == 0
             ? null
-            : "This preset references a Form Definition that no longer exists.";
+            : "This preset references a Form Definition that is missing or inactive.";
     }
 
     private static IEnumerable<string?> FormDefinitionIds(SectionPreset preset)

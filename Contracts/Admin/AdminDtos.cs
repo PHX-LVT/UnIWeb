@@ -855,6 +855,7 @@ public class ColumnSlotResponseDto
         public string Type => BlockDtoJson.GetTypeDiscriminator(GetType());
 
         public bool Visible { get; set; } = true;
+        public Dictionary<string, string> EditorLabel { get; set; } = new();
         public List<BlockButtonDto> Buttons { get; set; } = new();
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
@@ -918,8 +919,7 @@ public class ColumnSlotResponseDto
     public class FormBlockCreateDto : BlockCreateDto
     {
         public string? FormDefinitionId { get; set; }
-        public List<FormFieldDto> Fields { get; set; } = new();
-        public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
+        public double FormScale { get; set; } = 1d;
     }
 
     public class BulletListItemDto
@@ -1008,6 +1008,7 @@ public class ColumnSlotResponseDto
         public string Type => BlockDtoJson.GetTypeDiscriminator(GetType());
 
         public bool? Visible { get; set; }
+        public Dictionary<string, string>? EditorLabel { get; set; }
         public List<BlockButtonDto>? Buttons { get; set; }
         public string? BlockZone { get; set; }
         public string? ZoneId { get; set; }
@@ -1069,8 +1070,7 @@ public class ColumnSlotResponseDto
     public class FormBlockUpdateDto : BlockUpdateDto
     {
         public string? FormDefinitionId { get; set; }
-        public List<FormFieldDto> Fields { get; set; } = new();
-        public Dictionary<string, string> SubmitButtonLabel { get; set; } = new();
+        public double? FormScale { get; set; }
     }
 
     public class CardBlockUpdateDto : BlockUpdateDto
@@ -1242,6 +1242,7 @@ public class ColumnSlotResponseDto
         public string Type { get; set; } = string.Empty;
         public bool Visible { get; set; }
         public int Order { get; set; }
+        public Dictionary<string, string> EditorLabel { get; set; } = new();
         public string? ColumnSlotId { get; set; }
         public string? BlockZone { get; set; }
         public string? ZoneId { get; set; }
@@ -1313,8 +1314,10 @@ public class ColumnSlotResponseDto
         public List<MapPinDto>? Pins { get; set; }
 
         // Form
-        public List<FormFieldDto>? Fields { get; set; }
-        public Dictionary<string, string>? SubmitButtonLabel { get; set; }
+        public double FormScale { get; set; } = 1d;
+        public int? FormDefaultWidthPx { get; set; }
+        public double? FormDefaultWidthPercent { get; set; }
+        public double? FormDefaultHeightPx { get; set; }
     }
     // -- Reset/Public DTO ------------------------------------
    

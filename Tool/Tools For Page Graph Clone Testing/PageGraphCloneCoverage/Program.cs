@@ -4,6 +4,7 @@ using System.Text.Json;
 using Contracts.Admin;
 using Contracts.Public;
 using Contracts.Global;
+using Contracts.Forms;
 using FullProject.Models;
 using FullProject.Services.CloneServices;
 using FullProject.Services.BlockServices;
@@ -1304,19 +1305,11 @@ public static class Program
         yield return WithBlockBase(new FormBlock
         {
             FormDefinitionId = "form-definition",
-            SubmitButtonLabel = Lang("Submit"),
-            Fields =
-            [
-                new FormField
-                {
-                    Name = "email",
-                    Type = "email",
-                    Label = Lang("Email"),
-                    Required = true,
-                    Options = ["one", "two"],
-                    Order = 1
-                }
-            ]
+            DesignSchemaVersion = FormDesignPolicy.CurrentSchemaVersion,
+            FormScale = .75d,
+            DefaultWidthPx = 560,
+            DefaultWidthPercent = 40d,
+            DefaultHeightPx = 420d
         });
         yield return WithBlockBase(new CardBlock
         {

@@ -1,0 +1,558 @@
+@using System.Globalization
+@using Contracts.Public
+@using Contracts.Forms
+@using SharedComponents.Helpers
+
+<form class="@FormClass"
+      style="@DesignStyle"
+      novalidate
+      @onsubmit="Submit"
+      @onsubmit:preventDefault="true">
+    @if (!string.IsNullOrWhiteSpace(NameText) || !string.IsNullOrWhiteSpace(IntroductionText))
+    {
+        <div class="sc-form-block__header">
+            @if (!string.IsNullOrWhiteSpace(NameText))
+            {
+                <h3>@NameText</h3>
+            }
+            @if (!string.IsNullOrWhiteSpace(IntroductionText))
+            {
+                <p>@IntroductionText</p>
+            }
+        </div>
+    }
+
+    @if (ShowInformationItems)
+    {
+        <ul class="sc-form-block__information-list">
+            @foreach (var item in InformationItems)
+            {
+                var href = FormDesignV2Policy.ResolveHref(item.Target);
+                <li>
+                    @if (!string.IsNullOrWhiteSpace(href))
+                    {
+                        <a href="@href">
+                            @if (!string.IsNullOrWhiteSpace(SafeIconClass(item.Icon)))
+                            {
+                                <i class="@SafeIconClass(item.Icon)" aria-hidden="true"></i>
+                            }
+                            <span>@StyleHelper.Lang(item.Text, Lang)</span>
+                        </a>
+                    }
+                    else
+                    {
+                        @if (!string.IsNullOrWhiteSpace(SafeIconClass(item.Icon)))
+                        {
+                            <i class="@SafeIconClass(item.Icon)" aria-hidden="true"></i>
+                        }
+                        <span>@StyleHelper.Lang(item.Text, Lang)</span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+
+    @if (InformationActions.Count > 0)
+    {
+        <div class="sc-form-block__actions sc-form-block__actions--information">
+            @foreach (var action in InformationActions)
+            {
+                var href = FormDesignV2Policy.ResolveHref(action.Target);
+                if (PreviewOnly)
+                {
+                    <span class="@ActionClass(action)" aria-disabled="true">@StyleHelper.Lang(action.Label, Lang)</span>
+                }
+                else if (!string.IsNullOrWhiteSpace(href))
+                {
+                    <a class="@ActionClass(action)" href="@href">@StyleHelper.Lang(action.Label, Lang)</a>
+                }
+            }
+        </div>
+    }
+
+    <input class="sc-form-honeypot"
+           type="text"
+           tabindex="-1"
+           autocomplete="off"
+           aria-hidden="true"
+           @bind="_honeypot" />
+
+    <div class="sc-form-block__body">
+        <div class="sc-form-block__rows">
+            @foreach (var row in EffectiveRows)
+            {
+                <div class="sc-form-block__row" style="--sc-form-row-columns:@Math.Clamp(row.FieldKeys.Count, 1, FormDesignV2Policy.MaximumFieldsPerRow)">
+                @foreach (var field in FieldsForRow(row))
+                {
+                    var key = FieldKey(field);
+                    var label = FieldLabel(field);
+                    var placeholder = FieldPlaceholder(field, label);
+                    var errorId = ErrorId(key);
+                    var hasError = HasError(key);
+
+                    <div class="@FieldClass(field)">
+                    @if (NormalizedType(field.Type) != "checkbox")
+                    {
+                        <label class="@LabelClass(placeholder)" for="@InputId(key)">
+                            @label
+                            @if (field.Required)
+                            {
+                                <span class="sc-required" aria-hidden="true">*</span>
+                            }
+                        </label>
+                    }
+
+                    @switch (NormalizedType(field.Type))
+                    {
+                        case "textarea":
+                            <textarea id="@InputId(key)"
+                                      class="@InputClass(field)"
+                                      name="@key"
+                                      placeholder="@placeholder"
+                                      maxlength="@MaxLengthAttribute(field)"
+                                      required="@field.Required"
+                                      aria-required="@field.Required"
+                                      aria-invalid="@hasError"
+                                      aria-describedby="@errorId"
+                                      disabled="@PreviewOnly"
+                                      value="@_data.GetValueOrDefault(key)"
+                                      @oninput="eventArgs => RevalidateIfInvalid(field, eventArgs.Value)"
+                                      @onchange="eventArgs => SetField(field, eventArgs.Value)"></textarea>
+                            break;
+
+                        case "select":
+                            <select id="@InputId(key)"
+                                    class="@InputClass(field)"
+                                    name="@key"
+                                    value="@_data.GetValueOrDefault(key)"
+                                    required="@field.Required"
+                                    aria-required="@field.Required"
+                                    aria-invalid="@hasError"
+                                    aria-describedby="@errorId"
+                                    disabled="@PreviewOnly"
+                                    @onchange="eventArgs => SetField(field, eventArgs.Value)">
+                                <option value="">@placeholder</option>
+                                @foreach (var option in (field.Options ?? new()).OrderBy(item => item.Order))
+                                {
+                                    <option value="@option.Value">@StyleHelper.Lang(option.Label, Lang)</option>
+                                }
+                            </select>
+                            break;
+
+                        case "checkbox":
+                            <label class="sc-form-checkbox" for="@InputId(key)">
+                                <input id="@InputId(key)"
+                                       type="checkbox"
+                                       name="@key"
+                                       required="@field.Required"
+                                       aria-required="@field.Required"
+                                       aria-invalid="@hasError"
+                                       aria-describedby="@errorId"
+                                       disabled="@PreviewOnly"
+                                       checked="@IsChecked(key)"
+                                       @onchange="eventArgs => SetField(field, eventArgs.Value)" />
+                                <span>
+                                    @label
+                                    @if (field.Required)
+                                    {
+                                        <span class="sc-required" aria-hidden="true">*</span>
+                                    }
+                                </span>
+                            </label>
+                            break;
+
+                        default:
+                            <input id="@InputId(key)"
+                                   type="@InputType(field.Type)"
+                                   inputmode="@InputMode(field.Type)"
+                                   class="@InputClass(field)"
+                                   name="@key"
+                                   placeholder="@placeholder"
+                                   maxlength="@MaxLengthAttribute(field)"
+                                   required="@field.Required"
+                                   aria-required="@field.Required"
+                                   aria-invalid="@hasError"
+                                   aria-describedby="@errorId"
+                                   disabled="@PreviewOnly"
+                                   value="@_data.GetValueOrDefault(key)"
+                                   @oninput="eventArgs => RevalidateIfInvalid(field, eventArgs.Value)"
+                                   @onchange="eventArgs => SetField(field, eventArgs.Value)" />
+                            break;
+                    }
+
+                    <span id="@errorId"
+                          class="sc-form-field__error"
+                          role="@(hasError ? "alert" : null)"
+                          aria-live="@(hasError ? "polite" : null)">
+                        @(_fieldErrors.GetValueOrDefault(key) ?? string.Empty)
+                    </span>
+                    </div>
+                }
+                </div>
+            }
+        </div>
+
+        <button type="submit"
+                class="@SubmitClass"
+                disabled="@(_submitting || PreviewOnly)">
+            @(_submitting ? SubmittingText : SubmitLabelText)
+        </button>
+
+        @if (BelowFieldActions.Count > 0)
+        {
+            <div class="sc-form-block__actions sc-form-block__actions--below-fields">
+                @foreach (var action in BelowFieldActions)
+                {
+                    var href = FormDesignV2Policy.ResolveHref(action.Target);
+                    if (PreviewOnly)
+                    {
+                        <span class="@ActionClass(action)" aria-disabled="true">@StyleHelper.Lang(action.Label, Lang)</span>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(href))
+                    {
+                        <a class="@ActionClass(action)" href="@href">@StyleHelper.Lang(action.Label, Lang)</a>
+                    }
+                }
+            </div>
+        }
+    </div>
+
+    <div class="sc-form-block__status" aria-live="polite" aria-atomic="true">
+        @if (_submitted)
+        {
+            <p class="sc-form-success">@SuccessText</p>
+        }
+        else if (_error)
+        {
+            <p class="sc-form-error">@(_errorMessage ?? FailureText)</p>
+        }
+    </div>
+</form>
+
+@code {
+    [Parameter, EditorRequired] public PublicFormBlockDto Block { get; set; } = default!;
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public string Context { get; set; } = "embedded";
+    [Parameter] public bool PreviewOnly { get; set; }
+    [Parameter] public Func<Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+
+    private Dictionary<string, string> _data = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> _fieldErrors = new(StringComparer.OrdinalIgnoreCase);
+    private bool _submitted;
+    private bool _submitting;
+    private bool _error;
+    private string? _errorMessage;
+    private string _honeypot = string.Empty;
+
+    private FormDesignSettingsDto Design => Block.Design ?? new FormDesignSettingsDto();
+    private List<FormFieldDefinitionDto> DefinitionFields => (Block.Fields ?? new())
+        .OrderBy(field => field.Order)
+        .Select(field => new FormFieldDefinitionDto
+        {
+            Key = FieldKey(field),
+            Type = field.Type,
+            Label = field.Label,
+            Placeholder = field.Placeholder,
+            Required = field.Required,
+            MaxLength = field.MaxLength,
+            InputBoxSize = field.InputBoxSize,
+            Order = field.Order,
+            Options = (field.Options ?? new()).Select(option => new FormFieldOptionDto
+            {
+                Value = option.Value,
+                Label = option.Label,
+                Order = option.Order
+            }).ToList()
+        }).ToList();
+    private FormDesignV2SettingsDto EffectiveV2
+    {
+        get
+        {
+            if (Design.V2 is { } v2 &&
+                FormDesignV2Policy.Validate(v2, DefinitionFields, Block.InformationItems, Block.AuxiliaryActions).Count == 0)
+            {
+                return FormDesignV2Policy.Normalize(v2);
+            }
+
+            return FormDesignV2Policy.ProjectFromV1(Block.FormDefinitionId ?? Block.Id, Design, DefinitionFields);
+        }
+    }
+    private List<FormFieldRowDto> EffectiveRows => EffectiveV2.FieldRows.OrderBy(row => row.Order).ToList();
+    private List<FormInformationItemDto> InformationItems => (Block.InformationItems ?? new()).OrderBy(item => item.Order).ToList();
+    private bool ShowInformationItems => EffectiveV2.OuterLayout == FormOuterLayout.SplitPanel && InformationItems.Count > 0;
+    private List<FormAuxiliaryActionDto> InformationActions => (Block.AuxiliaryActions ?? new())
+        .Where(action => ActionLayout(action).Placement == FormAuxiliaryActionPlacement.InformationPanel &&
+                         EffectiveV2.OuterLayout == FormOuterLayout.SplitPanel)
+        .OrderBy(action => action.Order)
+        .ToList();
+    private List<FormAuxiliaryActionDto> BelowFieldActions => (Block.AuxiliaryActions ?? new())
+        .Where(action => ActionLayout(action).Placement != FormAuxiliaryActionPlacement.InformationPanel ||
+                         EffectiveV2.OuterLayout != FormOuterLayout.SplitPanel)
+        .OrderBy(action => action.Order)
+        .ToList();
+    private string NameText => StyleHelper.Lang(Block.Name, Lang);
+    private string IntroductionText => StyleHelper.Lang(Block.Introduction, Lang);
+    private string SubmitLabelText => StyleHelper.Lang(Block.SubmitButtonLabel, Lang) is { Length: > 0 } value ? value : SubmitText;
+    private string FormClass => $"sc-block sc-block--form sc-form-block sc-form-block--{ShapeClass} sc-form-block--layout-{LayoutClass} sc-form-block--context-{ContextClass} sc-form-block--label-{LabelClassName} sc-form-block--align-{Design.TextAlign.ToString().ToLowerInvariant()} sc-form-block--background-{Design.BackgroundMode.ToString().ToLowerInvariant()} sc-form-block--shadow-{NormalizeCssToken(Design.Shadow)}{(Design.UseThemeDefaults ? " sc-form-block--theme" : string.Empty)}";
+    private string ShapeClass => Design.Shape switch
+    {
+        FormDesignShape.TwoColumns => "two-columns",
+        FormDesignShape.Cta => "cta",
+        _ => "stacked"
+    };
+    private string LayoutClass => EffectiveV2.OuterLayout switch
+    {
+        FormOuterLayout.SplitPanel => "split-panel",
+        FormOuterLayout.Cta => "cta",
+        _ => "standard"
+    };
+    private string ContextClass => NormalizeCssToken(Context);
+    private string LabelClassName => Design.LabelMode == FormLabelMode.InsideInputs ? "inside" : "visible";
+    private string SubmitClass => $"sc-btn sc-btn--{(Design.UseThemeDefaults ? "theme" : NormalizeCssToken(Design.ButtonStyle))} sc-form-block__submit sc-form-block__submit--{EffectiveV2.SubmitLayout.ToString().ToLowerInvariant()}";
+    private string DesignStyle => string.Join(';', new[]
+    {
+        $"--sc-form-design-width:{Math.Clamp(Design.WidthPx, FormDesignV2Policy.MinimumWidth(EffectiveV2.OuterLayout), FormDesignV2Policy.MaximumWidth(EffectiveV2.OuterLayout))}px",
+        $"--sc-form-design-height:{Design.CalculatedHeightPx}px",
+        $"--sc-form-background:{(Design.UseThemeDefaults ? "var(--theme-color-background, #fff)" : EffectiveV2.FormBackgroundColor)}",
+        $"--sc-form-text:{(Design.UseThemeDefaults ? "var(--theme-color-text, #111827)" : EffectiveV2.FormTextColor)}",
+        $"--sc-form-information-background:{(Design.UseThemeDefaults ? "var(--theme-color-primary, #001a33)" : EffectiveV2.InformationBackgroundColor)}",
+        $"--sc-form-information-text:{(Design.UseThemeDefaults ? "var(--theme-header-text, #fff)" : EffectiveV2.InformationTextColor)}",
+        $"--sc-form-split:{EffectiveV2.SplitPanelPercent}%",
+        $"--sc-form-accent:{(Design.UseThemeDefaults ? "var(--theme-color-accent, #e5c076)" : Design.AccentColor)}",
+        $"--sc-form-border:{(Design.UseThemeDefaults ? "color-mix(in srgb, var(--theme-color-text, #111827) 18%, transparent)" : Design.BorderColor)}",
+        $"--sc-form-border-width:{(Design.UseThemeDefaults ? "1px" : $"{Design.BorderWidthPx}px")}",
+        $"--sc-form-radius:{(Design.UseThemeDefaults ? "var(--theme-radius-base, 10px)" : $"{Design.BorderRadiusPx}px")}",
+        $"--sc-form-input-radius:{(Design.UseThemeDefaults ? "var(--theme-input-radius, 10px)" : "8px")}",
+        $"--sc-form-padding:{Design.PaddingPx}px",
+        $"--sc-form-gap:{Math.Clamp(Design.FieldGapPx, FormDesignV2Policy.MinimumFieldGapPx, FormDesignV2Policy.MaximumFieldGapPx)}px"
+    });
+
+    private IEnumerable<PublicFormFieldDto> FieldsForRow(FormFieldRowDto row)
+    {
+        var fields = (Block.Fields ?? new()).ToDictionary(FieldKey, StringComparer.OrdinalIgnoreCase);
+        foreach (var key in row.FieldKeys)
+            if (fields.TryGetValue(key, out var field)) yield return field;
+    }
+
+    private FormAuxiliaryActionLayoutDto ActionLayout(FormAuxiliaryActionDto action) =>
+        EffectiveV2.AuxiliaryActionLayouts.FirstOrDefault(layout =>
+            string.Equals(layout.ActionId, action.Id, StringComparison.OrdinalIgnoreCase)) ?? new FormAuxiliaryActionLayoutDto
+        {
+            ActionId = action.Id,
+            Style = FormAuxiliaryActionStyle.Theme,
+            Placement = FormAuxiliaryActionPlacement.BelowFields
+        };
+
+    private string ActionClass(FormAuxiliaryActionDto action)
+    {
+        var style = ActionLayout(action).Style;
+        var token = style == FormAuxiliaryActionStyle.Theme ? "theme" : style.ToString().ToLowerInvariant();
+        return $"sc-btn sc-btn--{token} sc-form-block__action sc-form-block__action--{token}";
+    }
+
+    private static string SafeIconClass(string? icon)
+    {
+        var value = icon?.Trim().ToLowerInvariant() ?? string.Empty;
+        return FormDesignV2Policy.IsGovernedInformationIcon(value) ? value : string.Empty;
+    }
+
+    protected override void OnParametersSet()
+    {
+        var next = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
+        {
+            var key = FieldKey(field);
+            next[key] = _data.TryGetValue(key, out var existing) ? existing : string.Empty;
+        }
+        _data = next;
+        _fieldErrors = _fieldErrors
+            .Where(error => next.ContainsKey(error.Key))
+            .ToDictionary(error => error.Key, error => error.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task Submit()
+    {
+        if (PreviewOnly || _submitting) return;
+        _submitted = false;
+        _error = false;
+        _errorMessage = null;
+        _fieldErrors.Clear();
+
+        foreach (var field in Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
+            ValidateField(field);
+        if (_fieldErrors.Count > 0) return;
+        if (OnSubmit is null) return;
+
+        _submitting = true;
+        try
+        {
+            var payload = new Dictionary<string, string>(_data, StringComparer.OrdinalIgnoreCase)
+            {
+                ["__website"] = _honeypot
+            };
+            var success = await OnSubmit(payload);
+            if (success)
+            {
+                _submitted = true;
+                _honeypot = string.Empty;
+                _fieldErrors.Clear();
+                _data = (Block.Fields ?? Enumerable.Empty<PublicFormFieldDto>())
+                    .ToDictionary(FieldKey, _ => string.Empty, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                _error = true;
+            }
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private void SetField(PublicFormFieldDto field, object? value)
+    {
+        var key = FieldKey(field);
+        _data[key] = value switch
+        {
+            bool booleanValue => booleanValue ? "true" : "false",
+            null => string.Empty,
+            _ => value.ToString() ?? string.Empty
+        };
+        ValidateField(field);
+    }
+
+    private void RevalidateIfInvalid(PublicFormFieldDto field, object? value)
+    {
+        if (_fieldErrors.ContainsKey(FieldKey(field))) SetField(field, value);
+    }
+
+    private void ValidateField(PublicFormFieldDto field)
+    {
+        var key = FieldKey(field);
+        var error = FormInputValueValidator.Validate(
+            field.Type,
+            _data.GetValueOrDefault(key),
+            field.Required,
+            (field.Options ?? new()).Select(option => option.Value).ToList());
+        if (error == FormInputValidationError.None)
+        {
+            _fieldErrors.Remove(key);
+            return;
+        }
+        _fieldErrors[key] = ValidationMessage(error, FieldLabel(field));
+    }
+
+    private string ValidationMessage(FormInputValidationError error, string label)
+    {
+        var language = Lang?.Trim().ToLowerInvariant() ?? "en";
+        if (language.StartsWith("vi", StringComparison.Ordinal))
+        {
+            return error switch
+            {
+                FormInputValidationError.Required => $"{label} là trường bắt buộc.",
+                FormInputValidationError.Email => "Nhập email đầy đủ, ví dụ ten@congty.com.",
+                FormInputValidationError.Phone => "Nhập số điện thoại hợp lệ có từ 6 đến 15 chữ số.",
+                FormInputValidationError.Number => "Chỉ nhập một số hợp lệ.",
+                FormInputValidationError.Date => "Chọn một ngày hợp lệ.",
+                FormInputValidationError.Url => "Nhập địa chỉ http hoặc https đầy đủ.",
+                FormInputValidationError.Option => "Chọn một giá trị có trong danh sách.",
+                _ => $"{label} không hợp lệ."
+            };
+        }
+        if (language.StartsWith("zh", StringComparison.Ordinal) || language.StartsWith("cn", StringComparison.Ordinal))
+        {
+            return error switch
+            {
+                FormInputValidationError.Required => $"{label}为必填项。",
+                FormInputValidationError.Email => "请输入完整的电子邮件地址，例如 name@company.com。",
+                FormInputValidationError.Phone => "请输入包含 6 到 15 位数字的有效电话号码。",
+                FormInputValidationError.Number => "请输入有效数字。",
+                FormInputValidationError.Date => "请选择有效日期。",
+                FormInputValidationError.Url => "请输入完整的 http 或 https 地址。",
+                FormInputValidationError.Option => "请从列表中选择一个值。",
+                _ => $"{label}的值无效。"
+            };
+        }
+        return error switch
+        {
+            FormInputValidationError.Required => $"{label} is required.",
+            FormInputValidationError.Email => "Enter a complete email address, such as name@company.com.",
+            FormInputValidationError.Phone => "Enter a valid phone number containing 6 to 15 digits.",
+            FormInputValidationError.Number => "Enter a valid number.",
+            FormInputValidationError.Date => "Choose a valid date.",
+            FormInputValidationError.Url => "Enter a complete http or https URL.",
+            FormInputValidationError.Option => "Choose a value from the available options.",
+            _ => $"{label} has an invalid value."
+        };
+    }
+
+    private string LabelClass(string placeholder) =>
+        FormFieldPresentationPolicy.ShouldShowLabel(Design.LabelMode, placeholder)
+            ? "sc-form-label"
+            : "sc-form-label sc-visually-hidden";
+
+    private string FieldLabel(PublicFormFieldDto field)
+    {
+        var label = StyleHelper.Lang(field.Label, Lang);
+        return string.IsNullOrWhiteSpace(label) ? FieldKey(field) : label;
+    }
+
+    private string FieldPlaceholder(PublicFormFieldDto field, string label)
+    {
+        var configured = StyleHelper.Lang(field.Placeholder, Lang);
+        return FormFieldPresentationPolicy.ResolvePlaceholder(
+            Design.LabelMode,
+            configured,
+            label,
+            field.Required);
+    }
+
+    private bool IsChecked(string key) => _data.GetValueOrDefault(key) == "true";
+    private string InputId(string key) => $"form-{NormalizeCssToken(Block.Id)}-{NormalizeCssToken(key)}";
+    private string ErrorId(string key) => $"{InputId(key)}-error";
+    private static string FieldKey(PublicFormFieldDto field) => !string.IsNullOrWhiteSpace(field.Name) ? field.Name : $"field_{field.Order}";
+    private static string FieldClass(PublicFormFieldDto field) => FormDesignPolicy.IsWideField(field.Type)
+        ? "sc-form-field sc-form-field--wide"
+        : "sc-form-field";
+
+    private string InputClass(PublicFormFieldDto field)
+    {
+        var size = FormInputTypeCatalog.NormalizeInputBoxSize(field.Type, field.InputBoxSize);
+        var baseClass = NormalizedType(field.Type) == "textarea"
+            ? $"sc-form-input sc-form-input--size-{size}"
+            : "sc-form-input";
+        return HasError(FieldKey(field)) ? $"{baseClass} sc-form-input--invalid" : baseClass;
+    }
+
+    private bool HasError(string key) => _fieldErrors.ContainsKey(key);
+    private static int? MaxLengthAttribute(PublicFormFieldDto field) => field.MaxLength <= 0 ? null : Math.Clamp(field.MaxLength, 1, FormInputTypeCatalog.MaxCharactersLimit);
+    private static string NormalizedType(string? type) => FormInputTypeCatalog.NormalizeType(type);
+    private static string InputType(string? type) => NormalizedType(type) switch
+    {
+        "tel" => "tel",
+        "number" => "text",
+        "date" => "date",
+        "url" => "url",
+        "email" => "email",
+        _ => "text"
+    };
+    private static string? InputMode(string? type) => NormalizedType(type) switch
+    {
+        "number" => "decimal",
+        "tel" => "tel",
+        "email" => "email",
+        "url" => "url",
+        _ => null
+    };
+    private static string NormalizeCssToken(string? value) => string.IsNullOrWhiteSpace(value)
+        ? "default"
+        : new string(value.Trim().ToLowerInvariant().Select(character => char.IsLetterOrDigit(character) || character == '-' ? character : '-').ToArray());
+
+    private string SubmitText => IsVietnamese ? "Gửi" : IsChinese ? "提交" : "Submit";
+    private string SubmittingText => IsVietnamese ? "Đang gửi..." : IsChinese ? "正在提交..." : "Submitting...";
+    private string SuccessText => IsVietnamese ? "Cảm ơn bạn, thông tin đã được gửi." : IsChinese ? "谢谢，您的信息已发送。" : "Thank you, your message has been sent.";
+    private string FailureText => IsVietnamese ? "Đã xảy ra lỗi. Vui lòng thử lại." : IsChinese ? "出现错误，请重试。" : "Something went wrong. Please try again.";
+    private bool IsVietnamese => Lang.StartsWith("vi", StringComparison.OrdinalIgnoreCase);
+    private bool IsChinese => Lang.StartsWith("zh", StringComparison.OrdinalIgnoreCase) || Lang.StartsWith("cn", StringComparison.OrdinalIgnoreCase);
+}

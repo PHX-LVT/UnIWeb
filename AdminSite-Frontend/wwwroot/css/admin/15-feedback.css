@@ -57,3 +57,52 @@
 .blazored-toast button.close:hover {
     color: #991b1b !important;
 }
+
+.admin-inline-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 1.5rem;
+    margin-left: 0.5rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.admin-inline-status__dot {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.admin-inline-status--success {
+    background: #ecfdf5;
+    color: #166534;
+}
+
+.admin-inline-status--info {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.admin-inline-status--warning {
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.admin-inline-status--error {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.ez-canvas__feedback-row {
+    display: flex;
+    justify-content: flex-end;
+    min-height: 1.5rem;
+    margin: -0.35rem 0 0.45rem;
+    padding: 0 0.25rem;
+}

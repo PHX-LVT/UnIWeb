@@ -51,6 +51,7 @@ else if (_pageDto is not null)
 {
     <div class="@(IsRuntimePreviewMode ? null : "sc-authoring-preview")">
         <PageRenderer @key="GetRequestKey()" Page="_pageDto" Lang="@_lang" ShowInvisible="true" />
+        <AdminPreviewFormModalHost Definitions="@_formDefinitions.Values.ToList()" Lang="@_lang" />
     </div>
 }
 else
@@ -125,7 +126,7 @@ else
             await Auth.InitializeAsync();
             if (!Auth.IsAuthenticated)
             {
-                Nav.NavigateTo("/login");
+                Nav.NavigateTo("login", forceLoad: true);
                 return;
             }
 
@@ -162,9 +163,9 @@ else
                     .ToList()
             };
         }
-        catch (Exception ex)
+        catch
         {
-            _error = ex.Message;
+            _error = "Preview could not be loaded.";
         }
         finally
         {
@@ -565,10 +566,17 @@ else
             "form" => new PublicFormBlockDto
             {
                 FormDefinitionId = b.FormDefinitionId,
+                FormDefinitionAvailable = ResolveFormDefinition(b) is not null,
+                FormScale = Math.Clamp(b.FormScale, FormBlockLayoutPolicy.MinimumScale, FormBlockLayoutPolicy.MaximumScale),
+                DefaultWidthPx = b.FormDefaultWidthPx,
+                DefaultWidthPercent = b.FormDefaultWidthPercent,
+                DefaultHeightPx = b.FormDefaultHeightPx,
                 Name = ResolveFormDefinition(b)?.Name,
                 Introduction = ResolveFormDefinition(b)?.Introduction,
-                FormLayoutMode = ResolveFormDefinition(b)?.Layout == FormLayoutModel.TwoColumns ? "two-columns" : "stacked",
-                SubmitButtonLabel = ResolveFormDefinition(b)?.SubmitButtonLabel ?? b.SubmitButtonLabel,
+                InformationItems = ResolveFormDefinition(b)?.InformationItems ?? new(),
+                AuxiliaryActions = ResolveFormDefinition(b)?.AuxiliaryActions ?? new(),
+                Design = MapFormDesign(ResolveFormDefinition(b)?.Design),
+                SubmitButtonLabel = ResolveFormDefinition(b)?.SubmitButtonLabel,
                 Fields = MapPreviewFormFields(b)
             },
             "card" => new PublicCardBlockDto
@@ -683,6 +691,34 @@ else
             ? definition
             : null;
 
+    private static FormDesignSettingsDto MapFormDesign(FormDesignSettingsModel? design)
+    {
+        design ??= new FormDesignSettingsModel();
+        return new FormDesignSettingsDto
+        {
+            UseThemeDefaults = design.UseThemeDefaults,
+            SchemaVersion = design.SchemaVersion,
+            Shape = (FormDesignShape)(int)design.Shape,
+            WidthPx = design.WidthPx,
+            CalculatedHeightPx = design.CalculatedHeightPx,
+            BackgroundMode = (FormDesignBackgroundMode)(int)design.BackgroundMode,
+            BackgroundColor = design.BackgroundColor,
+            TextColor = design.TextColor,
+            AccentColor = design.AccentColor,
+            BorderColor = design.BorderColor,
+            BorderWidthPx = design.BorderWidthPx,
+            BorderRadiusPx = design.BorderRadiusPx,
+            Shadow = design.Shadow,
+            PaddingPx = design.PaddingPx,
+            FieldGapPx = design.FieldGapPx,
+            TextAlign = (FormDesignTextAlign)(int)design.TextAlign,
+            LabelMode = (FormLabelMode)(int)design.LabelMode,
+            ButtonStyle = design.ButtonStyle,
+            ButtonWidth = (FormDesignButtonWidth)(int)design.ButtonWidth,
+            V2 = design.V2
+        };
+    }
+
     private List<PublicFormFieldDto> MapPreviewFormFields(BlockModel block)
     {
         var definition = ResolveFormDefinition(block);
@@ -707,22 +743,7 @@ else
             }).ToList();
         }
 
-        return block.Fields?.Select(field => new PublicFormFieldDto
-        {
-            Name = field.Name ?? field.Id,
-            Type = field.FieldType ?? "text",
-            Label = field.Label ?? new(),
-            Required = field.Required,
-            MaxLength = FormInputTypeCatalog.NormalizeMaxCharacters(field.FieldType, 0),
-            InputBoxSize = 1,
-            Options = (field.Options ?? new()).Select((option, index) => new PublicFormFieldOptionDto
-            {
-                Value = option,
-                Label = new Dictionary<string, string> { ["en"] = option },
-                Order = index
-            }).ToList(),
-            Order = field.Order
-        }).ToList() ?? new();
+        return new();
     }
 
     private static PublicBlockLayoutDto MapBlockLayout(BlockLayoutModel? layout) => new()
@@ -759,6 +780,11 @@ else
         BackgroundColor = value?.BackgroundColor ?? legacyLayout?.BackgroundColor,
         TextColor = value?.TextColor,
         TextAlign = value?.TextAlign ?? "inherit",
+        FontSizePx = value?.FontSizePx,
+        FontWeight = value?.FontWeight,
+        FontFamily = value?.FontFamily,
+        LineHeight = value?.LineHeight,
+        LetterSpacingPx = value?.LetterSpacingPx,
         Opacity = value?.Opacity ?? 1,
         BorderColor = value?.BorderColor,
         BorderWidth = value?.BorderWidth ?? 0,

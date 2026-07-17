@@ -1,0 +1,235 @@
+@page "/login"
+@model AdminSite.Pages.AdminLoginModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Model.Text["pageTitle"]</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/admin/17-login.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="login-page" style="@Model.LoginAppearanceCss">
+        <div class="login-page__media">
+            <video class="login-page__video"
+                   autoplay
+                   muted
+                   loop
+                   playsinline
+                   preload="metadata"
+                   aria-hidden="true"
+                   tabindex="-1">
+                <source src="~/media/login-background.mp4" type="video/mp4" />
+            </video>
+            <div class="login-page__overlay" aria-hidden="true"></div>
+
+            <div class="login-brand">
+                <img class="login-brand__logo"
+                     src="~/media/ui-logistic-logo.svg"
+                     asp-append-version="true"
+                     alt=""
+                     aria-hidden="true" />
+                <span class="login-brand__name">U&amp;I Logistic</span>
+            </div>
+        </div>
+
+        <div class="login-page__panel">
+            <div class="login-language">
+                <label for="login-language-select" data-login-text="language">@Model.Text["language"]</label>
+                <select id="login-language-select"
+                        class="login-language__select"
+                        data-login-language-select
+                        aria-label="@Model.Text["language"]">
+                    @foreach (var lang in Model.LanguageOptions)
+                    {
+                        <option value="@lang.Code"
+                                data-direction="@lang.Direction"
+                                selected="@(lang.Code == Model.CurrentLanguage)">
+                            @lang.NativeName
+                        </option>
+                    }
+                </select>
+            </div>
+
+          <div class="login-panel-shell">
+            <h1 class="login-page-title" data-login-text="mainTitle">@Model.Text["mainTitle"]</h1>
+
+            <div class="login-card">
+                <div class="login-header">
+                    <h2 data-login-text="greeting">@Model.Text["greeting"]</h2>
+                    <p data-login-text="subtitle">@Model.Text["subtitle"]</p>
+                </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+            {
+                <div class="alert alert-info" data-login-status-reason="@Model.StatusReason">
+                    <i class="fas fa-info-circle"></i>
+                    <span>@Model.StatusMessage</span>
+                </div>
+            }
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+            }
+
+            <form method="post" autocomplete="off" data-login-credential-form>
+                <input asp-for="ReturnUrl" type="hidden" />
+                <input asp-for="LanguageCode" type="hidden" data-login-language-input />
+
+                <div class="form-group">
+                    <label for="Input_Email" class="form-label required" data-login-text="email">@Model.Text["email"]</label>
+                    <input asp-for="Input.Email"
+                           class="form-control"
+                           type="email"
+                           autocomplete="off"
+                           autocapitalize="none"
+                           spellcheck="false"
+                           data-login-email
+                           autofocus />
+                    <span asp-validation-for="Input.Email" class="text-danger"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="Input_Password" class="form-label required" data-login-text="password">@Model.Text["password"]</label>
+                    <input asp-for="Input.Password"
+                           class="form-control"
+                           type="password"
+                           autocomplete="off"
+                           data-login-password />
+                    <span asp-validation-for="Input.Password" class="text-danger"></span>
+                </div>
+
+                <label class="login-remember" for="Input_RememberMe">
+                    <input asp-for="Input.RememberMe" data-login-remember />
+                    <span data-login-text="rememberMe">@Model.Text["rememberMe"]</span>
+                </label>
+
+                <button class="btn-admin btn-primary login-submit" type="submit">
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span data-login-text="submit">@Model.Text["submit"]</span>
+                </button>
+            </form>
+            </div>
+          </div>
+        </div>
+    </div>
+
+    <script>
+        window.adminLoginLanguage = {
+            fallbackLanguage: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.FallbackLanguage)),
+            translations: @Html.Raw(Model.LoginTranslationsJson)
+        };
+
+        (function () {
+            const storageKey = "admin-lang";
+            const state = window.adminLoginLanguage || {};
+            const translations = state.translations || {};
+            const fallbackLanguage = (state.fallbackLanguage || "en").toLowerCase();
+            const select = document.querySelector("[data-login-language-select]");
+            const hiddenInput = document.querySelector("[data-login-language-input]");
+
+            function readStoredLanguage() {
+                let raw = "";
+                try {
+                    raw = localStorage.getItem(storageKey) || "";
+                    if (!raw) return "";
+                    const parsed = JSON.parse(raw);
+                    return typeof parsed === "string" ? parsed : "";
+                } catch {
+                    return raw.replace(/^"|"$/g, "");
+                }
+            }
+
+            function hasOption(code) {
+                if (!select || !code) return false;
+                return Array.from(select.options).some(option => option.value.toLowerCase() === code.toLowerCase());
+            }
+
+            function normalizeLanguage(code) {
+                const requested = (code || "").trim().toLowerCase();
+                if (hasOption(requested)) {
+                    return Array.from(select.options).find(option => option.value.toLowerCase() === requested).value;
+                }
+                if (hasOption(fallbackLanguage)) return fallbackLanguage;
+                return select && select.options.length > 0 ? select.options[0].value : "en";
+            }
+
+            function textFor(key, code) {
+                const language = translations[code] || {};
+                const fallback = translations[fallbackLanguage] || translations.en || {};
+                const english = translations.en || {};
+                return language[key] || fallback[key] || english[key] || key;
+            }
+
+            function persistLanguage(code) {
+                if (hiddenInput) hiddenInput.value = code;
+                try { localStorage.setItem(storageKey, JSON.stringify(code)); } catch { }
+            }
+
+            function applyLanguage(code) {
+                const normalized = normalizeLanguage(code);
+                const selectedOption = select
+                    ? Array.from(select.options).find(option => option.value === normalized)
+                    : null;
+
+                if (select) select.value = normalized;
+                if (hiddenInput) hiddenInput.value = normalized;
+                document.documentElement.lang = normalized;
+                document.documentElement.dir = selectedOption?.dataset.direction || "ltr";
+                document.title = textFor("pageTitle", normalized);
+
+                document.querySelectorAll("[data-login-text]").forEach(element => {
+                    element.textContent = textFor(element.dataset.loginText, normalized);
+                });
+
+                document.querySelectorAll("[data-login-status-reason]").forEach(element => {
+                    const reason = element.dataset.loginStatusReason;
+                    const textNode = element.querySelector("span") || element;
+                    if (reason) textNode.textContent = textFor(reason, normalized);
+                });
+
+                persistLanguage(normalized);
+            }
+
+            const initialLanguage = readStoredLanguage() || hiddenInput?.value || fallbackLanguage;
+            applyLanguage(initialLanguage);
+            select?.addEventListener("change", event => applyLanguage(event.target.value));
+        })();
+
+        // One-release migration cleanup. Authentication no longer reads or writes
+        // browser storage; remove the legacy bearer-token container only.
+        try { localStorage.removeItem("admin_session"); } catch { }
+
+        (function () {
+            const form = document.querySelector("[data-login-credential-form]");
+            const email = document.querySelector("[data-login-email]");
+            const password = document.querySelector("[data-login-password]");
+            const remember = document.querySelector("[data-login-remember]");
+
+            function applyCredentialPreference() {
+                const allowRemembering = remember?.checked === true;
+                if (form) form.autocomplete = allowRemembering ? "on" : "off";
+                if (email) email.autocomplete = allowRemembering ? "username" : "off";
+                if (password) password.autocomplete = allowRemembering ? "current-password" : "off";
+
+                if (!allowRemembering && navigator.credentials?.preventSilentAccess) {
+                    navigator.credentials.preventSilentAccess().catch(() => { });
+                }
+            }
+
+            applyCredentialPreference();
+            remember?.addEventListener("change", applyCredentialPreference);
+            form?.addEventListener("submit", applyCredentialPreference);
+        })();
+    </script>
+</body>
+</html>

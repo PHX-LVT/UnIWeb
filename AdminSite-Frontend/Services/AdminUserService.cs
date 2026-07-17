@@ -33,6 +33,24 @@ namespace AdminSite.Services
         public Task<ApiResponse<AdminUserResponse>> DeleteUserAsync(string id) =>
             _http.DeleteAsync<AdminUserResponse>($"api/admin/users/{id}");
 
+        public Task<ApiResponse<List<AdminRoleResponse>>> GetRolesAsync() =>
+            _http.GetAsync<List<AdminRoleResponse>>("api/admin/roles");
+
+        public Task<ApiResponse<AdminRoleResponse>> CreateRoleAsync(AdminRoleCreateRequest request) =>
+            _http.PostAsync<AdminRoleResponse>("api/admin/roles", request);
+
+        public Task<ApiResponse<AdminRoleImpactResponse>> GetRoleImpactAsync(string id, AdminRoleUpdateRequest request) =>
+            _http.PostAsync<AdminRoleImpactResponse>($"api/admin/roles/{id}/impact", request);
+
+        public Task<ApiResponse<AdminRoleResponse>> UpdateRoleAsync(string id, AdminRoleUpdateRequest request) =>
+            _http.PutAsync<AdminRoleResponse>($"api/admin/roles/{id}", request);
+
+        public Task<ApiResponse<long>> DeleteRoleAsync(string id, string? replacementRoleId) =>
+            _http.PostAsync<long>($"api/admin/roles/{id}/delete", new AdminRoleDeleteRequest
+            {
+                ReplacementRoleId = replacementRoleId
+            });
+
         public Task<ApiResponse<AdminPagedResponse<AdminSessionResponse>>> GetSessionsAsync(int page, int pageSize, string? adminId = null)
         {
             var query = $"?page={page}&pageSize={pageSize}";

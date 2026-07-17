@@ -5,7 +5,7 @@
         public string Secret { get; set; } = string.Empty;
         public string Issuer { get; set; } = "MySiteAPI";       // default if not in config
         public string Audience { get; set; } = "MySiteClients"; // default if not in config
-        public int ExpiryHour { get; set; } = 1;
+        public int ExpiryHour { get; set; } = 4;
     }
 
     public class MongoDbSettings

@@ -1,4 +1,4 @@
-﻿@inject AdminSectionService SectionService
+@inject AdminSectionService SectionService
 @inject IHttpService Http
 
 <div class="alert alert-info">
@@ -49,7 +49,7 @@
                 Content = _content,
                 Visible = Section.Visible
             });
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

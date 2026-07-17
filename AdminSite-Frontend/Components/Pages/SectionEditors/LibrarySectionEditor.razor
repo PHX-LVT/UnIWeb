@@ -283,7 +283,7 @@
                 SortMode = _sortMode
             });
 
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success)
             {
                 ApplyLocalSectionState();

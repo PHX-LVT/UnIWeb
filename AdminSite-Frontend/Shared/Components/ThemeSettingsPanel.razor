@@ -1,5 +1,6 @@
 @using AdminSite.Models
 @using AdminSite.Services
+@using Contracts.Global
 @using DevExpress.Blazor
 @using Microsoft.JSInterop
 @inject ThemeService ThemeService
@@ -22,6 +23,28 @@ else if (_model is not null)
     <div class="theme-settings-panel">
         <section class="theme-settings-panel__section">
             <h3>@T("ThemeText")</h3>
+            <div class="theme-settings-panel__font-grid">
+                <label class="theme-settings-panel__font-field">
+                    <span>@T("BodyFont")</span>
+                    <FontPicker Value="@_model.FontBody"
+                                ValueChanged="SetBodyFont"
+                                AriaLabel="@T("BodyFont")"
+                                CssClass="theme-settings-panel__font-picker"
+                                PickerId="theme-body-font"
+                                OpenPickerId="@_openFontPickerId"
+                                OpenPickerIdChanged="SetOpenFontPicker" />
+                </label>
+                <label class="theme-settings-panel__font-field">
+                    <span>@T("HeadingFont")</span>
+                    <FontPicker Value="@_model.FontHeading"
+                                ValueChanged="SetHeadingFont"
+                                AriaLabel="@T("HeadingFont")"
+                                CssClass="theme-settings-panel__font-picker"
+                                PickerId="theme-heading-font"
+                                OpenPickerId="@_openFontPickerId"
+                                OpenPickerIdChanged="SetOpenFontPicker" />
+                </label>
+            </div>
             @SliderRow("EyebrowTextSize", EyebrowTextSizePx, 10, 24, "px", v => EyebrowTextSizePx = v)
             @SliderRow("HeadingTextSize", HeadingTextSizePx, 24, 72, "px", v => HeadingTextSizePx = v)
             @SliderRow("SubheadingTextSize", SubheadingTextSizePx, 12, 32, "px", v => SubheadingTextSizePx = v)
@@ -40,7 +63,26 @@ else if (_model is not null)
 
         <section class="theme-settings-panel__section">
             <h3>@T("Buttons")</h3>
-            @SliderRow("ButtonPaddingRadius", ButtonSizePercent, 80, 140, "%", v => ButtonSizePercent = v)
+            <label>
+                <span>@T("DefaultButtonStyle")</span>
+                <select class="form-control theme-settings-panel__select" value="@ButtonStyleValue" @onchange="ChangeButtonStyle">
+                    @foreach (var style in _buttonStyles)
+                    {
+                        <option value="@style">@T(ButtonStyleLabelKey(style))</option>
+                    }
+                </select>
+            </label>
+            <label>
+                <span>@T("DefaultButtonColor")</span>
+                <select class="form-control theme-settings-panel__select" value="@ButtonColorRoleValue" @onchange="ChangeButtonColorRole">
+                    @foreach (var role in _buttonColorRoles)
+                    {
+                        <option value="@role">@T(ButtonColorRoleLabelKey(role))</option>
+                    }
+                </select>
+            </label>
+            @SliderRow("ButtonSize", ButtonSizePercent, 80, 140, "%", v => ButtonSizePercent = v)
+            @SliderRow("ButtonRadius", ButtonRadiusPx, 0, 40, "px", v => ButtonRadiusPx = v)
             @SliderRow("ButtonLabelTextSize", ButtonTextSizePx, 11, 22, "px", v => ButtonTextSizePx = v)
         </section>
 
@@ -187,8 +229,11 @@ else if (_model is not null)
     private bool _loading = true;
     private bool _saving;
     private bool _resetting;
+    private string? _openFontPickerId;
 
     private readonly List<string> _animations = new() { "off", "subtle", "normal", "expressive" };
+    private readonly List<string> _buttonStyles = new() { "filled", "outline", "ghost" };
+    private readonly List<string> _buttonColorRoles = new() { "accent", "primary" };
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
@@ -239,6 +284,12 @@ else if (_model is not null)
         set => SetPx(v => _model!.ButtonTextSize = v, value, 11, 22);
     }
 
+    private int ButtonRadiusPx
+    {
+        get => ParsePx(_model?.ButtonRadius, 6);
+        set => SetPx(v => _model!.ButtonRadius = v, value, 0, 40);
+    }
+
     private int ButtonSizePercent
     {
         get => (int)Math.Round(ParseScale(_model?.ButtonSizeScale, 1) * 100);
@@ -262,9 +313,67 @@ else if (_model is not null)
         }
     }
 
+    private string ButtonStyleValue
+    {
+        get => NormalizeChoice(_model?.ButtonStyle, "filled", "outline", "ghost");
+        set
+        {
+            if (_model is null) return;
+            _model.ButtonStyle = NormalizeChoice(value, "filled", "outline", "ghost");
+            ApplyLivePreview();
+        }
+    }
+
+    private string ButtonColorRoleValue
+    {
+        get => NormalizeChoice(_model?.ButtonColorRole, "accent", "primary");
+        set
+        {
+            if (_model is null) return;
+            _model.ButtonColorRole = NormalizeChoice(value, "accent", "primary");
+            ApplyLivePreview();
+        }
+    }
+
+    private void ChangeButtonStyle(ChangeEventArgs e) =>
+        ButtonStyleValue = e.Value?.ToString() ?? "filled";
+
+    private void ChangeButtonColorRole(ChangeEventArgs e) =>
+        ButtonColorRoleValue = e.Value?.ToString() ?? "accent";
+
     private void ChangeAnimationSpeed(ChangeEventArgs e)
     {
         AnimationSpeedValue = e.Value?.ToString() ?? "normal";
+    }
+
+    private Task SetBodyFont(string? value)
+    {
+        if (_model is not null)
+        {
+            _model.FontBody = ThemeFontCatalog.NormalizeNameOrDefault(value);
+            _openFontPickerId = null;
+            ApplyLivePreview();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task SetHeadingFont(string? value)
+    {
+        if (_model is not null)
+        {
+            _model.FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(value);
+            _openFontPickerId = null;
+            ApplyLivePreview();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task SetOpenFontPicker(string? pickerId)
+    {
+        _openFontPickerId = pickerId;
+        return Task.CompletedTask;
     }
 
     protected override async Task OnInitializedAsync()
@@ -288,7 +397,7 @@ else if (_model is not null)
             _model = Normalize(res.Data);
         }
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _saving = false;
 
         try
@@ -318,7 +427,7 @@ else if (_model is not null)
             ApplyLivePreview();
         }
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _resetting = false;
 
         try
@@ -406,8 +515,8 @@ else if (_model is not null)
 
     private static ThemeModel Normalize(ThemeModel model)
     {
-        model.FontBody = string.IsNullOrWhiteSpace(model.FontBody) ? "Inter" : model.FontBody;
-        model.FontHeading = string.IsNullOrWhiteSpace(model.FontHeading) ? "Inter" : model.FontHeading;
+        model.FontBody = ThemeFontCatalog.NormalizeNameOrDefault(model.FontBody);
+        model.FontHeading = ThemeFontCatalog.NormalizeNameOrDefault(model.FontHeading);
         model.TextSizeEyebrow = $"{ParsePx(model.TextSizeEyebrow, 13)}px";
         model.TextSizeHeading = $"{ParsePx(model.TextSizeHeading, 40)}px";
         model.TextSizeSubheading = $"{ParsePx(model.TextSizeSubheading, 17)}px";
@@ -420,6 +529,9 @@ else if (_model is not null)
         model.ColorBackground = NormalizeColor(model.ColorBackground, "#ffffff");
         model.ColorText = NormalizeColor(model.ColorText, "#111827");
         model.BorderRadius = $"{ParsePx(model.BorderRadius, 10)}px";
+        model.ButtonStyle = NormalizeChoice(model.ButtonStyle, "filled", "outline", "ghost");
+        model.ButtonColorRole = NormalizeChoice(model.ButtonColorRole, "accent", "primary");
+        model.ButtonRadius = $"{ParsePx(model.ButtonRadius, 6)}px";
         model.ButtonSizeScale = ParseScale(model.ButtonSizeScale, 1).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
         model.ButtonTextSize = $"{ParsePx(model.ButtonTextSize, 15)}px";
         model.AnimationSpeed = string.IsNullOrWhiteSpace(model.AnimationSpeed) ? "normal" : model.AnimationSpeed;
@@ -444,6 +556,9 @@ else if (_model is not null)
         ColorBackground = "#ffffff",
         ColorText = "#111827",
         BorderRadius = "10px",
+        ButtonStyle = "filled",
+        ButtonColorRole = "accent",
+        ButtonRadius = "6px",
         ButtonSizeScale = "1",
         ButtonTextSize = "15px",
         AnimationsEnabled = true,
@@ -536,4 +651,23 @@ else if (_model is not null)
         "expressive" => "AnimationExpressive",
         _ => "AnimationNormal"
     };
+
+    private static string ButtonStyleLabelKey(string value) => value.ToLowerInvariant() switch
+    {
+        "outline" => "Outline",
+        "ghost" => "Ghost",
+        _ => "Filled"
+    };
+
+    private static string ButtonColorRoleLabelKey(string value) => value.ToLowerInvariant() switch
+    {
+        "primary" => "PrimaryColor",
+        _ => "AccentColor"
+    };
+
+    private static string NormalizeChoice(string? value, string fallback, params string[] allowed)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return allowed.Contains(normalized, StringComparer.Ordinal) ? normalized! : fallback;
+    }
 }

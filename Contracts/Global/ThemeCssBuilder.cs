@@ -6,6 +6,18 @@ namespace Contracts.Global
     public static class ThemeCssBuilder
     {
         public static string Build(PublicTheme? theme)
+            => BuildForSelector(theme, ":root");
+
+        public static string BuildScoped(PublicTheme? theme, string selector)
+        {
+            selector = selector?.Trim() ?? string.Empty;
+            if (selector.Length == 0 || selector.IndexOfAny(new[] { '{', '}', ';' }) >= 0)
+                throw new ArgumentException("A safe CSS selector is required.", nameof(selector));
+
+            return BuildForSelector(theme, selector);
+        }
+
+        private static string BuildForSelector(PublicTheme? theme, string selector)
         {
             theme ??= new PublicTheme();
 
@@ -23,6 +35,17 @@ namespace Contracts.Global
             var itemTitleText = Size(theme.TextSizeItemTitle, "20px");
             var buttonScale = Number(theme.ButtonSizeScale, "1");
             var buttonText = Size(theme.ButtonTextSize, "15px");
+            var buttonRadius = Size(theme.ButtonRadius, "6px");
+            var buttonStyle = Choice(theme.ButtonStyle, "filled", "outline", "ghost");
+            var buttonRole = Choice(theme.ButtonColorRole, "accent", "primary");
+            var buttonColor = buttonRole == "primary" ? primary : accent;
+            var buttonContrast = ContrastText(buttonColor);
+            var buttonBackground = buttonStyle == "filled" ? buttonColor : "transparent";
+            var buttonForeground = buttonStyle == "filled" ? buttonContrast : buttonColor;
+            var buttonBorder = buttonStyle == "ghost" ? "transparent" : buttonColor;
+            var buttonBackgroundImage = buttonStyle == "filled"
+                ? $"linear-gradient(110deg, color-mix(in srgb, {buttonColor} 76%, #000 24%) 0%, {buttonColor} 48%, color-mix(in srgb, {buttonColor} 78%, #fff 22%) 100%)"
+                : "none";
             var spacingScale = Number(theme.SpacingScale, "1");
             var motionDuration = Motion(theme.AnimationsEnabled, theme.AnimationSpeed);
             var motionEnabled = theme.AnimationsEnabled &&
@@ -35,9 +58,9 @@ namespace Contracts.Global
             var padXl = $"calc(200px * {spacingScale})";
 
             var css = new StringBuilder();
-            css.AppendLine(":root {");
-            css.AppendLine($"    --theme-font-body: '{EscapeFont(theme.FontBody, "Inter")}', sans-serif;");
-            css.AppendLine($"    --theme-font-heading: '{EscapeFont(theme.FontHeading, "Inter")}', sans-serif;");
+            css.AppendLine($"{selector} {{");
+            css.AppendLine($"    --theme-font-body: {ThemeFontCatalog.CssStackOrDefault(theme.FontBody)};");
+            css.AppendLine($"    --theme-font-heading: {ThemeFontCatalog.CssStackOrDefault(theme.FontHeading)};");
             css.AppendLine($"    --theme-text-base: {baseText};");
             css.AppendLine($"    --theme-text-eyebrow: {eyebrowText};");
             css.AppendLine($"    --theme-text-heading: {headingText};");
@@ -52,6 +75,17 @@ namespace Contracts.Global
             css.AppendLine($"    --theme-radius-base: {radius};");
             css.AppendLine($"    --theme-button-size-scale: {buttonScale};");
             css.AppendLine($"    --theme-button-text-size: {buttonText};");
+            css.AppendLine($"    --theme-button-style: {buttonStyle};");
+            css.AppendLine($"    --theme-button-color-role: {buttonRole};");
+            css.AppendLine($"    --theme-button-background: {buttonBackground};");
+            css.AppendLine($"    --theme-button-background-image: {buttonBackgroundImage};");
+            css.AppendLine($"    --theme-button-color: {buttonForeground};");
+            css.AppendLine($"    --theme-button-border-color: {buttonBorder};");
+            css.AppendLine($"    --theme-button-hover-background: {buttonColor};");
+            css.AppendLine($"    --theme-button-hover-background-image: {buttonBackgroundImage};");
+            css.AppendLine($"    --theme-button-hover-color: {buttonContrast};");
+            css.AppendLine($"    --theme-button-hover-lift: {(motionEnabled ? "-2px" : "0px")};");
+            css.AppendLine($"    --theme-button-press-scale: {(motionEnabled ? "0.985" : "1")};");
             css.AppendLine($"    --theme-button-padding-y: calc(12px * {buttonScale});");
             css.AppendLine($"    --theme-button-padding-x: calc(22px * {buttonScale});");
             css.AppendLine($"    --theme-motion-duration: {motionDuration};");
@@ -62,7 +96,7 @@ namespace Contracts.Global
             css.AppendLine($"    --theme-section-padding-lg: {padLarge};");
             css.AppendLine($"    --theme-section-padding-xl: {padXl};");
             css.AppendLine($"    --theme-card-radius: {radius};");
-            css.AppendLine($"    --theme-button-radius: calc(6px * {buttonScale});");
+            css.AppendLine($"    --theme-button-radius: {buttonRadius};");
             css.AppendLine($"    --theme-input-radius: {radius};");
             css.AppendLine("    --theme-card-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);");
             css.AppendLine("    --theme-card-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.12);");
@@ -99,12 +133,6 @@ namespace Contracts.Global
             css.AppendLine("    --transition: var(--theme-motion-duration) ease;");
             css.AppendLine("}");
             return css.ToString();
-        }
-
-        private static string EscapeFont(string? value, string fallback)
-        {
-            var font = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-            return font.Replace("\\", string.Empty, StringComparison.Ordinal).Replace("'", string.Empty, StringComparison.Ordinal);
         }
 
         private static string Color(string? value, string fallback)
@@ -146,6 +174,14 @@ namespace Contracts.Global
                     => Math.Clamp(n, 0.5, 2).ToString("0.##", CultureInfo.InvariantCulture),
                 _ => fallback
             };
+        }
+
+        private static string Choice(string? value, string fallback, params string[] allowed)
+        {
+            var normalized = value?.Trim().ToLowerInvariant();
+            return string.Equals(normalized, fallback, StringComparison.Ordinal) || allowed.Contains(normalized, StringComparer.Ordinal)
+                ? normalized!
+                : fallback;
         }
 
         private static string Motion(bool enabled, string? speed)

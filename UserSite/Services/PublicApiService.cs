@@ -3,6 +3,7 @@ using System.Text.Json;
 using Contracts.Api;
 using Contracts.Public;
 using Contracts.Global;
+using Contracts.Forms;
 
 
 namespace UserSite.Services
@@ -159,6 +160,65 @@ namespace UserSite.Services
                 return res.IsSuccessStatusCode;
             }
             catch { return false; }
+        }
+
+        public async Task<FormDefinitionResponse?> GetFormDefinitionByIdAsync(string id)
+        {
+            try
+            {
+                var result = await _http.GetFromJsonAsync<ApiResponse<FormDefinitionResponse>>(
+                    $"api/public/forms/by-id/{Uri.EscapeDataString(id)}", _json);
+                return result?.Data;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load public form definition {FormDefinitionId}.", id);
+                return null;
+            }
+        }
+
+        public async Task<FormDefinitionResponse?> GetFormDefinitionByKeyAsync(string key)
+        {
+            try
+            {
+                var result = await _http.GetFromJsonAsync<ApiResponse<FormDefinitionResponse>>(
+                    $"api/public/forms/{Uri.EscapeDataString(key)}", _json);
+                return result?.Data;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load public form definition {FormKey}.", key);
+                return null;
+            }
+        }
+
+        public async Task<bool> SubmitDefinitionFormAsync(
+            string formKey,
+            Dictionary<string, string> data,
+            string language,
+            string sourcePage)
+        {
+            try
+            {
+                var payload = new Dictionary<string, string>(data, StringComparer.OrdinalIgnoreCase);
+                var honeypot = payload.GetValueOrDefault("__website") ?? string.Empty;
+                payload.Remove("__website");
+                var response = await _http.PostAsJsonAsync(
+                    $"api/public/forms/{Uri.EscapeDataString(formKey)}/submit",
+                    new PublicFormSubmitRequest
+                    {
+                        Data = payload,
+                        Language = language,
+                        SourcePage = sourcePage,
+                        Honeypot = honeypot
+                    });
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to submit public form definition {FormKey}.", formKey);
+                return false;
+            }
         }
 
         // -- Private response wrappers -------------------------

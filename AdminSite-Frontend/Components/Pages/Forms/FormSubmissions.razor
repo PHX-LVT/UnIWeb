@@ -414,7 +414,7 @@ else
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
-        _hasAccess = Auth.CanViewFormSubmissions;
+        _hasAccess = Auth.CanAccessFormSubmissions;
         if (!_hasAccess)
         {
             _loading = false;
@@ -448,15 +448,15 @@ else
 
         if (!submissions.Success)
         {
-            Http.Toast(submissions.Message, submissions.StatusCode);
+            Http.Notify(submissions.Message, submissions.StatusCode);
             if (submissions.StatusCode is 401 or 403)
                 _hasAccess = false;
         }
 
         if (!definitions.Success)
-            Http.Toast(definitions.Message, definitions.StatusCode);
+            Http.Notify(definitions.Message, definitions.StatusCode);
         if (!assignees.Success)
-            Http.Toast(assignees.Message, assignees.StatusCode);
+            Http.Notify(assignees.Message, assignees.StatusCode);
 
         _submissions = submissions.Data ?? new();
         _filteredSubmissions = _submissions;
@@ -534,7 +534,7 @@ else
             }
             else
             {
-                Http.Toast(result.Message, result.StatusCode);
+                Http.Notify(result.Message, result.StatusCode);
             }
         }
         finally
@@ -566,14 +566,14 @@ else
     private async Task BulkStatus(FormSubmissionStatusModel status)
     {
         var res = await FormService.BulkStatusAsync(_selectedIds.ToList(), status);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         await LoadAsync(false);
     }
 
     private async Task BulkDelete()
     {
         var res = await FormService.BulkDeleteAsync(_selectedIds.ToList());
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         await LoadAsync(false);
     }
 
@@ -587,7 +587,7 @@ else
             return;
         }
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         _detail = Clone(sub);
     }
 
@@ -602,7 +602,7 @@ else
             InternalNotes = _detail.InternalNotes,
             AssignedToAdminId = string.IsNullOrWhiteSpace(_detail.AssignedToAdminId) ? null : _detail.AssignedToAdminId
         });
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success && res.Data is not null)
             UpsertSubmission(res.Data);
         _detail = null;

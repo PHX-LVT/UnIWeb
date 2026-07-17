@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Archived generator for the dated June 26, 2026 Word technical guides.
+# It is retained for history only and must not regenerate current handoff docs.
 from __future__ import annotations
 
 from pathlib import Path

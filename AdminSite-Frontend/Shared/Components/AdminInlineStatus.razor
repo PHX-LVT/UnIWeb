@@ -1,0 +1,52 @@
+@using AdminSite.Services.Notifications
+@inject IAdminNotificationService Notifications
+@implements IDisposable
+
+@if (_status is not null)
+{
+    <span class="@CssClass" role="status" aria-live="polite">
+        <span class="admin-inline-status__dot" aria-hidden="true"></span>
+        <span>@_status.Message</span>
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired] public string TargetId { get; set; } = string.Empty;
+
+    private AdminInlineFeedbackState? _status;
+
+    protected override void OnInitialized()
+    {
+        Notifications.InlineFeedbackChanged += HandleChanged;
+        Refresh();
+    }
+
+    protected override void OnParametersSet() => Refresh();
+
+    private void HandleChanged() => InvokeAsync(() =>
+    {
+        Refresh();
+        StateHasChanged();
+    });
+
+    private void Refresh()
+    {
+        _status = !string.IsNullOrWhiteSpace(TargetId) &&
+                  Notifications.TryGetInlineStatus(TargetId, out var status)
+            ? status
+            : null;
+    }
+
+    private string CssClass => _status?.Severity switch
+    {
+        AdminFeedbackSeverity.Success => "admin-inline-status admin-inline-status--success",
+        AdminFeedbackSeverity.Warning => "admin-inline-status admin-inline-status--warning",
+        AdminFeedbackSeverity.Error => "admin-inline-status admin-inline-status--error",
+        _ => "admin-inline-status admin-inline-status--info"
+    };
+
+    public void Dispose()
+    {
+        Notifications.InlineFeedbackChanged -= HandleChanged;
+    }
+}

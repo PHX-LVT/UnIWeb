@@ -49,7 +49,7 @@ public static class BlockStarterPresetCatalog
 
     private static StarterPreset Get(string type) => type switch
     {
-        "text" => Preset(6, 3, 6, padding: "medium"),
+        "text" => Preset(6, 3, 6, padding: "none"),
         "bullet-list" => Preset(5, 4, 5, padding: "medium", radius: "medium"),
         "image" => Preset(5, 4, 5, radius: "medium", aspect: "landscape", mediaFit: "cover"),
         "video" => Preset(6, 4, 6, radius: "medium", aspect: "widescreen", mediaFit: "cover"),
@@ -153,6 +153,11 @@ public static class BlockStarterPresetCatalog
         target.SchemaVersion ??= defaults.SchemaVersion;
         target.BackgroundMode ??= defaults.BackgroundMode;
         target.TextAlign ??= defaults.TextAlign;
+        target.FontSizePx ??= defaults.FontSizePx;
+        target.FontWeight ??= defaults.FontWeight;
+        target.FontFamily ??= defaults.FontFamily;
+        target.LineHeight ??= defaults.LineHeight;
+        target.LetterSpacingPx ??= defaults.LetterSpacingPx;
         target.Opacity ??= defaults.Opacity;
         target.BorderWidth ??= defaults.BorderWidth;
         target.BorderStyle ??= defaults.BorderStyle;

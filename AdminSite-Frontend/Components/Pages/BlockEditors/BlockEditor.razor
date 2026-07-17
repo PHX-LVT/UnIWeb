@@ -1,4 +1,4 @@
-﻿@inject AdminBlockService BlockService
+@inject AdminBlockService BlockService
 @inject IHttpService Http
 @inject IJSRuntime JS
 @inject AdminAuthService Auth
@@ -20,25 +20,10 @@ else
         <button class="btn-admin btn-primary"
                 disabled="@(!AddTargetHasCapacity)"
                 title="@AddTargetTitle"
-                @onclick="TogglePicker">
+                @onclick="RequestAddBlock">
             <i class="fas fa-plus"></i> @T("AddBlock")
         </button>
     </div>
-
-    @if (_showPicker)
-    {
-        <div class="ez-modal-overlay block-create-modal-overlay" @onclick="ClosePicker">
-            <div class="ez-modal block-create-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
-                <BlockCreationWizard Open="true"
-                                     Busy="_creatingBlock"
-                                     AdminLanguage="@AdminLanguage"
-                                     AllowedTypes="@AddTargetAllowedTypes"
-                                     ConstraintLabel="@AddTargetConstraintLabel"
-                                     Confirmed="AddBlock"
-                                     Cancelled="ClosePicker" />
-            </div>
-        </div>
-    }
 
     @if (!_blocks.Any())
     {
@@ -132,9 +117,38 @@ else
                         {
                             <div class="block-focused-inspector">
                                 <div class="block-focused-inspector__head">
-                                    <div>
+                                    <div class="block-focused-inspector__identity">
                                         <span>@T("BlockInspector")</span>
-                                        <strong><i class="fas @BlockIconClass(_fullBlock.Type)"></i> @T(BlockLabelKey(_fullBlock.Type))</strong>
+                                        <div class="block-focused-inspector__title-row" @onclick:stopPropagation="true">
+                                            <i class="fas @BlockIconClass(_fullBlock.Type)" aria-hidden="true"></i>
+                                            @if (_renamingBlockId == _fullBlock.Id)
+                                            {
+                                                <input class="block-focused-inspector__name-input"
+                                                       value="@_renameDraft"
+                                                       autofocus
+                                                       placeholder="@FocusedBlockDisplayName"
+                                                       aria-label="@T("BlockName")"
+                                                       @oninput="SetFocusedBlockNameDraft"
+                                                       @onblur="FinishFocusedBlockNameEdit"
+                                                       @onkeydown="HandleFocusedBlockNameKey"
+                                                       @onkeydown:stopPropagation="true" />
+                                            }
+                                            else
+                                            {
+                                                <strong>@FocusedBlockDisplayName</strong>
+                                                @if (SupportsFocusedBlockNameRename)
+                                                {
+                                                    <button type="button"
+                                                            class="block-focused-inspector__rename"
+                                                            title="@(CanRenameFocusedBlockName ? T("EditBlockName") : T("ContentLockedHint"))"
+                                                            aria-label="@T("EditBlockName")"
+                                                            disabled="@(!CanRenameFocusedBlockName)"
+                                                            @onclick="StartFocusedBlockNameEdit">
+                                                        <i class="fas fa-pen"></i>
+                                                    </button>
+                                                }
+                                            }
+                                        </div>
                                     </div>
                                     <div class="block-focused-inspector__badges">
                                         <span class="@(_fullBlock.Visible ? "is-visible" : "is-hidden")">
@@ -237,7 +251,7 @@ else
                                     <button type="button" class="btn-admin btn-primary"
                                             disabled="@(!AddTargetHasCapacity)"
                                             title="@AddTargetTitle"
-                                            @onclick="TogglePicker">
+                                            @onclick="RequestAddBlock">
                                         <i class="fas fa-plus"></i> @T("AddBlockToContainer")
                                     </button>
                                 </section>
@@ -400,6 +414,9 @@ else
         display: grid;
         gap: .18rem;
     }
+    .block-focused-inspector__identity {
+        min-width: 0;
+    }
     .block-focused-inspector__head > div:first-child > span,
     .block-focused-inspector__organization label > span,
     .block-focused-inspector__path > span {
@@ -415,6 +432,66 @@ else
         gap: .45rem;
         color: var(--primary);
         font-size: .9rem;
+    }
+    .block-focused-inspector__title-row {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        min-width: 0;
+        color: var(--primary);
+    }
+    .block-focused-inspector__title-row > i {
+        flex: 0 0 auto;
+        width: 18px;
+        text-align: center;
+    }
+    .block-focused-inspector__title-row strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .block-focused-inspector__rename {
+        display: inline-grid;
+        width: 26px;
+        height: 26px;
+        flex: 0 0 26px;
+        place-items: center;
+        border: 1px solid #d8e0ea;
+        border-radius: 7px;
+        background: #fff;
+        color: var(--primary);
+        cursor: pointer;
+    }
+    .block-focused-inspector__rename:hover {
+        border-color: rgba(15, 52, 96, .28);
+        background: #f8fafc;
+    }
+    .block-focused-inspector__rename:disabled {
+        opacity: .45;
+        cursor: not-allowed;
+    }
+    .block-focused-inspector__rename:disabled:hover {
+        border-color: #d8e0ea;
+        background: #fff;
+    }
+    .block-focused-inspector__name-input {
+        width: min(260px, 100%);
+        min-width: 120px;
+        height: 30px;
+        padding: 0 .55rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 7px;
+        background: #fff;
+        color: var(--primary);
+        font: inherit;
+        font-size: .9rem;
+        font-weight: 750;
+    }
+    .block-focused-inspector__name-input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, .14);
+        outline: none;
     }
     .block-focused-inspector__workspace-note {
         display: flex;
@@ -940,18 +1017,21 @@ else
     [Parameter] public string?      SectionBlockLayoutMode { get; set; }
     [Parameter] public bool         UseArrangeWorkspace { get; set; }
     [Parameter] public string?      InitialBlockId { get; set; }
+    [Parameter] public int          RefreshVersion { get; set; }
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback<string?> ActiveBlockChanged { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<BlockCreationRequest> AddRequested { get; set; }
 
     private List<BlockModel> _blocks     = new();
     private BlockModel?      _fullBlock;
     private string?          _activeBlockId;
     private string?          _activePanelBlockId;
+    private string?          _renamingBlockId;
+    private string           _renameDraft = string.Empty;
+    private string           _renameBeforeEdit = string.Empty;
     private BlockModel?      _confirmDelete;
     private bool             _loading    = true;
-    private bool             _showPicker = false;
-    private bool             _creatingBlock = false;
     private bool             _reorderingBlock = false;
     private bool             _savingLayout = false;
     private string?          _visualValidationMessage;
@@ -963,6 +1043,7 @@ else
     private string?          _loadedSectionId;
     private string?          _loadedSlotId;
     private string?          _loadedInitialBlockId;
+    private int              _loadedRefreshVersion = -1;
     private ElementReference _blockListRef;
     private DotNetObjectReference<BlockEditor>? _dotNetRef;
     private bool _blockSortableInitialized;
@@ -1034,6 +1115,101 @@ else
     private sealed record VisualHistoryEntry(BlockUpdateDto Before, BlockUpdateDto After);
     private sealed record ContainerSlotStatus(string Key, string Label, bool Required, BlockModel? Child);
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string FocusedBlockDisplayName => _fullBlock is null ? string.Empty : BlockDisplayName(_fullBlock);
+    private bool SupportsFocusedBlockNameRename => _fullBlock is not null;
+    private bool CanRenameFocusedBlockName =>
+        _fullBlock is not null &&
+        SupportsFocusedBlockNameRename &&
+        !_fullBlock.Authoring.FullLocked &&
+        !_fullBlock.Authoring.ContentLocked;
+    private string ActiveBlockLanguage =>
+        Languages.Contains(AdminLanguage, StringComparer.OrdinalIgnoreCase)
+            ? AdminLanguage
+            : Languages.Contains("en", StringComparer.OrdinalIgnoreCase)
+                ? "en"
+                : Languages.FirstOrDefault() ?? "en";
+
+    private void StartFocusedBlockNameEdit()
+    {
+        if (_fullBlock is null || !CanRenameFocusedBlockName)
+            return;
+
+        _renamingBlockId = _fullBlock.Id;
+        _renameDraft = LangValue(_fullBlock.EditorLabel) ?? string.Empty;
+        _renameBeforeEdit = _renameDraft;
+    }
+
+    private void SetFocusedBlockNameDraft(ChangeEventArgs e)
+    {
+        _renameDraft = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task FinishFocusedBlockNameEdit()
+    {
+        if (_fullBlock is null || !string.Equals(_renamingBlockId, _fullBlock.Id, StringComparison.Ordinal))
+            return;
+
+        _renamingBlockId = null;
+        var before = _fullBlock.EditorLabel is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(_fullBlock.EditorLabel);
+        ApplyFocusedBlockName(_renameDraft);
+        var blockId = _fullBlock.Id;
+        var response = await BlockService.UpdateAsync(
+            PageId,
+            SectionId,
+            blockId,
+            BlockUpdateDtoMapper.Build(_fullBlock));
+        if (!response.Success)
+        {
+            _fullBlock.EditorLabel = before;
+            var failedListBlock = _blocks.FirstOrDefault(block => block.Id == blockId);
+            if (failedListBlock is not null)
+                failedListBlock.EditorLabel = new Dictionary<string, string>(before);
+            Http.Notify(response, failureFallback: T("NotificationSaveFailed"));
+            return;
+        }
+
+        await ReloadBlocks();
+        await LoadFullBlock(blockId);
+        await NotifyChangedAsync();
+    }
+
+    private async Task HandleFocusedBlockNameKey(KeyboardEventArgs e)
+    {
+        if (string.Equals(e.Key, "Enter", StringComparison.OrdinalIgnoreCase))
+        {
+            await FinishFocusedBlockNameEdit();
+        }
+        else if (string.Equals(e.Key, "Escape", StringComparison.OrdinalIgnoreCase))
+        {
+            _renameDraft = _renameBeforeEdit;
+            _renamingBlockId = null;
+        }
+    }
+
+    private void ApplyFocusedBlockName(string value)
+    {
+        if (_fullBlock is null)
+            return;
+
+        var language = ActiveBlockLanguage;
+        var trimmed = value.Trim();
+        var title = _fullBlock.EditorLabel is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(_fullBlock.EditorLabel);
+
+        if (string.IsNullOrWhiteSpace(trimmed))
+            title.Remove(language);
+        else
+            title[language] = trimmed;
+
+        _fullBlock.EditorLabel = title;
+        var listBlock = _blocks.FirstOrDefault(block => block.Id == _fullBlock.Id);
+        if (listBlock is not null)
+            listBlock.EditorLabel = new Dictionary<string, string>(title);
+    }
+
     private bool IsRequiredContainerSlot(BlockModel block)
     {
         if (string.IsNullOrWhiteSpace(block.ParentBlockId) ||
@@ -1241,9 +1417,10 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        var refreshChanged = _loadedRefreshVersion != RefreshVersion;
         var contextChanged = _loadedPageId != PageId || _loadedSectionId != SectionId || _loadedSlotId != SlotId;
         var initialBlockChanged = _loadedInitialBlockId != InitialBlockId;
-        if (contextChanged)
+        if (contextChanged || refreshChanged)
         {
             _loadedPageId = PageId;
             _loadedSectionId = SectionId;
@@ -1254,7 +1431,7 @@ else
             await ReloadBlocks();
         }
 
-        if ((contextChanged || initialBlockChanged) &&
+        if ((contextChanged || refreshChanged || initialBlockChanged) &&
             !string.IsNullOrWhiteSpace(InitialBlockId) &&
             _activeBlockId != InitialBlockId &&
             _blocks.Any(block => block.Id == InitialBlockId))
@@ -1262,6 +1439,7 @@ else
             await OpenBlock(InitialBlockId, notify: false);
         }
         _loadedInitialBlockId = InitialBlockId;
+        _loadedRefreshVersion = RefreshVersion;
     }
 
   private async Task ReloadBlocks()
@@ -1323,55 +1501,31 @@ else
             await ActiveBlockChanged.InvokeAsync(blockId);
     }
 
-    private void TogglePicker()
+    private async Task RequestAddBlock()
     {
         if (!AddTargetHasCapacity)
         {
-            Http.Toast(AddTargetTitle, 400);
+            Http.Notify(AddTargetTitle, 400);
             return;
         }
-        _showPicker = !_showPicker;
-    }
-    private void ClosePicker() => _showPicker = false;
-
-    private async Task AddBlock(BlockStarterSelection selection)
-    {
-        if (!AddTargetHasCapacity) return;
-        _creatingBlock = true;
-        try
-        {
-            var dto = BlockStarterVariantCatalog.CreateDto(selection.Type, selection.VariantKey);
-            dto.ParentBlockId = AddTargetContainer?.Id;
-            // Use slotted create only when SlotId is set.
-            var res = string.IsNullOrEmpty(SlotId)
-                ? await BlockService.CreateAsync(PageId, SectionId, dto)
-                : await BlockService.CreateInSlotAsync(PageId, SectionId, SlotId, dto);
-
-            Http.Toast(res.Message, res.StatusCode);
-            if (!res.Success)
-            {
-                return;
-            }
-
-            _showPicker = false;
-            await ReloadBlocks();
-            if (res.Data is not null)
-            {
-                await ToggleBlock(res.Data.Id);
-            }
-            await NotifyChangedAsync();
-        }
-        finally
-        {
-            _creatingBlock = false;
-        }
+        await AddRequested.InvokeAsync(new BlockCreationRequest(
+            PageId,
+            SectionId,
+            SlotId,
+            AddTargetContainer?.Id,
+            "default",
+            null,
+            AddTargetAllowedTypes?.ToList(),
+            AddTargetConstraintLabel,
+            AddTargetContainer is null ? T("SelectedSection") : BlockDisplayName(AddTargetContainer),
+            false));
     }
 
     private async Task ToggleVisibility(BlockModel block)
     {
         var res = await BlockService.SetVisibilityAsync(
             PageId, SectionId, block.Id, !block.Visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.SilentSuccess(res);
         if (res.Success)
         {
             block.Visible = !block.Visible;
@@ -1386,7 +1540,7 @@ else
 
         var visible = !_fullBlock.Visible;
         var res = await BlockService.SetVisibilityAsync(PageId, SectionId, _fullBlock.Id, visible);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.SilentSuccess(res);
         if (!res.Success)
             return;
 
@@ -1403,7 +1557,7 @@ else
         var deletingIds = OwnedDescendantIds(_confirmDelete.Id);
         deletingIds.Add(_confirmDelete.Id);
         var res = await BlockService.DeleteAsync(PageId, SectionId, _confirmDelete.Id);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res, T("NotificationBlockDeleted"));
         if (res.Success)
         {
             if (_activeBlockId is not null && deletingIds.Contains(_activeBlockId))
@@ -1472,7 +1626,7 @@ else
             return false;
         if (peers.Any(block => block.Authoring.FullLocked || block.Authoring.GeometryLocked))
         {
-            Http.Toast(T("GeometryLockedHint"), 400);
+            Http.Notify(T("GeometryLockedHint"), 400);
             return false;
         }
         if (peers.Any(block => !PresetAllowsChildReorder(block)))
@@ -1484,7 +1638,7 @@ else
             var res = await BlockService.ReorderAsync(PageId, SectionId, cleanIds);
             if (!res.Success)
             {
-                Http.Toast(res.Message, res.StatusCode);
+                Http.Notify(res, failureFallback: T("NotificationReorderFailed"));
                 await ReloadBlocks();
                 await InvokeAsync(StateHasChanged);
                 return false;
@@ -1542,6 +1696,9 @@ else
     {
         var res = await BlockService.GetByIdAsync(PageId, SectionId, blockId);
         _fullBlock = res.Data;
+        _renamingBlockId = null;
+        _renameDraft = string.Empty;
+        _renameBeforeEdit = string.Empty;
         if (_fullBlock is not null)
         {
             _fullBlock.Layout ??= new BlockLayoutModel();
@@ -1673,7 +1830,7 @@ else
         if (!ValidateVisualSettings(out var validationMessage))
         {
             _visualValidationMessage = validationMessage;
-            Http.Toast(validationMessage, 400);
+            Http.Notify(validationMessage, 400);
             return;
         }
 
@@ -1685,7 +1842,7 @@ else
             var before = CloneUpdateDto(_savedVisualSnapshot ?? BlockUpdateDtoMapper.Build(_fullBlock));
             var dto = CloneUpdateDto(BlockUpdateDtoMapper.Build(_fullBlock));
             var res = await BlockService.UpdateAsync(PageId, SectionId, _fullBlock.Id, dto);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success)
             {
                 if (!UpdateDtosEqual(before, dto))
@@ -1729,7 +1886,7 @@ else
             var res = await BlockService.UpdateAsync(PageId, SectionId, blockId, target);
             if (!res.Success)
             {
-                Http.Toast(res.Message, res.StatusCode);
+                Http.Notify(res.Message, res.StatusCode);
                 return;
             }
 
@@ -1937,7 +2094,8 @@ else
 
     private string BlockDisplayName(BlockModel block)
     {
-        var title = LangValue(block.Title)
+        var title = LangValue(block.EditorLabel)
+            ?? LangValue(block.Title)
             ?? LangValue(block.Label)
             ?? LangValue(block.StepLabel)
             ?? LangValue(block.ButtonLabel)

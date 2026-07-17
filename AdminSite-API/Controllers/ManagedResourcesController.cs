@@ -476,16 +476,13 @@ namespace FullProject.Controllers
             User.Identity?.Name ??
             "unknown";
 
-        private AdminRole ActorRole =>
-            Enum.TryParse<AdminRole>(User.FindFirst(ClaimTypes.Role)?.Value, true, out var role)
-                ? role
-                : AdminRole.Viewer;
-
         private bool IsContentManager =>
-            ActorRole is AdminRole.AdminAdmin or AdminRole.Manager;
+            FullProject.Security.AdminAuthorization.IsAdminAdmin(User) ||
+            FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.ApproveContent);
 
         private bool IsWriter =>
-            ActorRole == AdminRole.Writer;
+            FullProject.Security.AdminAuthorization.HasPermission(User, AdminPermissionKeys.CreateEditContent) &&
+            !IsContentManager;
 
         private bool IsResourceLibraryReader =>
             IsContentManager || IsWriter;

@@ -1,4 +1,4 @@
-﻿@inject AdminSectionService SectionService
+@inject AdminSectionService SectionService
 @inject IHttpService Http
 
 <div style="display:grid;grid-template-columns:1fr;gap:1rem">
@@ -136,7 +136,7 @@
                 Items = _items.Select(MapItem).ToList(),
                 Visible = Section.Visible
             });
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

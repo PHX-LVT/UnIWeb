@@ -13,7 +13,7 @@ namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages")]
-    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+    [Authorize]
     public class PagesController : ControllerBase
     {
         private readonly PageService _service;
@@ -45,6 +45,7 @@ namespace FullProject.Controllers
         }
 
         // POST api/admin/pages
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] PageCreateDto dto)
         {
@@ -86,6 +87,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{pageId}")]
         public async Task<IActionResult> Update(string pageId, [FromBody] PageUpdateDto dto)
         {
@@ -98,6 +100,7 @@ namespace FullProject.Controllers
         }
 
         // DELETE api/admin/pages/:pageId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpDelete("{pageId}")]
         public async Task<IActionResult> Delete(string pageId)
         {
@@ -108,6 +111,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/visibility
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{pageId}/visibility")]
         public async Task<IActionResult> SetVisibility(string pageId, [FromBody] VisibilityDto dto)
         {
@@ -118,6 +122,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/:pageId/access
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{pageId}/access")]
         public async Task<IActionResult> SetAccess(string pageId, [FromBody] VisibilityDto dto)
         {
@@ -128,6 +133,7 @@ namespace FullProject.Controllers
         }
 
         // PUT api/admin/pages/reorder
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder([FromBody] ReorderDto dto)
         {
@@ -137,7 +143,7 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok("Pages reordered."));
         }
 
-
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpGet("{pageId}/revisions")]
         public async Task<IActionResult> GetRevisions(string pageId)
         {
@@ -150,6 +156,7 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(revisions));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost("{pageId}/revisions/{revisionId}/restore")]
         public async Task<IActionResult> RestoreRevision(string pageId, string revisionId)
         {
@@ -161,6 +168,7 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(MapToDto(restored), "Page revision restored."));
         }
         // POST api/admin/pages/:pageId/publish
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost("{pageId}/publish")]
         public async Task<IActionResult> Publish(string pageId)
         {
@@ -171,6 +179,7 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(new { result.PublishedAt }, result.Message));
         }
         // POST api/admin/pages/:pageId/reset
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost("{pageId}/reset")]
         public async Task<IActionResult> Reset(string pageId)
         {

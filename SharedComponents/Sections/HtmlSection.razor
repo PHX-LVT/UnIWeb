@@ -29,8 +29,5 @@
             ? $"{StyleHelper.GetSectionClass(Section.Style)} sc-section--sticky-html"
             : StyleHelper.GetSectionClass(Section.Style);
 
-    private string HtmlClass =>
-        ResolvedHtml.Contains("sc-insight-subscribe", StringComparison.OrdinalIgnoreCase)
-            ? "sc-html sc-html--insight-subscribe"
-            : "sc-html";
+    private const string HtmlClass = "sc-html";
 }

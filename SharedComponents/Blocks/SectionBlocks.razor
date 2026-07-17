@@ -1,4 +1,6 @@
 @using Contracts.Public
+@using Contracts.Global
+@using Contracts.Forms
 @using SharedComponents.Helpers
 
 @if (ShouldRenderContainer)
@@ -18,6 +20,7 @@
         @for (var index = 0; index < renderedBlocks.Count; index++)
         {
             var block = renderedBlocks[index];
+            var governedFormSize = GetFormDefaultSize(block);
             <div class="@GetBlockClass(block)"
                  data-block-id="@block.Id"
                  data-block-stable-id="@block.StableId"
@@ -28,6 +31,9 @@
                  data-block-position-mode="@EffectivePositionMode(block)"
                  data-block-shape="@NormalizeShape(EffectiveAppearance(block).Shape)"
                  data-block-radius="@EffectiveRadius(EffectiveAppearance(block).BorderRadius, block.Layout?.BorderRadius)"
+                 data-form-default-width-px="@(governedFormSize is { } formWidth ? formWidth.WidthPx : null)"
+                 data-form-default-width-percent="@(governedFormSize is { } formSize ? FormatNumber(formSize.WidthPercent) : null)"
+                 data-form-default-height-px="@(governedFormSize is { } formHeight ? formHeight.HeightPx : null)"
                  aria-hidden="@GetAriaHidden(block)"
                  style="@GetBlockStyle(block, index, renderedBlocks.Count)">
                 <div class="@GetAnimationClass(block)"
@@ -45,7 +51,16 @@
                             }
                             else
                             {
-                                @RenderBlock(block)
+                                @if (governedFormSize is not null && EffectivePositionMode(block) == "freeform")
+                                {
+                                    <div class="sc-governed-form-scale">
+                                        @RenderBlock(block)
+                                    </div>
+                                }
+                                else
+                                {
+                                    @RenderBlock(block)
+                                }
                             }
                         </div>
                     </div>
@@ -222,7 +237,6 @@
         return block switch
         {
             PublicTextBlockDto text =>
-                !HasLocalizedText(text.Title) &&
                 !HasLocalizedText(text.Content) &&
                 !HasButtonContent(text.Buttons),
             PublicImageBlockDto image =>
@@ -301,10 +315,57 @@
             $"z-index: {Math.Clamp(layout.ZIndex, 0, 1000)}"
         };
 
+        if (GetFormDefaultSize(block) is { } formSize && EffectivePositionMode(block) == "freeform")
+        {
+            var scale = block is PublicFormBlockDto form
+                ? form.FormScale
+                : FreeformHeightPx(layout) / formSize.HeightPx;
+            parts.Add($"--sc-form-scale: {FormatNumber(Math.Clamp(scale, FormBlockLayoutPolicy.MinimumScale, FormBlockLayoutPolicy.MaximumScale))}");
+            parts.Add($"--sc-form-default-width-px: {formSize.WidthPx}px");
+            parts.Add($"--sc-form-default-height-px: {formSize.HeightPx}px");
+        }
+
         AddResponsiveStyleParts(parts, "tablet", layout, block.Responsive?.Tablet, span);
         AddResponsiveStyleParts(parts, "mobile", layout, block.Responsive?.Mobile, span);
 
         return string.Join("; ", parts);
+    }
+
+    private static FormBlockDefaultSize? GetFormDefaultSize(PublicBlockDto block)
+    {
+        if (block is not PublicFormBlockDto form)
+            return null;
+
+        if (form.DefaultWidthPercent is > 0 && form.DefaultHeightPx is > 0)
+        {
+            var widthPercent = Math.Clamp(form.DefaultWidthPercent.Value, 1d, 100d);
+            var widthUnits = Math.Clamp((int)Math.Round(widthPercent / 100d * 12d), 1, 12);
+            return new FormBlockDefaultSize(
+                form.DefaultWidthPx is > 0
+                    ? form.DefaultWidthPx.Value
+                    : (int)Math.Round(widthPercent / 100d * FormBlockLayoutPolicy.NormalContentWidthPx),
+                widthUnits,
+                widthPercent,
+                (int)Math.Round(form.DefaultHeightPx.Value));
+        }
+
+        return FormBlockLayoutPolicy.CalculateDefaultSize(
+            FormDesignPolicy.Normalize(
+                form.Design,
+                (form.Fields ?? new List<PublicFormFieldDto>()).Select(field => new FormFieldDefinitionDto
+                {
+                    Key = field.Name,
+                    Type = field.Type,
+                    Label = field.Label,
+                    Placeholder = field.Placeholder,
+                    Required = field.Required,
+                    MaxLength = field.MaxLength,
+                    InputBoxSize = field.InputBoxSize,
+                    Order = field.Order
+                }),
+                form.Name,
+                form.Introduction,
+                form.SubmitButtonLabel));
     }
 
     private string GetBlockVisualStyle(PublicBlockDto block)
@@ -320,6 +381,22 @@
 
         if (!string.IsNullOrWhiteSpace(appearance.TextColor))
             parts.Add($"color: {appearance.TextColor}");
+
+        if (appearance.FontSizePx is > 0)
+            parts.Add($"--sc-block-font-size: {Math.Clamp(appearance.FontSizePx.Value, 10, 96)}px");
+
+        if (appearance.FontWeight is > 0)
+            parts.Add($"--sc-block-font-weight: {Math.Clamp(appearance.FontWeight.Value, 100, 900)}");
+
+        if (!string.IsNullOrWhiteSpace(appearance.FontFamily) &&
+            ThemeFontCatalog.TryResolve(appearance.FontFamily, out var font))
+            parts.Add($"font-family: {font.CssStack}");
+
+        if (appearance.LineHeight is > 0)
+            parts.Add($"--sc-block-line-height: {FormatNumber(Math.Clamp(appearance.LineHeight.Value, 0.8, 3))}");
+
+        if (appearance.LetterSpacingPx.HasValue)
+            parts.Add($"--sc-block-letter-spacing: {FormatNumber(Math.Clamp(appearance.LetterSpacingPx.Value, -4, 20))}px");
 
         var opacity = Math.Clamp(appearance.Opacity, 0, 1);
         if (opacity < 1)

@@ -8,7 +8,7 @@
     <h1 class="page-title"><i class="fas fa-tags"></i> @T("ContentTypes")</h1>
 </div>
 
-@if (!Auth.CanManageAllContent)
+@if (!Auth.CanManageContentConfiguration)
 {
     <div class="admin-card">
         <p class="text-muted">@T("NoPermission")</p>
@@ -209,7 +209,7 @@ else
             ? await ContentService.CreateTypeAsync(_edit)
             : await ContentService.UpdateTypeAsync(_editingId, _edit);
 
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success)
         {
             NewType();
@@ -222,7 +222,7 @@ else
         if (_editingId is null) return;
 
         var res = await ContentService.DeleteTypeAsync(_editingId);
-        Http.Toast(res.Message, res.StatusCode);
+        Http.Notify(res.Message, res.StatusCode);
         if (res.Success)
         {
             NewType();

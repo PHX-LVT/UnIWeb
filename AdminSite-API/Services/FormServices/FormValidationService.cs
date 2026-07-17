@@ -1,7 +1,10 @@
 using System.Text.RegularExpressions;
 using Contracts.Forms;
+using FullProject.Data;
 using FullProject.Models;
 using FullProject.Security.Forms;
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace FullProject.Services.FormServices;
 
@@ -15,10 +18,12 @@ public sealed class FormValidationService
         "^[A-Za-z][A-Za-z0-9_-]{0,99}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly FormInputTypeService _inputTypes;
+    private readonly MongoDbContext _context;
 
-    public FormValidationService(FormInputTypeService inputTypes)
+    public FormValidationService(FormInputTypeService inputTypes, MongoDbContext context)
     {
         _inputTypes = inputTypes;
+        _context = context;
     }
 
     public async Task<Dictionary<string, string>> ValidateAsync(
@@ -165,8 +170,106 @@ public sealed class FormValidationService
         if (fields.Any(field => field.Label?.Values.Any(value => !string.IsNullOrWhiteSpace(value)) != true))
             errors.Add("Every field must have a label.");
         AddCapabilityErrors(fields, errors, enforceMetadataShape: true, capabilities);
+        AddDesignErrors(request, errors);
+        await AddManagedResourceErrorsAsync(request, errors);
 
         return errors;
+    }
+
+    private async Task AddManagedResourceErrorsAsync(FormDefinitionUpsertRequest request, ICollection<string> errors)
+    {
+        var resourceIds = (request.AuxiliaryActions ?? new())
+            .Where(action => action.Target?.Type == FormActionTargetType.ManagedResource)
+            .Select(action => action.Target.ResourceId?.Trim())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (resourceIds.Count == 0) return;
+
+        if (resourceIds.Any(id => !ObjectId.TryParse(id, out _)))
+        {
+            errors.Add("Every managed-resource action must contain a valid Resource Library ID.");
+            resourceIds = resourceIds.Where(id => ObjectId.TryParse(id, out _)).ToList();
+            if (resourceIds.Count == 0) return;
+        }
+
+        var availableIds = await _context.ManagedResources
+            .Find(resource => resourceIds.Contains(resource.Id) && resource.Active && resource.Kind == "file")
+            .Project(resource => resource.Id)
+            .ToListAsync();
+        var available = availableIds.ToHashSet(StringComparer.Ordinal);
+        if (resourceIds.Any(id => !available.Contains(id)))
+            errors.Add("Every managed-resource action must reference an active file in the Resource Library.");
+    }
+
+    private static void AddDesignErrors(FormDefinitionUpsertRequest request, List<string> errors)
+    {
+        var design = request.Design;
+        if (design is null)
+        {
+            errors.Add("Form Design is required.");
+            return;
+        }
+        var legacyProjection = design.V2 is null ||
+                               ((request.InformationItems?.Count ?? 0) == 0 &&
+                                (request.AuxiliaryActions?.Count ?? 0) == 0 &&
+                                FormDesignV2Policy.MatchesLegacyProjection(null, design, request.Fields));
+
+        if (!Enum.IsDefined(design.Shape))
+            errors.Add("Choose a supported Form shape.");
+        else if (legacyProjection &&
+                 (design.WidthPx < FormDesignPolicy.MinimumWidth(design.Shape) ||
+                  design.WidthPx > FormDesignPolicy.MaximumWidth(design.Shape)))
+            errors.Add($"Form width must be between {FormDesignPolicy.MinimumWidth(design.Shape)} and {FormDesignPolicy.MaximumWidth(design.Shape)} pixels for this shape.");
+
+        if (design.V2 is not null && !legacyProjection &&
+            (design.WidthPx < FormDesignV2Policy.MinimumWidth(design.V2.OuterLayout) ||
+             design.WidthPx > FormDesignV2Policy.MaximumWidth(design.V2.OuterLayout)))
+        {
+            errors.Add($"Form width must be between {FormDesignV2Policy.MinimumWidth(design.V2.OuterLayout)} and {FormDesignV2Policy.MaximumWidth(design.V2.OuterLayout)} pixels for this outer layout.");
+        }
+
+        if (design.PaddingPx is < FormDesignPolicy.MinimumPaddingPx or > FormDesignPolicy.MaximumPaddingPx)
+            errors.Add($"Form padding must be between {FormDesignPolicy.MinimumPaddingPx} and {FormDesignPolicy.MaximumPaddingPx} pixels.");
+        var minimumGap = legacyProjection ? FormDesignPolicy.MinimumGapPx : FormDesignV2Policy.MinimumFieldGapPx;
+        var maximumGap = legacyProjection ? FormDesignPolicy.MaximumGapPx : FormDesignV2Policy.MaximumFieldGapPx;
+        if (design.FieldGapPx < minimumGap || design.FieldGapPx > maximumGap)
+            errors.Add($"Form field spacing must be between {minimumGap} and {maximumGap} pixels.");
+        if (design.BorderWidthPx is < 0 or > 4)
+            errors.Add("Form border width must be between 0 and 4 pixels.");
+        if (design.BorderRadiusPx is < 0 or > 40)
+            errors.Add("Form corner radius must be between 0 and 40 pixels.");
+
+        if (design.V2 is not null)
+        {
+            errors.AddRange(FormDesignV2Policy.Validate(
+                design.V2!,
+                request.Fields,
+                request.InformationItems,
+                request.AuxiliaryActions));
+        }
+
+        var requiredHeight = legacyProjection
+            ? FormDesignPolicy.CalculateRequiredHeight(
+                design,
+                request.Fields ?? new List<FormFieldDefinitionDto>(),
+                request.Name,
+                request.Introduction,
+                request.SubmitButtonLabel)
+            : FormDesignV2Policy.CalculateRequiredHeight(
+                design,
+                design.V2!,
+                request.Fields,
+                request.Name,
+                request.Introduction,
+                request.SubmitButtonLabel,
+                request.InformationItems,
+                request.AuxiliaryActions);
+        if (Enum.IsDefined(design.Shape) && requiredHeight > FormDesignPolicy.MaximumHeightPx)
+        {
+            errors.Add($"This Form is too tall for the governed design limit of {FormDesignPolicy.MaximumHeightPx} pixels. Remove or simplify fields before saving.");
+        }
     }
 
     public static string ResolveText(IReadOnlyDictionary<string, string> values, string language, string fallback) =>

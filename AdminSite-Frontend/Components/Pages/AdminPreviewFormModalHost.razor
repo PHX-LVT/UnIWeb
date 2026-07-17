@@ -1,0 +1,148 @@
+@implements IAsyncDisposable
+@using Contracts.Forms
+@using Contracts.Public
+@using SharedComponents
+@inject IJSRuntime JS
+
+@if (_open)
+{
+    <div class="sc-public-modal open"
+         role="dialog"
+         aria-modal="true"
+         aria-label="@ModalLabel"
+         @onclick="CloseFromBackdrop">
+        <div class="sc-public-modal__dialog" style="@DialogStyle" @onclick:stopPropagation="true">
+            @if (_block is null)
+            {
+                <div class="sc-public-modal__header">
+                    <h2>@UnavailableTitle</h2>
+                    <button type="button" class="sc-public-modal__close" aria-label="@CloseText" @onclick="Close">×</button>
+                </div>
+                <p class="sc-public-modal__intro">@UnavailableText</p>
+            }
+            else
+            {
+                <button type="button" class="sc-public-modal__close sc-public-modal__close--floating" aria-label="@CloseText" @onclick="Close">×</button>
+                <PublicFormRenderer Block="@_block" Lang="@Lang" Context="modal" PreviewOnly="true" />
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyCollection<FormDefinitionModel> Definitions { get; set; } = Array.Empty<FormDefinitionModel>();
+    [Parameter] public string Lang { get; set; } = "en";
+
+    private DotNetObjectReference<AdminPreviewFormModalHost>? _reference;
+    private PublicFormBlockDto? _block;
+    private bool _open;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _reference = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("cmsFormHost.register", _reference);
+    }
+
+    [JSInvokable]
+    public Task OpenById(string id) => Open(Definitions.FirstOrDefault(definition => definition.Active && definition.Id == id));
+
+    [JSInvokable]
+    public Task OpenByKey(string key) => Open(Definitions.FirstOrDefault(definition =>
+        definition.Active && string.Equals(definition.Key, key, StringComparison.OrdinalIgnoreCase)));
+
+    [JSInvokable]
+    public Task CloseFromJs() => Close();
+
+    private async Task Open(FormDefinitionModel? definition)
+    {
+        _block = definition is null ? null : Map(definition);
+        _open = true;
+        await JS.InvokeVoidAsync("cmsFormHost.setOpen", true);
+        await InvokeAsync(StateHasChanged);
+        await JS.InvokeVoidAsync("cmsFormHost.focusDialog");
+    }
+
+    private Task CloseFromBackdrop() => Close();
+
+    private async Task Close()
+    {
+        _open = false;
+        _block = null;
+        await JS.InvokeVoidAsync("cmsFormHost.setOpen", false);
+    }
+
+    private static PublicFormBlockDto Map(FormDefinitionModel definition) => new()
+    {
+        Id = $"admin-modal-preview-{definition.Id}",
+        Type = "form",
+        Visible = true,
+        FormDefinitionId = definition.Id,
+        FormDefinitionAvailable = true,
+        Name = definition.Name,
+        Introduction = definition.Introduction,
+        InformationItems = definition.InformationItems,
+        AuxiliaryActions = definition.AuxiliaryActions,
+        SubmitButtonLabel = definition.SubmitButtonLabel,
+        Design = new FormDesignSettingsDto
+        {
+            UseThemeDefaults = definition.Design.UseThemeDefaults,
+            SchemaVersion = definition.Design.SchemaVersion,
+            Shape = (FormDesignShape)definition.Design.Shape,
+            WidthPx = definition.Design.WidthPx,
+            CalculatedHeightPx = definition.Design.CalculatedHeightPx,
+            BackgroundMode = (FormDesignBackgroundMode)definition.Design.BackgroundMode,
+            BackgroundColor = definition.Design.BackgroundColor,
+            TextColor = definition.Design.TextColor,
+            AccentColor = definition.Design.AccentColor,
+            BorderColor = definition.Design.BorderColor,
+            BorderWidthPx = definition.Design.BorderWidthPx,
+            BorderRadiusPx = definition.Design.BorderRadiusPx,
+            Shadow = definition.Design.Shadow,
+            PaddingPx = definition.Design.PaddingPx,
+            FieldGapPx = definition.Design.FieldGapPx,
+            TextAlign = (FormDesignTextAlign)definition.Design.TextAlign,
+            LabelMode = (FormLabelMode)definition.Design.LabelMode,
+            ButtonStyle = definition.Design.ButtonStyle,
+            ButtonWidth = (FormDesignButtonWidth)definition.Design.ButtonWidth,
+            V2 = definition.Design.V2
+        },
+        Fields = definition.Fields.OrderBy(field => field.Order).Select(field => new PublicFormFieldDto
+        {
+            Name = field.Key,
+            Type = field.Type,
+            Label = field.Label,
+            Placeholder = field.Placeholder,
+            Required = field.Required,
+            MaxLength = field.MaxLength,
+            InputBoxSize = field.InputBoxSize,
+            Order = field.Order,
+            Options = field.Options.Select(option => new PublicFormFieldOptionDto
+            {
+                Value = option.Value,
+                Label = option.Label,
+                Order = option.Order
+            }).ToList()
+        }).ToList()
+    };
+
+    private bool IsVietnamese => Lang.StartsWith("vi", StringComparison.OrdinalIgnoreCase);
+    private bool IsChinese => Lang.StartsWith("zh", StringComparison.OrdinalIgnoreCase) || Lang.StartsWith("cn", StringComparison.OrdinalIgnoreCase);
+    private string ModalLabel => IsVietnamese ? "Biểu mẫu" : IsChinese ? "表单" : "Form";
+    private string UnavailableTitle => IsVietnamese ? "Không thể mở biểu mẫu" : IsChinese ? "无法打开表单" : "Unable to open form";
+    private string UnavailableText => IsVietnamese ? "Biểu mẫu này không tồn tại hoặc chưa được bật." : IsChinese ? "此表单不存在或尚未启用。" : "This form is unavailable or inactive.";
+    private string CloseText => IsVietnamese ? "Đóng" : IsChinese ? "关闭" : "Close";
+    private string DialogStyle => $"--sc-form-design-width:{_block?.Design?.WidthPx ?? FormDesignPolicy.StackedDefaultWidthPx}px";
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("cmsFormHost.unregister");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        _reference?.Dispose();
+    }
+}

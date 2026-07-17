@@ -1,3 +1,4 @@
+using Contracts.Global;
 using FullProject.DTOs;
 using FullProject.Models;
 using MongoDB.Driver;
@@ -29,8 +30,8 @@ namespace FullProject.Services
             var theme = await GetAsync();
 
             var updates = new List<UpdateDefinition<SiteTheme>>();
-            if (dto.FontBody != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontBody, dto.FontBody));
-            if (dto.FontHeading != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontHeading, dto.FontHeading));
+            if (dto.FontBody != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontBody, ThemeFontCatalog.NormalizeNameOrDefault(dto.FontBody)));
+            if (dto.FontHeading != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.FontHeading, ThemeFontCatalog.NormalizeNameOrDefault(dto.FontHeading)));
             if (dto.TextSizeBase != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.TextSizeBase, dto.TextSizeBase));
             if (dto.TextSizeEyebrow != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.TextSizeEyebrow, dto.TextSizeEyebrow));
             if (dto.TextSizeHeading != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.TextSizeHeading, dto.TextSizeHeading));
@@ -43,6 +44,9 @@ namespace FullProject.Services
             if (dto.ColorBackground != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.ColorBackground, dto.ColorBackground));
             if (dto.ColorText != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.ColorText, dto.ColorText));
             if (dto.BorderRadius != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.BorderRadius, dto.BorderRadius));
+            if (dto.ButtonStyle != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.ButtonStyle, NormalizeChoice(dto.ButtonStyle, "filled", "outline", "ghost")));
+            if (dto.ButtonColorRole != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.ButtonColorRole, NormalizeChoice(dto.ButtonColorRole, "primary", "accent")));
+            if (dto.ButtonRadius != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.ButtonRadius, dto.ButtonRadius));
             if (dto.ButtonSizeScale != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.ButtonSizeScale, dto.ButtonSizeScale));
             if (dto.ButtonTextSize != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.ButtonTextSize, dto.ButtonTextSize));
             if (dto.AnimationsEnabled != null) updates.Add(Builders<SiteTheme>.Update.Set(t => t.AnimationsEnabled, dto.AnimationsEnabled.Value));
@@ -55,6 +59,12 @@ namespace FullProject.Services
                 t => t.Id == theme.Id,
                 Builders<SiteTheme>.Update.Combine(updates),
                 new FindOneAndUpdateOptions<SiteTheme, SiteTheme> { ReturnDocument = ReturnDocument.After });
+        }
+
+        private static string NormalizeChoice(string? value, params string[] allowed)
+        {
+            var normalized = value?.Trim().ToLowerInvariant();
+            return allowed.Contains(normalized, StringComparer.Ordinal) ? normalized! : allowed[0];
         }
     }
 }

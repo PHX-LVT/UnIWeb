@@ -234,11 +234,11 @@
         if (res.Success && res.Data is not null)
         {
             _imageUrl = res.Data.Url;
-            Http.Toast("Hero image uploaded.", res.StatusCode);
+            Http.Notify(T("NotificationImageUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? "Hero image upload failed.", res.StatusCode);
+            Http.Notify(res.Message ?? T("NotificationImageUploadFailed"), res.StatusCode);
         }
     }
 
@@ -280,7 +280,7 @@
                 Visible = Section.Visible
             };
             var res = await SectionService.UpdateAsync(PageId, Section.Id, dto);
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

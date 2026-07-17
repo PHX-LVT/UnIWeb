@@ -48,8 +48,8 @@
 }
 
 .content-status-dot.is-rejected {
-    background: #dc2626;
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+    background: #111827;
+    box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.16);
 }
 
 .content-status-dot.is-deleted {
@@ -70,16 +70,20 @@
     border: 1.5px solid #111827;
 }
 
-.content-stat-card--published {
+.admin-data-stat.content-stat-card--total {
+    --admin-data-color: #2563eb;
+}
+
+.admin-data-stat.content-stat-card--published {
     --admin-data-color: #16a34a;
 }
 
-.content-stat-card--submitted {
-    --admin-data-color: #f59e0b;
+.admin-data-stat.content-stat-card--submitted {
+    --admin-data-color: #92400e;
 }
 
-.content-stat-card--rejected {
-    --admin-data-color: #dc2626;
+.admin-data-stat.content-stat-card--rejected {
+    --admin-data-color: #111827;
 }
 
 .content-stat-label {
@@ -93,7 +97,7 @@
 
 .content-stat-value {
     margin-top: .35rem;
-    color: var(--primary);
+    color: var(--admin-data-color);
     font-size: 1.65rem;
     font-weight: 800;
     line-height: 1.1;
@@ -293,6 +297,7 @@
 
 .content-rich-select,
 .content-rich-size,
+.content-rich-list,
 .content-rich-btn,
 .content-rich-color {
     min-height: 32px;
@@ -326,6 +331,31 @@
     text-align: right;
 }
 
+.content-stat-grid--single {
+    grid-template-columns: minmax(180px, 1fr);
+}
+
+.content-rich-list {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 34px;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.content-rich-list-select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
 .content-rich-btn,
 .content-rich-color {
     display: inline-grid;
@@ -339,6 +369,43 @@
     width: 1px;
     height: 1px;
     opacity: 0;
+}
+
+.content-rich-color.is-disabled {
+    opacity: .35;
+    cursor: not-allowed;
+}
+
+.content-rich-toolbar--block-text {
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: .38rem;
+    scrollbar-width: thin;
+}
+
+.content-rich-toolbar--block-text .content-rich-format {
+    flex: 0 0 auto;
+}
+
+.content-rich-transparent-row {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .42rem .55rem;
+    border-bottom: 1px solid #d8e0ea;
+    background: #fff;
+    color: #475569;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.content-rich-transparent-row input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--primary);
 }
 
 .content-rich-surface {
@@ -567,8 +634,8 @@
 }
 
 .content-status-pill.is-rejected {
-    background: #fcebeb;
-    color: #791f1f;
+    background: #e5e7eb;
+    color: #111827;
 }
 
 .content-status-pill.is-deleted {

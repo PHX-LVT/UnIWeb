@@ -13,7 +13,7 @@ namespace FullProject.Controllers
 {
     [ApiController]
     [Route("api/admin/pages/{pageId}/sections")]
-    [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+    [Authorize]
     public class SectionsController : ControllerBase
     {
         private readonly SectionService _service;
@@ -46,6 +46,7 @@ namespace FullProject.Controllers
         }
 
         // POST api/admin/pages/:pageId/sections
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPost]
         public async Task<IActionResult> Create(string pageId, [FromBody] SectionCreateDto dto)
         {
@@ -56,10 +57,12 @@ namespace FullProject.Controllers
             var created = await _service.CreateAsync(pageId, dto);
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId = created.Id },
-                ApiResult.Created(MapToDto(pageId, created), "Section created."));
+                ApiResult.Created(MapToDto(pageId, created), "Section created.")
+                    .WithNotification("NotificationSectionSaved"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{sectionId}")]
         public async Task<IActionResult> Update(string pageId, string sectionId,
             [FromBody] SectionUpdateDto dto)
@@ -69,20 +72,24 @@ namespace FullProject.Controllers
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
 
 
-            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Section updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Section updated.")
+                .WithNotification("NotificationSectionSaved"));
         }
 
         // DELETE api/admin/pages/:pageId/sections/:sectionId
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpDelete("{sectionId}")]
         public async Task<IActionResult> Delete(string pageId, string sectionId)
         {
             if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.DeleteAsync(pageId, sectionId);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
-            return Ok(ApiResult.Ok("Section deleted."));
+            return Ok(ApiResult.Ok("Section deleted.")
+                .WithNotification("NotificationDeleted"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/visibility
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{sectionId}/visibility")]
         public async Task<IActionResult> SetVisibility(string pageId, string sectionId,
             [FromBody] VisibilityDto dto)
@@ -90,10 +97,12 @@ namespace FullProject.Controllers
             if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.SetVisibilityAsync(pageId, sectionId, dto.Visible);
             if (!ok) return NotFound(ApiResult.NotFound("Section not found."));
-            return Ok(ApiResult.Ok($"Section {(dto.Visible ? "shown" : "hidden")}."));
+            return Ok(ApiResult.Ok($"Section {(dto.Visible ? "shown" : "hidden")}.")
+                .WithNotification("NotificationSectionVisibilityUpdated"));
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId/style
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("{sectionId}/style")]
         public async Task<IActionResult> UpdateStyle(string pageId, string sectionId,
         [FromBody] SectionStyleDto dto)
@@ -101,17 +110,21 @@ namespace FullProject.Controllers
             if (!CanUsePageBuilder) return Forbid();
             var updated = await _service.UpdateStyleAsync(pageId, sectionId, dto);
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
-            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Style updated."));
+            return Ok(ApiResult.Ok(MapToDto(pageId, updated), "Style updated.")
+                .WithNotification("NotificationSectionSaved"));
         }
 
         // PUT api/admin/pages/:pageId/sections/reorder
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
         [HttpPut("reorder")]
         public async Task<IActionResult> Reorder(string pageId, [FromBody] ReorderDto dto)
         {
             if (!CanUsePageBuilder) return Forbid();
             var ok = await _service.ReorderAsync(pageId, dto.OrderedIds);
-            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed."));
-            return Ok(ApiResult.Ok("Sections reordered."));
+            if (!ok) return BadRequest(ApiResult.BadRequest("Reorder failed.")
+                .WithNotification("NotificationReorderFailed"));
+            return Ok(ApiResult.Ok("Sections reordered.")
+                .WithNotification("NotificationOrderSaved"));
         }
 
         // -- Mapping -------------------------------------------

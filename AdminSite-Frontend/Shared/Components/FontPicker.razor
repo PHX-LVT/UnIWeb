@@ -1,0 +1,148 @@
+@using Contracts.Global
+
+<div class="@RootClass" @onkeydown="HandleKeyDown">
+    <button type="button"
+            class="admin-font-picker__trigger"
+            style="@SelectedStyle"
+            aria-label="@AriaLabel"
+            aria-haspopup="listbox"
+            aria-expanded="@(IsOpen.ToString().ToLowerInvariant())"
+            @onclick="Toggle">
+        <span class="admin-font-picker__name">@SelectedLabel</span>
+        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+    </button>
+
+    @if (IsOpen)
+    {
+        <button type="button"
+                class="admin-font-picker__backdrop"
+                tabindex="-1"
+                aria-hidden="true"
+                @onclick="Close"></button>
+        <div class="admin-font-picker__menu" role="listbox" aria-label="@AriaLabel">
+            @if (AllowInherit)
+            {
+                <button type="button"
+                        class="admin-font-picker__option @(IsInherit ? "is-selected" : null)"
+                        style="font-family: var(--theme-font-body, &quot;Inter&quot;, sans-serif)"
+                        role="option"
+                        aria-selected="@IsInherit"
+                        @onclick="@(() => Choose(ThemeFontCatalog.InheritKey))">
+                    <span>@InheritLabel</span>
+                    <small>@InheritDescription</small>
+                </button>
+            }
+
+            @foreach (var font in ThemeFontCatalog.Fonts)
+            {
+                var selected = IsSelected(font.DisplayName);
+                <button type="button"
+                        class="admin-font-picker__option @(selected ? "is-selected" : null)"
+                        style="@FontStyle(font)"
+                        role="option"
+                        aria-selected="@selected"
+                        @onclick="@(() => Choose(font.DisplayName))">
+                    <span>@font.DisplayName</span>
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public bool AllowInherit { get; set; }
+    [Parameter] public string InheritLabel { get; set; } = "Theme";
+    [Parameter] public string InheritDescription { get; set; } = "Use Theme font";
+    [Parameter] public string AriaLabel { get; set; } = "Font";
+    [Parameter] public string CssClass { get; set; } = string.Empty;
+    [Parameter] public string? PickerId { get; set; }
+    [Parameter] public string? OpenPickerId { get; set; }
+    [Parameter] public EventCallback<string?> OpenPickerIdChanged { get; set; }
+
+    private bool _open;
+
+    private bool HasOpenController =>
+        !string.IsNullOrWhiteSpace(PickerId) && OpenPickerIdChanged.HasDelegate;
+
+    private bool IsOpen =>
+        HasOpenController
+            ? string.Equals(OpenPickerId, PickerId, StringComparison.Ordinal)
+            : _open;
+
+    private string RootClass =>
+        string.Join(" ", new[] { "admin-font-picker", CssClass, IsOpen ? "is-open" : null }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private bool IsInherit =>
+        AllowInherit &&
+        (string.IsNullOrWhiteSpace(Value) ||
+         string.Equals(Value, ThemeFontCatalog.InheritKey, StringComparison.OrdinalIgnoreCase));
+
+    private string SelectedLabel => IsInherit
+        ? InheritLabel
+        : ThemeFontCatalog.NormalizeNameOrDefault(Value);
+
+    private string SelectedStyle => IsInherit
+        ? "font-family: var(--theme-font-body, \"Inter\", sans-serif)"
+        : $"font-family: {ThemeFontCatalog.CssStackOrDefault(Value)}";
+
+    private Task Toggle()
+    {
+        return IsOpen ? Close() : Open();
+    }
+
+    private async Task Open()
+    {
+        if (HasOpenController)
+        {
+            await OpenPickerIdChanged.InvokeAsync(PickerId);
+            return;
+        }
+
+        _open = true;
+    }
+
+    private async Task Close()
+    {
+        if (HasOpenController)
+        {
+            await OpenPickerIdChanged.InvokeAsync(null);
+            return;
+        }
+
+        _open = false;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (string.Equals(e.Key, "Escape", StringComparison.Ordinal))
+        {
+            await Close();
+        }
+        else if (string.Equals(e.Key, "ArrowDown", StringComparison.Ordinal))
+        {
+            await Open();
+        }
+    }
+
+    private async Task Choose(string value)
+    {
+        await Close();
+
+        if (AllowInherit && string.Equals(value, ThemeFontCatalog.InheritKey, StringComparison.OrdinalIgnoreCase))
+        {
+            await ValueChanged.InvokeAsync(null);
+            return;
+        }
+
+        await ValueChanged.InvokeAsync(ThemeFontCatalog.NormalizeNameOrDefault(value));
+    }
+
+    private bool IsSelected(string displayName) =>
+        !IsInherit &&
+        string.Equals(ThemeFontCatalog.NormalizeNameOrDefault(Value), displayName, StringComparison.Ordinal);
+
+    private static string FontStyle(ThemeFontDefinition font) =>
+        $"font-family: {font.CssStack}";
+}

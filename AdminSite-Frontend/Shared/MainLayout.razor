@@ -3,12 +3,14 @@
 @using SharedComponents.Helpers
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.JSInterop
 @using Blazored.Toast
 @using Blazored.Toast.Configuration
 @inject AdminAuthService Auth
 @inject AdminLanguageService AdminLanguage
 @inject AdminSettingsService SettingsService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @implements IDisposable
 
 @if (!_ready)
@@ -21,7 +23,9 @@ else if (Auth.IsAuthenticated)
 {
     <BlazoredToasts Position="ToastPosition.TopRight"
     Timeout="4"
-    ShowProgressBar="true" />
+    ShowProgressBar="true"
+    MaxToastCount="3"
+    RemoveToastsOnNavigation="true" />
 
     <div class="ez-layout" style="@_appearanceCss">
         <div class="ez-contain">
@@ -146,7 +150,7 @@ else if (Auth.IsAuthenticated)
 
         if (!Auth.IsAuthenticated)
         {
-            Nav.NavigateTo("/login", forceLoad: false);
+            Nav.NavigateTo("login", forceLoad: true);
             return;
         }
 
@@ -183,7 +187,17 @@ else if (Auth.IsAuthenticated)
     {
         var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(path)) path = "/";
-        _accessDenied = !CanAccessPath(path);
+        if (CanAccessPath(path))
+        {
+            _accessDenied = false;
+            return;
+        }
+
+        // Every authenticated account can open the Page Management root.
+        // Replace an inaccessible route so Back does not immediately return
+        // the user to the same denied URL.
+        _accessDenied = false;
+        Nav.NavigateTo("/", replace: true);
     }
 
     private bool CanAccessPath(string path)
@@ -199,32 +213,46 @@ else if (Auth.IsAuthenticated)
             return Auth.IsAuthenticated;
 
         if (path.StartsWith("/content/resources", StringComparison.OrdinalIgnoreCase))
-            return Auth.CanManageAllContent || Auth.IsWriter;
+            return Auth.CanManageContent;
 
         if (path.StartsWith("/content/types", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/content/templates", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/content/deleted", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/content/published", StringComparison.OrdinalIgnoreCase))
-            return Auth.CanManageAllContent;
+            path.StartsWith("/content/deleted", StringComparison.OrdinalIgnoreCase))
+            return Auth.IsAdminAdmin;
+
+        if (path.StartsWith("/content/published", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanManageContent;
 
         if (path.StartsWith("/content/preview", StringComparison.OrdinalIgnoreCase))
             return Auth.CanViewContent;
 
-        if (path.StartsWith("/content/new", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/content/edit", StringComparison.OrdinalIgnoreCase) ||
+        if (path.StartsWith("/content/new", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanCreateEditContent || Auth.IsAdminAdmin;
+
+        if (path.StartsWith("/content/edit", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/content/my", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/content/submitted", StringComparison.OrdinalIgnoreCase))
             return Auth.CanManageContent;
 
         if (path.StartsWith("/content", StringComparison.OrdinalIgnoreCase))
-            return Auth.CanManageContent;
+            return Auth.CanViewContent;
 
         if (path.StartsWith("/global", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/settings", StringComparison.OrdinalIgnoreCase))
             return Auth.CanManageSettings;
 
+        if (path.StartsWith("/forms/submissions", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanAccessFormSubmissions;
+
+        if (path.StartsWith("/forms/definitions", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/forms/types", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanAccessFormDefinitions;
+
+        if (string.Equals(path, "/forms", StringComparison.OrdinalIgnoreCase))
+            return Auth.CanUseFormManagement;
+
         if (path.StartsWith("/forms", StringComparison.OrdinalIgnoreCase))
-            return Auth.CanViewLogs;
+            return false;
 
         if (path.StartsWith("/users/sessions", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/users/audit", StringComparison.OrdinalIgnoreCase))
@@ -287,8 +315,7 @@ else if (Auth.IsAuthenticated)
     private async Task Logout()
     {
         _menuOpen = false;
-        await Auth.LogoutAsync();
-        Nav.NavigateTo("/login");
+        await JS.InvokeVoidAsync("adminAuth.submitSignOut", "signed-out", true);
     }
 
     private enum SidebarMode

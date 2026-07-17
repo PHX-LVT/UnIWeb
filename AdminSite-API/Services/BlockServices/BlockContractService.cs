@@ -1,4 +1,5 @@
 using Contracts.Admin;
+using Contracts.Global;
 using Contracts.Public;
 using FullProject.Models;
 using FullProject.Security;
@@ -145,6 +146,11 @@ public static class BlockContractService
             BackgroundColor = NormalizeColor(incoming?.BackgroundColor, legacyLayout?.BackgroundColor ?? current.BackgroundColor),
             TextColor = NormalizeColor(incoming?.TextColor, current.TextColor),
             TextAlign = Choice(incoming?.TextAlign, TextAlignValues, current.TextAlign, "inherit"),
+            FontSizePx = ClampNullableInt(incoming?.FontSizePx ?? current.FontSizePx, 10, 96),
+            FontWeight = NormalizeFontWeight(incoming?.FontWeight ?? current.FontWeight),
+            FontFamily = NormalizeOptionalFont(incoming?.FontFamily ?? current.FontFamily),
+            LineHeight = ClampNullable(incoming?.LineHeight ?? current.LineHeight, 0.8, 3),
+            LetterSpacingPx = ClampNullable(incoming?.LetterSpacingPx ?? current.LetterSpacingPx, -4, 20),
             Opacity = Clamp(incoming?.Opacity ?? current.Opacity, 0, 1),
             BorderColor = NormalizeColor(incoming?.BorderColor, current.BorderColor),
             BorderWidth = Math.Clamp(incoming?.BorderWidth ?? current.BorderWidth, 0, 20),
@@ -281,6 +287,11 @@ public static class BlockContractService
             BackgroundColor = value.BackgroundColor,
             TextColor = value.TextColor,
             TextAlign = value.TextAlign,
+            FontSizePx = value.FontSizePx,
+            FontWeight = value.FontWeight,
+            FontFamily = value.FontFamily,
+            LineHeight = value.LineHeight,
+            LetterSpacingPx = value.LetterSpacingPx,
             Opacity = value.Opacity,
             BorderColor = value.BorderColor,
             BorderWidth = value.BorderWidth,
@@ -365,6 +376,11 @@ public static class BlockContractService
             BackgroundColor = value.BackgroundColor,
             TextColor = value.TextColor,
             TextAlign = value.TextAlign,
+            FontSizePx = value.FontSizePx,
+            FontWeight = value.FontWeight,
+            FontFamily = value.FontFamily,
+            LineHeight = value.LineHeight,
+            LetterSpacingPx = value.LetterSpacingPx,
             Opacity = value.Opacity,
             BorderColor = value.BorderColor,
             BorderWidth = value.BorderWidth,
@@ -457,6 +473,11 @@ public static class BlockContractService
             BackgroundColor = NormalizeColor(value.BackgroundColor, useLegacyLayout ? block.Layout?.BackgroundColor : null),
             TextColor = NormalizeColor(value.TextColor, null),
             TextAlign = Choice(value.TextAlign, TextAlignValues, "inherit", "inherit"),
+            FontSizePx = ClampNullableInt(value.FontSizePx, 10, 96),
+            FontWeight = NormalizeFontWeight(value.FontWeight),
+            FontFamily = NormalizeOptionalFont(value.FontFamily),
+            LineHeight = ClampNullable(value.LineHeight, 0.8, 3),
+            LetterSpacingPx = ClampNullable(value.LetterSpacingPx, -4, 20),
             Opacity = Clamp(value.Opacity, 0, 1),
             BorderColor = NormalizeColor(value.BorderColor, null),
             BorderWidth = Math.Clamp(value.BorderWidth, 0, 20),
@@ -494,6 +515,11 @@ public static class BlockContractService
         BackgroundColor = value.BackgroundColor,
         TextColor = value.TextColor,
         TextAlign = value.TextAlign,
+        FontSizePx = value.FontSizePx,
+        FontWeight = value.FontWeight,
+        FontFamily = value.FontFamily,
+        LineHeight = value.LineHeight,
+        LetterSpacingPx = value.LetterSpacingPx,
         Opacity = value.Opacity,
         BorderColor = value.BorderColor,
         BorderWidth = value.BorderWidth,
@@ -518,6 +544,11 @@ public static class BlockContractService
         BackgroundColor = value.BackgroundColor,
         TextColor = value.TextColor,
         TextAlign = value.TextAlign,
+        FontSizePx = value.FontSizePx,
+        FontWeight = value.FontWeight,
+        FontFamily = value.FontFamily,
+        LineHeight = value.LineHeight,
+        LetterSpacingPx = value.LetterSpacingPx,
         Opacity = value.Opacity,
         BorderColor = value.BorderColor,
         BorderWidth = value.BorderWidth,
@@ -593,6 +624,19 @@ public static class BlockContractService
     private static double Clamp(double value, double min, double max) =>
         double.IsFinite(value) ? Math.Clamp(value, min, max) : min;
 
+    private static int? ClampNullableInt(int? value, int min, int max) =>
+        value.HasValue ? Math.Clamp(value.Value, min, max) : null;
+
+    private static int? NormalizeFontWeight(int? value)
+    {
+        if (!value.HasValue) return null;
+        var clamped = Math.Clamp(value.Value, 100, 900);
+        return Math.Clamp((int)Math.Round(clamped / 100d) * 100, 100, 900);
+    }
+
+    private static string? NormalizeOptionalFont(string? value) =>
+        ThemeFontCatalog.NormalizeOptionalName(value);
+
     private static double NormalizeRotation(double value)
     {
         if (!double.IsFinite(value)) return 0;
@@ -647,6 +691,10 @@ public static class BlockContractService
 
             if (appearance.BorderWidth is < 0 or > 20)
                 errors.Add("Border width must be between 0 and 20 pixels.");
+
+            if (!string.IsNullOrWhiteSpace(appearance.FontFamily) &&
+                !ThemeFontCatalog.IsAllowed(appearance.FontFamily))
+                errors.Add("Font family is not supported.");
 
             if (TryContrastRatio(appearance.BackgroundColor, appearance.TextColor, out var ratio) && ratio < 4.5)
                 errors.Add("Background and text colors must have a contrast ratio of at least 4.5:1.");

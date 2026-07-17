@@ -1,4 +1,5 @@
 using Contracts.Admin;
+using Contracts.Forms;
 
 namespace AdminSite.Services;
 
@@ -31,9 +32,7 @@ public static class BlockStarterVariantCatalog
         {
             ["text"] =
             [
-                V("editorial", "StarterEditorial", "StarterEditorialHint", "text-editorial", 6, 3, 6),
-                V("compact", "StarterCompact", "StarterCompactHint", "text-compact", 5, 2, 5, padding: "small"),
-                V("feature", "StarterFeature", "StarterFeatureHint", "text-feature", 8, 4, 8, background: "theme-background", align: "center")
+                V("default", "Text", "BlockDescriptionText", "text-editorial", 6, 3, 6, padding: "none")
             ],
             ["bullet-list"] =
             [
@@ -96,12 +95,6 @@ public static class BlockStarterVariantCatalog
                 V("wide", "StarterWide", "StarterWideHint", "map-wide", 8, 5, 8, aspect: "landscape", padding: "none"),
                 V("full-width", "StarterFullWidth", "StarterFullWidthHint", "map-full", 12, 6, 12, aspect: "widescreen", padding: "none")
             ],
-            ["form"] =
-            [
-                V("compact", "StarterCompact", "StarterCompactHint", "form-compact", 5, 6, 5, border: 1),
-                V("standard", "StarterStandard", "StarterStandardHint", "form-standard", 7, 7, 7, border: 1),
-                V("full-width", "StarterFullWidth", "StarterFullWidthHint", "form-full", 12, 8, 12, border: 1)
-            ],
             ["container"] =
             [
                 V("stack", "StarterStackCollection", "StarterStackCollectionHint", "container-stack", 8, 6, 8, containerPresetKey: ContainerPresetCatalog.StackKey, containerMode: "stack"),
@@ -117,8 +110,44 @@ public static class BlockStarterVariantCatalog
     public static IReadOnlyList<BlockStarterVariantDefinition> ForType(string type) =>
         Variants.TryGetValue(type, out var variants) ? variants : Variants["text"];
 
-    public static BlockCreateDto CreateDto(string type, string variantKey)
+    public static BlockCreateDto CreateDto(string type, string variantKey, string? formDefinitionId = null)
     {
+        if (string.Equals(type, "form", StringComparison.Ordinal))
+        {
+            return new FormBlockCreateDto
+            {
+                FormDefinitionId = formDefinitionId,
+                FormScale = 1d,
+                Layout = new BlockLayoutDto
+                {
+                    Width = "custom",
+                    ColumnSpan = 12,
+                    Align = "stretch",
+                    Justify = "start",
+                    Padding = "none",
+                    Margin = "none",
+                    BorderRadius = "none",
+                    W = 12,
+                    H = 1,
+                    WidthPercent = 100,
+                    HeightPx = FormDesignPolicy.MinimumHeightPx
+                },
+                Appearance = new BlockAppearanceDto
+                {
+                    SchemaVersion = 2,
+                    BackgroundMode = "none",
+                    Opacity = 1,
+                    BorderWidth = 0,
+                    BorderStyle = "solid",
+                    BorderRadius = "none",
+                    Shadow = "none",
+                    Shape = "rectangle",
+                    AspectRatio = "auto",
+                    Padding = "none",
+                    Margin = "none"
+                }
+            };
+        }
         var variant = ForType(type).FirstOrDefault(item => item.Key == variantKey) ?? ForType(type)[0];
         var dto = CreateTypedDto(type, variant);
         dto.Layout = new BlockLayoutDto
@@ -169,7 +198,6 @@ public static class BlockStarterVariantCatalog
         "icon" => new IconBlockCreateDto(),
         "button" => new ButtonBlockCreateDto { Style = variant.ButtonStyle ?? "filled" },
         "map" => new MapBlockCreateDto(),
-        "form" => new FormBlockCreateDto(),
         "container" => CreateContainer(variant),
         _ => new TextBlockCreateDto()
     };

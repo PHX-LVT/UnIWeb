@@ -42,18 +42,52 @@ namespace FullProject.Services
                     return (null, ["Content item not found."]);
                 }
 
+                if (dto.Status is not ContentStatus.Draft and
+                    not ContentStatus.Submitted and
+                    not ContentStatus.Rejected)
+                {
+                    await session.AbortTransactionAsync();
+                    return (null, ["Unsupported Content workflow transition."]);
+                }
+
+                var storedStatus = dto.Status == ContentStatus.Rejected
+                    ? ContentStatus.Draft
+                    : dto.Status;
                 var updates = new List<UpdateDefinition<ContentItem>>
                 {
-                    Builders<ContentItem>.Update.Set(c => c.Status, dto.Status),
+                    Builders<ContentItem>.Update.Set(c => c.Status, storedStatus),
                     Builders<ContentItem>.Update.Set(c => c.UpdatedAt, DateTime.UtcNow),
                     Builders<ContentItem>.Update.Set(c => c.UpdatedById, actorId)
                 };
 
                 if (dto.Status == ContentStatus.Submitted)
+                {
                     updates.Add(Builders<ContentItem>.Update.Set(c => c.SubmittedAt, DateTime.UtcNow));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.ReviewStatus, ContentReviewStatus.None));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectionMessage, null));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedById, null));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedAt, null));
+                }
+                else if (dto.Status == ContentStatus.Rejected)
+                {
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.ReviewStatus, ContentReviewStatus.Rejected));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectionMessage, string.IsNullOrWhiteSpace(dto.Message) ? null : dto.Message.Trim()));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedById, actorId));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedAt, DateTime.UtcNow));
+                }
+                else
+                {
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.ReviewStatus, ContentReviewStatus.None));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectionMessage, null));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedById, null));
+                    updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedAt, null));
+                }
 
                 await _context.ContentDraft.UpdateOneAsync(session, c => c.Id == id, Builders<ContentItem>.Update.Combine(updates));
-                await _revisions.LogAsync(session, item.StableId, dto.Status.ToString().ToLowerInvariant(), actorId, dto.Message);
+                var action = dto.Status == ContentStatus.Rejected
+                    ? "rejected"
+                    : dto.Status.ToString().ToLowerInvariant();
+                await _revisions.LogAsync(session, item.StableId, action, actorId, dto.Message);
 
                 var updated = await GetByIdAsync(session, id);
                 await session.CommitTransactionAsync();
@@ -86,6 +120,10 @@ namespace FullProject.Services
                 await _context.ContentDraft.UpdateOneAsync(session, c => c.Id == id,
                     Builders<ContentItem>.Update
                         .Set(c => c.Status, ContentStatus.Published)
+                        .Set(c => c.ReviewStatus, ContentReviewStatus.None)
+                        .Set(c => c.RejectionMessage, null)
+                        .Set(c => c.RejectedById, null)
+                        .Set(c => c.RejectedAt, null)
                         .Set(c => c.PublishedAt, now)
                         .Set(c => c.PublishedById, actorId)
                         .Set(c => c.UpdatedById, actorId)
@@ -178,6 +216,10 @@ namespace FullProject.Services
                 await _context.ContentDraft.UpdateOneAsync(session, c => c.Id == id,
                     Builders<ContentItem>.Update
                         .Set(c => c.Status, ContentStatus.Draft)
+                        .Set(c => c.ReviewStatus, ContentReviewStatus.None)
+                        .Set(c => c.RejectionMessage, null)
+                        .Set(c => c.RejectedById, null)
+                        .Set(c => c.RejectedAt, null)
                         .Set(c => c.Visible, true)
                         .Set(c => c.UpdatedById, actorId)
                         .Set(c => c.UpdatedAt, now));

@@ -1,0 +1,175 @@
+/* Governed font picker shared by Theme settings and Block text editing. */
+.admin-font-picker {
+    position: relative;
+    min-width: 0;
+}
+
+.admin-font-picker__trigger {
+    position: relative;
+    z-index: 81;
+    display: inline-flex;
+    width: 100%;
+    min-height: 34px;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: 0 .65rem;
+    border: 1px solid rgba(15, 23, 42, .18);
+    border-radius: 7px;
+    background: #fff;
+    color: #0f172a;
+    font-size: .86rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.admin-font-picker__trigger:focus-visible,
+.admin-font-picker__option:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--theme-color-accent, #e5c076) 70%, #fff);
+    outline-offset: 2px;
+}
+
+.admin-font-picker__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-font-picker__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    border: 0;
+    background: transparent;
+    cursor: default;
+}
+
+.admin-font-picker__menu {
+    position: absolute;
+    z-index: 80;
+    top: calc(100% + 5px);
+    left: 0;
+    width: max(100%, 230px);
+    max-height: 300px;
+    overflow: auto;
+    padding: .35rem;
+    border: 1px solid rgba(15, 23, 42, .16);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 16px 38px rgba(15, 23, 42, .18);
+}
+
+.admin-font-picker__option {
+    display: flex;
+    width: 100%;
+    min-height: 40px;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .45rem .55rem;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #0f172a;
+    text-align: left;
+    cursor: pointer;
+}
+
+.admin-font-picker__option:hover,
+.admin-font-picker__option.is-selected {
+    background: rgba(0, 26, 51, .08);
+}
+
+.admin-font-picker__option span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .9rem;
+    font-weight: 800;
+}
+
+.admin-font-picker__option small {
+    flex: 0 0 auto;
+    color: #64748b;
+    font-family: var(--theme-font-body, "Inter", sans-serif);
+    font-size: .68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.theme-settings-panel__font-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .6rem;
+}
+
+.theme-settings-panel__font-field {
+    min-width: 0;
+}
+
+.theme-settings-panel__font-picker .admin-font-picker__trigger {
+    border-color: rgba(255, 255, 255, .18);
+}
+
+/* The two Theme font fields share one sidebar row. Let either dropdown use
+   exactly that row's width; the Heading picker opens back toward the left so
+   it never expands the sidebar's horizontal scroll area. */
+.theme-settings-panel__font-picker .admin-font-picker__menu {
+    width: calc(200% + .6rem);
+    overflow-x: hidden;
+}
+
+.theme-settings-panel__font-field:last-child .admin-font-picker__menu {
+    right: 0;
+    left: auto;
+}
+
+/* Body Font opens from the left, so keep its scrollbar on that edge as well.
+   Reset the option direction so font names retain normal reading order. */
+.theme-settings-panel__font-field:first-child .admin-font-picker__menu {
+    direction: rtl;
+}
+
+.theme-settings-panel__font-field:first-child .admin-font-picker__option {
+    direction: ltr;
+}
+
+.content-rich-editor--block-text,
+.content-rich-toolbar--block-text {
+    overflow: visible;
+}
+
+.content-rich-font-picker {
+    flex: 0 0 148px;
+}
+
+.content-rich-font-picker .admin-font-picker__trigger {
+    min-height: 32px;
+    padding: 0 .5rem;
+    border-color: #d8e0ea;
+    border-radius: 6px;
+    font-size: .82rem;
+}
+
+.content-rich-font-picker .admin-font-picker__menu {
+    width: 240px;
+}
+
+@media (max-width: 520px) {
+    .theme-settings-panel__font-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .theme-settings-panel__font-picker .admin-font-picker__menu {
+        right: auto;
+        left: 0;
+        width: 100%;
+    }
+
+    .content-rich-font-picker {
+        flex-basis: 132px;
+    }
+}

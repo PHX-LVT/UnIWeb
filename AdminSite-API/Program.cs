@@ -39,6 +39,8 @@ builder.Services.Configure<R2StorageSettings>(
     builder.Configuration.GetSection("R2Storage"));
 builder.Services.Configure<FormSecuritySettings>(
     builder.Configuration.GetSection("FormSecurity"));
+builder.Services.Configure<FormDesignV2RuntimeSettings>(
+    builder.Configuration.GetSection("FormDesignV2"));
 
 // --- MongoDB ---
 var mongoSettings = builder.Configuration
@@ -63,6 +65,7 @@ builder.Services.AddSingleton<FullProject.Data.MongoDbContext>();
 builder.Services.AddSingleton<MongoIndexService>();
 
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<AdminRoleService>();
 builder.Services.AddScoped<BrandingService>();
 builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<GlobalButtonsService>();
@@ -86,8 +89,10 @@ builder.Services.AddScoped<FormSubmissionService>();
 builder.Services.AddScoped<FormSubmissionExportService>();
 builder.Services.AddScoped<FormSubmissionSecurityService>();
 builder.Services.AddScoped<FormInputTypeService>();
+builder.Services.AddScoped<FormDefinitionOrderService>();
 builder.Services.AddScoped<FormDefinitionService>();
 builder.Services.AddScoped<FormValidationService>();
+builder.Services.AddScoped<FormDesignV2MigrationPlanner>();
 builder.Services.AddScoped<PublicFormSubmissionService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ContentAssetMetadataService>();
@@ -96,6 +101,7 @@ builder.Services.AddScoped<ContentValidationService>();
 builder.Services.AddScoped<ContentMappingService>();
 builder.Services.AddScoped<ContentRevisionService>();
 builder.Services.AddScoped<ContentWorkflowService>();
+builder.Services.AddScoped<ContentWorkflowPolicy>();
 builder.Services.AddScoped<ContentService>();
 builder.Services.AddScoped<ManagedResourceAlbumService>();
 builder.Services.AddScoped<ManagedResourceValidationService>();
@@ -344,6 +350,41 @@ var seedSettings = builder.Configuration
 
 var seedEmail = builder.Configuration["Seed:AdminEmail"];
 var seedPassword = builder.Configuration["Seed:AdminPassword"];
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<AdminRoleService>()
+        .EnsureInitializedAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    logger.LogInformation("Admin role bootstrap complete.");
+}
+catch (Exception ex)
+{
+    logger.LogCritical(ex,
+        "Admin role bootstrap failed. Check MongoDB connectivity and legacy role data.");
+    throw;
+}
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    var contentMigration = await scope.ServiceProvider.GetRequiredService<ContentService>()
+        .MigrateLegacyWorkflowAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    if (contentMigration.WorkflowCount > 0 || contentMigration.AuthorCount > 0)
+    {
+        logger.LogInformation(
+            "Content workflow migration complete. Rejected records: {WorkflowCount}, author records: {AuthorCount}.",
+            contentMigration.WorkflowCount,
+            contentMigration.AuthorCount);
+    }
+}
+catch (Exception ex)
+{
+    logger.LogWarning(ex,
+        "Legacy Content workflow migration did not complete. The app will retry on the next startup.");
+}
 
 if (!string.IsNullOrEmpty(seedEmail) && !string.IsNullOrEmpty(seedPassword))
 {

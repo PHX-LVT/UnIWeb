@@ -8,9 +8,9 @@
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
 
-        var target = Auth.CanViewFormSubmissions
+        var target = Auth.CanAccessFormSubmissions
             ? "/forms/submissions"
-            : Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions
+            : Auth.CanAccessFormDefinitions
                 ? "/forms/definitions"
                 : "/";
         Nav.NavigateTo(target, replace: true);

@@ -57,13 +57,13 @@
 
         @if (_expandedGroup == "forms")
         {
-            @if (Auth.CanViewFormSubmissions)
+            @if (Auth.CanAccessFormSubmissions)
             {
                 <NavLink class="ez-nav-link ez-nav-child" href="/forms/submissions" @onclick='() => ExpandGroup("forms")'>
                     <span>@T("FormSubmissions")</span>
                 </NavLink>
             }
-            @if (Auth.CanViewFormDefinitions || Auth.CanEditFormDefinitions)
+            @if (Auth.CanAccessFormDefinitions)
             {
                 <NavLink class="ez-nav-link ez-nav-child" href="/forms/definitions" @onclick='() => ExpandGroup("forms")'>
                     <span>@T("FormDefinitions")</span>
@@ -95,16 +95,19 @@
 
         @if (_expandedGroup == "content")
         {
+            <NavLink class="ez-nav-link ez-nav-child" href="/content/all" @onclick='() => ExpandGroup("content")'>
+                <span>@T("AllContent")</span>
+            </NavLink>
             @if (Auth.CanManageContent)
             {
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/all" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("AllContent")</span>
-                </NavLink>
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/my" @onclick='() => ExpandGroup("content")'>
                     <span>@T("MyContent")</span>
                 </NavLink>
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/submitted" @onclick='() => ExpandGroup("content")'>
                     <span>@T("Submitted")</span>
+                </NavLink>
+                <NavLink class="ez-nav-link ez-nav-child" href="/content/published" @onclick='() => ExpandGroup("content")'>
+                    <span>@T("Published")</span>
                 </NavLink>
             }
             <NavLink class="ez-nav-link ez-nav-child" href="/content/preview" @onclick='() => ExpandGroup("content")'>
@@ -116,11 +119,8 @@
                     <span>@T("ResourceLibrary")</span>
                 </NavLink>
             }
-            @if (Auth.CanManageAllContent)
+            @if (Auth.IsAdminAdmin)
             {
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/published" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("Published")</span>
-                </NavLink>
                 <NavLink class="ez-nav-link ez-nav-child" href="/content/deleted" @onclick='() => ExpandGroup("content")'>
                     <span>@T("Deleted")</span>
                 </NavLink>
@@ -203,7 +203,7 @@
     }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
-    private bool CanViewResourceLibrary => Auth.CanManageAllContent || Auth.IsWriter;
+    private bool CanViewResourceLibrary => Auth.CanManageContent;
 
     private void ToggleGroup(string group)
     {
@@ -233,7 +233,7 @@
         }
 
         _expandedGroup = "content";
-        Nav.NavigateTo(Auth.CanManageContent ? "/content/all" : "/content/preview");
+        Nav.NavigateTo("/content/all");
     }
 
     private void CollapseGroups()

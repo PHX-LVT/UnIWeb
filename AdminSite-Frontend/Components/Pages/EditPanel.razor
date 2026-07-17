@@ -1,4 +1,4 @@
-﻿@using Contracts.Admin
+@using Contracts.Admin
 @using System.Text.Json
 @inject AdminSectionService SectionService
 @inject IHttpService Http
@@ -172,7 +172,9 @@
                          SectionBlockLayoutMode="@Section.Style?.BlockLayoutMode"
                          UseArrangeWorkspace="@CanArrangeBlocks"
                          InitialBlockId="@InitialBlockId"
+                         RefreshVersion="@BlockEditorRefreshVersion"
                          Languages="_languages"
+                         AddRequested="OnAddBlockRequested"
                          ActiveBlockChanged="OnActiveBlockChanged"
                          OnChanged="OnBlocksChanged" />
         }
@@ -229,6 +231,8 @@
     [Parameter] public bool CanArrangeBlocks { get; set; }
     [Parameter] public string InitialTab { get; set; } = "style";
     [Parameter] public string? InitialBlockId { get; set; }
+    [Parameter] public int BlockEditorRefreshVersion { get; set; }
+    [Parameter] public EventCallback<BlockCreationRequest> OnAddBlockRequested { get; set; }
 
     private string _tab = "style";
     private List<string> _languages = new() { "en" };
@@ -289,7 +293,7 @@
     {
         if (HasUnsavedSectionChanges)
         {
-            Http.Toast(T("SaveSectionBeforePreset"), 409);
+            Http.Notify(T("SaveSectionBeforePreset"), 409);
             return;
         }
         await OnSaveAsPresetRequested.InvokeAsync(Section.Id);

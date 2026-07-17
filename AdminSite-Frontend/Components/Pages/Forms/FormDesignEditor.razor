@@ -1,0 +1,1551 @@
+@implements IAsyncDisposable
+@using Contracts.Forms
+@using Contracts.Public
+@using Microsoft.AspNetCore.Components.Rendering
+@inject IJSRuntime JS
+@inject IHttpService Http
+@inject ThemeService ThemeService
+
+@if (_theme is not null)
+{
+    <style>@((MarkupString)ThemeService.ToScopedCssVariables(_theme, ".form-design-preview-theme"))</style>
+}
+
+<div class="form-design-editor">
+    <section class="form-design-preview-panel form-design-preview-theme" aria-labelledby="form-design-preview-title">
+        <div class="form-design-preview-panel__heading">
+            <strong id="form-design-preview-title">@T("LivePreview")</strong>
+            <div class="form-design-preview-toolbar">
+                <button type="button"
+                        class="btn-admin btn-secondary form-design-settings-trigger"
+                        disabled="@Disabled"
+                        aria-haspopup="dialog"
+                        aria-expanded="@SettingsOpen"
+                        @onclick="OpenDrawer">
+                    <i class="fas fa-sliders" aria-hidden="true"></i>
+                    @T("DesignSettings")
+                </button>
+                <button type="button"
+                        class="btn-admin btn-ghost form-design-reset-trigger"
+                        disabled="@(Disabled || ResetDisabled)"
+                        title="@T("Reset")"
+                        aria-label="@T("Reset")"
+                        @onclick="RequestReset">
+                    <i class="fas fa-rotate-left" aria-hidden="true"></i>
+                </button>
+                <div class="form-design-dimensions" aria-live="polite">
+                    <span>@T("Width"): <strong>@PreviewWidthPx px</strong></span>
+                    <span>@T("Height"): <strong>@PreviewHeightPx px</strong> · @T("Automatic")</span>
+                </div>
+            </div>
+        </div>
+        @if (UsageCount > 0)
+        {
+            <div class="form-design-usage-warning">
+                <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                @string.Format(T("FormDesignUsageWarning"), UsageCount)
+            </div>
+        }
+        <div class="form-design-preview-stage" @ref="_previewStageElement">
+            <div class="form-design-preview-track" style="--form-design-preview-width:@(PreviewWidthPx)px">
+            <div class="form-design-preview-canvas"
+                 style="--form-design-preview-width:@(PreviewWidthPx)px;--form-design-split:@(V2.SplitPanelPercent)%">
+                <PublicFormRenderer Block="@PreviewBlock" Lang="@AdminLanguage" Context="preview" PreviewOnly="true" />
+                @if (V2.OuterLayout == FormOuterLayout.SplitPanel)
+                {
+                    <button type="button"
+                            class="form-design-split-handle"
+                            disabled="@Disabled"
+                            title="@T("DragSplitDivider")"
+                            aria-label="@T("DragSplitDivider")"
+                            @onpointerdown="BeginSplitDrag"></button>
+                }
+                <button type="button"
+                        class="form-design-width-handle form-design-width-handle--left"
+                        disabled="@Disabled"
+                        title="@T("DragLeftEdgeToResize")"
+                        aria-label="@T("DragLeftEdgeToResize")"
+                        @onpointerdown="args => BeginWidthDrag(args, -1)"></button>
+                <button type="button"
+                        class="form-design-width-handle form-design-width-handle--right"
+                        disabled="@Disabled"
+                        title="@T("DragRightEdgeToResize")"
+                        aria-label="@T("DragRightEdgeToResize")"
+                        @onpointerdown="args => BeginWidthDrag(args, 1)"></button>
+            </div>
+            </div>
+        </div>
+    </section>
+
+    @if (SettingsOpen)
+    {
+        <aside class="form-design-drawer"
+               @ref="_drawerElement"
+               tabindex="-1"
+               aria-labelledby="form-design-drawer-title">
+            <header class="form-design-drawer__header">
+                <button type="button" class="btn-admin btn-ghost" @onclick="CloseDrawer">
+                    <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                    @T("Back")
+                </button>
+                <div>
+                    <strong id="form-design-drawer-title">@T("DesignSettings")</strong>
+                    <span>@DefinitionName</span>
+                </div>
+            </header>
+
+            <div class="form-design-drawer__body">
+                <section class="form-design-drawer__section" aria-labelledby="form-layout-heading">
+                    <h3 id="form-layout-heading">@T("Layout")</h3>
+                    <div class="form-design-layouts">
+                        @foreach (var layout in Enum.GetValues<FormOuterLayout>())
+                        {
+                            <button type="button"
+                                    class="form-design-layout @(V2.OuterLayout == layout ? "active" : null)"
+                                    disabled="@Disabled"
+                                    aria-pressed="@(V2.OuterLayout == layout)"
+                                    @onclick="() => SetOuterLayout(layout)">
+                                <span class="form-design-layout__diagram form-design-layout__diagram--@LayoutToken(layout)" aria-hidden="true"><i></i><i></i><i></i></span>
+                                <strong>@T(LayoutKey(layout))</strong>
+                            </button>
+                        }
+                    </div>
+                    <label class="form-filter">
+                        <span>@T("FormWidth")</span>
+                        <input class="form-control"
+                               type="number"
+                               min="@FormDesignV2Policy.MinimumWidth(V2.OuterLayout)"
+                               max="@FormDesignV2Policy.MaximumWidth(V2.OuterLayout)"
+                               value="@PreviewWidthPx"
+                               disabled="@Disabled"
+                               @onchange="SetDesignWidthFromInput" />
+                    </label>
+                    @if (V2.OuterLayout == FormOuterLayout.SplitPanel)
+                    {
+                        <label class="form-design-slider">
+                            <span>@T("SplitRatio"): @V2.SplitPanelPercent%</span>
+                            <input type="range"
+                                   min="@FormDesignV2Policy.MinimumSplitPanelPercent"
+                                   max="@FormDesignV2Policy.MaximumSplitPanelPercent"
+                                   value="@V2.SplitPanelPercent"
+                                   disabled="@Disabled"
+                                   @oninput="SetSplitPercent" />
+                        </label>
+                    }
+                </section>
+
+                <section class="form-design-drawer__section" aria-labelledby="form-rows-heading">
+                    <div class="form-design-section-heading">
+                        <div>
+                            <h3 id="form-rows-heading">@T("FieldRows")</h3>
+                            <span>@T("FieldRowsHint")</span>
+                        </div>
+                        <button type="button"
+                                class="btn-admin btn-secondary"
+                                disabled="@(Disabled || !CanGroupSelectedFields)"
+                                @onclick="GroupSelectedFields">
+                            @T("GroupOnOneLine")
+                        </button>
+                    </div>
+                    @if (Rows.Count == 0)
+                    {
+                        <div class="form-design-empty">@T("FieldRowsEmpty")</div>
+                    }
+                    else
+                    {
+                        <div class="form-design-rows" @ref="_rowsElement">
+                            @foreach (var row in Rows)
+                            {
+                                <article class="form-design-row"
+                                         data-row-id="@row.Id"
+                                         tabindex="0"
+                                         title="@T("DragRowToReorder")"
+                                         @onkeydown="args => HandleRowKeyDown(args, row)"
+                                         @key="row.Id">
+                                    <header>
+                                        <strong>@string.Format(T("FieldRowNumber"), row.Order + 1)</strong>
+                                        @if (row.FieldKeys.Count > 1)
+                                        {
+                                            <button type="button"
+                                                    class="form-design-row__ungroup"
+                                                    disabled="@Disabled"
+                                                    title="@T("Ungroup")"
+                                                    @onclick="() => UngroupRow(row)">
+                                                <i class="fas fa-object-ungroup" aria-hidden="true"></i>
+                                                @T("Ungroup")
+                                            </button>
+                                        }
+                                    </header>
+                                    <div class="form-design-row__fields"
+                                         data-row-id="@row.Id"
+                                         style="--form-design-field-count:@row.FieldKeys.Count">
+                                        @foreach (var fieldKey in row.FieldKeys)
+                                        {
+                                            var field = FindField(fieldKey);
+                                            if (field is null) continue;
+                                            <div class="form-design-field-chip"
+                                                 data-field-key="@fieldKey"
+                                                 tabindex="0"
+                                                 title="@T("DragFieldToReorder")"
+                                                 @onkeydown="args => HandleFieldKeyDown(args, row, fieldKey)"
+                                                 @key="fieldKey">
+                                                <label>
+                                                    <input type="checkbox"
+                                                           disabled="@Disabled"
+                                                           checked="@_selectedFieldKeys.Contains(fieldKey)"
+                                                           @onchange="e => ToggleFieldSelection(fieldKey, e.Value)" />
+                                                    <span>@FieldName(field)</span>
+                                                </label>
+                                                @if (FormDesignPolicy.IsWideField(field.Type))
+                                                {
+                                                    <em>@T("FullRow")</em>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+
+                @if (V2.OuterLayout == FormOuterLayout.SplitPanel)
+                {
+                <section class="form-design-drawer__section" aria-labelledby="information-heading">
+                    <div class="form-design-section-heading">
+                        <div>
+                            <h3 id="information-heading">@T("InformationPanel")</h3>
+                            <span>@T("InformationPanelHint")</span>
+                        </div>
+                        <button type="button" class="btn-admin btn-secondary" disabled="@Disabled" @onclick="AddInformationItem">@T("AddInformationItem")</button>
+                    </div>
+                    @if (Definition.InformationItems.Count == 0)
+                    {
+                        <div class="form-design-empty">@T("NoInformationItems")</div>
+                    }
+                    @if (Definition.InformationItems.Count > 0)
+                    {
+                    <div class="form-design-card-list" @ref="_informationItemsElement">
+                    @foreach (var item in Definition.InformationItems.OrderBy(item => item.Order))
+                    {
+                        <article class="form-design-item-card"
+                                 data-info-id="@item.Id"
+                                 tabindex="0"
+                                 title="@T("DragInformationItemToReorder")"
+                                 @onkeydown="args => HandleInformationItemKeyDown(args, item)"
+                                 @key="item.Id">
+                            <header>
+                                <strong>@string.Format(T("InformationItemNumber"), item.Order + 1)</strong>
+                                @DeleteButton(() => RemoveInformationItem(item))
+                            </header>
+                            <div class="form-design-control-grid">
+                                <label class="form-filter">
+                                    <span>@T("Icon")</span>
+                                    <select class="form-control" value="@item.Icon" disabled="@Disabled" @onchange="e => SetInformationIcon(item, e.Value)">
+                                        @foreach (var icon in InformationIcons)
+                                        {
+                                            <option value="@icon.Value">@T(icon.LabelKey)</option>
+                                        }
+                                    </select>
+                                </label>
+                                <label class="form-filter">
+                                    <span>@T("Text")</span>
+                                    <input class="form-control" value="@Localized(item.Text)" disabled="@Disabled" @onchange="e => SetLocalized(item.Text, e.Value)" />
+                                </label>
+                            </div>
+                            <label class="form-design-check">
+                                <input type="checkbox" checked="@(item.Target is not null)" disabled="@Disabled" @onchange="e => ToggleInformationTarget(item, e.Value)" />
+                                <span>@T("MakeInformationItemClickable")</span>
+                            </label>
+                            @if (item.Target is not null)
+                            {
+                                <div class="form-design-target-grid">
+                                    <label class="form-filter">
+                                        <span>@T("TargetType")</span>
+                                        <select class="form-control" value="@item.Target.Type" disabled="@Disabled" @onchange="e => SetTargetType(item.Target, e.Value, false)">
+                                            @foreach (var targetType in InformationTargetTypes)
+                                            {
+                                                <option value="@targetType">@T(TargetTypeKey(targetType))</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    @TargetValueEditor(item.Target, null)
+                                </div>
+                            }
+                        </article>
+                    }
+                    </div>
+                    }
+                </section>
+                }
+
+                <section class="form-design-drawer__section" aria-labelledby="primary-buttons-heading">
+                    <h3 id="primary-buttons-heading">@T("PrimaryButtons")</h3>
+                    <div class="form-design-submit-card">
+                        <div>
+                            <strong>@T("SubmitButton")</strong>
+                            <span>@T("SubmitSemanticHint")</span>
+                        </div>
+                        <label class="form-filter">
+                            <span>@T("SubmitPlacement")</span>
+                            <select class="form-control" value="@V2.SubmitLayout" disabled="@Disabled" @onchange="SetSubmitLayout">
+                                @foreach (var submitLayout in Enum.GetValues<FormSubmitLayout>())
+                                {
+                                    <option value="@(submitLayout)">@T(SubmitLayoutKey(submitLayout))</option>
+                                }
+                            </select>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="form-design-drawer__section" aria-labelledby="auxiliary-buttons-heading">
+                    <div class="form-design-section-heading">
+                        <div>
+                            <h3 id="auxiliary-buttons-heading">@T("AuxiliaryButtons")</h3>
+                            <span>@T("AuxiliaryActionsHint")</span>
+                        </div>
+                        <button type="button"
+                                class="btn-admin btn-secondary"
+                                disabled="@(Disabled || Definition.AuxiliaryActions.Count >= FormDesignV2Policy.MaximumAuxiliaryActions)"
+                                @onclick="AddAuxiliaryAction">@T("AddAuxiliaryAction")</button>
+                    </div>
+                    @if (Definition.AuxiliaryActions.Count == 0)
+                    {
+                        <div class="form-design-empty">@T("NoAuxiliaryActions")</div>
+                    }
+                    @if (Definition.AuxiliaryActions.Count > 0)
+                    {
+                    <div class="form-design-card-list" @ref="_auxiliaryActionsElement">
+                    @foreach (var action in Definition.AuxiliaryActions.OrderBy(action => action.Order))
+                    {
+                        var actionLayout = LayoutFor(action.Id);
+                        <article class="form-design-item-card"
+                                 data-action-id="@action.Id"
+                                 tabindex="0"
+                                 title="@T("DragAuxiliaryActionToReorder")"
+                                 @onkeydown="args => HandleAuxiliaryActionKeyDown(args, action)"
+                                 @key="action.Id">
+                            <header>
+                                <strong>@string.Format(T("AuxiliaryActionNumber"), action.Order + 1)</strong>
+                                @DeleteButton(() => RemoveAuxiliaryAction(action))
+                            </header>
+                            <label class="form-filter">
+                                <span>@T("Label")</span>
+                                <input class="form-control" value="@Localized(action.Label)" disabled="@Disabled" @onchange="e => SetLocalized(action.Label, e.Value)" />
+                            </label>
+                            <div class="form-design-target-grid">
+                                <label class="form-filter">
+                                    <span>@T("TargetType")</span>
+                                    <select class="form-control" value="@action.Target.Type" disabled="@Disabled" @onchange="e => SetTargetType(action.Target, e.Value, true)">
+                                        @foreach (var targetType in AuxiliaryTargetTypes)
+                                        {
+                                            <option value="@targetType">@T(TargetTypeKey(targetType))</option>
+                                        }
+                                    </select>
+                                </label>
+                                @TargetValueEditor(action.Target, action)
+                            </div>
+                            @if (!HasConfiguredTarget(action.Target))
+                            {
+                                <span class="form-design-validation-hint" role="status">
+                                    <i class="fas fa-circle-exclamation" aria-hidden="true"></i>
+                                    @T("ActionTargetRequired")
+                                </span>
+                            }
+                            <div class="form-design-control-grid">
+                                <label class="form-filter">
+                                    <span>@T("ActionStyle")</span>
+                                    <select class="form-control" value="@actionLayout.Style" disabled="@Disabled" @onchange="e => SetActionStyle(actionLayout, e.Value)">
+                                        @foreach (var style in Enum.GetValues<FormAuxiliaryActionStyle>())
+                                        {
+                                            <option value="@style">@T(style.ToString())</option>
+                                        }
+                                    </select>
+                                </label>
+                                @if (V2.OuterLayout == FormOuterLayout.SplitPanel)
+                                {
+                                    <label class="form-filter">
+                                        <span>@T("Placement")</span>
+                                        <select class="form-control" value="@actionLayout.Placement" disabled="@Disabled" @onchange="e => SetActionPlacement(actionLayout, e.Value)">
+                                            <option value="@FormAuxiliaryActionPlacement.BelowFields">@T("BelowFields")</option>
+                                            <option value="@FormAuxiliaryActionPlacement.InformationPanel">@T("InformationPanel")</option>
+                                        </select>
+                                    </label>
+                                }
+                            </div>
+                        </article>
+                    }
+                    </div>
+                    }
+                </section>
+
+                <section class="form-design-drawer__section" aria-labelledby="appearance-heading">
+                    <h3 id="appearance-heading">@T("Appearance")</h3>
+                    <label class="form-design-check form-design-theme-defaults">
+                        <input type="checkbox"
+                               checked="@Definition.Design.UseThemeDefaults"
+                               disabled="@Disabled"
+                               @onchange="ToggleThemeDefaults" />
+                        <span>
+                            <strong>@T("UseThemeDefaults")</strong>
+                            <small>@T("UseThemeDefaultsHint")</small>
+                        </span>
+                    </label>
+                    @if (V2.OuterLayout == FormOuterLayout.SplitPanel)
+                    {
+                        <div class="form-design-control-grid">
+                            @ColorInput("InformationBackgroundColor", V2.InformationBackgroundColor, value => SetV2Color(nameof(FormDesignV2SettingsDto.InformationBackgroundColor), value), Definition.Design.UseThemeDefaults)
+                            @ColorInput("InformationTextColor", V2.InformationTextColor, value => SetV2Color(nameof(FormDesignV2SettingsDto.InformationTextColor), value), Definition.Design.UseThemeDefaults)
+                            @ColorInput("FormBackgroundColor", V2.FormBackgroundColor, value => SetV2Color(nameof(FormDesignV2SettingsDto.FormBackgroundColor), value), Definition.Design.UseThemeDefaults)
+                            @ColorInput("FormTextColor", V2.FormTextColor, value => SetV2Color(nameof(FormDesignV2SettingsDto.FormTextColor), value), Definition.Design.UseThemeDefaults)
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="form-design-control-grid">
+                            <label class="form-filter">
+                                <span>@T("FormBackground")</span>
+                                <select class="form-control" value="@Definition.Design.BackgroundMode" disabled="@(Disabled || Definition.Design.UseThemeDefaults)" @onchange="SetBackgroundMode">
+                                    <option value="@FormDesignBackgroundModeModel.Solid">@T("Solid")</option>
+                                    <option value="@FormDesignBackgroundModeModel.Transparent">@T("Transparent")</option>
+                                </select>
+                            </label>
+                            @ColorInput("BackgroundColor", Definition.Design.BackgroundColor, value => SetLegacyColor(nameof(FormDesignSettingsModel.BackgroundColor), value), Definition.Design.UseThemeDefaults || Definition.Design.BackgroundMode == FormDesignBackgroundModeModel.Transparent)
+                            @ColorInput("TextColor", Definition.Design.TextColor, value => SetLegacyColor(nameof(FormDesignSettingsModel.TextColor), value), Definition.Design.UseThemeDefaults)
+                        </div>
+                    }
+                    <div class="form-design-control-grid">
+                        @ColorInput("AccentColor", Definition.Design.AccentColor, value => SetLegacyColor(nameof(FormDesignSettingsModel.AccentColor), value), Definition.Design.UseThemeDefaults)
+                        @ColorInput("BorderColor", Definition.Design.BorderColor, value => SetLegacyColor(nameof(FormDesignSettingsModel.BorderColor), value), Definition.Design.UseThemeDefaults)
+                        <label class="form-filter">
+                            <span>@T("TextAlignment")</span>
+                            <select class="form-control" value="@Definition.Design.TextAlign" disabled="@Disabled" @onchange="SetTextAlign">
+                                <option value="@FormDesignTextAlignModel.Left">@T("Left")</option>
+                                <option value="@FormDesignTextAlignModel.Center">@T("Center")</option>
+                            </select>
+                        </label>
+                        <label class="form-filter">
+                            <span>@T("LabelStyle")</span>
+                            <select class="form-control" value="@Definition.Design.LabelMode" disabled="@Disabled" @onchange="SetLabelMode">
+                                <option value="@FormLabelModeModel.Visible">@T("VisibleLabels")</option>
+                                <option value="@FormLabelModeModel.InsideInputs">@T("LabelsInsideInputs")</option>
+                            </select>
+                        </label>
+                        <label class="form-filter">
+                            <span>@T("ButtonStyle")</span>
+                            <select class="form-control" value="@Definition.Design.ButtonStyle" disabled="@(Disabled || Definition.Design.UseThemeDefaults)" @onchange="e => SetLegacyString(nameof(FormDesignSettingsModel.ButtonStyle), e.Value)">
+                                <option value="filled">@T("Filled")</option>
+                                <option value="outline">@T("Outline")</option>
+                                <option value="ghost">@T("Ghost")</option>
+                            </select>
+                        </label>
+                        <label class="form-filter">
+                            <span>@T("Shadow")</span>
+                            <select class="form-control" value="@Definition.Design.Shadow" disabled="@(Disabled || Definition.Design.UseThemeDefaults)" @onchange="e => SetLegacyString(nameof(FormDesignSettingsModel.Shadow), e.Value)">
+                                <option value="none">@T("None")</option>
+                                <option value="small">@T("Small")</option>
+                                <option value="medium">@T("Medium")</option>
+                                <option value="large">@T("Large")</option>
+                            </select>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="form-design-drawer__section" aria-labelledby="spacing-heading">
+                    <h3 id="spacing-heading">@T("SpacingAndBorder")</h3>
+                    <div class="form-design-sliders">
+                        @Slider("BorderWidth", Definition.Design.BorderWidthPx, 0, 4, nameof(FormDesignSettingsModel.BorderWidthPx))
+                        @Slider("CornerRadius", Definition.Design.BorderRadiusPx, 0, 40, nameof(FormDesignSettingsModel.BorderRadiusPx))
+                        @Slider("InnerPadding", Definition.Design.PaddingPx, FormDesignPolicy.MinimumPaddingPx, FormDesignPolicy.MaximumPaddingPx, nameof(FormDesignSettingsModel.PaddingPx))
+                        @Slider("FieldSpacing", Definition.Design.FieldGapPx, FormDesignV2Policy.MinimumFieldGapPx, FormDesignV2Policy.MaximumFieldGapPx, nameof(FormDesignSettingsModel.FieldGapPx))
+                    </div>
+                </section>
+            </div>
+
+            <ResourcePickerModal Open="@_resourcePickerOpen"
+                                 Kind="file"
+                                 ResourceSelected="SelectManagedResource"
+                                 Closed="CloseResourcePicker" />
+        </aside>
+    }
+
+    @if (_resetConfirmationOpen)
+    {
+        <div class="modal-backdrop" @onclick="CancelReset">
+            <div class="modal-box" style="max-width:460px" role="alertdialog" aria-modal="true" aria-labelledby="reset-form-design-title" @onclick:stopPropagation="true">
+                <div class="modal-header" id="reset-form-design-title">@T("ResetFormDesignTitle")</div>
+                <div class="modal-body">
+                    <p>@T("ResetFormDesignPrompt")</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-admin btn-ghost" @onclick="CancelReset">@T("Cancel")</button>
+                    <button type="button" class="btn-admin btn-danger" @onclick="ConfirmReset">@T("Reset")</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public FormDefinitionModel Definition { get; set; } = default!;
+    [Parameter] public string AdminLanguage { get; set; } = "en";
+    [Parameter] public int UsageCount { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool ResetDisabled { get; set; }
+    [Parameter] public bool SettingsOpen { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+    [Parameter] public EventCallback<bool> SettingsOpenChanged { get; set; }
+    [Parameter] public EventCallback ResetRequested { get; set; }
+
+    private static readonly (string Value, string LabelKey)[] InformationIcons =
+    [
+        ("fas fa-circle-info", "Information"),
+        ("fas fa-phone", "Phone"),
+        ("fas fa-envelope", "Email"),
+        ("fas fa-location-dot", "Location"),
+        ("fas fa-clock", "Hours"),
+        ("fas fa-link", "Link")
+    ];
+    private static readonly FormActionTargetType[] InformationTargetTypes =
+    [
+        FormActionTargetType.InternalLink,
+        FormActionTargetType.ExternalUrl,
+        FormActionTargetType.Phone,
+        FormActionTargetType.Email
+    ];
+    private static readonly FormActionTargetType[] AuxiliaryTargetTypes = Enum.GetValues<FormActionTargetType>();
+
+    private readonly HashSet<string> _selectedFieldKeys = new(StringComparer.OrdinalIgnoreCase);
+    private DotNetObjectReference<FormDesignEditor>? _reference;
+    private ElementReference _drawerElement;
+    private ElementReference _rowsElement;
+    private ElementReference _informationItemsElement;
+    private ElementReference _auxiliaryActionsElement;
+    private ElementReference _previewStageElement;
+    private ThemeModel? _theme;
+    private FormDefinitionModel? _activeDefinition;
+    private bool _drawerFocusPending;
+    private bool _sortablesRefreshPending;
+    private bool _resetConfirmationOpen;
+    private bool _resourcePickerOpen;
+    private string? _resourceActionId;
+    private bool _previewRecenteringPending = true;
+
+    private FormDesignV2SettingsDto V2 => Definition.Design.V2!;
+    private List<FormFieldRowDto> Rows => V2.FieldRows.OrderBy(row => row.Order).ToList();
+    private int PreviewWidthPx => Math.Clamp(Definition.Design.WidthPx, FormDesignV2Policy.MinimumWidth(V2.OuterLayout), FormDesignV2Policy.MaximumWidth(V2.OuterLayout));
+    private int PreviewHeightPx => FormDesignV2Policy.CalculateHeight(
+        ToDto(Definition.Design),
+        V2,
+        Definition.Fields.Select(ToDto),
+        Definition.Name,
+        Definition.Introduction,
+        Definition.SubmitButtonLabel,
+        Definition.InformationItems,
+        Definition.AuxiliaryActions);
+    private string DefinitionName => Localized(Definition.Name, Definition.Key);
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var response = await ThemeService.GetAsync();
+        _theme = response.Data ?? new ThemeModel();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_activeDefinition, Definition))
+        {
+            _activeDefinition = Definition;
+            _previewRecenteringPending = true;
+            _selectedFieldKeys.Clear();
+            _sortablesRefreshPending = true;
+        }
+        EnsureDesignState();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        _reference ??= DotNetObjectReference.Create(this);
+        if (_drawerFocusPending)
+        {
+            _drawerFocusPending = false;
+            await JS.InvokeVoidAsync("formDesignEditor.openDrawer", _drawerElement, _reference);
+        }
+        if (SettingsOpen && _sortablesRefreshPending)
+        {
+            _sortablesRefreshPending = false;
+            try { await JS.InvokeVoidAsync("formDesignEditor.initDesignSortables", _rowsElement, _informationItemsElement, _auxiliaryActionsElement, _reference, Disabled); }
+            catch (JSException) { }
+        }
+        if (_previewRecenteringPending)
+        {
+            _previewRecenteringPending = false;
+            try { await JS.InvokeVoidAsync("formDesignEditor.centerPreview", _previewStageElement); }
+            catch (JSException) { }
+        }
+    }
+
+    private void EnsureDesignState()
+    {
+        Definition.Design ??= new FormDesignSettingsModel();
+        Definition.InformationItems ??= new();
+        Definition.AuxiliaryActions ??= new();
+        Definition.Design.V2 ??= FormDesignV2Policy.ProjectFromV1(Definition.Id, ToDto(Definition.Design), Definition.Fields.Select(ToDto));
+        EnsureRowCoverage();
+        EnsureActionLayouts();
+        NormalizeDesign(authoringChange: false);
+    }
+
+    private void EnsureRowCoverage()
+    {
+        if (Definition.Design.V2 is null) return;
+        var fieldKeys = Definition.Fields
+            .Where(field => !string.IsNullOrWhiteSpace(field.Key))
+            .OrderBy(field => field.Order)
+            .Select(field => field.Key.Trim())
+            .ToList();
+        var validKeys = fieldKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rows = Definition.Design.V2.FieldRows
+            .OrderBy(row => row.Order)
+            .Select(row => new FormFieldRowDto
+            {
+                Id = string.IsNullOrWhiteSpace(row.Id) ? NewId("row") : row.Id,
+                FieldKeys = (row.FieldKeys ?? new())
+                    .Where(key => validKeys.Contains(key) && seen.Add(key))
+                    .ToList()
+            })
+            .Where(row => row.FieldKeys.Count > 0)
+            .ToList();
+        foreach (var key in fieldKeys.Where(key => seen.Add(key)))
+        {
+            rows.Add(new FormFieldRowDto { Id = NewId("row"), FieldKeys = [key] });
+        }
+        for (var index = 0; index < rows.Count; index++) rows[index].Order = index;
+        Definition.Design.V2.FieldRows = rows;
+        NormalizeFieldOrderFromRows();
+        _selectedFieldKeys.RemoveWhere(key => !validKeys.Contains(key));
+    }
+
+    private void EnsureActionLayouts()
+    {
+        if (Definition.Design.V2 is null) return;
+        var actionIds = Definition.AuxiliaryActions.Select(action => action.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var layouts = Definition.Design.V2.AuxiliaryActionLayouts
+            .Where(layout => actionIds.Contains(layout.ActionId))
+            .GroupBy(layout => layout.ActionId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+        foreach (var action in Definition.AuxiliaryActions.Where(action => layouts.All(layout => !string.Equals(layout.ActionId, action.Id, StringComparison.OrdinalIgnoreCase))))
+        {
+            layouts.Add(new FormAuxiliaryActionLayoutDto
+            {
+                ActionId = action.Id,
+                Style = FormAuxiliaryActionStyle.Theme,
+                Placement = FormAuxiliaryActionPlacement.BelowFields
+            });
+        }
+        Definition.Design.V2.AuxiliaryActionLayouts = layouts;
+    }
+
+    private async Task OpenDrawer()
+    {
+        if (Disabled || SettingsOpen) return;
+        _drawerFocusPending = true;
+        _sortablesRefreshPending = true;
+        await SettingsOpenChanged.InvokeAsync(true);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CloseDrawer()
+    {
+        _resourcePickerOpen = false;
+        _resourceActionId = null;
+        if (SettingsOpen)
+        {
+            try { await JS.InvokeVoidAsync("formDesignEditor.destroyDesignSortables", _rowsElement, _informationItemsElement, _auxiliaryActionsElement); }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { }
+            try { await JS.InvokeVoidAsync("formDesignEditor.closeDrawer", _drawerElement); }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { }
+        }
+        _sortablesRefreshPending = true;
+        await SettingsOpenChanged.InvokeAsync(false);
+    }
+
+    [JSInvokable]
+    public Task RequestCloseDesignDrawer() => CloseDrawer();
+
+    private void RequestReset()
+    {
+        if (Disabled || ResetDisabled) return;
+        _resetConfirmationOpen = true;
+    }
+
+    private void CancelReset() => _resetConfirmationOpen = false;
+
+    private async Task ConfirmReset()
+    {
+        if (Disabled || ResetDisabled) return;
+        _resetConfirmationOpen = false;
+        _previewRecenteringPending = true;
+        _selectedFieldKeys.Clear();
+        await ResetRequested.InvokeAsync();
+        _sortablesRefreshPending = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private RenderFragment Slider(string labelKey, int value, int min, int max, string property) => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "label");
+        builder.AddAttribute(sequence++, "class", "form-design-slider");
+        builder.OpenElement(sequence++, "span");
+        builder.AddContent(sequence++, $"{T(labelKey)}: {value}px");
+        builder.CloseElement();
+        builder.OpenElement(sequence++, "input");
+        builder.AddAttribute(sequence++, "type", "range");
+        builder.AddAttribute(sequence++, "min", min);
+        builder.AddAttribute(sequence++, "max", max);
+        builder.AddAttribute(sequence++, "value", value);
+        builder.AddAttribute(sequence++, "disabled", Disabled || Definition.Design.UseThemeDefaults);
+        builder.AddAttribute(sequence++, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e => SetLegacyInt(property, e.Value)));
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment ColorInput(string labelKey, string value, Func<object?, Task> changed, bool disabled = false) => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "label");
+        builder.AddAttribute(sequence++, "class", "form-design-color");
+        builder.OpenElement(sequence++, "span");
+        builder.AddContent(sequence++, T(labelKey));
+        builder.CloseElement();
+        builder.OpenElement(sequence++, "input");
+        builder.AddAttribute(sequence++, "type", "color");
+        builder.AddAttribute(sequence++, "value", value);
+        builder.AddAttribute(sequence++, "disabled", Disabled || disabled);
+        builder.AddAttribute(sequence++, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e => changed(e.Value)));
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment DeleteButton(Func<Task> remove) => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "span");
+        builder.AddAttribute(sequence++, "class", "form-design-item-actions");
+        AddIconButton(builder, ref sequence, "fa-trash", T("Delete"), Disabled, remove, "danger");
+        builder.CloseElement();
+    };
+
+    private void AddIconButton(RenderTreeBuilder builder, ref int sequence, string icon, string label, bool disabled, Func<Task> clicked, string? css = null)
+    {
+        builder.OpenElement(sequence++, "button");
+        builder.AddAttribute(sequence++, "type", "button");
+        builder.AddAttribute(sequence++, "class", css);
+        builder.AddAttribute(sequence++, "title", label);
+        builder.AddAttribute(sequence++, "aria-label", label);
+        builder.AddAttribute(sequence++, "disabled", disabled);
+        builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, clicked));
+        builder.OpenElement(sequence++, "i");
+        builder.AddAttribute(sequence++, "class", $"fas {icon}");
+        builder.AddAttribute(sequence++, "aria-hidden", "true");
+        builder.CloseElement();
+        builder.CloseElement();
+    }
+
+    private RenderFragment TargetValueEditor(FormActionTargetDto target, FormAuxiliaryActionDto? action) => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "label");
+        builder.AddAttribute(sequence++, "class", "form-filter");
+        builder.OpenElement(sequence++, "span");
+        builder.AddContent(sequence++, T(TargetValueLabelKey(target.Type)));
+        builder.CloseElement();
+        if (target.Type == FormActionTargetType.ManagedResource && action is not null)
+        {
+            builder.OpenElement(sequence++, "span");
+            builder.AddAttribute(sequence++, "class", "form-design-resource-target");
+            builder.OpenElement(sequence++, "button");
+            builder.AddAttribute(sequence++, "type", "button");
+            builder.AddAttribute(sequence++, "class", "btn-admin btn-secondary");
+            builder.AddAttribute(sequence++, "disabled", Disabled);
+            builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => OpenResourcePicker(action)));
+            builder.AddContent(sequence++, T("ChooseManagedResource"));
+            builder.CloseElement();
+            builder.OpenElement(sequence++, "small");
+            builder.AddContent(sequence++, string.IsNullOrWhiteSpace(target.ResourceId) ? T("NoResourceSelected") : target.ResourceId);
+            builder.CloseElement();
+            builder.CloseElement();
+        }
+        else
+        {
+            builder.OpenElement(sequence++, "input");
+            builder.AddAttribute(sequence++, "class", "form-control");
+            builder.AddAttribute(sequence++, "value", TargetValue(target));
+            builder.AddAttribute(sequence++, "disabled", Disabled);
+            builder.AddAttribute(sequence++, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => SetTargetValue(target, e.Value)));
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
+
+    private PublicFormBlockDto PreviewBlock => new()
+    {
+        Id = $"preview-{Definition.Id}",
+        Type = "form",
+        Visible = true,
+        FormDefinitionId = Definition.Id,
+        Name = Definition.Name,
+        Introduction = Definition.Introduction,
+        InformationItems = Definition.InformationItems,
+        AuxiliaryActions = Definition.AuxiliaryActions,
+        SubmitButtonLabel = Definition.SubmitButtonLabel,
+        Design = ToDto(Definition.Design),
+        Fields = Definition.Fields.OrderBy(field => field.Order).Select(field => new PublicFormFieldDto
+        {
+            Name = field.Key,
+            Type = field.Type,
+            Label = field.Label,
+            Placeholder = field.Placeholder,
+            Required = field.Required,
+            MaxLength = field.MaxLength,
+            InputBoxSize = field.InputBoxSize,
+            Order = field.Order,
+            Options = field.Options.Select(option => new PublicFormFieldOptionDto
+            {
+                Value = option.Value,
+                Label = option.Label,
+                Order = option.Order
+            }).ToList()
+        }).ToList()
+    };
+
+    private async Task SetOuterLayout(FormOuterLayout layout)
+    {
+        if (Disabled || V2.OuterLayout == layout) return;
+        V2.OuterLayout = layout;
+        Definition.Design.Shape = (FormDesignShapeModel)FormDesignV2Policy.LegacyShape(layout);
+        Definition.Design.WidthPx = FormDesignV2Policy.DefaultWidth(layout);
+        _previewRecenteringPending = true;
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private Task SetDesignWidthFromInput(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var width))
+            Definition.Design.WidthPx = Math.Clamp(width, FormDesignV2Policy.MinimumWidth(V2.OuterLayout), FormDesignV2Policy.MaximumWidth(V2.OuterLayout));
+        return ApplyChange();
+    }
+
+    private Task SetSplitPercent(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+            V2.SplitPanelPercent = Math.Clamp(value, FormDesignV2Policy.MinimumSplitPanelPercent, FormDesignV2Policy.MaximumSplitPanelPercent);
+        return ApplyChange();
+    }
+
+    private void ToggleFieldSelection(string key, object? value)
+    {
+        if (value is not true)
+        {
+            _selectedFieldKeys.Remove(key);
+            return;
+        }
+        if (FindField(key) is { } field && FormDesignPolicy.IsWideField(field.Type))
+        {
+            Http.Notify(T("WideFieldsUseOwnRow"), 400);
+            return;
+        }
+        if (_selectedFieldKeys.Count >= FormDesignV2Policy.MaximumFieldsPerRow)
+        {
+            Http.Notify(T("MaximumThreeFieldsPerRow"), 400);
+            return;
+        }
+        _selectedFieldKeys.Add(key);
+    }
+
+    private bool CanGroupSelectedFields => _selectedFieldKeys.Count is >= 2 and <= FormDesignV2Policy.MaximumFieldsPerRow &&
+        _selectedFieldKeys.All(key => FindField(key) is { } field && !FormDesignPolicy.IsWideField(field.Type));
+
+    private async Task GroupSelectedFields()
+    {
+        if (Disabled || !CanGroupSelectedFields) return;
+        var selected = FlattenedFieldKeys().Where(_selectedFieldKeys.Contains).ToList();
+        var insertionIndex = Rows
+            .Select((row, index) => new { row, index })
+            .Where(pair => pair.row.FieldKeys.Any(_selectedFieldKeys.Contains))
+            .Select(pair => pair.index)
+            .DefaultIfEmpty(Rows.Count)
+            .Min();
+        var rows = Rows;
+        foreach (var row in rows) row.FieldKeys.RemoveAll(_selectedFieldKeys.Contains);
+        rows.RemoveAll(row => row.FieldKeys.Count == 0);
+        insertionIndex = Math.Clamp(insertionIndex, 0, rows.Count);
+        rows.Insert(insertionIndex, new FormFieldRowDto { Id = NewId("row"), FieldKeys = selected });
+        SetRows(rows);
+        _selectedFieldKeys.Clear();
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private async Task UngroupRow(FormFieldRowDto row)
+    {
+        if (Disabled || row.FieldKeys.Count <= 1) return;
+        var rows = Rows;
+        var current = rows.First(item => item.Id == row.Id);
+        var index = rows.IndexOf(current);
+        rows.RemoveAt(index);
+        var ungrouped = current.FieldKeys.Select((fieldKey, fieldIndex) => new FormFieldRowDto
+        {
+            Id = fieldIndex == 0 ? current.Id : NewId("row"),
+            FieldKeys = [fieldKey]
+        }).ToList();
+        rows.InsertRange(index, ungrouped);
+        SetRows(rows);
+        _selectedFieldKeys.ExceptWith(current.FieldKeys);
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnRowsReordered(string[] orderedRowIds)
+    {
+        if (Disabled) return false;
+        var rows = Rows;
+        var byId = rows.ToDictionary(row => row.Id, StringComparer.OrdinalIgnoreCase);
+        if (orderedRowIds.Length != rows.Count ||
+            orderedRowIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != rows.Count ||
+            orderedRowIds.Any(id => !byId.ContainsKey(id))) return false;
+
+        SetRows(orderedRowIds.Select(id => byId[id]).ToList());
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+        return true;
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnInformationItemsReordered(string[] orderedIds)
+    {
+        if (Disabled) return false;
+        var byId = Definition.InformationItems.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+        if (orderedIds.Length != byId.Count || orderedIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != byId.Count || orderedIds.Any(id => !byId.ContainsKey(id)))
+            return false;
+
+        Definition.InformationItems = orderedIds.Select((id, index) =>
+        {
+            var item = byId[id];
+            item.Order = index;
+            return item;
+        }).ToList();
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+        return true;
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnAuxiliaryActionsReordered(string[] orderedIds)
+    {
+        if (Disabled) return false;
+        var byId = Definition.AuxiliaryActions.ToDictionary(action => action.Id, StringComparer.OrdinalIgnoreCase);
+        if (orderedIds.Length != byId.Count || orderedIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != byId.Count || orderedIds.Any(id => !byId.ContainsKey(id)))
+            return false;
+
+        Definition.AuxiliaryActions = orderedIds.Select((id, index) =>
+        {
+            var action = byId[id];
+            action.Order = index;
+            return action;
+        }).ToList();
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+        return true;
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnFieldsReordered(string rowId, string[] orderedFieldKeys)
+    {
+        if (Disabled) return false;
+        var row = V2.FieldRows.FirstOrDefault(item => string.Equals(item.Id, rowId, StringComparison.OrdinalIgnoreCase));
+        if (row is null || orderedFieldKeys.Length != row.FieldKeys.Count ||
+            orderedFieldKeys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != row.FieldKeys.Count ||
+            !orderedFieldKeys.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(row.FieldKeys)) return false;
+
+        row.FieldKeys = orderedFieldKeys.ToList();
+        NormalizeFieldOrderFromRows();
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+        return true;
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnFieldMovedToNewRow(string fieldKey, int insertionIndex)
+    {
+        if (Disabled || string.IsNullOrWhiteSpace(fieldKey)) return false;
+        var rows = Rows;
+        var sourceIndex = rows.FindIndex(row => row.FieldKeys.Any(key => string.Equals(key, fieldKey, StringComparison.OrdinalIgnoreCase)));
+        if (sourceIndex < 0) return false;
+
+        var source = rows[sourceIndex];
+        FormFieldRowDto newRow;
+        if (source.FieldKeys.Count == 1)
+        {
+            rows.RemoveAt(sourceIndex);
+            if (sourceIndex < insertionIndex) insertionIndex--;
+            newRow = source;
+        }
+        else
+        {
+            source.FieldKeys.RemoveAll(key => string.Equals(key, fieldKey, StringComparison.OrdinalIgnoreCase));
+            newRow = new FormFieldRowDto { Id = NewId("row"), FieldKeys = [fieldKey] };
+        }
+
+        insertionIndex = Math.Clamp(insertionIndex, 0, rows.Count);
+        rows.Insert(insertionIndex, newRow);
+        SetRows(rows);
+        _selectedFieldKeys.Remove(fieldKey);
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+        return true;
+    }
+
+    private async Task MoveFieldInRow(FormFieldRowDto row, string fieldKey, int delta)
+    {
+        if (Disabled) return;
+        var targetRow = V2.FieldRows.First(item => item.Id == row.Id);
+        var index = targetRow.FieldKeys.FindIndex(key => string.Equals(key, fieldKey, StringComparison.OrdinalIgnoreCase));
+        var next = index + delta;
+        if (index < 0 || next < 0 || next >= targetRow.FieldKeys.Count) return;
+        (targetRow.FieldKeys[index], targetRow.FieldKeys[next]) = (targetRow.FieldKeys[next], targetRow.FieldKeys[index]);
+        NormalizeFieldOrderFromRows();
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private async Task MoveRow(FormFieldRowDto row, int delta)
+    {
+        if (Disabled) return;
+        var rows = Rows;
+        var index = rows.FindIndex(item => item.Id == row.Id);
+        var next = index + delta;
+        if (index < 0 || next < 0 || next >= rows.Count) return;
+        (rows[index], rows[next]) = (rows[next], rows[index]);
+        SetRows(rows);
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private Task HandleRowKeyDown(KeyboardEventArgs args, FormFieldRowDto row)
+    {
+        if (!args.AltKey) return Task.CompletedTask;
+        return args.Key switch
+        {
+            "ArrowUp" => MoveRow(row, -1),
+            "ArrowDown" => MoveRow(row, 1),
+            _ => Task.CompletedTask
+        };
+    }
+
+    private Task HandleFieldKeyDown(KeyboardEventArgs args, FormFieldRowDto row, string fieldKey)
+    {
+        if (!args.AltKey) return Task.CompletedTask;
+        return args.Key switch
+        {
+            "ArrowLeft" => MoveFieldInRow(row, fieldKey, -1),
+            "ArrowRight" => MoveFieldInRow(row, fieldKey, 1),
+            _ => Task.CompletedTask
+        };
+    }
+
+    private Task HandleInformationItemKeyDown(KeyboardEventArgs args, FormInformationItemDto item)
+    {
+        if (!args.AltKey) return Task.CompletedTask;
+        return args.Key switch
+        {
+            "ArrowUp" => MoveInformationItem(item, -1),
+            "ArrowDown" => MoveInformationItem(item, 1),
+            _ => Task.CompletedTask
+        };
+    }
+
+    private Task HandleAuxiliaryActionKeyDown(KeyboardEventArgs args, FormAuxiliaryActionDto action)
+    {
+        if (!args.AltKey) return Task.CompletedTask;
+        return args.Key switch
+        {
+            "ArrowUp" => MoveAuxiliaryAction(action, -1),
+            "ArrowDown" => MoveAuxiliaryAction(action, 1),
+            _ => Task.CompletedTask
+        };
+    }
+
+    private void SetRows(List<FormFieldRowDto> rows)
+    {
+        for (var index = 0; index < rows.Count; index++) rows[index].Order = index;
+        V2.FieldRows = rows;
+        NormalizeFieldOrderFromRows();
+    }
+
+    private void NormalizeFieldOrderFromRows()
+    {
+        var order = FlattenedFieldKeys()
+            .Select((key, index) => new { key, index })
+            .ToDictionary(pair => pair.key, pair => pair.index, StringComparer.OrdinalIgnoreCase);
+        var next = order.Count;
+        foreach (var field in Definition.Fields)
+            field.Order = order.TryGetValue(field.Key, out var index) ? index : next++;
+        Definition.Fields = Definition.Fields.OrderBy(field => field.Order).ToList();
+    }
+
+    private List<string> FlattenedFieldKeys() => V2.FieldRows.OrderBy(row => row.Order).SelectMany(row => row.FieldKeys).ToList();
+
+    private Task AddInformationItem()
+    {
+        if (Disabled) return Task.CompletedTask;
+        Definition.InformationItems.Add(new FormInformationItemDto
+        {
+            Id = NewId("info"),
+            Icon = InformationIcons[0].Value,
+            Text = new() { [AdminLanguage] = T("InformationItem") },
+            Order = Definition.InformationItems.Count
+        });
+        _sortablesRefreshPending = true;
+        return ApplyChange();
+    }
+
+    private async Task RemoveInformationItem(FormInformationItemDto item)
+    {
+        Definition.InformationItems.Remove(item);
+        NormalizeOrders(Definition.InformationItems, (value, index) => value.Order = index);
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private async Task MoveInformationItem(FormInformationItemDto item, int delta)
+    {
+        var items = Definition.InformationItems.OrderBy(value => value.Order).ToList();
+        if (!Move(items, item, delta)) return;
+        NormalizeOrders(items, (value, index) => value.Order = index);
+        Definition.InformationItems = items;
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private Task SetInformationIcon(FormInformationItemDto item, object? value)
+    {
+        var icon = value?.ToString() ?? string.Empty;
+        if (InformationIcons.Any(candidate => candidate.Value == icon)) item.Icon = icon;
+        return ApplyChange();
+    }
+
+    private Task ToggleInformationTarget(FormInformationItemDto item, object? value)
+    {
+        item.Target = value is true ? new FormActionTargetDto { Type = FormActionTargetType.Phone } : null;
+        return ApplyChange();
+    }
+
+    private Task AddAuxiliaryAction()
+    {
+        if (Disabled || Definition.AuxiliaryActions.Count >= FormDesignV2Policy.MaximumAuxiliaryActions) return Task.CompletedTask;
+        var action = new FormAuxiliaryActionDto
+        {
+            Id = NewId("action"),
+            Label = new() { [AdminLanguage] = T("AuxiliaryAction") },
+            Target = new FormActionTargetDto { Type = FormActionTargetType.ExternalUrl },
+            Order = Definition.AuxiliaryActions.Count
+        };
+        Definition.AuxiliaryActions.Add(action);
+        V2.AuxiliaryActionLayouts.Add(new FormAuxiliaryActionLayoutDto
+        {
+            ActionId = action.Id,
+            Style = FormAuxiliaryActionStyle.Theme,
+            Placement = FormAuxiliaryActionPlacement.BelowFields
+        });
+        _sortablesRefreshPending = true;
+        return ApplyChange();
+    }
+
+    private async Task RemoveAuxiliaryAction(FormAuxiliaryActionDto action)
+    {
+        Definition.AuxiliaryActions.Remove(action);
+        V2.AuxiliaryActionLayouts.RemoveAll(layout => string.Equals(layout.ActionId, action.Id, StringComparison.OrdinalIgnoreCase));
+        NormalizeOrders(Definition.AuxiliaryActions, (value, index) => value.Order = index);
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private async Task MoveAuxiliaryAction(FormAuxiliaryActionDto action, int delta)
+    {
+        var actions = Definition.AuxiliaryActions.OrderBy(value => value.Order).ToList();
+        if (!Move(actions, action, delta)) return;
+        NormalizeOrders(actions, (value, index) => value.Order = index);
+        Definition.AuxiliaryActions = actions;
+        _sortablesRefreshPending = true;
+        await ApplyChange();
+    }
+
+    private FormAuxiliaryActionLayoutDto LayoutFor(string actionId) =>
+        V2.AuxiliaryActionLayouts.First(layout => string.Equals(layout.ActionId, actionId, StringComparison.OrdinalIgnoreCase));
+
+    private Task SetSubmitLayout(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<FormSubmitLayout>(e.Value?.ToString(), out var value)) V2.SubmitLayout = value;
+        return ApplyChange();
+    }
+
+    private Task SetActionStyle(FormAuxiliaryActionLayoutDto layout, object? value)
+    {
+        if (Enum.TryParse<FormAuxiliaryActionStyle>(value?.ToString(), out var parsed)) layout.Style = parsed;
+        return ApplyChange();
+    }
+
+    private Task SetActionPlacement(FormAuxiliaryActionLayoutDto layout, object? value)
+    {
+        if (Enum.TryParse<FormAuxiliaryActionPlacement>(value?.ToString(), out var parsed))
+            layout.Placement = parsed;
+        return ApplyChange();
+    }
+
+    private Task ToggleThemeDefaults(ChangeEventArgs e)
+    {
+        Definition.Design.UseThemeDefaults = e.Value is true;
+        if (Definition.Design.UseThemeDefaults)
+        {
+            var scale = ThemeSpacingScale(_theme?.SpacingScale);
+            Definition.Design.PaddingPx = Math.Clamp((int)Math.Round(32d * scale), FormDesignPolicy.MinimumPaddingPx, FormDesignPolicy.MaximumPaddingPx);
+            Definition.Design.FieldGapPx = Math.Clamp((int)Math.Round(16d * scale), FormDesignV2Policy.MinimumFieldGapPx, FormDesignV2Policy.MaximumFieldGapPx);
+        }
+        return ApplyChange();
+    }
+
+    private static double ThemeSpacingScale(string? value)
+    {
+        value = value?.Trim().ToLowerInvariant();
+        if (value == "compact") return .85d;
+        if (value == "spacious") return 1.2d;
+        return double.TryParse(value, System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Clamp(parsed, .5d, 2d)
+            : 1d;
+    }
+
+    private Task SetTargetType(FormActionTargetDto target, object? value, bool allowManagedResource)
+    {
+        if (!Enum.TryParse<FormActionTargetType>(value?.ToString(), out var parsed)) return Task.CompletedTask;
+        if (!allowManagedResource && parsed == FormActionTargetType.ManagedResource) return Task.CompletedTask;
+        target.Type = parsed;
+        target.PageId = null;
+        target.Path = null;
+        target.Url = null;
+        target.ResourceId = null;
+        target.Phone = null;
+        target.Email = null;
+        target.ResolvedHref = null;
+        return ApplyChange();
+    }
+
+    private Task SetTargetValue(FormActionTargetDto target, object? value)
+    {
+        var text = value?.ToString()?.Trim() ?? string.Empty;
+        switch (target.Type)
+        {
+            case FormActionTargetType.InternalLink: target.Path = text; break;
+            case FormActionTargetType.ExternalUrl: target.Url = text; break;
+            case FormActionTargetType.Phone: target.Phone = text; break;
+            case FormActionTargetType.Email: target.Email = text; break;
+        }
+        return ApplyChange();
+    }
+
+    private string TargetValue(FormActionTargetDto target) => target.Type switch
+    {
+        FormActionTargetType.InternalLink => target.Path ?? string.Empty,
+        FormActionTargetType.ExternalUrl => target.Url ?? string.Empty,
+        FormActionTargetType.Phone => target.Phone ?? string.Empty,
+        FormActionTargetType.Email => target.Email ?? string.Empty,
+        _ => string.Empty
+    };
+
+    private static bool HasConfiguredTarget(FormActionTargetDto target) => target.Type switch
+    {
+        FormActionTargetType.InternalLink => !string.IsNullOrWhiteSpace(target.Path) || !string.IsNullOrWhiteSpace(target.PageId),
+        FormActionTargetType.ExternalUrl => !string.IsNullOrWhiteSpace(target.Url),
+        FormActionTargetType.ManagedResource => !string.IsNullOrWhiteSpace(target.ResourceId),
+        FormActionTargetType.Phone => !string.IsNullOrWhiteSpace(target.Phone),
+        FormActionTargetType.Email => !string.IsNullOrWhiteSpace(target.Email),
+        _ => false
+    };
+
+    private Task OpenResourcePicker(FormAuxiliaryActionDto action)
+    {
+        _resourceActionId = action.Id;
+        _resourcePickerOpen = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task SelectManagedResource(ManagedResourceModel resource)
+    {
+        var action = Definition.AuxiliaryActions.FirstOrDefault(value => value.Id == _resourceActionId);
+        if (action is not null)
+        {
+            action.Target.Type = FormActionTargetType.ManagedResource;
+            action.Target.ResourceId = resource.Id;
+            action.Target.PageId = null;
+            action.Target.Path = null;
+            action.Target.Url = null;
+            action.Target.Phone = null;
+            action.Target.Email = null;
+            action.Target.ResolvedHref = null;
+            await ApplyChange();
+        }
+        await CloseResourcePicker();
+    }
+
+    private Task CloseResourcePicker()
+    {
+        _resourcePickerOpen = false;
+        _resourceActionId = null;
+        return Task.CompletedTask;
+    }
+
+    private Task SetLocalized(Dictionary<string, string> values, object? value)
+    {
+        values[AdminLanguage] = value?.ToString() ?? string.Empty;
+        return ApplyChange();
+    }
+
+    private Task SetBackgroundMode(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<FormDesignBackgroundModeModel>(e.Value?.ToString(), out var value)) Definition.Design.BackgroundMode = value;
+        return ApplyChange();
+    }
+
+    private Task SetTextAlign(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<FormDesignTextAlignModel>(e.Value?.ToString(), out var value)) Definition.Design.TextAlign = value;
+        return ApplyChange();
+    }
+
+    private Task SetLabelMode(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<FormLabelModeModel>(e.Value?.ToString(), out var value)) Definition.Design.LabelMode = value;
+        return ApplyChange();
+    }
+
+    private Task SetLegacyColor(string property, object? value) => SetLegacyString(property, value);
+
+    private Task SetLegacyString(string property, object? value)
+    {
+        var text = value?.ToString() ?? string.Empty;
+        switch (property)
+        {
+            case nameof(FormDesignSettingsModel.BackgroundColor):
+                Definition.Design.BackgroundColor = text;
+                V2.FormBackgroundColor = text;
+                break;
+            case nameof(FormDesignSettingsModel.TextColor):
+                Definition.Design.TextColor = text;
+                V2.FormTextColor = text;
+                break;
+            case nameof(FormDesignSettingsModel.AccentColor): Definition.Design.AccentColor = text; break;
+            case nameof(FormDesignSettingsModel.BorderColor): Definition.Design.BorderColor = text; break;
+            case nameof(FormDesignSettingsModel.ButtonStyle): Definition.Design.ButtonStyle = text; break;
+            case nameof(FormDesignSettingsModel.Shadow): Definition.Design.Shadow = text; break;
+        }
+        return ApplyChange();
+    }
+
+    private Task SetV2Color(string property, object? value)
+    {
+        var text = value?.ToString() ?? string.Empty;
+        switch (property)
+        {
+            case nameof(FormDesignV2SettingsDto.InformationBackgroundColor): V2.InformationBackgroundColor = text; break;
+            case nameof(FormDesignV2SettingsDto.InformationTextColor): V2.InformationTextColor = text; break;
+            case nameof(FormDesignV2SettingsDto.FormBackgroundColor):
+                V2.FormBackgroundColor = text;
+                Definition.Design.BackgroundColor = text;
+                break;
+            case nameof(FormDesignV2SettingsDto.FormTextColor):
+                V2.FormTextColor = text;
+                Definition.Design.TextColor = text;
+                break;
+        }
+        return ApplyChange();
+    }
+
+    private Task SetLegacyInt(string property, object? value)
+    {
+        if (!int.TryParse(value?.ToString(), out var number)) return Task.CompletedTask;
+        switch (property)
+        {
+            case nameof(FormDesignSettingsModel.BorderWidthPx): Definition.Design.BorderWidthPx = number; break;
+            case nameof(FormDesignSettingsModel.BorderRadiusPx): Definition.Design.BorderRadiusPx = number; break;
+            case nameof(FormDesignSettingsModel.PaddingPx): Definition.Design.PaddingPx = number; break;
+            case nameof(FormDesignSettingsModel.FieldGapPx): Definition.Design.FieldGapPx = number; break;
+        }
+        return ApplyChange();
+    }
+
+    private async Task BeginWidthDrag(PointerEventArgs args, int direction)
+    {
+        if (Disabled) return;
+        _reference ??= DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync(
+            "formDesignEditor.beginWidthDrag",
+            _reference,
+            args.ClientX,
+            PreviewWidthPx,
+            FormDesignV2Policy.MinimumWidth(V2.OuterLayout),
+            FormDesignV2Policy.MaximumWidth(V2.OuterLayout),
+            direction < 0 ? -1 : 1,
+            _previewStageElement);
+    }
+
+    private async Task BeginSplitDrag(PointerEventArgs args)
+    {
+        if (Disabled) return;
+        _reference ??= DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync(
+            "formDesignEditor.beginSplitDrag",
+            _reference,
+            args.ClientX,
+            V2.SplitPanelPercent,
+            PreviewWidthPx,
+            FormDesignV2Policy.MinimumSplitPanelPercent,
+            FormDesignV2Policy.MaximumSplitPanelPercent);
+    }
+
+    [JSInvokable]
+    public async Task SetDesignWidth(int width)
+    {
+        Definition.Design.WidthPx = width;
+        await ApplyChange();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task SetSplitPanelPercent(int percent)
+    {
+        V2.SplitPanelPercent = Math.Clamp(percent, FormDesignV2Policy.MinimumSplitPanelPercent, FormDesignV2Policy.MaximumSplitPanelPercent);
+        await ApplyChange();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ApplyChange()
+    {
+        NormalizeDesign(authoringChange: true);
+        await Changed.InvokeAsync();
+    }
+
+    private void NormalizeDesign(bool authoringChange)
+    {
+        var normalizedV2 = FormDesignV2Policy.Normalize(Definition.Design.V2);
+        Definition.Design.V2 = normalizedV2;
+        if (authoringChange)
+        {
+            Definition.Design.SchemaVersion = FormDesignV2Policy.TargetSchemaVersion;
+            Definition.Design.Shape = (FormDesignShapeModel)FormDesignV2Policy.LegacyShape(normalizedV2.OuterLayout);
+            Definition.Design.WidthPx = Math.Clamp(
+                Definition.Design.WidthPx,
+                FormDesignV2Policy.MinimumWidth(normalizedV2.OuterLayout),
+                FormDesignV2Policy.MaximumWidth(normalizedV2.OuterLayout));
+            Definition.Design.PaddingPx = Math.Clamp(Definition.Design.PaddingPx, FormDesignPolicy.MinimumPaddingPx, FormDesignPolicy.MaximumPaddingPx);
+            Definition.Design.FieldGapPx = Math.Clamp(Definition.Design.FieldGapPx, FormDesignV2Policy.MinimumFieldGapPx, FormDesignV2Policy.MaximumFieldGapPx);
+            Definition.Design.ButtonWidth = normalizedV2.SubmitLayout == FormSubmitLayout.Full
+                ? FormDesignButtonWidthModel.Full
+                : FormDesignButtonWidthModel.Content;
+            Definition.Design.CalculatedHeightPx = PreviewHeightPx;
+        }
+        Definition.InformationItems = Definition.InformationItems.OrderBy(item => item.Order).ToList();
+        Definition.AuxiliaryActions = Definition.AuxiliaryActions.OrderBy(action => action.Order).ToList();
+    }
+
+    private FormFieldDefinitionModel? FindField(string key) => Definition.Fields.FirstOrDefault(field => string.Equals(field.Key, key, StringComparison.OrdinalIgnoreCase));
+    private string FieldName(FormFieldDefinitionModel field) => Localized(field.Label, field.Key);
+    private string Localized(Dictionary<string, string>? values, string fallback = "") =>
+        values?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : values?.GetValueOrDefault("en") is { Length: > 0 } english
+                ? english
+                : values?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? fallback;
+
+    private static bool Move<T>(List<T> values, T value, int delta)
+    {
+        var index = values.IndexOf(value);
+        var next = index + delta;
+        if (index < 0 || next < 0 || next >= values.Count) return false;
+        (values[index], values[next]) = (values[next], values[index]);
+        return true;
+    }
+
+    private static void NormalizeOrders<T>(IReadOnlyList<T> values, Action<T, int> setOrder)
+    {
+        for (var index = 0; index < values.Count; index++) setOrder(values[index], index);
+    }
+
+    private static string NewId(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
+    private static string LayoutToken(FormOuterLayout layout) => layout switch { FormOuterLayout.SplitPanel => "split-panel", FormOuterLayout.Cta => "cta", _ => "standard" };
+    private static string LayoutKey(FormOuterLayout layout) => layout switch { FormOuterLayout.SplitPanel => "SplitPanel", FormOuterLayout.Cta => "CTA", _ => "Standard" };
+    private static string SubmitLayoutKey(FormSubmitLayout layout) => layout switch { FormSubmitLayout.Center => "Center", FormSubmitLayout.Right => "Right", FormSubmitLayout.Full => "FullWidth", _ => "Left" };
+    private static string TargetTypeKey(FormActionTargetType type) => type switch { FormActionTargetType.InternalLink => "InternalLink", FormActionTargetType.ExternalUrl => "ExternalUrl", FormActionTargetType.ManagedResource => "ManagedResource", FormActionTargetType.Phone => "Phone", _ => "Email" };
+    private static string TargetValueLabelKey(FormActionTargetType type) => type switch { FormActionTargetType.InternalLink => "LinkPath", FormActionTargetType.ExternalUrl => "LinkUrl", FormActionTargetType.ManagedResource => "ManagedResource", FormActionTargetType.Phone => "PhoneNumber", _ => "EmailAddress" };
+
+    private static FormFieldDefinitionDto ToDto(FormFieldDefinitionModel field) => new()
+    {
+        Key = field.Key,
+        Type = field.Type,
+        Label = field.Label,
+        Placeholder = field.Placeholder,
+        Required = field.Required,
+        MinLength = field.MinLength,
+        MaxLength = field.MaxLength,
+        InputBoxSize = field.InputBoxSize,
+        Order = field.Order,
+        Options = field.Options.Select(option => new FormFieldOptionDto { Value = option.Value, Label = option.Label, Order = option.Order }).ToList()
+    };
+
+    private static FormDesignSettingsDto ToDto(FormDesignSettingsModel design) => new()
+    {
+        UseThemeDefaults = design.UseThemeDefaults,
+        SchemaVersion = design.SchemaVersion,
+        Shape = (FormDesignShape)design.Shape,
+        WidthPx = design.WidthPx,
+        CalculatedHeightPx = design.CalculatedHeightPx,
+        BackgroundMode = (FormDesignBackgroundMode)design.BackgroundMode,
+        BackgroundColor = design.BackgroundColor,
+        TextColor = design.TextColor,
+        AccentColor = design.AccentColor,
+        BorderColor = design.BorderColor,
+        BorderWidthPx = design.BorderWidthPx,
+        BorderRadiusPx = design.BorderRadiusPx,
+        Shadow = design.Shadow,
+        PaddingPx = design.PaddingPx,
+        FieldGapPx = design.FieldGapPx,
+        TextAlign = (FormDesignTextAlign)design.TextAlign,
+        LabelMode = (FormLabelMode)design.LabelMode,
+        ButtonStyle = design.ButtonStyle,
+        ButtonWidth = (FormDesignButtonWidth)design.ButtonWidth,
+        V2 = design.V2
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("formDesignEditor.destroyDesignSortables", _rowsElement, _informationItemsElement, _auxiliaryActionsElement); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        catch (InvalidOperationException) { }
+        if (SettingsOpen)
+        {
+            try { await JS.InvokeVoidAsync("formDesignEditor.closeDrawer", _drawerElement); }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { }
+            catch (InvalidOperationException) { }
+        }
+        _reference?.Dispose();
+    }
+}

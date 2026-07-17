@@ -266,7 +266,7 @@
         const long maxImageBytes = 20L * 1024 * 1024;
         if (file.Size > maxImageBytes)
         {
-            Http.Toast(T("ImageTooLarge"), 400);
+            Http.Notify(T("ImageTooLarge"), 400);
             return;
         }
 
@@ -275,11 +275,11 @@
         {
             _cardAsset = DirectAsset(res.Data);
             _imageUrl = _cardAsset.Url;
-            Http.Toast(T("ImageUploaded"), res.StatusCode);
+            Http.Notify(T("ImageUploaded"), res.StatusCode);
         }
         else
         {
-            Http.Toast(res.Message ?? T("ImageUploadFailed"), res.StatusCode);
+            Http.Notify(res.Message ?? T("ImageUploadFailed"), res.StatusCode);
         }
     }
 
@@ -310,7 +310,7 @@
         try
         {
             var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, BuildDto());
-            Http.Toast(res.Message, res.StatusCode);
+            Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally
@@ -383,6 +383,11 @@
         BackgroundColor = OptionalText(value.BackgroundColor),
         TextColor = OptionalText(value.TextColor),
         TextAlign = value.TextAlign,
+        FontSizePx = value.FontSizePx,
+        FontWeight = value.FontWeight,
+        FontFamily = OptionalText(value.FontFamily),
+        LineHeight = value.LineHeight,
+        LetterSpacingPx = value.LetterSpacingPx,
         Opacity = Math.Clamp(value.Opacity, 0, 1),
         BorderColor = OptionalText(value.BorderColor),
         BorderWidth = Math.Clamp(value.BorderWidth, 0, 20),
@@ -639,6 +644,11 @@
         BackgroundColor = source?.BackgroundColor ?? legacyLayout?.BackgroundColor,
         TextColor = source?.TextColor,
         TextAlign = source?.TextAlign ?? "inherit",
+        FontSizePx = source?.FontSizePx,
+        FontWeight = source?.FontWeight,
+        FontFamily = source?.FontFamily,
+        LineHeight = source?.LineHeight,
+        LetterSpacingPx = source?.LetterSpacingPx,
         Opacity = Math.Clamp(source?.Opacity ?? 1, 0, 1),
         BorderColor = source?.BorderColor,
         BorderWidth = Math.Clamp(source?.BorderWidth ?? 0, 0, 20),

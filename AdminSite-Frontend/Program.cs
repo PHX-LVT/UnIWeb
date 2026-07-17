@@ -1,6 +1,9 @@
 using AdminSite.Services;
+using AdminSite.Services.Authentication;
 using Blazored.LocalStorage;
 using Blazored.Toast;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages(options =>
@@ -9,23 +12,99 @@ builder.Services.AddRazorPages(options =>
 });
 builder.Services.AddServerSideBlazor();
 
-// Blazored
+var dataProtection = builder.Services
+    .AddDataProtection()
+    .SetApplicationName("MySite.AdminSite");
+var configuredKeyPath = builder.Configuration["Authentication:DataProtectionKeysPath"];
+if (!string.IsNullOrWhiteSpace(configuredKeyPath))
+{
+    var expandedKeyPath = Environment.ExpandEnvironmentVariables(configuredKeyPath);
+    var absoluteKeyPath = Path.IsPathRooted(expandedKeyPath)
+        ? expandedKeyPath
+        : Path.GetFullPath(expandedKeyPath, builder.Environment.ContentRootPath);
+    Directory.CreateDirectory(absoluteKeyPath);
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(absoluteKeyPath));
+
+    if (builder.Configuration.GetValue("Authentication:ProtectDataProtectionKeysAtRest", true))
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new InvalidOperationException(
+                "DPAPI key protection is Windows-only. Configure a certificate-based protector on non-Windows hosts.");
+        }
+
+        var protectToLocalMachine = builder.Configuration.GetValue(
+            "Authentication:ProtectKeysToLocalMachine",
+            false);
+        dataProtection.ProtectKeysWithDpapi(protectToLocalMachine);
+    }
+}
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = AdminAuthConstants.Scheme;
+        options.DefaultChallengeScheme = AdminAuthConstants.Scheme;
+        options.DefaultSignInScheme = AdminAuthConstants.Scheme;
+    })
+    .AddCookie(AdminAuthConstants.Scheme, options =>
+    {
+        options.Cookie.Name = AdminAuthConstants.CookieName;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.IsEssential = true;
+        options.Cookie.Path = "/";
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.LoginPath = "/login";
+        options.AccessDeniedPath = "/login";
+        options.SlidingExpiration = false;
+        options.EventsType = typeof(AdminCookieAuthenticationEvents);
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = options.DefaultPolicy;
+});
+builder.Services.AddHttpContextAccessor();
+
+// Blazored LocalStorage remains registered for non-secret UI preferences such
+// as the Admin language. Authentication no longer reads or writes it.
 builder.Services.AddBlazoredLocalStorage();
 builder.Services.AddBlazoredToast();
 
 // DevExpress
 builder.Services.AddDevExpressBlazor();
 
-// HttpClient — points at the API
-builder.Services.AddScoped(sp => new HttpClient
-{
-    BaseAddress = new Uri(
-        builder.Configuration["ApiBaseUrl"]
-        ?? "http://localhost:6969/")
-});
+// All API traffic originates on the AdminSite server. The protected JWT is
+// attached by HttpService and is never exposed to browser JavaScript.
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:6969/";
+if (!Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiBaseUri))
+    throw new InvalidOperationException("ApiBaseUrl must be an absolute URL.");
+if (!builder.Environment.IsDevelopment() && apiBaseUri.Scheme != Uri.UriSchemeHttps)
+    throw new InvalidOperationException("ApiBaseUrl must use HTTPS outside Development.");
 
-// Services
+builder.Services
+    .AddHttpClient(AdminAuthConstants.ApiClientName, client =>
+    {
+        client.BaseAddress = apiBaseUri;
+        client.Timeout = TimeSpan.FromSeconds(10);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
+builder.Services.AddScoped(sp =>
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient(AdminAuthConstants.ApiClientName));
+
+// Authentication/session services
+builder.Services.AddScoped<AdminCookieAuthenticationEvents>();
+builder.Services.AddScoped<AdminApiAuthenticationClient>();
+builder.Services.AddSingleton<AdminSessionInvalidationService>();
+builder.Services.AddScoped<AuthenticationStateProvider, AdminRevalidatingAuthenticationStateProvider>();
+
+// Application services
 builder.Services.AddScoped<IHttpService, HttpService>();
+builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 builder.Services.AddScoped<AdminAuthService>();
 builder.Services.AddScoped<BrandingService>();
 builder.Services.AddScoped<ThemeService>();
@@ -43,6 +122,11 @@ builder.Services.AddScoped<AdminUserService>();
 
 var app = builder.Build();
 
+{
+    app.Logger.LogWarning(
+        "Authentication:DataProtectionKeysPath is not configured. Persist and protect the AdminSite key ring before production cutover so deployments do not invalidate authentication cookies.");
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
@@ -52,8 +136,15 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");
 
 app.Run();
+
+public partial class Program
+{
+}
