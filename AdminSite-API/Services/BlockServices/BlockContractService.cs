@@ -37,7 +37,7 @@ public static class BlockContractService
         var errors = ValidateContract(dto.Appearance, dto.Responsive, dto.Animation,
             dto is ContainerBlockCreateDto container ? container.ContainerLayout : null,
             dto is ImageBlockCreateDto image ? image.AltText : null,
-            dto is ImageBlockCreateDto createImage && !string.IsNullOrWhiteSpace(createImage.Asset?.Url ?? createImage.ImageUrl))
+            dto is ImageBlockCreateDto createImage && !string.IsNullOrWhiteSpace(createImage.Asset?.Url))
             .ToList();
         ValidateSpecific(dto, errors);
         return errors;
@@ -48,7 +48,7 @@ public static class BlockContractService
         var errors = ValidateContract(dto.Appearance, dto.Responsive, dto.Animation,
             dto is ContainerBlockUpdateDto container ? container.ContainerLayout : null,
             dto is ImageBlockUpdateDto image ? image.AltText : null,
-            dto is ImageBlockUpdateDto updateImage && !string.IsNullOrWhiteSpace(updateImage.Asset?.Url ?? updateImage.ImageUrl))
+            dto is ImageBlockUpdateDto updateImage && !string.IsNullOrWhiteSpace(updateImage.Asset?.Url))
             .ToList();
         ValidateSpecific(dto, errors);
         return errors;
@@ -138,8 +138,7 @@ public static class BlockContractService
 
     public static BlockAppearance MergeAppearance(
         BlockAppearance? current,
-        BlockAppearanceDto? incoming,
-        BlockLayoutDto? legacyLayout = null)
+        BlockAppearanceDto? incoming)
     {
         current ??= new BlockAppearance();
 
@@ -152,8 +151,8 @@ public static class BlockContractService
                 current.SchemaVersion < 2 && !string.IsNullOrWhiteSpace(current.BackgroundColor)
                     ? "color"
                     : current.BackgroundMode,
-                string.IsNullOrWhiteSpace(legacyLayout?.BackgroundColor) ? "none" : "color"),
-            BackgroundColor = NormalizeColor(incoming?.BackgroundColor, legacyLayout?.BackgroundColor ?? current.BackgroundColor),
+                "none"),
+            BackgroundColor = NormalizeColor(incoming?.BackgroundColor, current.BackgroundColor),
             TextColor = NormalizeColor(incoming?.TextColor, current.TextColor),
             TextAlign = Choice(incoming?.TextAlign, TextAlignValues, current.TextAlign, "inherit"),
             FontSizePx = ClampNullableInt(incoming?.FontSizePx ?? current.FontSizePx, 10, 96),
@@ -165,19 +164,15 @@ public static class BlockContractService
             BorderColor = NormalizeColor(incoming?.BorderColor, current.BorderColor),
             BorderWidth = Math.Clamp(incoming?.BorderWidth ?? current.BorderWidth, 0, 20),
             BorderStyle = Choice(incoming?.BorderStyle, BorderStyles, current.BorderStyle, "solid"),
-            BorderRadius = Choice(
-                incoming?.BorderRadius ?? legacyLayout?.BorderRadius,
-                RadiusValues,
-                current.BorderRadius,
-                "none"),
+            BorderRadius = Choice(incoming?.BorderRadius, RadiusValues, current.BorderRadius, "none"),
             Shadow = Choice(incoming?.Shadow, ShadowValues, current.Shadow, "none"),
             Shape = Choice(incoming?.Shape, ShapeValues, current.Shape, "rectangle"),
             AspectRatio = Choice(incoming?.AspectRatio, AspectRatioValues, current.AspectRatio, "auto"),
             RotationDeg = NormalizeRotation(incoming?.RotationDeg ?? current.RotationDeg),
             MediaFit = Choice(incoming?.MediaFit, MediaFitValues, current.MediaFit, "cover"),
             MediaPosition = Choice(incoming?.MediaPosition, MediaPositionValues, current.MediaPosition, "center"),
-            Padding = Choice(incoming?.Padding ?? legacyLayout?.Padding, SpacingValues, current.Padding, "none"),
-            Margin = Choice(incoming?.Margin ?? legacyLayout?.Margin, SpacingValues, current.Margin, "none"),
+            Padding = Choice(incoming?.Padding, SpacingValues, current.Padding, "none"),
+            Margin = Choice(incoming?.Margin, SpacingValues, current.Margin, "none"),
             Decorative = incoming?.Decorative ?? current.Decorative,
             InheritFromContainer = incoming?.InheritFromContainer ?? current.InheritFromContainer
         };
@@ -234,15 +229,7 @@ public static class BlockContractService
 
     public static ContainerLayoutSettings MergeContainerLayout(
         ContainerLayoutSettings? current,
-        ContainerLayoutSettingsDto? incoming,
-        string? legacyMode,
-        int? legacyColumns,
-        string? legacyGap,
-        int? legacyOrbitRadius,
-        int? legacyOrbitStartAngle,
-        int? legacySemicircleRadius,
-        int? legacySemicircleStartAngle,
-        int? legacySemicircleEndAngle)
+        ContainerLayoutSettingsDto? incoming)
     {
         var isNewContainer = current is null;
         current ??= new ContainerLayoutSettings();
@@ -264,19 +251,19 @@ public static class BlockContractService
             AllowedChildType = purpose == "collection" && !isNewContainer
                 ? NullableChoice(incoming?.AllowedChildType ?? current.AllowedChildType, BlockTypes)
                 : null,
-            Mode = Choice(incoming?.Mode ?? legacyMode, ContainerModes, current.Mode, "stack"),
-            Columns = Math.Clamp(incoming?.Columns ?? legacyColumns ?? current.Columns, 1, 6),
-            Gap = Choice(incoming?.Gap ?? legacyGap, SpacingValues, current.Gap, "medium"),
+            Mode = Choice(incoming?.Mode, ContainerModes, current.Mode, "stack"),
+            Columns = Math.Clamp(incoming?.Columns ?? current.Columns, 1, 6),
+            Gap = Choice(incoming?.Gap, SpacingValues, current.Gap, "medium"),
             AlignItems = Choice(incoming?.AlignItems, AlignItemsValues, current.AlignItems, "stretch"),
             JustifyContent = Choice(incoming?.JustifyContent, JustifyContentValues, current.JustifyContent, "start"),
             Wrap = incoming?.Wrap ?? current.Wrap,
-            OrbitRadius = Math.Clamp(incoming?.OrbitRadius ?? legacyOrbitRadius ?? current.OrbitRadius, 80, 480),
-            OrbitStartAngle = Math.Clamp(incoming?.OrbitStartAngle ?? legacyOrbitStartAngle ?? current.OrbitStartAngle, -360, 360),
+            OrbitRadius = Math.Clamp(incoming?.OrbitRadius ?? current.OrbitRadius, 80, 480),
+            OrbitStartAngle = Math.Clamp(incoming?.OrbitStartAngle ?? current.OrbitStartAngle, -360, 360),
             OrbitEndAngle = Math.Clamp(incoming?.OrbitEndAngle ?? current.OrbitEndAngle, -360, 360),
             OrbitDirection = Choice(incoming?.OrbitDirection, OrbitDirections, current.OrbitDirection, "clockwise"),
-            SemicircleRadius = Math.Clamp(incoming?.SemicircleRadius ?? legacySemicircleRadius ?? current.SemicircleRadius, 80, 480),
-            SemicircleStartAngle = Math.Clamp(incoming?.SemicircleStartAngle ?? legacySemicircleStartAngle ?? current.SemicircleStartAngle, -360, 360),
-            SemicircleEndAngle = Math.Clamp(incoming?.SemicircleEndAngle ?? legacySemicircleEndAngle ?? current.SemicircleEndAngle, -360, 360),
+            SemicircleRadius = Math.Clamp(incoming?.SemicircleRadius ?? current.SemicircleRadius, 80, 480),
+            SemicircleStartAngle = Math.Clamp(incoming?.SemicircleStartAngle ?? current.SemicircleStartAngle, -360, 360),
+            SemicircleEndAngle = Math.Clamp(incoming?.SemicircleEndAngle ?? current.SemicircleEndAngle, -360, 360),
             MobileMode = Choice(incoming?.MobileMode, ResponsiveModes, current.MobileMode, "stack"),
             CompactRadius = Math.Clamp(incoming?.CompactRadius ?? current.CompactRadius, 60, 220),
             CompactChildWidth = Math.Clamp(incoming?.CompactChildWidth ?? current.CompactChildWidth, 72, 180),
@@ -468,19 +455,11 @@ public static class BlockContractService
     private static BlockAppearance ResolveAppearance(Block block)
     {
         var value = block.Appearance ?? new BlockAppearance();
-        var useLegacyLayout = value.SchemaVersion == 0;
-        var useLegacyBackgroundMode = value.SchemaVersion < 2;
         return new BlockAppearance
         {
             SchemaVersion = Math.Max(value.SchemaVersion, 2),
-            BackgroundMode = Choice(
-                useLegacyBackgroundMode && !string.IsNullOrWhiteSpace(value.BackgroundColor)
-                    ? "color"
-                    : value.BackgroundMode,
-                BackgroundModes,
-                useLegacyLayout && !string.IsNullOrWhiteSpace(block.Layout?.BackgroundColor) ? "color" : "none",
-                "none"),
-            BackgroundColor = NormalizeColor(value.BackgroundColor, useLegacyLayout ? block.Layout?.BackgroundColor : null),
+            BackgroundMode = Choice(value.BackgroundMode, BackgroundModes, "none", "none"),
+            BackgroundColor = NormalizeColor(value.BackgroundColor, null),
             TextColor = NormalizeColor(value.TextColor, null),
             TextAlign = Choice(value.TextAlign, TextAlignValues, "inherit", "inherit"),
             FontSizePx = ClampNullableInt(value.FontSizePx, 10, 96),
@@ -492,27 +471,15 @@ public static class BlockContractService
             BorderColor = NormalizeColor(value.BorderColor, null),
             BorderWidth = Math.Clamp(value.BorderWidth, 0, 20),
             BorderStyle = Choice(value.BorderStyle, BorderStyles, "solid", "solid"),
-            BorderRadius = Choice(
-                useLegacyLayout ? block.Layout?.BorderRadius : value.BorderRadius,
-                RadiusValues,
-                value.BorderRadius,
-                "none"),
+            BorderRadius = Choice(value.BorderRadius, RadiusValues, "none", "none"),
             Shadow = Choice(value.Shadow, ShadowValues, "none", "none"),
             Shape = Choice(value.Shape, ShapeValues, "rectangle", "rectangle"),
             AspectRatio = Choice(value.AspectRatio, AspectRatioValues, "auto", "auto"),
             RotationDeg = NormalizeRotation(value.RotationDeg),
             MediaFit = Choice(value.MediaFit, MediaFitValues, "cover", "cover"),
             MediaPosition = Choice(value.MediaPosition, MediaPositionValues, "center", "center"),
-            Padding = Choice(
-                useLegacyLayout ? block.Layout?.Padding : value.Padding,
-                SpacingValues,
-                value.Padding,
-                "none"),
-            Margin = Choice(
-                useLegacyLayout ? block.Layout?.Margin : value.Margin,
-                SpacingValues,
-                value.Margin,
-                "none"),
+            Padding = Choice(value.Padding, SpacingValues, "none", "none"),
+            Margin = Choice(value.Margin, SpacingValues, "none", "none"),
             Decorative = value.Decorative,
             InheritFromContainer = value.InheritFromContainer
         };

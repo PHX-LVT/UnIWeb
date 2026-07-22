@@ -2,8 +2,11 @@
 @inject BrandingService BrandingService
 @inject IHttpService Http
 
-<div class="page-header">
-    <h1 class="page-title"><i class="fas fa-paint-brush"></i> @T("Branding")</h1>
+<GlobalWorkspaceHeader />
+
+<div class="global-workspace-content">
+<div class="page-header global-workspace-section-header">
+    <h2 class="global-workspace-section-title"><i class="fas fa-paint-brush"></i> @T("Branding")</h2>
     <div class="page-actions">
         <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
             <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
@@ -51,6 +54,7 @@ else if (_model is not null)
         <div class="form-hint">@T("LogoUploadHint")</div>
     </div>
 }
+</div>
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";

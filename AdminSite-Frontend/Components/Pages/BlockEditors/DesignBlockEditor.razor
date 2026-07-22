@@ -256,7 +256,7 @@
         _loadedBlockId = Block.Id;
         _icon = Block.Icon ?? string.Empty;
         _iconPosition = Block.IconPosition == "right" ? "right" : "left";
-        _cardAsset = CopyAsset(Block.Asset, Block.ImageUrl);
+        _cardAsset = CopyAsset(Block.Asset);
         _imageUrl = _cardAsset.Url;
         _title = new(Block.Title ?? new());
         _label = new(Block.Label ?? new());
@@ -293,10 +293,10 @@
         _containerPurpose = NormalizeContainerPurpose(Block.ContainerLayout.Purpose);
         _allowedChildType = Block.ContainerLayout.AllowedChildType;
         _shareAppearance = Block.ContainerLayout.ShareAppearance;
-        _sharedAppearance = CopyAppearance(Block.ContainerLayout.SharedAppearance, null);
+        _sharedAppearance = CopyAppearance(Block.ContainerLayout.SharedAppearance);
         _sharedAppearance.BackgroundColor ??= "#ffffff";
         _sharedAppearance.TextColor ??= "#0f172a";
-        _appearance = CopyAppearance(Block.Appearance, Block.Layout);
+        _appearance = CopyAppearance(Block.Appearance);
         _tabletResponsive = CopyResponsive(Block.Responsive.Tablet);
         _mobileResponsive = CopyResponsive(Block.Responsive.Mobile);
         _items = Block.BulletItems?.Select(i => new BulletListItemModel
@@ -477,10 +477,10 @@
         _imageUrl = resource.Url;
     }
 
-    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? asset, string? legacyUrl) => new()
+    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? asset) => new()
     {
         SchemaVersion = 1,
-        Url = asset?.Url ?? legacyUrl,
+        Url = asset?.Url,
         ResourceId = asset?.ResourceId,
         ResourceSource = asset?.ResourceSource ?? "DirectUpload",
         StorageKey = asset?.StorageKey,
@@ -520,7 +520,6 @@
             Title = _title,
             Description = _description,
             Asset = AssetDto(_cardAsset),
-            ImageUrl = _imageUrl,
             ButtonLabel = _buttonLabel,
             ImageAltText = _imageAltText,
             Href = _href,
@@ -691,15 +690,11 @@
     private static string NormalizeOrbitDirection(string? value) =>
         value == "counter-clockwise" ? "counter-clockwise" : "clockwise";
 
-    private static BlockAppearanceModel CopyAppearance(BlockAppearanceModel? source, BlockLayoutModel? legacyLayout) => new()
+    private static BlockAppearanceModel CopyAppearance(BlockAppearanceModel? source) => new()
     {
         SchemaVersion = Math.Max(source?.SchemaVersion ?? 0, 2),
-        BackgroundMode = source?.SchemaVersion < 2 &&
-            !string.IsNullOrWhiteSpace(source?.BackgroundColor ?? legacyLayout?.BackgroundColor)
-                ? "color"
-                : source?.BackgroundMode ??
-            (string.IsNullOrWhiteSpace(source?.BackgroundColor ?? legacyLayout?.BackgroundColor) ? "none" : "color"),
-        BackgroundColor = source?.BackgroundColor ?? legacyLayout?.BackgroundColor,
+        BackgroundMode = source?.BackgroundMode ?? "none",
+        BackgroundColor = source?.BackgroundColor,
         TextColor = source?.TextColor,
         TextAlign = source?.TextAlign ?? "inherit",
         FontSizePx = source?.FontSizePx,
@@ -711,14 +706,14 @@
         BorderColor = source?.BorderColor,
         BorderWidth = Math.Clamp(source?.BorderWidth ?? 0, 0, 20),
         BorderStyle = NormalizeBorderStyle(source?.BorderStyle),
-        BorderRadius = NormalizeRadius(source?.BorderRadius ?? legacyLayout?.BorderRadius),
+        BorderRadius = NormalizeRadius(source?.BorderRadius),
         Shadow = NormalizeShadow(source?.Shadow),
         Shape = NormalizeShape(source?.Shape),
         AspectRatio = source?.AspectRatio ?? "auto",
         MediaFit = source?.MediaFit ?? "cover",
         MediaPosition = source?.MediaPosition ?? "center",
-        Padding = NormalizeSpacing(source?.Padding ?? legacyLayout?.Padding),
-        Margin = NormalizeSpacing(source?.Margin ?? legacyLayout?.Margin),
+        Padding = NormalizeSpacing(source?.Padding),
+        Margin = NormalizeSpacing(source?.Margin),
         Decorative = source?.Decorative ?? false,
         InheritFromContainer = source?.InheritFromContainer ?? false
     };

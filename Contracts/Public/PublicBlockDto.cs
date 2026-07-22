@@ -165,17 +165,9 @@ namespace Contracts.Public
 
     public class PublicContainerBlockDto : PublicBlockDto
     {
-        public string PresetKey { get; set; } = ContainerPresetCatalog.LegacyFreeformKey;
+        public string PresetKey { get; set; } = ContainerPresetCatalog.StackKey;
         public Dictionary<string, string>? Title { get; set; }
         public PublicContainerLayoutSettingsDto ContainerLayout { get; set; } = new();
-        public string? LayoutMode { get; set; }
-        public int? Columns { get; set; }
-        public string? Gap { get; set; }
-        public int OrbitRadius { get; set; } = 180;
-        public int OrbitStartAngle { get; set; } = -90;
-        public int SemicircleRadius { get; set; } = 180;
-        public int SemicircleStartAngle { get; set; } = 180;
-        public int SemicircleEndAngle { get; set; } = 360;
         public List<PublicBlockDto>? Children { get; set; }
     }
 

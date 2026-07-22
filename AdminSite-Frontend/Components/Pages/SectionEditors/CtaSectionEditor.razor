@@ -122,7 +122,7 @@
     private string? _loadedSectionId;
     private List<FormDefinitionModel> _formDefinitions = new();
 
-    private List<string> _layouts = new() { "center", "left", "right", "final-card" };
+    private List<string> _layouts = new() { "center", "left", "right", "final-card", "about-final" };
     private List<string> _btnStyles = new() { "filled", "outline", "ghost" };
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
@@ -137,7 +137,7 @@
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
 
-        _layout = NormalizeLegacyLayout(Section.Layout);
+        _layout = Section.Layout ?? throw new InvalidOperationException("CTA Sections require a canonical layout.");
         _heading = new(Section.Heading ?? new());
         _subtext = new(Section.Subtext ?? new());
 
@@ -225,11 +225,4 @@
         _ => "filled"
     };
 
-    private static string NormalizeLegacyLayout(string? layout) => layout switch
-    {
-        "centered" => "center",
-        "stacked" => "center",
-        null or "" => "center",
-        _ => layout
-    };
 }

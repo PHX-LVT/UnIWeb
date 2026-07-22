@@ -22,7 +22,7 @@
 .sc-industry-logic h2,
 .sc-industry-tech h2 {
     margin: 0 0 24px;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     font-size: clamp(28px, 3vw, 42px);
     line-height: 1.2;
 }

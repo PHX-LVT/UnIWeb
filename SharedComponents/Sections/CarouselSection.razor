@@ -107,7 +107,7 @@
     [Parameter, EditorRequired] public PublicCarouselSectionDto Section { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
-    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private string CarouselLayout => Section.Layout == "case-metrics" ? "case-metrics" : "cards";
 

@@ -298,9 +298,9 @@
 
     private string GetLang(Dictionary<string, string> values)
     {
-        if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
-            return en;
-        return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+        if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
+            return localized;
+        return values.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? string.Empty;
     }
 
     private sealed record ContentTypeOption(string Key, string Label);

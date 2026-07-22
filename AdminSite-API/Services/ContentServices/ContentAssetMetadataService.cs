@@ -440,7 +440,7 @@ namespace FullProject.Services
                 return value;
             if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
                 return en;
-            return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+            return fallback;
         }
 
         private static string H(string value) => WebUtility.HtmlEncode(value);

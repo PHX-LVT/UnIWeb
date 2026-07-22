@@ -35,8 +35,6 @@ public sealed class SectionPresetService
             .Find(_ => true)
             .SortByDescending(preset => preset.UpdatedAt)
             .ToListAsync();
-        foreach (var preset in presets.Where(preset => _contracts.Compatibility(preset).IsCompatible))
-            _contracts.UpgradeInPlace(preset);
         return presets;
     }
 
@@ -64,7 +62,6 @@ public sealed class SectionPresetService
             Description = NormalizeLocalized(dto.Description),
             SectionType = SectionPresetContractService.SectionType(snapshot),
             Section = snapshot,
-            Style = snapshot.Style,
             Blocks = capturedBlocks,
             SchemaVersion = SectionPresetContractService.CurrentSchemaVersion,
             EditableSlots = new(),
@@ -157,6 +154,8 @@ public sealed class SectionPresetService
                 continue;
 
             var source = FormDefinitionService.MapDesign(definition.Design);
+            if (source.V2 is null)
+                throw new InvalidOperationException($"Form Definition '{definition.Key}' does not contain a schema-v2 design.");
             var fields = definition.Fields.Select(field => new FormFieldDefinitionDto
                 {
                     Key = field.Key,
@@ -167,22 +166,15 @@ public sealed class SectionPresetService
                     InputBoxSize = field.InputBoxSize,
                     Order = field.Order
                 }).ToList();
-            var design = source.V2 is not null
-                ? FormDefinitionService.NormalizeV2WriteDesign(
-                    definition.Id,
-                    source,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel,
-                    FormDefinitionService.MapInformationItems(definition.InformationItems),
-                    FormDefinitionService.MapAuxiliaryActions(definition.AuxiliaryActions))
-                : FormDesignPolicy.Normalize(
-                    source,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel);
+            var design = FormDefinitionService.NormalizeV2WriteDesign(
+                definition.Id,
+                source,
+                fields,
+                definition.Name,
+                definition.Introduction,
+                definition.SubmitButtonLabel,
+                FormDefinitionService.MapInformationItems(definition.InformationItems),
+                FormDefinitionService.MapAuxiliaryActions(definition.AuxiliaryActions));
             var baseline = FormBlockLayoutPolicy.CalculateDefaultSize(
                 design,
                 FormBlockLayoutPolicy.AvailableContentWidthPx(section.Style?.ContentWidth));
@@ -236,8 +228,6 @@ public sealed class SectionPresetService
     {
         var preset = await _context.SectionPresets.Find(item => item.Id == presetId).FirstOrDefaultAsync();
         if (preset is null) return false;
-        if (_contracts.Compatibility(preset).IsCompatible)
-            _contracts.UpgradeInPlace(preset);
         var result = await _context.SectionPresets.DeleteOneAsync(preset => preset.Id == presetId);
         if (result.DeletedCount <= 0) return false;
 

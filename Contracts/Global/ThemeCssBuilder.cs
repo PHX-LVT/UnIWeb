@@ -105,32 +105,6 @@ namespace Contracts.Global
             css.AppendLine($"    --theme-header-text: {headerText};");
             css.AppendLine($"    --theme-header-link-hover: {accent};");
 
-            // Temporary compatibility aliases. SharedComponents will be migrated away from
-            // these legacy names over time, but keeping equal defaults makes this pass visual-neutral.
-            css.AppendLine("    --font-body: var(--theme-font-body);");
-            css.AppendLine("    --font-heading: var(--theme-font-heading);");
-            css.AppendLine("    --text-size-base: var(--theme-text-base);");
-            css.AppendLine("    --text-size-eyebrow: var(--theme-text-eyebrow);");
-            css.AppendLine("    --text-size-heading: var(--theme-text-heading);");
-            css.AppendLine("    --text-size-subheading: var(--theme-text-subheading);");
-            css.AppendLine("    --text-size-body: var(--theme-text-body);");
-            css.AppendLine("    --text-size-small: var(--theme-text-small);");
-            css.AppendLine("    --text-size-item-title: var(--theme-text-item-title);");
-            css.AppendLine("    --color-primary: var(--theme-color-primary);");
-            css.AppendLine("    --color-accent: var(--theme-color-accent);");
-            css.AppendLine("    --color-background: var(--theme-color-background);");
-            css.AppendLine("    --color-text: var(--theme-color-text);");
-            css.AppendLine("    --border-radius: var(--theme-radius-base);");
-            css.AppendLine("    --animation-speed: var(--theme-motion-duration);");
-            css.AppendLine("    --spacing-scale: var(--theme-spacing-scale);");
-            css.AppendLine("    --navy: var(--theme-color-primary);");
-            css.AppendLine("    --gold: var(--theme-color-accent);");
-            css.AppendLine("    --gold-gradient: var(--theme-gold-gradient);");
-            css.AppendLine("    --section-pad-v: var(--theme-section-padding-y);");
-            css.AppendLine("    --card-radius: var(--theme-card-radius);");
-            css.AppendLine("    --card-shadow: var(--theme-card-shadow);");
-            css.AppendLine("    --card-shadow-hover: var(--theme-card-shadow-hover);");
-            css.AppendLine("    --transition: var(--theme-motion-duration) ease;");
             css.AppendLine("}");
             return css.ToString();
         }

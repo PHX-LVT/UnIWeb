@@ -1036,37 +1036,30 @@ else
             errors.Add("Every field must have a label.");
         AddCapabilityValidation(definition.Fields, errors);
         var designDto = ToDesignDto(definition.Design);
-        if (designDto.V2 is not null)
+        if (designDto.V2 is null)
+        {
+            errors.Add("A schema-v2 Form Design is required.");
+        }
+        else
         {
             errors.AddRange(FormDesignV2Policy.Validate(
-                designDto.V2!,
+                designDto.V2,
                 definition.Fields.Select(ToFieldDto),
                 definition.InformationItems,
                 definition.AuxiliaryActions));
-        }
-        var legacyProjection = designDto.V2 is null ||
-                               (definition.InformationItems.Count == 0 &&
-                                definition.AuxiliaryActions.Count == 0 &&
-                                FormDesignV2Policy.MatchesLegacyProjection(definition.Id, designDto, definition.Fields.Select(ToFieldDto)));
-        var requiredHeight = legacyProjection
-            ? FormDesignPolicy.CalculateRequiredHeight(
+            var requiredHeight = FormDesignV2Policy.CalculateRequiredHeight(
                 designDto,
-                definition.Fields.Select(ToFieldDto),
-                definition.Name,
-                definition.Introduction,
-                definition.SubmitButtonLabel)
-            : FormDesignV2Policy.CalculateRequiredHeight(
-                designDto,
-                designDto.V2!,
+                designDto.V2,
                 definition.Fields.Select(ToFieldDto),
                 definition.Name,
                 definition.Introduction,
                 definition.SubmitButtonLabel,
                 definition.InformationItems,
                 definition.AuxiliaryActions);
-        if (requiredHeight > FormDesignPolicy.MaximumHeightPx)
-        {
-            errors.Add(string.Format(T("FormDesignTooTall"), FormDesignPolicy.MaximumHeightPx));
+            if (requiredHeight > FormDesignPolicy.MaximumHeightPx)
+            {
+                errors.Add(string.Format(T("FormDesignTooTall"), FormDesignPolicy.MaximumHeightPx));
+            }
         }
 
         return errors;
@@ -1074,16 +1067,16 @@ else
 
     private string FieldValidationLabel(FormFieldDefinitionModel field)
     {
-        var label = field.Label.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? field.Key;
+        var label = Text(field.Label, field.Key);
         return string.Format(T("FieldNumberLabel"), field.Order + 1, string.IsNullOrWhiteSpace(label) ? T("Field") : label);
     }
 
     private string Text(Dictionary<string, string>? values, string fallback) =>
         values?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
             ? localized
-            : values?.GetValueOrDefault("en") is { Length: > 0 } english
-                ? english
-                : values?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+            : values?.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) is { Length: > 0 } configuredFallback
+                ? configuredFallback
+                : fallback;
 
     private string TypeName(FormInputTypeModel type) =>
         type.Name.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
@@ -1286,7 +1279,7 @@ else
     {
         if (_editingDefinition is null) return;
         _editingDefinition.Design ??= CreateDefaultDesign(FormDesignShapeModel.Stacked);
-        _editingDefinition.Design.V2 ??= FormDesignV2Policy.ProjectFromV1(
+        _editingDefinition.Design.V2 ??= FormDesignV2Policy.CreateDefault(
             _editingDefinition.Id,
             ToDesignDto(_editingDefinition.Design),
             _editingDefinition.Fields.Select(ToFieldDto));
@@ -1443,7 +1436,7 @@ else
     {
         foreach (var field in fields)
         {
-            var label = field.Label.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? field.Key;
+            var label = Text(field.Label, field.Key);
             var capability = Capability(field);
             var optionsWithData = field.Options
                 .Where(option => !string.IsNullOrWhiteSpace(option.Value) ||

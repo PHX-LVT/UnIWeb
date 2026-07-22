@@ -1,401 +1,405 @@
-[
-  {
-    "_id": {
-      "$oid": "6a3507ee4a176a86ce0c2695"
+[{
+    "_id" : { "$oid" : "6a3507ee4a176a86ce0c2696" },
+    "Key" : "expert",
+    "Name" : {
+      "en" : "Talk to an Expert",
+      "vi" : "Trao đổi với chuyên gia"
     },
-    "Key": "quote",
-    "Name": {
-      "en": "Get a Quote",
-      "vi": "Nhận báo giá"
+    "Introduction" : {
+      "en" : "Our specialists are here to answer your questions and help you find the best solution.",
+      "vi" : "Chuyên gia của chúng tôi sẽ hỗ trợ câu hỏi và đề xuất giải pháp phù hợp."
     },
-    "Introduction": {
-      "en": "Fill out the form below and our sales team will contact you shortly.",
-      "vi": "Điền thông tin bên dưới và đội ngũ tư vấn sẽ liên hệ với bạn sớm."
+    "SubmitButtonLabel" : {
+      "en" : "Submit",
+      "vi" : "Gửi"
     },
-    "SubmitButtonLabel": {
-      "en": "Submit Request",
-      "vi": "Gửi yêu cầu"
+    "InformationItems" : [],
+    "AuxiliaryActions" : [],
+    "Design" : {
+      "UseThemeDefaults" : true,
+      "SchemaVersion" : { "$numberInt" : "2" },
+      "Shape" : { "$numberInt" : "0" },
+      "WidthPx" : { "$numberInt" : "430" },
+      "CalculatedHeightPx" : { "$numberInt" : "720" },
+      "BackgroundMode" : { "$numberInt" : "1" },
+      "BackgroundColor" : "#ffffff",
+      "TextColor" : "#0f172a",
+      "AccentColor" : "#1d4ed8",
+      "BorderColor" : "#dbe3ef",
+      "BorderWidthPx" : { "$numberInt" : "1" },
+      "BorderRadiusPx" : { "$numberInt" : "16" },
+      "Shadow" : "small",
+      "PaddingPx" : { "$numberInt" : "32" },
+      "FieldGapPx" : { "$numberInt" : "16" },
+      "TextAlign" : { "$numberInt" : "0" },
+      "LabelMode" : { "$numberInt" : "1" },
+      "ButtonStyle" : "filled",
+      "ButtonWidth" : { "$numberInt" : "1" },
+      "V2" : {
+        "OuterLayout" : "Standard",
+        "FieldRows" : [{
+            "Id" : "row-34a72c97fa5b8fa0e196",
+            "Order" : { "$numberInt" : "0" },
+            "FieldKeys" : ["name"]
+          }, {
+            "Id" : "row-bde889acd59e0f6a95da",
+            "Order" : { "$numberInt" : "1" },
+            "FieldKeys" : ["email"]
+          }, {
+            "Id" : "row-7e84df004e520f006c42",
+            "Order" : { "$numberInt" : "2" },
+            "FieldKeys" : ["phone"]
+          }, {
+            "Id" : "row-dc9c9e2ecee72dedc9d8",
+            "Order" : { "$numberInt" : "3" },
+            "FieldKeys" : ["company"]
+          }, {
+            "Id" : "row-fdf50f8c17178ab11389",
+            "Order" : { "$numberInt" : "4" },
+            "FieldKeys" : ["service"]
+          }, {
+            "Id" : "row-016e90e9fba3cd211a85",
+            "Order" : { "$numberInt" : "5" },
+            "FieldKeys" : ["message"]
+          }],
+        "InformationBackgroundColor" : "#0f2740",
+        "InformationTextColor" : "#ffffff",
+        "FormBackgroundColor" : "#ffffff",
+        "FormTextColor" : "#0f172a",
+        "SplitPanelPercent" : { "$numberInt" : "40" },
+        "SubmitLayout" : "Full",
+        "AuxiliaryActionLayouts" : []
+      }
     },
-    "DisplayMode": {
-      "$numberInt": "0"
-    },
-    "Layout": {
-      "$numberInt": "0"
-    },
-    "Active": true,
-    "Fields": [
-      {
-        "Key": "ServiceType",
-        "Type": "select",
-        "Label": {
-          "en": "Select Service"
+    "Active" : true,
+    "Fields" : [{
+        "Key" : "Name",
+        "Type" : "text",
+        "Label" : {
+          "en" : "Full Name",
+          "vi" : "Ho va Ten"
         },
-        "Placeholder": {
-          "en": "Select Service"
+        "Placeholder" : {
+          "en" : "Full Name"
         },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "500" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "0" }
+      }, {
+        "Key" : "Email",
+        "Type" : "email",
+        "Label" : {
+          "en" : "Email Address"
         },
-        "MaxLength": {
-          "$numberInt": "100"
+        "Placeholder" : {
+          "en" : "Email Address"
         },
-        "Options": [
-          {
-            "Value": "Logistics",
-            "Label": {
-              "en": "Logistics"
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "254" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "1" }
+      }, {
+        "Key" : "Phone",
+        "Type" : "tel",
+        "Label" : {
+          "en" : "Phone Number"
+        },
+        "Placeholder" : {
+          "en" : "Phone Number"
+        },
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "40" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "2" }
+      }, {
+        "Key" : "Company",
+        "Type" : "text",
+        "Label" : {
+          "en" : "Company Name"
+        },
+        "Placeholder" : {
+          "en" : "Company Name"
+        },
+        "Required" : false,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "500" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "3" }
+      }, {
+        "Key" : "Service",
+        "Type" : "select",
+        "Label" : {
+          "en" : "Select Service"
+        },
+        "Placeholder" : {
+          "en" : "Select Service"
+        },
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "0" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [{
+            "Value" : "Consulting",
+            "Label" : {
+              "en" : "Consulting"
             },
-            "Order": {
-              "$numberInt": "0"
-            }
-          },
-          {
-            "Value": "Warehouse",
-            "Label": {
-              "en": "Warehouse"
+            "Order" : { "$numberInt" : "0" }
+          }, {
+            "Value" : "Implementation",
+            "Label" : {
+              "en" : "Implementation"
             },
-            "Order": {
-              "$numberInt": "1"
-            }
-          },
-          {
-            "Value": "Transport",
-            "Label": {
-              "en": "Transport"
+            "Order" : { "$numberInt" : "1" }
+          }, {
+            "Value" : "Support",
+            "Label" : {
+              "en" : "Support"
             },
-            "Order": {
-              "$numberInt": "2"
-            }
-          }
-        ],
-        "Order": {
-          "$numberInt": "0"
-        }
-      },
-      {
-        "Key": "Route",
-        "Type": "text",
-        "Label": {
-          "en": "Route / Volume / Duration"
-        },
-        "Placeholder": {
-          "en": "Route / Volume / Duration"
-        },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "300"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "1"
-        }
-      },
-      {
-        "Key": "Email",
-        "Type": "email",
-        "Label": {
-          "en": "Email Address"
-        },
-        "Placeholder": {
-          "en": "Email Address"
-        },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "254"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "2"
-        }
-      },
-      {
-        "Key": "Phone",
-        "Type": "tel",
-        "Label": {
-          "en": "Phone Number"
-        },
-        "Placeholder": {
-          "en": "Phone Number"
-        },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "40"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "3"
-        }
-      }
-    ],
-    "CreatedAt": {
-      "$date": {
-        "$numberLong": "1781860334123"
-      }
-    },
-    "UpdatedAt": {
-      "$date": {
-        "$numberLong": "1782094259930"
-      }
-    }
-  },
-  {
-    "_id": {
-      "$oid": "6a3507ee4a176a86ce0c2696"
-    },
-    "Key": "expert",
-    "Name": {
-      "en": "Talk to an Expert",
-      "vi": "Trao đổi với chuyên gia"
-    },
-    "Introduction": {
-      "en": "Our specialists are here to answer your questions and help you find the best solution.",
-      "vi": "Chuyên gia của chúng tôi sẽ hỗ trợ câu hỏi và đề xuất giải pháp phù hợp."
-    },
-    "SubmitButtonLabel": {
-      "en": "Submit",
-      "vi": "Gửi"
-    },
-    "DisplayMode": {
-      "$numberInt": "0"
-    },
-    "Layout": {
-      "$numberInt": "0"
-    },
-    "Active": true,
-    "Fields": [
-      {
-        "Key": "Name",
-        "Type": "text",
-        "Label": {
-          "en": "Full Name"
-        },
-        "Placeholder": {
-          "en": "Full Name"
-        },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "150"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "0"
-        }
-      },
-      {
-        "Key": "Email",
-        "Type": "email",
-        "Label": {
-          "en": "Email Address"
-        },
-        "Placeholder": {
-          "en": "Email Address"
-        },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "254"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "1"
-        }
-      },
-      {
-        "Key": "Phone",
-        "Type": "tel",
-        "Label": {
-          "en": "Phone Number"
-        },
-        "Placeholder": {
-          "en": "Phone Number"
-        },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "40"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "2"
-        }
-      },
-      {
-        "Key": "Company",
-        "Type": "text",
-        "Label": {
-          "en": "Company Name"
-        },
-        "Placeholder": {
-          "en": "Company Name"
-        },
-        "Required": false,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "200"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "3"
-        }
-      },
-      {
-        "Key": "Service",
-        "Type": "select",
-        "Label": {
-          "en": "Select Service"
-        },
-        "Placeholder": {
-          "en": "Select Service"
-        },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "100"
-        },
-        "Options": [
-          {
-            "Value": "Consulting",
-            "Label": {
-              "en": "Consulting"
+            "Order" : { "$numberInt" : "2" }
+          }, {
+            "Value" : "Other",
+            "Label" : {
+              "en" : "Other"
             },
-            "Order": {
-              "$numberInt": "0"
-            }
-          },
-          {
-            "Value": "Implementation",
-            "Label": {
-              "en": "Implementation"
+            "Order" : { "$numberInt" : "3" }
+          }],
+        "Order" : { "$numberInt" : "4" }
+      }, {
+        "Key" : "Message",
+        "Type" : "textarea",
+        "Label" : {
+          "en" : "Your Message"
+        },
+        "Placeholder" : {
+          "en" : "Your Message"
+        },
+        "Required" : false,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "2000" },
+        "InputBoxSize" : { "$numberInt" : "4" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "5" }
+      }],
+    "CreatedAt" : { "$date" : { "$numberLong" : "1781860334123" } },
+    "UpdatedAt" : { "$date" : { "$numberLong" : "1784260728666" } }
+  }, {
+    "_id" : { "$oid" : "6a3507ee4a176a86ce0c2695" },
+    "Key" : "quote",
+    "Name" : {
+      "en" : "Get a Quote",
+      "vi" : "Nhận báo giá"
+    },
+    "Introduction" : {
+      "en" : "Fill out the form below and our sales team will contact you shortly.",
+      "vi" : "Điền thông tin bên dưới và đội ngũ tư vấn sẽ liên hệ với bạn sớm."
+    },
+    "SubmitButtonLabel" : {
+      "en" : "Submit Request",
+      "vi" : "Gửi yêu cầu"
+    },
+    "InformationItems" : [],
+    "AuxiliaryActions" : [],
+    "Design" : {
+      "UseThemeDefaults" : true,
+      "SchemaVersion" : { "$numberInt" : "2" },
+      "Shape" : { "$numberInt" : "0" },
+      "WidthPx" : { "$numberInt" : "560" },
+      "CalculatedHeightPx" : { "$numberInt" : "572" },
+      "BackgroundMode" : { "$numberInt" : "1" },
+      "BackgroundColor" : "#ffffff",
+      "TextColor" : "#0f172a",
+      "AccentColor" : "#1d4ed8",
+      "BorderColor" : "#dbe3ef",
+      "BorderWidthPx" : { "$numberInt" : "1" },
+      "BorderRadiusPx" : { "$numberInt" : "16" },
+      "Shadow" : "small",
+      "PaddingPx" : { "$numberInt" : "32" },
+      "FieldGapPx" : { "$numberInt" : "16" },
+      "TextAlign" : { "$numberInt" : "0" },
+      "LabelMode" : { "$numberInt" : "0" },
+      "ButtonStyle" : "filled",
+      "ButtonWidth" : { "$numberInt" : "1" },
+      "V2" : {
+        "OuterLayout" : "Standard",
+        "FieldRows" : [{
+            "Id" : "row-26a7ab3e424d7ea5c68c",
+            "Order" : { "$numberInt" : "0" },
+            "FieldKeys" : ["servicetype"]
+          }, {
+            "Id" : "row-a38ac507648dbef5c38f",
+            "Order" : { "$numberInt" : "1" },
+            "FieldKeys" : ["route"]
+          }, {
+            "Id" : "row-e32e812253b99f26dc58",
+            "Order" : { "$numberInt" : "2" },
+            "FieldKeys" : ["email"]
+          }, {
+            "Id" : "row-d4004c9b0f6354aa3a44",
+            "Order" : { "$numberInt" : "3" },
+            "FieldKeys" : ["phone"]
+          }],
+        "InformationBackgroundColor" : "#0f2740",
+        "InformationTextColor" : "#ffffff",
+        "FormBackgroundColor" : "#ffffff",
+        "FormTextColor" : "#0f172a",
+        "SplitPanelPercent" : { "$numberInt" : "40" },
+        "SubmitLayout" : "Full",
+        "AuxiliaryActionLayouts" : []
+      }
+    },
+    "Active" : true,
+    "Fields" : [{
+        "Key" : "ServiceType",
+        "Type" : "select",
+        "Label" : {
+          "en" : "Select Service"
+        },
+        "Placeholder" : {
+          "en" : "Select Service"
+        },
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "0" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [{
+            "Value" : "Logistics",
+            "Label" : {
+              "en" : "Logistics"
             },
-            "Order": {
-              "$numberInt": "1"
-            }
-          },
-          {
-            "Value": "Support",
-            "Label": {
-              "en": "Support"
+            "Order" : { "$numberInt" : "0" }
+          }, {
+            "Value" : "Warehouse",
+            "Label" : {
+              "en" : "Warehouse"
             },
-            "Order": {
-              "$numberInt": "2"
-            }
-          },
-          {
-            "Value": "Other",
-            "Label": {
-              "en": "Other"
+            "Order" : { "$numberInt" : "1" }
+          }, {
+            "Value" : "Transport",
+            "Label" : {
+              "en" : "Transport"
             },
-            "Order": {
-              "$numberInt": "3"
-            }
-          }
-        ],
-        "Order": {
-          "$numberInt": "4"
-        }
-      },
-      {
-        "Key": "Message",
-        "Type": "textarea",
-        "Label": {
-          "en": "Your Message"
+            "Order" : { "$numberInt" : "2" }
+          }],
+        "Order" : { "$numberInt" : "0" }
+      }, {
+        "Key" : "Route",
+        "Type" : "text",
+        "Label" : {
+          "en" : "Route / Volume / Duration"
         },
-        "Placeholder": {
-          "en": "Your Message"
+        "Placeholder" : {
+          "en" : "Route / Volume / Duration"
         },
-        "Required": false,
-        "MinLength": {
-          "$numberInt": "0"
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "500" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "1" }
+      }, {
+        "Key" : "Email",
+        "Type" : "email",
+        "Label" : {
+          "en" : "Email Address"
         },
-        "MaxLength": {
-          "$numberInt": "2000"
+        "Placeholder" : {
+          "en" : "Email Address"
         },
-        "Options": [],
-        "Order": {
-          "$numberInt": "5"
-        }
-      }
-    ],
-    "CreatedAt": {
-      "$date": {
-        "$numberLong": "1781860334123"
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "254" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "2" }
+      }, {
+        "Key" : "Phone",
+        "Type" : "tel",
+        "Label" : {
+          "en" : "Phone Number"
+        },
+        "Placeholder" : {
+          "en" : "Phone Number"
+        },
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "40" },
+        "InputBoxSize" : { "$numberInt" : "1" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "3" }
+      }],
+    "CreatedAt" : { "$date" : { "$numberLong" : "1781860334123" } },
+    "UpdatedAt" : { "$date" : { "$numberLong" : "1784257593106" } }
+  }, {
+    "_id" : { "$oid" : "6a35fdb1f60d924b8f4f6cc0" },
+    "Key" : "ss",
+    "Name" : {
+      "en" : "Test Form"
+    },
+    "Introduction" : { },
+    "SubmitButtonLabel" : {
+      "en" : "Submit"
+    },
+    "Design" : {
+      "UseThemeDefaults" : true,
+      "SchemaVersion" : { "$numberInt" : "2" },
+      "Shape" : { "$numberInt" : "0" },
+      "WidthPx" : { "$numberInt" : "560" },
+      "CalculatedHeightPx" : { "$numberInt" : "250" },
+      "BackgroundMode" : { "$numberInt" : "1" },
+      "BackgroundColor" : "#ffffff",
+      "TextColor" : "#0f172a",
+      "AccentColor" : "#1d4ed8",
+      "BorderColor" : "#dbe3ef",
+      "BorderWidthPx" : { "$numberInt" : "1" },
+      "BorderRadiusPx" : { "$numberInt" : "16" },
+      "Shadow" : "small",
+      "PaddingPx" : { "$numberInt" : "32" },
+      "FieldGapPx" : { "$numberInt" : "16" },
+      "TextAlign" : { "$numberInt" : "0" },
+      "LabelMode" : { "$numberInt" : "0" },
+      "ButtonStyle" : "filled",
+      "ButtonWidth" : { "$numberInt" : "1" },
+      "V2" : {
+        "OuterLayout" : "Standard",
+        "FieldRows" : [{
+            "Id" : "row-b339f5a042c949f6b2a3",
+            "Order" : { "$numberInt" : "0" },
+            "FieldKeys" : ["name"]
+          }],
+        "InformationBackgroundColor" : "#0f2740",
+        "InformationTextColor" : "#ffffff",
+        "FormBackgroundColor" : "#ffffff",
+        "FormTextColor" : "#0f172a",
+        "SplitPanelPercent" : { "$numberInt" : "40" },
+        "SubmitLayout" : "Full",
+        "AuxiliaryActionLayouts" : []
       }
     },
-    "UpdatedAt": {
-      "$date": {
-        "$numberLong": "1782094270207"
-      }
-    }
-  },
-  {
-    "_id": {
-      "$oid": "6a35fdb1f60d924b8f4f6cc0"
-    },
-    "Key": "ss",
-    "Name": {
-      "en": "New form"
-    },
-    "Introduction": {},
-    "SubmitButtonLabel": {
-      "en": "Submit"
-    },
-    "DisplayMode": {
-      "$numberInt": "0"
-    },
-    "Active": true,
-    "Fields": [
-      {
-        "Key": "Name",
-        "Type": "text",
-        "Label": {
-          "en": "Name"
+    "Active" : true,
+    "Fields" : [{
+        "Key" : "Name",
+        "Type" : "text",
+        "Label" : {
+          "en" : "Name"
         },
-        "Placeholder": {
-          "en": "Name"
+        "Placeholder" : {
+          "en" : "Name"
         },
-        "Required": true,
-        "MinLength": {
-          "$numberInt": "0"
-        },
-        "MaxLength": {
-          "$numberInt": "150"
-        },
-        "Options": [],
-        "Order": {
-          "$numberInt": "0"
-        }
-      }
-    ],
-    "CreatedAt": {
-      "$date": {
-        "$numberLong": "1781923249017"
-      }
-    },
-    "UpdatedAt": {
-      "$date": {
-        "$numberLong": "1781923249017"
-      }
-    }
-  }
-]
+        "Required" : true,
+        "MinLength" : { "$numberInt" : "0" },
+        "MaxLength" : { "$numberInt" : "150" },
+        "InputBoxSize" : { "$numberInt" : "0" },
+        "Options" : [],
+        "Order" : { "$numberInt" : "0" }
+      }],
+    "CreatedAt" : { "$date" : { "$numberLong" : "1781923249017" } },
+    "UpdatedAt" : { "$date" : { "$numberLong" : "1784344795202" } }
+  }]

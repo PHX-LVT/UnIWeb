@@ -1,7 +1,5 @@
 using Contracts.Forms;
 using FullProject.Models;
-using FullProject.Settings;
-using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
 namespace FullProject.Services.FormServices;
@@ -9,7 +7,6 @@ namespace FullProject.Services.FormServices;
 public enum FormDefinitionOrderMutationStatus
 {
     Applied,
-    Disabled,
     Conflict,
     Invalid
 }
@@ -23,15 +20,10 @@ public sealed class FormDefinitionOrderService
 {
     private readonly IMongoCollection<FormDefinitionOrderDocument> _orders;
     private readonly IMongoCollection<FormDefinition> _definitions;
-    private readonly FormDesignV2RuntimeSettings _settings;
-
-    public FormDefinitionOrderService(
-        IMongoDatabase database,
-        IOptions<FormDesignV2RuntimeSettings> settings)
+    public FormDefinitionOrderService(IMongoDatabase database)
     {
         _orders = database.GetCollection<FormDefinitionOrderDocument>("form_definition_order");
         _definitions = database.GetCollection<FormDefinition>("form_definitions");
-        _settings = settings.Value;
     }
 
     public async Task<FormDefinitionOrderResponse> GetAsync(
@@ -51,7 +43,7 @@ public sealed class FormDefinitionOrderService
             Revision = document?.Revision ?? 0,
             DefinitionIds = reconciled,
             PersistentOrderAvailable = document is not null,
-            WritesEnabled = _settings.EnableOrderWrites
+            WritesEnabled = true
         };
     }
 
@@ -75,9 +67,6 @@ public sealed class FormDefinitionOrderService
         CancellationToken cancellationToken = default)
     {
         var current = await GetAsync(cancellationToken: cancellationToken);
-        if (!_settings.EnableOrderWrites)
-            return new(FormDefinitionOrderMutationStatus.Disabled, current, "Form Definition ordering writes are disabled before the authoring phase.");
-
         var requested = (request.DefinitionIds ?? new())
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())

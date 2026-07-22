@@ -24,6 +24,10 @@ using FullProject.Services.BlockServices;
 using Contracts.Auth;
 using FullProject.Security;
 using FullProject.Services.LogManagement;
+using FullProject.Services.Health;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,8 +52,6 @@ builder.Services.Configure<R2StorageSettings>(
     builder.Configuration.GetSection("R2Storage"));
 builder.Services.Configure<FormSecuritySettings>(
     builder.Configuration.GetSection("FormSecurity"));
-builder.Services.Configure<FormDesignV2RuntimeSettings>(
-    builder.Configuration.GetSection("FormDesignV2"));
 builder.Services.AddOptions<LogManagementSettings>()
     .Bind(builder.Configuration.GetSection("LogManagement"))
     .Validate(settings =>
@@ -59,8 +61,7 @@ builder.Services.AddOptions<LogManagementSettings>()
         settings.LoginTotalDays >= settings.LoginActiveDays &&
         settings.CriticalSecurityTotalDays >= settings.AuditTotalDays &&
         settings.ExportMaximumRows is >= 1 and <= 1_000_000 &&
-        settings.RetentionBatchSize is >= 100 and <= 10_000 &&
-        settings.MigrationBatchSize is >= 100 and <= 5_000,
+        settings.RetentionBatchSize is >= 100 and <= 10_000,
         "LogManagement retention, export, or batch settings are invalid.")
     .ValidateOnStart();
 
@@ -85,6 +86,21 @@ builder.Services.AddSingleton<IMongoClient>(mongoClient);
 builder.Services.AddSingleton<IMongoDatabase>(mongoDb);
 builder.Services.AddSingleton<FullProject.Data.MongoDbContext>();
 builder.Services.AddSingleton<MongoIndexService>();
+builder.Services.AddSingleton<StartupMaintenanceHealthState>();
+builder.Services.AddSingleton<LogPersistenceHealthState>();
+builder.Services.AddHealthChecks()
+    .AddCheck<MongoReadinessHealthCheck>(
+        "mongodb",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"])
+    .AddCheck<StartupMaintenanceHealthState>(
+        "startup-maintenance",
+        failureStatus: HealthStatus.Degraded,
+        tags: ["ready"])
+    .AddCheck<LogPersistenceHealthState>(
+        "security-log-persistence",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"]);
 
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<RememberedDeviceService>();
@@ -115,7 +131,6 @@ builder.Services.AddScoped<FormInputTypeService>();
 builder.Services.AddScoped<FormDefinitionOrderService>();
 builder.Services.AddScoped<FormDefinitionService>();
 builder.Services.AddScoped<FormValidationService>();
-builder.Services.AddScoped<FormDesignV2MigrationPlanner>();
 builder.Services.AddScoped<PublicFormSubmissionService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ContentAssetMetadataService>();
@@ -144,7 +159,6 @@ builder.Services.AddScoped<ILoginActivityWriter, LoginActivityWriter>();
 builder.Services.AddScoped<LogManagementQueryService>();
 builder.Services.AddScoped<LogExportService>();
 builder.Services.AddScoped<LogRetentionService>();
-builder.Services.AddHostedService<LegacyLogMigrationService>();
 
 // --- Memory Cache (Phase 1 - Maybe Redis in Phase 2) ---
 builder.Services.AddMemoryCache();
@@ -254,38 +268,16 @@ builder.Services.AddControllers(options =>
 });
 
 // --- CORS ---
-var corsSettings = builder.Configuration
-    .GetSection("Cors")                   // was "AllowedOrigins"
-    .Get<CorsSettings>();
-
-if (corsSettings is null ||
-    string.IsNullOrWhiteSpace(corsSettings.AdminOrigin) ||
-    string.IsNullOrWhiteSpace(corsSettings.UserOrigin))
-{
-    Console.WriteLine(
-        "WARNING: Cors settings missing or incomplete in appsettings.json. " +
-        "CORS will reject all cross-origin requests.");
-}
-
-var allowedOrigins = new[]
-{
-    corsSettings?.AdminOrigin ?? string.Empty,
-    corsSettings?.UserOrigin  ?? string.Empty
-}.Where(o => !string.IsNullOrWhiteSpace(o)).ToArray();
+var allowedOrigins = ResolveCorsOrigins(builder.Configuration, builder.Environment);
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontends", policy =>
     {
-        if (allowedOrigins.Length > 0)
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        else
-            policy.AllowAnyOrigin()
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -339,9 +331,8 @@ var app = builder.Build();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 // --- MongoDB Indexes ---
-// CreateOneAsync is idempotent - safe to run on every startup.
-// try-catch ensures a MongoDB issue at startup logs a warning
-// rather than crashing the entire app.
+// Required indexes are part of the API correctness contract. Startup fails
+// closed when MongoDB cannot create or verify them.
 try
 {
     await app.Services.GetRequiredService<MongoIndexService>()
@@ -350,39 +341,41 @@ try
 }
 catch (Exception ex)
 {
-    logger.LogWarning(ex,
-        "MongoDB index creation failed. App will continue but " +
-        "some queries may be slower. Check MongoDB connectivity.");
+    logger.LogCritical(ex,
+        "MongoDB index creation failed. The API cannot start safely.");
+    throw;
+}
+
+var startupMaintenance = app.Services.GetRequiredService<StartupMaintenanceHealthState>();
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<FormInputTypeService>()
+        .EnsureDefaultsAsync()
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    logger.LogInformation("Default form input types checked.");
+    startupMaintenance.MarkSucceeded("form-input-type-seed");
+}
+catch (Exception ex)
+{
+    startupMaintenance.MarkDegraded("form-input-type-seed", ex);
+    logger.LogWarning(ex, "Optional form input-type seed failed.");
 }
 
 try
 {
     using var scope = app.Services.CreateScope();
-    var resourceAlbumCleanup = await scope.ServiceProvider.GetRequiredService<ManagedResourceAlbumService>()
-        .RemoveLegacyDefaultAlbumsAsync()
-        .WaitAsync(TimeSpan.FromSeconds(10));
-    if (resourceAlbumCleanup.AlbumCount > 0 || resourceAlbumCleanup.ResourceCount > 0)
-    {
-        logger.LogInformation(
-            "Legacy default resource albums removed. Albums: {AlbumCount}, resources unfiled: {ResourceCount}.",
-            resourceAlbumCleanup.AlbumCount,
-            resourceAlbumCleanup.ResourceCount);
-    }
-
-    await scope.ServiceProvider.GetRequiredService<FormInputTypeService>()
-        .EnsureDefaultsAsync()
-        .WaitAsync(TimeSpan.FromSeconds(10));
-    logger.LogInformation("Default form input types checked.");
-
     await scope.ServiceProvider.GetRequiredService<FormDefinitionService>()
         .EnsureDefaultDefinitionsAsync()
         .WaitAsync(TimeSpan.FromSeconds(10));
     logger.LogInformation("Default public form definitions checked.");
+    startupMaintenance.MarkSucceeded("default-form-definition-seed");
 }
 catch (Exception ex)
 {
-    logger.LogWarning(ex,
-        "Startup cleanup or form definition seed failed. Resource album cleanup or public modal forms may be unavailable until the next startup.");
+    startupMaintenance.MarkDegraded("default-form-definition-seed", ex);
+    logger.LogWarning(ex, "Optional default form-definition seed failed.");
 }
 
 // --- Seed admin user ---
@@ -404,28 +397,8 @@ try
 catch (Exception ex)
 {
     logger.LogCritical(ex,
-        "Admin role bootstrap failed. Check MongoDB connectivity and legacy role data.");
+        "Admin role bootstrap failed. Check MongoDB connectivity and canonical role references.");
     throw;
-}
-
-try
-{
-    using var scope = app.Services.CreateScope();
-    var contentMigration = await scope.ServiceProvider.GetRequiredService<ContentService>()
-        .MigrateLegacyWorkflowAsync()
-        .WaitAsync(TimeSpan.FromSeconds(10));
-    if (contentMigration.WorkflowCount > 0 || contentMigration.AuthorCount > 0)
-    {
-        logger.LogInformation(
-            "Content workflow migration complete. Rejected records: {WorkflowCount}, author records: {AuthorCount}.",
-            contentMigration.WorkflowCount,
-            contentMigration.AuthorCount);
-    }
-}
-catch (Exception ex)
-{
-    logger.LogWarning(ex,
-        "Legacy Content workflow migration did not complete. The app will retry on the next startup.");
 }
 
 if (!string.IsNullOrEmpty(seedEmail) && !string.IsNullOrEmpty(seedPassword))
@@ -439,9 +412,11 @@ if (!string.IsNullOrEmpty(seedEmail) && !string.IsNullOrEmpty(seedPassword))
             .WaitAsync(TimeSpan.FromSeconds(10));
         logger.LogInformation(
             "Admin seed check complete for {Email}.", seedEmail);
+        startupMaintenance.MarkSucceeded("admin-user-seed");
     }
     catch (Exception ex)
     {
+        startupMaintenance.MarkDegraded("admin-user-seed", ex);
         logger.LogWarning(ex,
             "Admin seed failed. App will continue. " +
             "Check MongoDB connectivity and seed settings.");
@@ -474,10 +449,88 @@ app.UseMiddleware<AdminMutationAuditMiddleware>();
 app.UseMiddleware<AdminSessionValidationMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = WriteHealthResponseAsync
+}).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthResponseAsync
+}).AllowAnonymous();
 
 logger.LogInformation(
     "MySite API started. Environment: {Env}",
     app.Environment.EnvironmentName);
 
 app.Run();
+
+static string[] ResolveCorsOrigins(IConfiguration configuration, IHostEnvironment environment)
+{
+    var settings = configuration.GetSection("Cors").Get<CorsSettings>();
+    string?[] configuredOrigins =
+    [
+        settings?.AdminOrigin,
+        settings?.UserOrigin
+    ];
+
+    if (configuredOrigins.Any(string.IsNullOrWhiteSpace))
+    {
+        if (!environment.IsDevelopment())
+        {
+            throw new InvalidOperationException(
+                "Cors:AdminOrigin and Cors:UserOrigin are required outside Development.");
+        }
+
+        configuredOrigins =
+        [
+            "https://localhost:7152",
+            "https://localhost:7113"
+        ];
+    }
+
+    return configuredOrigins
+        .Select(origin => NormalizeOrigin(origin!, environment))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
+static string NormalizeOrigin(string configuredOrigin, IHostEnvironment environment)
+{
+    var value = configuredOrigin.Trim().TrimEnd('/');
+    if (!Uri.TryCreate(value, UriKind.Absolute, out var origin) ||
+        (origin.Scheme != Uri.UriSchemeHttp && origin.Scheme != Uri.UriSchemeHttps) ||
+        !string.IsNullOrEmpty(origin.UserInfo) ||
+        !string.IsNullOrEmpty(origin.Query) ||
+        !string.IsNullOrEmpty(origin.Fragment) ||
+        origin.AbsolutePath != "/")
+    {
+        throw new InvalidOperationException(
+            $"CORS origin '{configuredOrigin}' must contain only an HTTP(S) scheme, host, and optional port.");
+    }
+
+    if (!environment.IsDevelopment() && origin.IsLoopback)
+    {
+        throw new InvalidOperationException(
+            $"CORS origin '{configuredOrigin}' cannot be a loopback address outside Development.");
+    }
+
+    return origin.GetLeftPart(UriPartial.Authority);
+}
+
+static Task WriteHealthResponseAsync(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+    return JsonSerializer.SerializeAsync(
+        context.Response.Body,
+        new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.ToDictionary(
+                item => item.Key,
+                item => item.Value.Status.ToString(),
+                StringComparer.OrdinalIgnoreCase)
+        });
+}
 

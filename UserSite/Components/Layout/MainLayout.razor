@@ -31,6 +31,14 @@
 
     <PublicFormModalHost Lang="@_lang" />
 }
+else if (_shellUnavailable)
+{
+    <div class="sc-not-found" role="alert">
+        <h1>Site temporarily unavailable</h1>
+        <p>@_shellMessage</p>
+        <button type="button" class="sc-btn sc-btn--theme" @onclick="RetryShellAsync">Try again</button>
+    </div>
+}
 else
 {
     <div class="sc-loading"><div class="sc-spinner"></div></div>
@@ -45,6 +53,8 @@ else
     private bool _scrollInitialized = false;
     private bool _resetHeaderScrollPending = false;
     private bool _widgetsInitialized = false;
+    private bool _shellUnavailable;
+    private string _shellMessage = string.Empty;
     private string _lang = "en";
     private DotNetObjectReference<MainLayout>? _dotNetRef;
 
@@ -89,8 +99,17 @@ else
             return;
         }
 
-        await LangService.LoadSettingsAsync();
         Navigation.LocationChanged += HandleLocationChanged;
+        await LoadShellAsync();
+    }
+
+    private async Task LoadShellAsync(bool forceThemeReload = false)
+    {
+        _ready = false;
+        _shellUnavailable = false;
+        _shellMessage = string.Empty;
+
+        await LangService.LoadSettingsAsync();
         StyleHelper.SetFallbackLanguage(LangService.FallbackLanguage);
         _langs = LangService.Languages.Select(l => l.Code).ToList();
         _lang = await LangService.GetAsync();
@@ -101,7 +120,7 @@ else
 
         await PublishLanguageAsync();
 
-        var theme = await ThemeService.GetAsync();
+        var theme = await ThemeService.GetAsync(forceThemeReload);
         var css = ThemeService.ToCssVariables(theme);
         await JS.InvokeVoidAsync("userSiteShell.setThemeVars", css);
 
@@ -114,17 +133,53 @@ else
 
         await Task.WhenAll(brandingTask, navTask, footerTask, socialTask, globalButtonsTask);
 
-        _branding = brandingTask.Result;
-        _nav = navTask.Result;
-        _footer = footerTask.Result;
-        _globalButtons = globalButtonsTask.Result;
-        _socialButtons = socialTask.Result;
+        var shellResultsAvailable = brandingTask.Result.IsAvailable &&
+                                    navTask.Result.IsAvailable &&
+                                    footerTask.Result.IsAvailable &&
+                                    socialTask.Result.IsAvailable &&
+                                    globalButtonsTask.Result.IsAvailable &&
+                                    ThemeService.LastLoadStatus is PublicOperationStatus.Success or PublicOperationStatus.NotConfigured &&
+                                    LangService.LastLoadStatus is PublicOperationStatus.Success or PublicOperationStatus.NotConfigured;
+        if (!shellResultsAvailable)
+        {
+            _shellUnavailable = true;
+            _shellMessage = FirstFailureMessage(
+                (brandingTask.Result.IsAvailable, brandingTask.Result.Message),
+                (navTask.Result.IsAvailable, navTask.Result.Message),
+                (footerTask.Result.IsAvailable, footerTask.Result.Message),
+                (socialTask.Result.IsAvailable, socialTask.Result.Message),
+                (globalButtonsTask.Result.IsAvailable, globalButtonsTask.Result.Message));
+            if (string.IsNullOrWhiteSpace(_shellMessage))
+                _shellMessage = !string.IsNullOrWhiteSpace(ThemeService.LastLoadMessage)
+                    ? ThemeService.LastLoadMessage
+                    : LangService.LastLoadMessage;
+            if (string.IsNullOrWhiteSpace(_shellMessage))
+                _shellMessage = "The site shell could not be loaded. Please try again.";
+            if (!_disposed) StateHasChanged();
+            return;
+        }
 
-    
+        _branding = brandingTask.Result.Data ?? new PublicBranding();
+        _nav = navTask.Result.Data ?? [];
+        _footer = footerTask.Result.Data ?? new PublicFooter();
+        _globalButtons = globalButtonsTask.Result.Data ?? [];
+        _socialButtons = socialTask.Result.Data ?? [];
 
         if (_disposed) return;
         _ready = true;
         StateHasChanged();
+    }
+
+    private Task RetryShellAsync() => LoadShellAsync(forceThemeReload: true);
+
+    private static string FirstFailureMessage(params (bool Available, string Message)[] results)
+    {
+        foreach (var result in results)
+        {
+            if (!result.Available && !string.IsNullOrWhiteSpace(result.Message))
+                return result.Message;
+        }
+        return string.Empty;
     }
 
     private async Task InitializeHeaderScrollAsync()
@@ -136,7 +191,7 @@ else
 
     private async Task PublishLanguageAsync()
     {
-        await JS.InvokeVoidAsync("userSiteShell.setLanguage", _lang);
+        await JS.InvokeVoidAsync("userSiteShell.setLanguage", _lang, LangService.FallbackLanguage);
     }
 
     [JSInvokable]

@@ -211,29 +211,24 @@ public sealed class FormValidationService
             errors.Add("Form Design is required.");
             return;
         }
-        var legacyProjection = design.V2 is null ||
-                               ((request.InformationItems?.Count ?? 0) == 0 &&
-                                (request.AuxiliaryActions?.Count ?? 0) == 0 &&
-                                FormDesignV2Policy.MatchesLegacyProjection(null, design, request.Fields));
+        if (design.V2 is null)
+        {
+            errors.Add("A schema-v2 Form Design is required.");
+            return;
+        }
 
         if (!Enum.IsDefined(design.Shape))
             errors.Add("Choose a supported Form shape.");
-        else if (legacyProjection &&
-                 (design.WidthPx < FormDesignPolicy.MinimumWidth(design.Shape) ||
-                  design.WidthPx > FormDesignPolicy.MaximumWidth(design.Shape)))
-            errors.Add($"Form width must be between {FormDesignPolicy.MinimumWidth(design.Shape)} and {FormDesignPolicy.MaximumWidth(design.Shape)} pixels for this shape.");
-
-        if (design.V2 is not null && !legacyProjection &&
-            (design.WidthPx < FormDesignV2Policy.MinimumWidth(design.V2.OuterLayout) ||
-             design.WidthPx > FormDesignV2Policy.MaximumWidth(design.V2.OuterLayout)))
+        if (design.WidthPx < FormDesignV2Policy.MinimumWidth(design.V2.OuterLayout) ||
+            design.WidthPx > FormDesignV2Policy.MaximumWidth(design.V2.OuterLayout))
         {
             errors.Add($"Form width must be between {FormDesignV2Policy.MinimumWidth(design.V2.OuterLayout)} and {FormDesignV2Policy.MaximumWidth(design.V2.OuterLayout)} pixels for this outer layout.");
         }
 
         if (design.PaddingPx is < FormDesignPolicy.MinimumPaddingPx or > FormDesignPolicy.MaximumPaddingPx)
             errors.Add($"Form padding must be between {FormDesignPolicy.MinimumPaddingPx} and {FormDesignPolicy.MaximumPaddingPx} pixels.");
-        var minimumGap = legacyProjection ? FormDesignPolicy.MinimumGapPx : FormDesignV2Policy.MinimumFieldGapPx;
-        var maximumGap = legacyProjection ? FormDesignPolicy.MaximumGapPx : FormDesignV2Policy.MaximumFieldGapPx;
+        var minimumGap = FormDesignV2Policy.MinimumFieldGapPx;
+        var maximumGap = FormDesignV2Policy.MaximumFieldGapPx;
         if (design.FieldGapPx < minimumGap || design.FieldGapPx > maximumGap)
             errors.Add($"Form field spacing must be between {minimumGap} and {maximumGap} pixels.");
         if (design.BorderWidthPx is < 0 or > 4)
@@ -241,31 +236,21 @@ public sealed class FormValidationService
         if (design.BorderRadiusPx is < 0 or > 40)
             errors.Add("Form corner radius must be between 0 and 40 pixels.");
 
-        if (design.V2 is not null)
-        {
-            errors.AddRange(FormDesignV2Policy.Validate(
-                design.V2!,
-                request.Fields,
-                request.InformationItems,
-                request.AuxiliaryActions));
-        }
+        errors.AddRange(FormDesignV2Policy.Validate(
+            design.V2,
+            request.Fields,
+            request.InformationItems,
+            request.AuxiliaryActions));
 
-        var requiredHeight = legacyProjection
-            ? FormDesignPolicy.CalculateRequiredHeight(
-                design,
-                request.Fields ?? new List<FormFieldDefinitionDto>(),
-                request.Name,
-                request.Introduction,
-                request.SubmitButtonLabel)
-            : FormDesignV2Policy.CalculateRequiredHeight(
-                design,
-                design.V2!,
-                request.Fields,
-                request.Name,
-                request.Introduction,
-                request.SubmitButtonLabel,
-                request.InformationItems,
-                request.AuxiliaryActions);
+        var requiredHeight = FormDesignV2Policy.CalculateRequiredHeight(
+            design,
+            design.V2,
+            request.Fields,
+            request.Name,
+            request.Introduction,
+            request.SubmitButtonLabel,
+            request.InformationItems,
+            request.AuxiliaryActions);
         if (Enum.IsDefined(design.Shape) && requiredHeight > FormDesignPolicy.MaximumHeightPx)
         {
             errors.Add($"This Form is too tall for the governed design limit of {FormDesignPolicy.MaximumHeightPx} pixels. Remove or simplify fields before saving.");
@@ -277,14 +262,14 @@ public sealed class FormValidationService
             ? localized
             : values.GetValueOrDefault("en") is { Length: > 0 } english
                 ? english
-                : values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? fallback;
+                : fallback;
 
     private static string FieldValidationLabel(
         string? key,
         IReadOnlyDictionary<string, string>? label,
         int order)
     {
-        var text = label?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? key;
+        var text = key;
         return string.IsNullOrWhiteSpace(text)
             ? $"Field {order + 1}"
             : $"Field {order + 1} \"{text}\"";
@@ -402,7 +387,7 @@ public sealed class FormValidationService
         if (!IsSupported(type, capabilities))
             return;
 
-        var fieldLabel = label?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? key ?? "Field";
+        var fieldLabel = key ?? "Field";
         var capability = Capability(type, capabilities);
         var optionList = options
             .Where(option => !string.IsNullOrWhiteSpace(option.Value) ||

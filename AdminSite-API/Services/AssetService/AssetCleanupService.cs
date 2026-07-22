@@ -115,16 +115,16 @@ namespace FullProject.Services.AssetService
             switch (block)
             {
                 case ImageBlock image:
-                    yield return image.ImageUrl;
+                    yield return image.Asset.Url;
                     break;
                 case VideoBlock video:
-                    yield return video.EmbedUrl;
+                    yield return video.Asset.Url;
                     break;
                 case FileBlock file:
-                    yield return file.FileUrl;
+                    yield return file.Asset.Url;
                     break;
                 case CardBlock card:
-                    yield return card.ImageUrl;
+                    yield return card.Asset.Url;
                     break;
             }
         }

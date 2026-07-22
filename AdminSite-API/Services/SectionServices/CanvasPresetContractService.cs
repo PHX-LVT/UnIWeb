@@ -5,7 +5,6 @@ namespace FullProject.Services.SectionServices;
 public sealed class SectionPresetContractService
 {
     public const int CurrentSchemaVersion = 4;
-    public const int MinimumSupportedSchemaVersion = 1;
 
     private static readonly HashSet<string> SlotKinds = new(StringComparer.Ordinal)
     {
@@ -14,54 +13,16 @@ public sealed class SectionPresetContractService
 
     public SectionPresetCompatibility Compatibility(SectionPreset preset)
     {
-        if (preset.SchemaVersion < MinimumSupportedSchemaVersion)
-            return new(false, $"Preset schema {preset.SchemaVersion} is too old to migrate safely.");
-        if (preset.SchemaVersion > CurrentSchemaVersion)
-            return new(false, $"Preset schema {preset.SchemaVersion} requires a newer application version.");
-        return new(true, preset.SchemaVersion == CurrentSchemaVersion
-            ? null
-            : $"Preset schema {preset.SchemaVersion} will be upgraded in memory when applied.");
+        return preset.SchemaVersion == CurrentSchemaVersion
+            ? new(true, null)
+            : new(false, $"Preset schema {preset.SchemaVersion} is unsupported; schema {CurrentSchemaVersion} is required.");
     }
 
     public string? PrepareAndValidate(SectionPreset preset)
     {
         var compatibility = Compatibility(preset);
         if (!compatibility.IsCompatible) return compatibility.Message;
-        UpgradeInPlace(preset);
         return Validate(preset);
-    }
-
-    public void UpgradeInPlace(SectionPreset preset)
-    {
-        preset.Name ??= new();
-        preset.Description ??= new();
-        preset.PreviewText ??= new();
-        preset.Style ??= new SectionStyle();
-        preset.Blocks ??= new();
-        preset.EditableSlots ??= new();
-        preset.LockPolicy ??= new CanvasPresetLockPolicy();
-        preset.Section ??= new CanvasSection
-        {
-            Id = string.IsNullOrWhiteSpace(preset.Id) ? MongoDB.Bson.ObjectId.GenerateNewId().ToString() : preset.Id,
-            StableId = Guid.NewGuid().ToString(),
-            PageStableId = string.Empty,
-            AdminLabel = new Dictionary<string, string>(preset.Name),
-            Style = preset.Style
-        };
-        preset.SectionType = SectionType(preset.Section);
-        preset.Style = preset.Section.Style;
-        preset.ThumbnailBackground = string.IsNullOrWhiteSpace(preset.ThumbnailBackground)
-            ? preset.Section.Style.BackgroundColor
-            : preset.ThumbnailBackground;
-        foreach (var block in preset.Blocks)
-        {
-            block.Authoring ??= new BlockAuthoringPolicy();
-            block.Authoring.SchemaVersion = Math.Max(block.Authoring.SchemaVersion, 1);
-            block.Appearance ??= new BlockAppearance();
-            block.Responsive ??= new BlockResponsiveSettings();
-            block.Animation ??= new BlockAnimationSettings();
-        }
-        preset.SchemaVersion = CurrentSchemaVersion;
     }
 
     public string? Validate(SectionPreset preset)

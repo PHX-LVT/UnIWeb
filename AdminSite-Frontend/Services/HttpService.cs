@@ -20,7 +20,6 @@ namespace AdminSite.Services
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         Task<FileDownloadResult> GetFileAsync(string uri);
         Task<FileDownloadResult> PostFileDownloadAsync(string uri, object body);
-        void Toast(string? message, int statusCode);
         void Notify(string? message, int statusCode);
         void Notify<T>(ApiResponse<T>? response, string? successFallback = null, string? failureFallback = null);
         void NotifyInline<T>(ApiResponse<T>? response, string targetId, string? successFallback = null, string? failureFallback = null);
@@ -190,6 +189,28 @@ namespace AdminSite.Services
                                   ?? "application/octet-stream"
                 };
             }
+            catch (TaskCanceledException ex)
+            {
+                _notifications.Notify(new AdminFeedbackMessage
+                {
+                    Severity = AdminFeedbackSeverity.Warning,
+                    MessageKey = "NotificationRequestTimedOut",
+                    MessageFallback = "The download request timed out. Please try again.",
+                    TechnicalDetail = ex.Message
+                });
+                return FileDownloadResult.Fail("The download request timed out.", 504);
+            }
+            catch (HttpRequestException ex)
+            {
+                _notifications.Notify(new AdminFeedbackMessage
+                {
+                    Severity = AdminFeedbackSeverity.Error,
+                    MessageKey = "NotificationServiceUnavailable",
+                    MessageFallback = "The API is temporarily unavailable.",
+                    TechnicalDetail = ex.Message
+                });
+                return FileDownloadResult.Fail("The API is temporarily unavailable.", 503);
+            }
             catch (Exception ex)
             {
                 _notifications.Notify(new AdminFeedbackMessage
@@ -238,18 +259,31 @@ namespace AdminSite.Services
                            500,
                            notificationKey: "NotificationNoResponse");
             }
+            catch (TaskCanceledException ex)
+            {
+                return ApiResponse<T>.Fail(
+                    "Request timed out.",
+                    504,
+                    errors: [ex.Message],
+                    notificationKey: "NotificationRequestTimedOut");
+            }
+            catch (HttpRequestException ex)
+            {
+                return ApiResponse<T>.Fail(
+                    "The API is temporarily unavailable.",
+                    503,
+                    errors: [ex.Message],
+                    notificationKey: "NotificationServiceUnavailable");
+            }
             catch (Exception ex)
             {
                 return ApiResponse<T>.Fail(
                     "Request failed.",
-                    500,
+                           502,
                     errors: [ex.Message],
                     notificationKey: "NotificationRequestFailed");
             }
         }
-
-        public void Toast(string? message, int statusCode) =>
-            Notify(message, statusCode);
 
         public void Notify(string? message, int statusCode) =>
             _notifications.Notify(message, statusCode);

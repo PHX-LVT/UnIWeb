@@ -38,7 +38,7 @@ public static class FormDesignV2Policy
         "fas fa-link"
     };
 
-    public static FormDesignV2SettingsDto ProjectFromV1(
+    public static FormDesignV2SettingsDto CreateDefault(
         string? definitionId,
         FormDesignSettingsDto? design,
         IEnumerable<FormFieldDefinitionDto>? fields)
@@ -53,7 +53,7 @@ public static class FormDesignV2Policy
             FormDesignShape.Cta => FormOuterLayout.Cta,
             _ => FormOuterLayout.Standard
         };
-        var rows = PackLegacyRows(definitionId, design.Shape, orderedFields);
+        var rows = PackInitialRows(definitionId, design.Shape, orderedFields);
 
         return Normalize(new FormDesignV2SettingsDto
         {
@@ -205,7 +205,7 @@ public static class FormDesignV2Policy
         _ => StandardMaximumWidthPx
     };
 
-    public static FormDesignShape LegacyShape(FormOuterLayout layout) => layout switch
+    public static FormDesignShape ShapeForOuterLayout(FormOuterLayout layout) => layout switch
     {
         FormOuterLayout.SplitPanel => FormDesignShape.TwoColumns,
         FormOuterLayout.Cta => FormDesignShape.Cta,
@@ -239,47 +239,8 @@ public static class FormDesignV2Policy
                    pair.First.Placement == pair.Second.Placement);
     }
 
-    public static bool IsReadOnlyProjection(
-        string? definitionId,
-        FormDesignSettingsDto? design,
-        IEnumerable<FormFieldDefinitionDto>? fields,
-        IEnumerable<FormInformationItemDto>? informationItems = null,
-        IEnumerable<FormAuxiliaryActionDto>? auxiliaryActions = null)
-    {
-        if ((informationItems?.Any() ?? false) || (auxiliaryActions?.Any() ?? false)) return false;
-        if (design?.V2 is null) return true;
-        if (design.FieldGapPx is < FormDesignPolicy.MinimumGapPx or > FormDesignPolicy.MaximumGapPx) return false;
-        if (design.WidthPx < FormDesignPolicy.MinimumWidth(design.Shape) ||
-            design.WidthPx > FormDesignPolicy.MaximumWidth(design.Shape)) return false;
-
-        return MatchesLegacyProjection(definitionId, design, fields);
-    }
-
-    public static bool MatchesLegacyProjection(
-        string? definitionId,
-        FormDesignSettingsDto? design,
-        IEnumerable<FormFieldDefinitionDto>? fields)
-    {
-        if (design?.V2 is null) return true;
-
-        var submitted = Normalize(design.V2);
-        var projected = Normalize(ProjectFromV1(definitionId, design, fields));
-        return submitted.OuterLayout == projected.OuterLayout &&
-               submitted.InformationBackgroundColor == projected.InformationBackgroundColor &&
-               submitted.InformationTextColor == projected.InformationTextColor &&
-               submitted.FormBackgroundColor == projected.FormBackgroundColor &&
-               submitted.FormTextColor == projected.FormTextColor &&
-               submitted.SplitPanelPercent == projected.SplitPanelPercent &&
-               submitted.SubmitLayout == projected.SubmitLayout &&
-               submitted.FieldRows.Count == projected.FieldRows.Count &&
-               submitted.FieldRows.Zip(projected.FieldRows).All(pair =>
-                   pair.First.Order == pair.Second.Order &&
-                   pair.First.FieldKeys.SequenceEqual(pair.Second.FieldKeys, StringComparer.OrdinalIgnoreCase)) &&
-               submitted.AuxiliaryActionLayouts.Count == 0;
-    }
-
     public static int CalculateHeight(
-        FormDesignSettingsDto legacyDesign,
+        FormDesignSettingsDto baseDesign,
         FormDesignV2SettingsDto design,
         IEnumerable<FormFieldDefinitionDto>? fields,
         IReadOnlyDictionary<string, string>? name = null,
@@ -289,7 +250,7 @@ public static class FormDesignV2Policy
         IEnumerable<FormAuxiliaryActionDto>? auxiliaryActions = null) =>
         Math.Clamp(
             CalculateRequiredHeight(
-                legacyDesign,
+                baseDesign,
                 design,
                 fields,
                 name,
@@ -301,7 +262,7 @@ public static class FormDesignV2Policy
             FormDesignPolicy.MaximumHeightPx);
 
     public static int CalculateRequiredHeight(
-        FormDesignSettingsDto legacyDesign,
+        FormDesignSettingsDto baseDesign,
         FormDesignV2SettingsDto design,
         IEnumerable<FormFieldDefinitionDto>? fields,
         IReadOnlyDictionary<string, string>? name = null,
@@ -316,11 +277,11 @@ public static class FormDesignV2Policy
             .GroupBy(field => NormalizeFieldKey(field.Key), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var width = Math.Clamp(
-            legacyDesign.WidthPx,
+            baseDesign.WidthPx,
             MinimumWidth(normalized.OuterLayout),
             MaximumWidth(normalized.OuterLayout));
-        var padding = Math.Clamp(legacyDesign.PaddingPx, FormDesignPolicy.MinimumPaddingPx, FormDesignPolicy.MaximumPaddingPx);
-        var gap = Math.Clamp(legacyDesign.FieldGapPx, MinimumFieldGapPx, MaximumFieldGapPx);
+        var padding = Math.Clamp(baseDesign.PaddingPx, FormDesignPolicy.MinimumPaddingPx, FormDesignPolicy.MaximumPaddingPx);
+        var gap = Math.Clamp(baseDesign.FieldGapPx, MinimumFieldGapPx, MaximumFieldGapPx);
         var formWidth = normalized.OuterLayout == FormOuterLayout.SplitPanel
             ? Math.Max(220, (int)Math.Round(width * (100 - normalized.SplitPanelPercent) / 100d) - padding * 2)
             : Math.Max(180, width - padding * 2);
@@ -328,7 +289,7 @@ public static class FormDesignV2Policy
         var rowHeights = normalized.FieldRows.Select(row =>
             row.FieldKeys
                 .Where(fieldLookup.ContainsKey)
-                .Select(key => FieldHeight(fieldLookup[key], legacyDesign.LabelMode))
+                .Select(key => FieldHeight(fieldLookup[key], baseDesign.LabelMode))
                 .DefaultIfEmpty(0)
                 .Max()).ToList();
         var fieldsHeight = rowHeights.Sum() + Math.Max(0, rowHeights.Count - 1) * gap;
@@ -399,7 +360,7 @@ public static class FormDesignV2Policy
         };
     }
 
-    private static List<FormFieldRowDto> PackLegacyRows(
+    private static List<FormFieldRowDto> PackInitialRows(
         string? definitionId,
         FormDesignShape shape,
         IReadOnlyList<FormFieldDefinitionDto> fields)

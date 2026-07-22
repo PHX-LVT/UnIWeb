@@ -262,8 +262,7 @@ else
     {
         if (value is null) return string.Empty;
         if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized)) return localized;
-        if (value.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en)) return en;
-        return value.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+        return value.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? string.Empty;
     }
 
     private string GetTypeLabel(string key) =>

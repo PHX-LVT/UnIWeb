@@ -127,15 +127,15 @@ namespace FullProject.Controllers
             if (existing is null) return NotFound(ApiResult.NotFound("Content item not found."));
             var allowed = dto.Status switch
             {
-                ContentStatus.Draft when existing.Status == ContentStatus.Submitted =>
+                ContentWorkflowTransition.Draft when existing.Status == ContentStatus.Submitted =>
                     _workflowPolicy.CanWithdraw(User, ActorId, existing),
-                ContentStatus.Draft =>
+                ContentWorkflowTransition.Draft =>
                     _workflowPolicy.CanForceReturnToDraft(User, existing),
-                ContentStatus.Submitted when existing.Status == ContentStatus.Published =>
+                ContentWorkflowTransition.Submitted when existing.Status == ContentStatus.Published =>
                     _workflowPolicy.CanReturnPublishedToPending(User, existing),
-                ContentStatus.Submitted =>
+                ContentWorkflowTransition.Submitted =>
                     _workflowPolicy.CanSubmit(User, ActorId, existing),
-                ContentStatus.Rejected =>
+                ContentWorkflowTransition.Rejected =>
                     _workflowPolicy.CanReject(User, existing),
                 _ => false
             };

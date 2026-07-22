@@ -16,7 +16,15 @@ var dataProtection = builder.Services
     .AddDataProtection()
     .SetApplicationName("MySite.AdminSite");
 var configuredKeyPath = builder.Configuration["Authentication:DataProtectionKeysPath"];
-if (!string.IsNullOrWhiteSpace(configuredKeyPath))
+if (string.IsNullOrWhiteSpace(configuredKeyPath))
+{
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "Authentication:DataProtectionKeysPath is required outside Development.");
+    }
+}
+else
 {
     var expandedKeyPath = Environment.ExpandEnvironmentVariables(configuredKeyPath);
     var absoluteKeyPath = Path.IsPathRooted(expandedKeyPath)
@@ -76,11 +84,20 @@ builder.Services.AddDevExpressBlazor();
 
 // All API traffic originates on the AdminSite server. The protected JWT is
 // attached by HttpService and is never exposed to browser JavaScript.
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:6969/";
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"];
+if (string.IsNullOrWhiteSpace(apiBaseUrl))
+{
+    if (!builder.Environment.IsDevelopment())
+        throw new InvalidOperationException("ApiBaseUrl is required outside Development.");
+
+    apiBaseUrl = "https://localhost:6969/";
+}
 if (!Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiBaseUri))
     throw new InvalidOperationException("ApiBaseUrl must be an absolute URL.");
 if (!builder.Environment.IsDevelopment() && apiBaseUri.Scheme != Uri.UriSchemeHttps)
     throw new InvalidOperationException("ApiBaseUrl must use HTTPS outside Development.");
+if (!builder.Environment.IsDevelopment() && apiBaseUri.IsLoopback)
+    throw new InvalidOperationException("ApiBaseUrl cannot use a loopback address outside Development.");
 
 builder.Services
     .AddHttpClient(AdminAuthConstants.ApiClientName, client =>
@@ -123,6 +140,7 @@ builder.Services.AddScoped<LogManagementService>();
 
 var app = builder.Build();
 
+if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(configuredKeyPath))
 {
     app.Logger.LogWarning(
         "Authentication:DataProtectionKeysPath is not configured. Persist and protect the AdminSite key ring before production cutover so deployments do not invalidate authentication cookies.");

@@ -68,12 +68,7 @@ namespace FullProject.Services
         {
             var filters = urls
                 .Where(url => !string.IsNullOrWhiteSpace(url))
-                .SelectMany(url => new[]
-                {
-                    Builders<Block>.Filter.Eq("ImageUrl", url),
-                    Builders<Block>.Filter.Eq("FileUrl", url),
-                    Builders<Block>.Filter.Eq("EmbedUrl", url)
-                })
+                .Select(url => Builders<Block>.Filter.Eq("Asset.Url", url))
                 .ToList();
 
             return filters.Count == 0

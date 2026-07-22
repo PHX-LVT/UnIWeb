@@ -19,13 +19,11 @@ public sealed record ContainerPresetDefinition(
     string ResponsiveBehavior,
     string DiagramBehavior,
     int Columns,
-    string MobileMode,
-    bool Legacy = false);
+    string MobileMode);
 
 public static class ContainerPresetCatalog
 {
     public const int CatalogVersion = 1;
-    public const string LegacyFreeformKey = "legacy-freeform";
     public const string StackKey = "stack-basic";
     public const string RowKey = "row-six";
     public const string GridKey = "grid-six";
@@ -70,22 +68,6 @@ public static class ContainerPresetCatalog
                 ordering: true, optional: true, slotPrefix: "layer")
         };
 
-    private static readonly ContainerPresetDefinition Legacy = new(
-        LegacyFreeformKey,
-        "Legacy freeform",
-        "freeform",
-        "composition",
-        10,
-        StandardTypes,
-        Array.Empty<ContainerPresetSlotDefinition>(),
-        ChildOrderingAllowed: true,
-        EmptySlotsOptional: true,
-        ResponsiveBehavior: "legacy",
-        DiagramBehavior: "legacy",
-        Columns: 1,
-        MobileMode: "stack",
-        Legacy: true);
-
     public static IReadOnlyCollection<ContainerPresetDefinition> All => Governed.Values.ToArray();
 
     public static bool TryGetGoverned(string? key, out ContainerPresetDefinition definition)
@@ -96,12 +78,14 @@ public static class ContainerPresetCatalog
             return true;
         }
 
-        definition = Legacy;
+        definition = null!;
         return false;
     }
 
     public static ContainerPresetDefinition ForExisting(string? key) =>
-        TryGetGoverned(key, out var definition) ? definition : Legacy;
+        TryGetGoverned(key, out var definition)
+            ? definition
+            : throw new ArgumentException("Choose a supported Container preset.", nameof(key));
 
     public static string EffectiveKey(string? key) => ForExisting(key).Key;
 

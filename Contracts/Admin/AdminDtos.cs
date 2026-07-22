@@ -251,7 +251,7 @@ namespace Contracts.Admin
 
     public class CtaSectionCreateDto : SectionCreateDto
     {
-        public string Layout { get; set; } = "stacked";
+        public string Layout { get; set; } = "center";
         public Dictionary<string, string> Heading { get; set; } = new();
         public Dictionary<string, string> Subtext { get; set; } = new();
         public SectionButtonDto? Button { get; set; }
@@ -881,7 +881,6 @@ public class ColumnSlotResponseDto
     public class ImageBlockCreateDto : BlockCreateDto
     {
         public BlockAssetReferenceDto? Asset { get; set; }
-        public string? ImageUrl { get; set; }
         public Dictionary<string, string> AltText { get; set; } = new();
         public Dictionary<string, string> Caption { get; set; } = new();
         public bool OpenInLightbox { get; set; }
@@ -892,7 +891,6 @@ public class ColumnSlotResponseDto
     public class VideoBlockCreateDto : BlockCreateDto
     {
         public BlockAssetReferenceDto? Asset { get; set; }
-        public string EmbedUrl { get; set; } = string.Empty;
         public string SourceType { get; set; } = "youtube";
         public Dictionary<string, string> Title { get; set; } = new();
         public bool ShowControls { get; set; } = true;
@@ -904,10 +902,8 @@ public class ColumnSlotResponseDto
     public class FileBlockCreateDto : BlockCreateDto
     {
         public BlockAssetReferenceDto? Asset { get; set; }
-        public string? FileUrl { get; set; }
         public string Filename { get; set; } = string.Empty;
         public Dictionary<string, string> DisplayName { get; set; } = new();
-        public string FileType { get; set; } = string.Empty;
         public string OpenBehavior { get; set; } = "open";
     }
 
@@ -939,7 +935,6 @@ public class ColumnSlotResponseDto
         public string Icon { get; set; } = string.Empty;
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
-        public string? ImageUrl { get; set; }
         public BlockAssetReferenceDto? Asset { get; set; }
         public Dictionary<string, string> ImageAltText { get; set; } = new();
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
@@ -1001,14 +996,6 @@ public class ColumnSlotResponseDto
         public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
-        public string? LayoutMode { get; set; }
-        public int? Columns { get; set; }
-        public string? Gap { get; set; }
-        public int? OrbitRadius { get; set; }
-        public int? OrbitStartAngle { get; set; }
-        public int? SemicircleRadius { get; set; }
-        public int? SemicircleStartAngle { get; set; }
-        public int? SemicircleEndAngle { get; set; }
     }
 
     // -- Block Update DTOs -------------------------------------
@@ -1042,7 +1029,6 @@ public class ColumnSlotResponseDto
     public class ImageBlockUpdateDto : BlockUpdateDto
     {
         public BlockAssetReferenceDto? Asset { get; set; }
-        public string? ImageUrl { get; set; }
         public Dictionary<string, string> AltText { get; set; } = new();
         public Dictionary<string, string> Caption { get; set; } = new();
         public bool OpenInLightbox { get; set; }
@@ -1053,7 +1039,6 @@ public class ColumnSlotResponseDto
     public class VideoBlockUpdateDto : BlockUpdateDto
     {
         public BlockAssetReferenceDto? Asset { get; set; }
-        public string EmbedUrl { get; set; } = string.Empty;
         public string SourceType { get; set; } = "youtube";
         public Dictionary<string, string> Title { get; set; } = new();
         public bool ShowControls { get; set; } = true;
@@ -1065,10 +1050,8 @@ public class ColumnSlotResponseDto
     public class FileBlockUpdateDto : BlockUpdateDto
     {
         public BlockAssetReferenceDto? Asset { get; set; }
-        public string? FileUrl { get; set; }
         public string Filename { get; set; } = string.Empty;
         public Dictionary<string, string> DisplayName { get; set; } = new();
-        public string FileType { get; set; } = string.Empty;
         public string OpenBehavior { get; set; } = "open";
     }
 
@@ -1091,7 +1074,6 @@ public class ColumnSlotResponseDto
         public string Icon { get; set; } = string.Empty;
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
-        public string? ImageUrl { get; set; }
         public BlockAssetReferenceDto? Asset { get; set; }
         public Dictionary<string, string> ImageAltText { get; set; } = new();
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
@@ -1153,14 +1135,6 @@ public class ColumnSlotResponseDto
         public string? PresetKey { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
-        public string? LayoutMode { get; set; }
-        public int? Columns { get; set; }
-        public string? Gap { get; set; }
-        public int? OrbitRadius { get; set; }
-        public int? OrbitStartAngle { get; set; }
-        public int? SemicircleRadius { get; set; }
-        public int? SemicircleStartAngle { get; set; }
-        public int? SemicircleEndAngle { get; set; }
     }
 
     public sealed class BlockCreateDtoJsonConverter : JsonConverter<BlockCreateDto>
@@ -1298,15 +1272,7 @@ public class ColumnSlotResponseDto
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public string? PresetKey { get; set; }
-        public string? LayoutMode { get; set; }
         public ContainerLayoutSettingsDto? ContainerLayout { get; set; }
-        public int? Columns { get; set; }
-        public string? Gap { get; set; }
-        public int? OrbitRadius { get; set; }
-        public int? OrbitStartAngle { get; set; }
-        public int? SemicircleRadius { get; set; }
-        public int? SemicircleStartAngle { get; set; }
-        public int? SemicircleEndAngle { get; set; }
 
         // Image
         public string? ImageUrl { get; set; }

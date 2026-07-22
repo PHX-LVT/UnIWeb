@@ -45,6 +45,7 @@
     private FormDefinitionResponse? _definition;
     private bool _open;
     private bool _loading;
+    private string _loadError = string.Empty;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -62,25 +63,28 @@
     [JSInvokable]
     public Task CloseFromJs() => Close();
 
-    private async Task Open(Func<Task<FormDefinitionResponse?>> load)
+    private async Task Open(Func<Task<PublicOperationResult<FormDefinitionResponse>>> load)
     {
         _open = true;
         _loading = true;
         _block = null;
         _definition = null;
+        _loadError = string.Empty;
         await JS.InvokeVoidAsync("cmsFormHost.setOpen", true);
         await InvokeAsync(StateHasChanged);
 
-        _definition = await load();
+        var result = await load();
+        _definition = result.Data;
+        _loadError = result.Message;
         _block = _definition is null ? null : Map(_definition);
         _loading = false;
         await InvokeAsync(StateHasChanged);
         await JS.InvokeVoidAsync("cmsFormHost.focusDialog");
     }
 
-    private Task<bool> Submit(Dictionary<string, string> data) =>
+    private Task<PublicFormSubmitResult> Submit(Dictionary<string, string> data) =>
         _definition is null
-            ? Task.FromResult(false)
+            ? Task.FromResult(PublicFormSubmitResult.Rejected(PublicOperationStatus.Unavailable, "The form is not ready for submission."))
             : Api.SubmitDefinitionFormAsync(_definition.Key, data, Lang, Navigation.Uri);
 
     private Task CloseFromBackdrop() => Close();
@@ -131,7 +135,9 @@
     private string ModalLabel => IsVietnamese ? "Biểu mẫu" : IsChinese ? "表单" : "Form";
     private string LoadingText => IsVietnamese ? "Đang tải biểu mẫu..." : IsChinese ? "正在加载表单..." : "Loading form...";
     private string ErrorTitle => IsVietnamese ? "Không thể mở biểu mẫu" : IsChinese ? "无法打开表单" : "Unable to open form";
-    private string NotFoundText => IsVietnamese ? "Biểu mẫu này không tồn tại hoặc chưa được bật." : IsChinese ? "此表单不存在或尚未启用。" : "This form is unavailable or inactive.";
+    private string NotFoundText => !string.IsNullOrWhiteSpace(_loadError)
+        ? _loadError
+        : IsVietnamese ? "Biểu mẫu này không tồn tại hoặc chưa được bật." : IsChinese ? "此表单不存在或尚未启用。" : "This form is unavailable or inactive.";
     private string CloseText => IsVietnamese ? "Đóng" : IsChinese ? "关闭" : "Close";
     private string DialogStyle => $"--sc-form-design-width:{_block?.Design?.WidthPx ?? FormDesignPolicy.StackedDefaultWidthPx}px";
 

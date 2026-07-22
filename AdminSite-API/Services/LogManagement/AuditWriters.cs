@@ -4,6 +4,7 @@ using MongoDB.Driver;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using System.Text;
+using FullProject.Services.Health;
 
 namespace FullProject.Services.LogManagement;
 
@@ -98,12 +99,21 @@ public sealed class AuditTrailWriter : IAuditTrailWriter
     private readonly IMongoCollection<AdminAuditEvent> _events;
     private readonly IHttpContextAccessor _http;
     private readonly AuditRedactionPolicy _redaction;
+    private readonly LogPersistenceHealthState _health;
+    private readonly ILogger<AuditTrailWriter> _logger;
 
-    public AuditTrailWriter(IMongoDatabase database, IHttpContextAccessor http, AuditRedactionPolicy redaction)
+    public AuditTrailWriter(
+        IMongoDatabase database,
+        IHttpContextAccessor http,
+        AuditRedactionPolicy redaction,
+        LogPersistenceHealthState health,
+        ILogger<AuditTrailWriter> logger)
     {
         _events = database.GetCollection<AdminAuditEvent>("admin_audit_events");
         _http = http;
         _redaction = redaction;
+        _health = health;
+        _logger = logger;
     }
 
     public async Task WriteAsync(AuditWriteRequest request, CancellationToken cancellationToken = default)
@@ -147,8 +157,26 @@ public sealed class AuditTrailWriter : IAuditTrailWriter
             RequestMethod = _redaction.Clean(request.RequestMethod ?? context?.Request.Method, 20),
             RetentionClass = _redaction.Clean(request.RetentionClass, 40)
         };
-        await _events.InsertOneAsync(item, cancellationToken: cancellationToken);
-        if (context is not null) context.Items["AuditTrail.ExplicitWritten"] = true;
+        try
+        {
+            await _events.InsertOneAsync(item, cancellationToken: cancellationToken);
+            _health.MarkSucceeded();
+            if (context is not null) context.Items["AuditTrail.ExplicitWritten"] = true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _health.MarkFailed(ex);
+            _logger.LogCritical(
+                ex,
+                "Security audit persistence failed for {DomainCode}/{ActionCode}. CorrelationId: {CorrelationId}",
+                item.DomainCode,
+                item.ActionCode,
+                item.CorrelationId);
+        }
     }
 }
 
@@ -157,15 +185,24 @@ public sealed class LoginActivityWriter : ILoginActivityWriter
     private readonly IMongoCollection<AdminLoginActivityEvent> _events;
     private readonly IHttpContextAccessor _http;
     private readonly AuditRedactionPolicy _redaction;
+    private readonly LogPersistenceHealthState _health;
+    private readonly ILogger<LoginActivityWriter> _logger;
 
-    public LoginActivityWriter(IMongoDatabase database, IHttpContextAccessor http, AuditRedactionPolicy redaction)
+    public LoginActivityWriter(
+        IMongoDatabase database,
+        IHttpContextAccessor http,
+        AuditRedactionPolicy redaction,
+        LogPersistenceHealthState health,
+        ILogger<LoginActivityWriter> logger)
     {
         _events = database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_events");
         _http = http;
         _redaction = redaction;
+        _health = health;
+        _logger = logger;
     }
 
-    public Task WriteAsync(LoginActivityWriteRequest request, CancellationToken cancellationToken = default)
+    public async Task WriteAsync(LoginActivityWriteRequest request, CancellationToken cancellationToken = default)
     {
         var context = _http.HttpContext;
         var userAgent = request.UserAgent ?? context?.Request.Headers.UserAgent.FirstOrDefault();
@@ -196,7 +233,24 @@ public sealed class LoginActivityWriter : ILoginActivityWriter
             MessageKey = _redaction.Clean(request.MessageKey, 160),
             ResultMessage = _redaction.Clean(request.ResultMessage, 500)
         };
-        return _events.InsertOneAsync(item, cancellationToken: cancellationToken);
+        try
+        {
+            await _events.InsertOneAsync(item, cancellationToken: cancellationToken);
+            _health.MarkSucceeded();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _health.MarkFailed(ex);
+            _logger.LogCritical(
+                ex,
+                "Security login-activity persistence failed for {EventCode}. CorrelationId: {CorrelationId}",
+                item.EventCode,
+                item.CorrelationId);
+        }
     }
 
     private static string MaskIdentifier(string? value)

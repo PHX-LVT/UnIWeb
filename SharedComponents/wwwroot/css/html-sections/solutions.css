@@ -4,7 +4,7 @@
 .sc-detail-risk-intro .sc-detail-eyebrow {
     display: block;
     margin-bottom: 14px;
-    color: var(--gold);
+    color: var(--theme-color-accent);
     font-size: 0.875rem;
     font-weight: 700;
     letter-spacing: 1px;
@@ -13,7 +13,7 @@
 
 .sc-detail-risk-intro h2 {
     margin: 0;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     font-size: clamp(32px, 3.5vw, 44px);
     font-weight: 650;
     line-height: 1.2;
@@ -35,7 +35,7 @@
 
 .sc-detail-stat strong {
     display: block;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     font-size: 32px;
     font-weight: 750;
     line-height: 1;
@@ -64,25 +64,25 @@
     border: 1px solid rgba(0, 26, 51, 0.06);
     border-radius: 10px;
     box-shadow: 0 8px 26px rgba(0, 26, 51, 0.045);
-    transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+    transition: transform var(--theme-motion-duration) ease, box-shadow var(--theme-motion-duration) ease, border-color var(--theme-motion-duration) ease;
 }
 
 .sc-detail-risk-card:hover {
     transform: translateY(-5px);
     border-color: rgba(229, 192, 118, 0.45);
-    box-shadow: var(--card-shadow-hover);
+    box-shadow: var(--theme-card-shadow-hover);
 }
 
 .sc-detail-risk-icon {
     flex: 0 0 auto;
-    color: var(--gold);
+    color: var(--theme-color-accent);
     font-size: 21px;
     line-height: 1.2;
 }
 
 .sc-detail-risk-card h3 {
     margin: 0 0 12px;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     font-size: 18px;
     font-weight: 700;
     line-height: 1.35;
@@ -102,7 +102,7 @@
 .sc-solution-flow-eyebrow {
     display: block;
     margin-bottom: 14px;
-    color: var(--gold);
+    color: var(--theme-color-accent);
     font-size: 14px;
     font-weight: 750;
     letter-spacing: 1.5px;
@@ -141,7 +141,7 @@
     top: 12px;
     width: 10px;
     height: 10px;
-    background: var(--gold-gradient);
+    background: var(--theme-gold-gradient);
     border-radius: 999px;
     box-shadow: 0 0 0 6px rgba(229, 192, 118, 0.16);
 }
@@ -171,11 +171,11 @@
     font-size: 14px;
     font-weight: 700;
     text-align: center;
-    transition: transform var(--transition), color var(--transition);
+    transition: transform var(--theme-motion-duration) ease, color var(--theme-motion-duration) ease;
 }
 
 .sc-solution-flow-node:hover {
-    color: var(--gold);
+    color: var(--theme-color-accent);
     transform: translateY(-8px);
 }
 
@@ -185,10 +185,10 @@
     display: grid;
     place-items: center;
     color: #392a0c;
-    background: var(--gold-gradient);
+    background: var(--theme-gold-gradient);
     border-radius: 999px;
     box-shadow: 0 20px 44px rgba(0, 0, 0, 0.24);
-    transition: transform var(--transition), box-shadow var(--transition);
+    transition: transform var(--theme-motion-duration) ease, box-shadow var(--theme-motion-duration) ease;
 }
 
 .sc-solution-flow-node:hover .sc-solution-flow-circle {

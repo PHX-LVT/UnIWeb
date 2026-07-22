@@ -20,24 +20,10 @@
             <strong>@T(TabLabelKey)</strong>
         </span>
         <div class="ez-right-panel__header-actions">
-            <div class="ez-section-actions">
-                <button type="button"
-                        class="ez-icon-btn"
-                        title="@T("MoreActions")"
-                        aria-label="@T("MoreActions")"
-                        aria-expanded="@_actionsOpen"
-                        @onclick="ToggleActions">
-                    <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
-                </button>
-                @if (_actionsOpen)
-                {
-                    <div class="ez-section-actions__menu">
-                        <button type="button" @onclick="OpenPresetDialog">
-                            <i class="fas fa-bookmark" aria-hidden="true"></i>@T("SaveAsPreset")
-                        </button>
-                    </div>
-                }
-            </div>
+            <button type="button" class="btn-admin btn-ghost ez-section-preset-trigger" @onclick="OpenPresetDialog">
+                <i class="fas fa-bookmark" aria-hidden="true"></i>
+                <span>@T("SaveAsPreset")</span>
+            </button>
             <button type="button" class="ez-icon-btn" title="@T("Close")" aria-label="@T("Close")" @onclick="RequestClose">
                 <i class="fas fa-times" aria-hidden="true"></i>
             </button>
@@ -247,7 +233,6 @@
     private SectionStyleModel _designDraft = new();
     private bool _showArrangeGuard;
     private bool _showCloseGuard;
-    private bool _actionsOpen;
     private bool _savingDesign;
 
     private string EffectivePageId => !string.IsNullOrWhiteSpace(PageId) ? PageId : Section.PageId;
@@ -275,7 +260,6 @@
             _designDraft = CloneStyle(_savedDesign);
             _showArrangeGuard = false;
             _showCloseGuard = false;
-            _actionsOpen = false;
             _ = OnDirtyChanged.InvokeAsync(false);
         }
 
@@ -288,10 +272,7 @@
     private void SelectTab(string tab)
     {
         _tab = NormalizeTab(tab);
-        _actionsOpen = false;
     }
-
-    private void ToggleActions() => _actionsOpen = !_actionsOpen;
 
     private async Task DesignChanged()
     {
@@ -356,7 +337,6 @@
 
     private async Task OpenPresetDialog()
     {
-        _actionsOpen = false;
         if (HasUnsavedSectionChanges)
         {
             Http.Notify(T("SaveSectionBeforePreset"), 409);
@@ -367,7 +347,6 @@
 
     private async Task RequestClose()
     {
-        _actionsOpen = false;
         if (HasUnsavedSectionChanges)
         {
             _showCloseGuard = true;

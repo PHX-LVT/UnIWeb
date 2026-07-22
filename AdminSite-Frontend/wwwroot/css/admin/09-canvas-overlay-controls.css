@@ -338,7 +338,7 @@ body.ez-arranging-block {
     height: 12px;
     border: 2px solid #fff;
     border-radius: 50%;
-    background: var(--gold);
+    background: var(--theme-color-accent);
     box-shadow: 0 0 0 1px rgba(0, 26, 51, .28);
     cursor: nwse-resize;
     touch-action: none;

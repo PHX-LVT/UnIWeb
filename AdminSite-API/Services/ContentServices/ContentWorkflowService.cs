@@ -42,17 +42,17 @@ namespace FullProject.Services
                     return (null, ["Content item not found."]);
                 }
 
-                if (dto.Status is not ContentStatus.Draft and
-                    not ContentStatus.Submitted and
-                    not ContentStatus.Rejected)
+                if (dto.Status is not ContentWorkflowTransition.Draft and
+                    not ContentWorkflowTransition.Submitted and
+                    not ContentWorkflowTransition.Rejected)
                 {
                     await session.AbortTransactionAsync();
                     return (null, ["Unsupported Content workflow transition."]);
                 }
 
-                var storedStatus = dto.Status == ContentStatus.Rejected
-                    ? ContentStatus.Draft
-                    : dto.Status;
+                var storedStatus = dto.Status == ContentWorkflowTransition.Submitted
+                    ? ContentStatus.Submitted
+                    : ContentStatus.Draft;
                 var updates = new List<UpdateDefinition<ContentItem>>
                 {
                     Builders<ContentItem>.Update.Set(c => c.Status, storedStatus),
@@ -60,7 +60,7 @@ namespace FullProject.Services
                     Builders<ContentItem>.Update.Set(c => c.UpdatedById, actorId)
                 };
 
-                if (dto.Status == ContentStatus.Submitted)
+                if (dto.Status == ContentWorkflowTransition.Submitted)
                 {
                     updates.Add(Builders<ContentItem>.Update.Set(c => c.SubmittedAt, DateTime.UtcNow));
                     updates.Add(Builders<ContentItem>.Update.Set(c => c.ReviewStatus, ContentReviewStatus.None));
@@ -68,7 +68,7 @@ namespace FullProject.Services
                     updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedById, null));
                     updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectedAt, null));
                 }
-                else if (dto.Status == ContentStatus.Rejected)
+                else if (dto.Status == ContentWorkflowTransition.Rejected)
                 {
                     updates.Add(Builders<ContentItem>.Update.Set(c => c.ReviewStatus, ContentReviewStatus.Rejected));
                     updates.Add(Builders<ContentItem>.Update.Set(c => c.RejectionMessage, string.IsNullOrWhiteSpace(dto.Message) ? null : dto.Message.Trim()));
@@ -84,7 +84,7 @@ namespace FullProject.Services
                 }
 
                 await _context.ContentDraft.UpdateOneAsync(session, c => c.Id == id, Builders<ContentItem>.Update.Combine(updates));
-                var action = dto.Status == ContentStatus.Rejected
+                var action = dto.Status == ContentWorkflowTransition.Rejected
                     ? "rejected"
                     : dto.Status.ToString().ToLowerInvariant();
                 await _revisions.LogAsync(session, item.StableId, action, actorId, dto.Message);

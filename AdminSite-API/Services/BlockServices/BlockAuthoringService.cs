@@ -59,17 +59,7 @@ public sealed class BlockAuthoringService
         dto.PositionMode = block.PositionMode;
         dto.ParentBlockId = block.ParentBlockId;
         if (dto is ContainerBlockUpdateDto container)
-        {
             container.ContainerLayout = null;
-            container.LayoutMode = null;
-            container.Columns = null;
-            container.Gap = null;
-            container.OrbitRadius = null;
-            container.OrbitStartAngle = null;
-            container.SemicircleRadius = null;
-            container.SemicircleStartAngle = null;
-            container.SemicircleEndAngle = null;
-        }
         return null;
     }
 

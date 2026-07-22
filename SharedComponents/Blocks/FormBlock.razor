@@ -19,7 +19,7 @@ else
 @code {
     [Parameter, EditorRequired] public PublicFormBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
-    [Parameter] public Func<Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private bool IsVietnamese => Lang.StartsWith("vi", StringComparison.OrdinalIgnoreCase);
     private bool IsChinese => Lang.StartsWith("zh", StringComparison.OrdinalIgnoreCase) || Lang.StartsWith("cn", StringComparison.OrdinalIgnoreCase);

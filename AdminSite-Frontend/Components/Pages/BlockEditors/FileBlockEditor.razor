@@ -93,7 +93,7 @@
     {
         if (_loadedBlockId == Block.Id) return;
         _loadedBlockId = Block.Id;
-        _asset = CopyAsset(Block.Asset, Block.FileUrl, Block.FileName, Block.FileType);
+        _asset = CopyAsset(Block.Asset);
         _fileName = Block.FileName ?? _asset.FileName;
         _displayName = new(Block.DisplayName ?? new());
         _openBehavior = Block.OpenBehavior == "download" ? "download" : "open";
@@ -147,10 +147,8 @@
             var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new FileBlockUpdateDto
             {
                 Asset = AssetDto(_asset),
-                FileUrl = _asset.Url,
                 Filename = _fileName ?? _asset.FileName ?? string.Empty,
                 DisplayName = _displayName,
-                FileType = _asset.ContentType ?? string.Empty,
                 OpenBehavior = _openBehavior,
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
@@ -161,11 +159,11 @@
         finally { _saving = false; }
     }
 
-    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? value, string? url, string? name, string? type) => new()
+    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? value) => new()
     {
-        SchemaVersion = 1, Url = value?.Url ?? url, ResourceId = value?.ResourceId,
+        SchemaVersion = 1, Url = value?.Url, ResourceId = value?.ResourceId,
         ResourceSource = value?.ResourceSource ?? "DirectUpload", StorageKey = value?.StorageKey,
-        FileName = value?.FileName ?? name, ContentType = value?.ContentType ?? type, SizeBytes = value?.SizeBytes ?? 0
+        FileName = value?.FileName, ContentType = value?.ContentType, SizeBytes = value?.SizeBytes ?? 0
     };
     private static BlockAssetReferenceModel DirectAsset(AssetUploadModel upload) => new()
     {

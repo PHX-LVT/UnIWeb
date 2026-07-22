@@ -23,10 +23,6 @@
     <div class="form-group">
         <label class="form-label">@T("ContainerPreset")</label>
         <select class="form-control" value="@Block.PresetKey" @onchange="ChangePreset">
-            @if (SelectedPreset.Legacy)
-            {
-                <option value="@ContainerPresetCatalog.LegacyFreeformKey">@SelectedPreset.DisplayName</option>
-            }
             @foreach (var preset in ContainerPresetCatalog.All)
             {
                 <option value="@preset.Key">@preset.DisplayName</option>
@@ -231,7 +227,9 @@
     private BlockModel? ChildForSlot(string key) => Children.FirstOrDefault(child =>
         string.Equals(child.Authoring?.PresetSlotName, key, StringComparison.Ordinal));
     private string ChildName(BlockModel child) =>
-        child.EditorLabel?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? child.Type;
+        child.EditorLabel?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : child.EditorLabel?.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? child.Type;
 
     private void EnsureSharedAppearance()
     {

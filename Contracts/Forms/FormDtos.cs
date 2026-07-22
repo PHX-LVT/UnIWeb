@@ -69,13 +69,6 @@ public enum FormAuxiliaryActionPlacement
     BelowFields
 }
 
-public enum FormDesignCompatibilityMode
-{
-    V1Only,
-    DualReadV1Write,
-    DualReadV2Write
-}
-
 public class FormFieldRowDto
 {
     public string Id { get; set; } = string.Empty;
@@ -136,8 +129,6 @@ public class FormDesignV2SettingsDto
 
 public class FormDesignSettingsDto
 {
-    // False is the backward-compatible deserialization default for forms saved
-    // before Theme inheritance existed. New forms opt in through CreateDefault.
     public bool UseThemeDefaults { get; set; }
     public int SchemaVersion { get; set; } = FormDesignPolicy.CurrentSchemaVersion;
     public FormDesignShape Shape { get; set; } = FormDesignShape.Stacked;

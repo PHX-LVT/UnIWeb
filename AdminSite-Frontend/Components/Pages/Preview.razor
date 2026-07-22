@@ -279,7 +279,7 @@ else
             {
                 Heading = s.Heading,
                 Subtext = s.Subtext,
-                Layout = s.Layout,
+                Layout = s.Layout ?? throw new InvalidOperationException("CTA Sections require a canonical layout."),
                 Button = s.Button != null ? MapButton(s.Button) : null,
                 Buttons = s.Buttons?.Select(MapButton).ToList()
             },
@@ -636,18 +636,10 @@ else
             "container" => new PublicContainerBlockDto
             {
                 PresetKey = string.IsNullOrWhiteSpace(b.PresetKey)
-                    ? ContainerPresetCatalog.LegacyFreeformKey
+                    ? ContainerPresetCatalog.StackKey
                     : b.PresetKey,
                 Title = b.Title,
-                ContainerLayout = MapContainerLayout(b.ContainerLayout),
-                LayoutMode = b.LayoutMode,
-                Columns = b.Columns,
-                Gap = b.Gap,
-                OrbitRadius = b.OrbitRadius ?? 180,
-                OrbitStartAngle = b.OrbitStartAngle ?? -90,
-                SemicircleRadius = b.SemicircleRadius ?? 180,
-                SemicircleStartAngle = b.SemicircleStartAngle ?? 180,
-                SemicircleEndAngle = b.SemicircleEndAngle ?? 360
+                ContainerLayout = MapContainerLayout(b.ContainerLayout)
             },
             _ => new PublicTextBlockDto
             {
@@ -665,7 +657,7 @@ else
         dto.PositionMode = ResolveBlockPositionMode(b);
         dto.ParentBlockId = b.ParentBlockId;
         dto.Layout = MapBlockLayout(b.Layout);
-        dto.Appearance = MapBlockAppearance(b.Appearance, b.Layout);
+        dto.Appearance = MapBlockAppearance(b.Appearance);
         dto.Responsive = MapBlockResponsive(b.Responsive);
         dto.Animation = MapBlockAnimation(b.Animation);
         dto.Buttons = b.Buttons
@@ -767,17 +759,11 @@ else
         HeightPx = layout?.HeightPx
     };
 
-    private static PublicBlockAppearanceDto MapBlockAppearance(
-        BlockAppearanceModel? value,
-        BlockLayoutModel? legacyLayout) => new()
+    private static PublicBlockAppearanceDto MapBlockAppearance(BlockAppearanceModel? value) => new()
     {
         SchemaVersion = Math.Max(value?.SchemaVersion ?? 0, 2),
-        BackgroundMode = value?.SchemaVersion < 2 &&
-            !string.IsNullOrWhiteSpace(value?.BackgroundColor ?? legacyLayout?.BackgroundColor)
-                ? "color"
-                : value?.BackgroundMode ??
-            (string.IsNullOrWhiteSpace(value?.BackgroundColor ?? legacyLayout?.BackgroundColor) ? "none" : "color"),
-        BackgroundColor = value?.BackgroundColor ?? legacyLayout?.BackgroundColor,
+        BackgroundMode = value?.BackgroundMode ?? "none",
+        BackgroundColor = value?.BackgroundColor,
         TextColor = value?.TextColor,
         TextAlign = value?.TextAlign ?? "inherit",
         FontSizePx = value?.FontSizePx,
@@ -789,14 +775,14 @@ else
         BorderColor = value?.BorderColor,
         BorderWidth = value?.BorderWidth ?? 0,
         BorderStyle = value?.BorderStyle ?? "solid",
-        BorderRadius = value?.BorderRadius ?? legacyLayout?.BorderRadius ?? "none",
+        BorderRadius = value?.BorderRadius ?? "none",
         Shadow = value?.Shadow ?? "none",
         Shape = value?.Shape ?? "rectangle",
         AspectRatio = value?.AspectRatio ?? "auto",
         MediaFit = value?.MediaFit ?? "cover",
         MediaPosition = value?.MediaPosition ?? "center",
-        Padding = value?.Padding ?? legacyLayout?.Padding ?? "none",
-        Margin = value?.Margin ?? legacyLayout?.Margin ?? "none",
+        Padding = value?.Padding ?? "none",
+        Margin = value?.Margin ?? "none",
         Decorative = value?.Decorative ?? false
     };
 

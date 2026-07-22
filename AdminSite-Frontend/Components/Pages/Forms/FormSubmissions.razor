@@ -695,9 +695,9 @@ else
     private string Text(Dictionary<string, string>? values, string fallback) =>
         values?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
             ? localized
-            : values?.GetValueOrDefault("en") is { Length: > 0 } english
-                ? english
-                : values?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+            : values?.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) is { Length: > 0 } configuredFallback
+                ? configuredFallback
+                : fallback;
 
     private static DateTime? ParseDate(string value) =>
         DateTime.TryParse(value, out var parsed) ? parsed.Date : null;

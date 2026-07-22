@@ -1,0 +1,82 @@
+/* -- Global website elements workspace --------------------- */
+.global-workspace-header {
+    margin-bottom: 1.25rem;
+}
+
+.global-workspace-header__title-row {
+    margin-bottom: .7rem;
+}
+
+.global-workspace-tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: .25rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: thin;
+}
+
+.global-workspace-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    min-height: 42px;
+    padding: .65rem .9rem;
+    border-radius: 7px 7px 0 0;
+    color: var(--text-muted);
+    font-size: .84rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .12s, color .12s;
+}
+
+.global-workspace-tab::after {
+    position: absolute;
+    right: .55rem;
+    bottom: -1px;
+    left: .55rem;
+    height: 2px;
+    border-radius: 999px 999px 0 0;
+    background: transparent;
+    content: "";
+}
+
+.global-workspace-tab:hover {
+    background: var(--bg);
+    color: var(--primary);
+}
+
+.global-workspace-tab.active {
+    background: var(--surface);
+    color: var(--primary);
+}
+
+.global-workspace-tab.active::after {
+    background: var(--accent);
+}
+
+.global-workspace-content {
+    width: 100%;
+    max-width: 1120px;
+}
+
+.global-workspace-section-header {
+    margin-bottom: 1rem;
+}
+
+.global-workspace-section-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+@media (max-width: 640px) {
+    .global-workspace-tab {
+        min-height: 40px;
+        padding: .6rem .7rem;
+    }
+}

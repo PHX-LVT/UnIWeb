@@ -62,17 +62,8 @@ public static class AdminPermissionKeys
     public const string CreateEditContent = "create-edit-content";
     public const string ApproveContent = "approve-content";
 
-    // Legacy permission keys are retained for one-way role/session migration.
-    // They are intentionally absent from All and cannot be assigned again.
-    public const string ManageContent = "manage-content";
-    public const string PublishContent = "publish-content";
-    public const string DeleteContent = "delete-content";
-
     public const string ManageUsers = "manage-users";
     public const string ManageSettings = "manage-settings";
-    // Legacy key. Existing roles/sessions are migrated one-way by
-    // ExpandDependencies and the role bootstrap process.
-    public const string ViewLogs = "view-logs";
     public const string ViewAuditTrail = "view-audit-trail";
     public const string ViewLoginActivity = "view-login-activity";
     public const string ViewWebsiteActivity = "view-website-activity";
@@ -113,23 +104,12 @@ public static class AdminPermissionKeys
             string.Equals(permission, ApproveContent, StringComparison.OrdinalIgnoreCase))
             return ContentActionRequirements;
 
-        // Active pre-migration sessions continue to resolve safely until the
-        // role bootstrap revokes them and requires a fresh login.
-        if (string.Equals(permission, ManageContent, StringComparison.OrdinalIgnoreCase))
-            return [CreateEditContent];
-
-        if (string.Equals(permission, PublishContent, StringComparison.OrdinalIgnoreCase))
-            return [ApproveContent];
-
         if (string.Equals(permission, EditFormDefinitions, StringComparison.OrdinalIgnoreCase))
             return DefinitionEditRequirements;
 
         if (string.Equals(permission, ManageFormSubmissions, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(permission, ExportFormSubmissions, StringComparison.OrdinalIgnoreCase))
             return SubmissionActionRequirements;
-
-        if (string.Equals(permission, ViewLogs, StringComparison.OrdinalIgnoreCase))
-            return [ViewAuditTrail, ViewLoginActivity, ViewWebsiteActivity];
 
         return NoRequirements;
     }
@@ -164,13 +144,6 @@ public static class AdminPermissionKeys
         var source = (permissions ?? [])
             .Where(permission => !string.IsNullOrWhiteSpace(permission))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (source.Contains(ViewLogs))
-        {
-            source.Add(ViewAuditTrail);
-            source.Add(ViewLoginActivity);
-            source.Add(ViewWebsiteActivity);
-        }
-
         var allowed = All.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var expanded = source
             .Where(allowed.Contains)
@@ -292,7 +265,6 @@ public class AdminUserCreateRequest
     public string Password { get; set; } = string.Empty;
     public string RoleId { get; set; } = string.Empty;
     public List<string> ExtraPermissions { get; set; } = new();
-    public List<string> Permissions { get; set; } = new();
     public bool Active { get; set; } = true;
 }
 
@@ -301,7 +273,6 @@ public class AdminUserUpdateRequest
     public string? FullName { get; set; }
     public string? RoleId { get; set; }
     public List<string>? ExtraPermissions { get; set; }
-    public List<string>? Permissions { get; set; }
     public bool? Active { get; set; }
 }
 

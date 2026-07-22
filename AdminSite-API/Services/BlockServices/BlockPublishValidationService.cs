@@ -118,12 +118,12 @@ public static class BlockPublishValidationService
         values?.Values.Any(value => !string.IsNullOrWhiteSpace(value)) == true;
 
     private static string ContainerName(ContainerBlock container) =>
-        container.Title?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) is { } title
+        container.Title?.GetValueOrDefault("en") is { Length: > 0 } title
             ? $"Container '{title}'"
             : "The Container";
 
     private static string DisplayName(Block block) =>
-        block.EditorLabel?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? block.Id;
+        block.EditorLabel?.GetValueOrDefault("en") is { Length: > 0 } label ? label : block.Id;
 
     private static string BlockType(Block block) => block switch
     {

@@ -11,7 +11,7 @@
     <div class="sc-section-overlay"
          style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
 
-    <div style="position: relative; z-index: 1" class="sc-cta sc-cta--@NormalizeLayout(Section.Layout)">
+    <div style="position: relative; z-index: 1" class="sc-cta sc-cta--@Section.Layout">
         @if (Section.Heading is not null)
         {
             <h2 class="sc-cta__heading">
@@ -45,7 +45,7 @@
     [Parameter, EditorRequired] public PublicCtaSectionDto Section { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
-    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private IEnumerable<PublicSectionButtonDto> CtaButtons => Section.Buttons is { Count: > 0 }
         ? Section.Buttons.Where(b => b.Visible).OrderBy(b => b.Order)
@@ -53,5 +53,4 @@
             ? new[] { Section.Button }
             : Array.Empty<PublicSectionButtonDto>();
 
-    private static string NormalizeLayout(string? layout) => string.IsNullOrWhiteSpace(layout) ? "center" : layout;
 }

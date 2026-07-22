@@ -3,165 +3,153 @@
 @inject NavigationManager Nav
 @inject AdminAuthService Auth
 
-<nav class="ez-nav-section">
-    @if (Auth.IsAuthenticated)
-    {
+@if (Auth.IsAuthenticated)
+{
+    <nav class="ez-nav-section">
+        <div class="ez-nav-label">@T("Website")</div>
         <NavLink class="ez-nav-link" href="/" Match="NavLinkMatch.All" @onclick="CollapseGroups">
             <span>@T("Dashboard")</span>
         </NavLink>
-    }
-    @if (Auth.CanManageSettings)
-    {
-        <button class="ez-nav-link" type="button" @onclick="OpenThemeSettings">
-            <span>@T("Theme")</span>
-        </button>
-    }
-</nav>
 
-@if (Auth.CanManageSettings)
-{
-    <nav class="ez-nav-section">
-        <button class="ez-nav-toggle @ToggleClass("global")" type="button" @onclick='() => ToggleGroup("global")'>
-            <span>@T("Global")</span>
-            <i class="fas fa-chevron-down"></i>
-        </button>
-
-        @if (_expandedGroup == "global")
+        @if (Auth.CanManageSettings)
         {
-            @if (Auth.CanManageSettings)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/global/branding" @onclick='() => ExpandGroup("global")'>
-                    <span>@T("Branding")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/global/buttons" @onclick='() => ExpandGroup("global")'>
-                    <span>@T("GlobalButtons")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/global/footer" @onclick='() => ExpandGroup("global")'>
-                    <span>@T("Footer")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/global/social" @onclick='() => ExpandGroup("global")'>
-                    <span>@T("Social")</span>
-                </NavLink>
-            }
-        }
-    </nav>
-}
-
-@if (Auth.CanUseFormManagement)
-{
-    <nav class="ez-nav-section">
-        <button class="ez-nav-toggle @ToggleClass("forms")" type="button" @onclick='() => ToggleGroup("forms")'>
-            <span>@T("FormManagement")</span>
-            <i class="fas fa-chevron-down"></i>
-        </button>
-
-        @if (_expandedGroup == "forms")
-        {
-            @if (Auth.CanAccessFormSubmissions)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/forms/submissions" @onclick='() => ExpandGroup("forms")'>
-                    <span>@T("FormSubmissions")</span>
-                </NavLink>
-            }
-            @if (Auth.CanAccessFormDefinitions)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/forms/definitions" @onclick='() => ExpandGroup("forms")'>
-                    <span>@T("FormDefinitions")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/forms/types" @onclick='() => ExpandGroup("forms")'>
-                    <span>@T("FormTypes")</span>
-                </NavLink>
-            }
-        }
-    </nav>
-}
-
-@if (Auth.CanViewWebsiteActivity)
-{
-    <nav class="ez-nav-section">
-        <NavLink class="ez-nav-link" href="/website-activity" @onclick="CollapseGroups">
-            <span>@T("WebsiteActivity")</span>
-        </NavLink>
-    </nav>
-}
-
-@if (Auth.CanViewContent)
-{
-    <nav class="ez-nav-section">
-        <button class="ez-nav-toggle @ToggleClass("content")" type="button" @onclick="OpenContentManagement">
-            <span>@T("ContentManagement")</span>
-            <i class="fas fa-chevron-down"></i>
-        </button>
-
-        @if (_expandedGroup == "content")
-        {
-            <NavLink class="ez-nav-link ez-nav-child" href="/content/all" @onclick='() => ExpandGroup("content")'>
-                <span>@T("AllContent")</span>
+            <button class="ez-nav-link" type="button" @onclick="OpenThemeSettings">
+                <span>@T("Theme")</span>
+            </button>
+            <NavLink class="ez-nav-link" href="/global" @onclick="CollapseGroups">
+                <span>@T("Global")</span>
             </NavLink>
-            @if (Auth.CanManageContent)
+        }
+    </nav>
+}
+
+@if (Auth.CanViewContent || Auth.CanUseFormManagement)
+{
+    <nav class="ez-nav-section">
+        <div class="ez-nav-label">@T("Workflows")</div>
+
+        @if (Auth.CanViewContent)
+        {
+            <button class="ez-nav-toggle @ToggleClass("content")" type="button" @onclick="OpenContentManagement">
+                <span>@T("ContentManagement")</span>
+                <i class="fas fa-chevron-down"></i>
+            </button>
+
+            @if (_expandedGroup == "content")
             {
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/my" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("MyContent")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/submitted" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("Submitted")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/published" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("Published")</span>
-                </NavLink>
+                <div class="ez-nav-children">
+                    <NavLink class="ez-nav-link ez-nav-child" href="/content/all" @onclick='() => ExpandGroup("content")'>
+                        <span>@T("AllContent")</span>
+                    </NavLink>
+                    @if (Auth.CanManageContent)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/content/my" @onclick='() => ExpandGroup("content")'>
+                            <span>@T("MyContent")</span>
+                        </NavLink>
+                        <NavLink class="ez-nav-link ez-nav-child" href="/content/submitted" @onclick='() => ExpandGroup("content")'>
+                            <span>@T("Submitted")</span>
+                        </NavLink>
+                        <NavLink class="ez-nav-link ez-nav-child" href="/content/published" @onclick='() => ExpandGroup("content")'>
+                            <span>@T("Published")</span>
+                        </NavLink>
+                    }
+                    <NavLink class="ez-nav-link ez-nav-child" href="/content/preview" @onclick='() => ExpandGroup("content")'>
+                        <span>@T("ContentPreview")</span>
+                    </NavLink>
+                    @if (CanViewResourceLibrary)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/content/resources" @onclick='() => ExpandGroup("content")'>
+                            <span>@T("ResourceLibrary")</span>
+                        </NavLink>
+                    }
+                    @if (Auth.IsAdminAdmin)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/content/deleted" @onclick='() => ExpandGroup("content")'>
+                            <span>@T("Deleted")</span>
+                        </NavLink>
+                        <div class="ez-nav-label ez-nav-sublabel">@T("Configure")</div>
+                        <NavLink class="ez-nav-link ez-nav-child" href="/content/types" @onclick='() => ExpandGroup("content")'>
+                            <span>@T("ContentTypes")</span>
+                        </NavLink>
+                        <NavLink class="ez-nav-link ez-nav-child" href="/content/templates" @onclick='() => ExpandGroup("content")'>
+                            <span>@T("Templates")</span>
+                        </NavLink>
+                    }
+                </div>
             }
-            <NavLink class="ez-nav-link ez-nav-child" href="/content/preview" @onclick='() => ExpandGroup("content")'>
-                <span>@T("ContentPreview")</span>
-            </NavLink>
-            @if (CanViewResourceLibrary)
+        }
+
+        @if (Auth.CanUseFormManagement)
+        {
+            <button class="ez-nav-toggle @ToggleClass("forms")" type="button" @onclick='() => ToggleGroup("forms")'>
+                <span>@T("FormManagement")</span>
+                <i class="fas fa-chevron-down"></i>
+            </button>
+
+            @if (_expandedGroup == "forms")
             {
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/resources" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("ResourceLibrary")</span>
-                </NavLink>
-            }
-            @if (Auth.IsAdminAdmin)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/deleted" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("Deleted")</span>
-                </NavLink>
-                <div class="ez-nav-label ez-nav-sublabel">@T("Configure")</div>
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/types" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("ContentTypes")</span>
-                </NavLink>
-                <NavLink class="ez-nav-link ez-nav-child" href="/content/templates" @onclick='() => ExpandGroup("content")'>
-                    <span>@T("Templates")</span>
-                </NavLink>
+                <div class="ez-nav-children">
+                    @if (Auth.CanAccessFormSubmissions)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/forms/submissions" @onclick='() => ExpandGroup("forms")'>
+                            <span>@T("FormSubmissions")</span>
+                        </NavLink>
+                    }
+                    @if (Auth.CanAccessFormDefinitions)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/forms/definitions" @onclick='() => ExpandGroup("forms")'>
+                            <span>@T("FormDefinitions")</span>
+                        </NavLink>
+                        <NavLink class="ez-nav-link ez-nav-child" href="/forms/types" @onclick='() => ExpandGroup("forms")'>
+                            <span>@T("FormTypes")</span>
+                        </NavLink>
+                    }
+                </div>
             }
         }
     </nav>
 }
 
-@if (Auth.CanUseLogManagement)
+@if (Auth.CanViewWebsiteActivity || Auth.CanUseLogManagement)
 {
     <nav class="ez-nav-section">
-        <button class="ez-nav-toggle @ToggleClass("logs")" type="button" @onclick='() => ToggleGroup("logs")'>
-            <span>@T("LogManagement")</span>
-            <i class="fas fa-chevron-down"></i>
-        </button>
-        @if (_expandedGroup == "logs")
+        <div class="ez-nav-label">@T("Monitoring")</div>
+
+        @if (Auth.CanViewWebsiteActivity)
         {
-            @if (Auth.CanViewAuditTrail)
+            <NavLink class="ez-nav-link" href="/website-activity" @onclick="CollapseGroups">
+                <span>@T("WebsiteActivity")</span>
+            </NavLink>
+        }
+
+        @if (Auth.CanUseLogManagement)
+        {
+            <button class="ez-nav-toggle @ToggleClass("logs")" type="button" @onclick='() => ToggleGroup("logs")'>
+                <span>@T("LogManagement")</span>
+                <i class="fas fa-chevron-down"></i>
+            </button>
+            @if (_expandedGroup == "logs")
             {
-                <NavLink class="ez-nav-link ez-nav-child" href="/logs/audit" @onclick='() => ExpandGroup("logs")'>
-                    <span>@T("AuditTrail")</span>
-                </NavLink>
-            }
-            @if (Auth.CanViewLoginActivity)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/logs/login-activity" @onclick='() => ExpandGroup("logs")'>
-                    <span>@T("LoginActivity")</span>
-                </NavLink>
-            }
-            @if (Auth.IsAdminAdmin)
-            {
-                <NavLink class="ez-nav-link ez-nav-child" href="/logs/archives" @onclick='() => ExpandGroup("logs")'>
-                    <span>@T("ArchivesAndRetention")</span>
-                </NavLink>
+                <div class="ez-nav-children">
+                    @if (Auth.CanViewAuditTrail)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/logs/audit" @onclick='() => ExpandGroup("logs")'>
+                            <span>@T("AuditTrail")</span>
+                        </NavLink>
+                    }
+                    @if (Auth.CanViewLoginActivity)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/logs/login-activity" @onclick='() => ExpandGroup("logs")'>
+                            <span>@T("LoginActivity")</span>
+                        </NavLink>
+                    }
+                    @if (Auth.IsAdminAdmin)
+                    {
+                        <NavLink class="ez-nav-link ez-nav-child" href="/logs/archives" @onclick='() => ExpandGroup("logs")'>
+                            <span>@T("ArchivesAndRetention")</span>
+                        </NavLink>
+                    }
+                </div>
             }
         }
     </nav>
@@ -170,33 +158,33 @@
 @if (Auth.CanManageUsers || Auth.CanManageSettings)
 {
     <nav class="ez-nav-section">
-    <div class="ez-nav-label">@T("System")</div>
-    @if (Auth.CanManageUsers)
-    {
-        <button class="ez-nav-toggle @ToggleClass("users")" type="button" @onclick='() => ToggleGroup("users")'>
-            <span>@T("UserManagement")</span>
-            <i class="fas fa-chevron-down"></i>
-        </button>
-
-        @if (_expandedGroup == "users")
+        <div class="ez-nav-label">@T("System")</div>
+        @if (Auth.CanManageUsers)
         {
-            @if (Auth.CanManageUsers)
+            <button class="ez-nav-toggle @ToggleClass("users")" type="button" @onclick='() => ToggleGroup("users")'>
+                <span>@T("UserManagement")</span>
+                <i class="fas fa-chevron-down"></i>
+            </button>
+
+            @if (_expandedGroup == "users")
             {
-                <NavLink class="ez-nav-link ez-nav-child" href="/users" @onclick='() => ExpandGroup("users")'>
-                    <span>@T("Users")</span>
-                </NavLink>
+                <div class="ez-nav-children">
+                    <NavLink class="ez-nav-link ez-nav-child" href="/users" Match="NavLinkMatch.All" @onclick='() => ExpandGroup("users")'>
+                        <span>@T("Users")</span>
+                    </NavLink>
+                    <NavLink class="ez-nav-link ez-nav-child" href="/users/sessions" @onclick='() => ExpandGroup("users")'>
+                        <span>@T("ActiveSessions")</span>
+                    </NavLink>
+                </div>
             }
-            <NavLink class="ez-nav-link ez-nav-child" href="/users/sessions" @onclick='() => ExpandGroup("users")'>
-                <span>@T("ActiveSessions")</span>
+        }
+
+        @if (Auth.CanManageSettings)
+        {
+            <NavLink class="ez-nav-link" href="/settings" @onclick="CollapseGroups">
+                <span>@T("Settings")</span>
             </NavLink>
         }
-    }
-    @if (Auth.CanManageSettings)
-    {
-        <NavLink class="ez-nav-link" href="/settings" @onclick="CollapseGroups">
-            <span>@T("Settings")</span>
-        </NavLink>
-    }
     </nav>
 }
 
@@ -209,11 +197,7 @@
     protected override void OnInitialized()
     {
         var path = new Uri(Nav.Uri).AbsolutePath;
-        if (path.StartsWith("/global", StringComparison.OrdinalIgnoreCase))
-        {
-            _expandedGroup = "global";
-        }
-        else if (path.StartsWith("/forms", StringComparison.OrdinalIgnoreCase))
+        if (path.StartsWith("/forms", StringComparison.OrdinalIgnoreCase))
         {
             _expandedGroup = "forms";
         }

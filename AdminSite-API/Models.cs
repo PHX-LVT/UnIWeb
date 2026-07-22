@@ -177,13 +177,10 @@ namespace FullProject.Models
         public string Email { get; set; } = string.Empty;
         public string FullName { get; set; } = "Admin";
         public string PasswordHash { get; set; } = string.Empty;
-        [BsonElement("role")]
-        public string LegacyRole { get; set; } = string.Empty;
         [BsonRepresentation(BsonType.ObjectId)]
         public string? RoleId { get; set; }
         [BsonRepresentation(BsonType.String)]
         public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
-        public List<string> Permissions { get; set; } = new();
         public List<string> ExtraPermissions { get; set; } = new();
         public int TokenVersion { get; set; } = 1;
         public int FailedLoginAttempts { get; set; }
@@ -245,43 +242,6 @@ namespace FullProject.Models
         public string? RevokedById { get; set; }
         [BsonRepresentation(BsonType.String)]
         public AdminRememberedDeviceRevokeReason? RevokeReason { get; set; }
-    }
-
-    [BsonIgnoreExtraElements]
-    public class AdminLoginActivityRecord
-    {
-        [BsonId]
-        [BsonRepresentation(BsonType.ObjectId)]
-        public string Id { get; set; } = string.Empty;
-        public string? AdminId { get; set; }
-        public string Email { get; set; } = string.Empty;
-        public string EventType { get; set; } = string.Empty;
-        public bool Success { get; set; }
-        public string Message { get; set; } = string.Empty;
-        public string IpAddress { get; set; } = string.Empty;
-        public string UserAgent { get; set; } = string.Empty;
-        public string BrowserName { get; set; } = "Unknown";
-        public string OperatingSystem { get; set; } = "Unknown";
-        public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
-    }
-
-    [BsonIgnoreExtraElements]
-    public class AdminAuditLog
-    {
-        [BsonId]
-        [BsonRepresentation(BsonType.ObjectId)]
-        public string Id { get; set; } = string.Empty;
-        [BsonRepresentation(BsonType.String)]
-        public AdminAuditArea Area { get; set; } = AdminAuditArea.Auth;
-        public string Action { get; set; } = string.Empty;
-        public string ActorId { get; set; } = string.Empty;
-        public string ActorEmail { get; set; } = string.Empty;
-        public string? TargetId { get; set; }
-        public string? TargetEmail { get; set; }
-        public string Message { get; set; } = string.Empty;
-        public string IpAddress { get; set; } = string.Empty;
-        public string UserAgent { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     // ----------------------------------------------------------------
@@ -518,7 +478,7 @@ namespace FullProject.Models
     [BsonDiscriminator("cta")]
     public class CtaSection : Section
     {
-        public string Layout { get; set; } = "stacked";            // stacked | inline | withSubtext
+        public string Layout { get; set; } = "center";             // center | left | right | final-card | about-final
         public Dictionary<string, string> Heading { get; set; } = new();
         public Dictionary<string, string> Subtext { get; set; } = new();
         public SectionButton? Button { get; set; }
@@ -646,8 +606,6 @@ namespace FullProject.Models
         [BsonElement("Id")]
         public string Id { get; set; } = string.Empty;
         public int Order { get; set; } = 0;
-        // Blocks inside this column slot - no separate column endpoints
-        public List<Block> Blocks { get; set; } = new();
     }
 
     [BsonDiscriminator("columns")]
@@ -767,11 +725,8 @@ namespace FullProject.Models
         public string? ThumbnailUrl { get; set; }
         public string ThumbnailBackground { get; set; } = "#f3f4f6";
         public Dictionary<string, string> PreviewText { get; set; } = new();
-        // Kept for schema 1-3 Canvas preset compatibility. New presets store the
-        // complete polymorphic Section snapshot above.
-        public SectionStyle Style { get; set; } = new();
         public List<Block> Blocks { get; set; } = new();
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = 4;
         public List<CanvasPresetEditableSlot> EditableSlots { get; set; } = new();
         public CanvasPresetLockPolicy LockPolicy { get; set; } = new();
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -926,8 +881,6 @@ namespace FullProject.Models
         public BlockAssetReference Asset { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string? ImageUrl { get => Asset.Url; set => Asset.Url = value; }
-        [BsonElement("ImageUrl"), BsonIgnoreIfNull, JsonIgnore]
-        public string? LegacyImageUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public Dictionary<string, string> AltText { get; set; } = new();
         public Dictionary<string, string> Caption { get; set; } = new();
         public bool OpenInLightbox { get; set; }
@@ -941,8 +894,6 @@ namespace FullProject.Models
         public BlockAssetReference Asset { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string EmbedUrl { get => Asset.Url ?? string.Empty; set => Asset.Url = value; }
-        [BsonElement("EmbedUrl"), BsonIgnoreIfNull, JsonIgnore]
-        public string? LegacyEmbedUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public string SourceType { get; set; } = "youtube";
         public Dictionary<string, string> Title { get; set; } = new();
         public bool ShowControls { get; set; } = true;
@@ -957,14 +908,10 @@ namespace FullProject.Models
         public BlockAssetReference Asset { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string? FileUrl { get => Asset.Url; set => Asset.Url = value; }
-        [BsonElement("FileUrl"), BsonIgnoreIfNull, JsonIgnore]
-        public string? LegacyFileUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public string Filename { get; set; } = string.Empty;
         public Dictionary<string, string> DisplayName { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string FileType { get => Asset.ContentType ?? string.Empty; set => Asset.ContentType = value; }
-        [BsonElement("FileType"), BsonIgnoreIfNull, JsonIgnore]
-        public string? LegacyFileType { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.ContentType = value; } }
         public string OpenBehavior { get; set; } = "open";
     }
 
@@ -1013,8 +960,6 @@ namespace FullProject.Models
         public Dictionary<string, string> ImageAltText { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string? ImageUrl { get => Asset.Url; set => Asset.Url = value; }
-        [BsonElement("ImageUrl"), BsonIgnoreIfNull, JsonIgnore]
-        public string? LegacyImageUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -1138,79 +1083,11 @@ namespace FullProject.Models
             set => ContainerLayout.SemicircleEndAngle = value;
         }
 
-        [BsonElement("LayoutMode"), BsonIgnoreIfNull, JsonIgnore]
-        public string? LegacyLayoutMode
-        {
-            get => null;
-            set { if (!string.IsNullOrWhiteSpace(value)) ContainerLayout.Mode = value; }
-        }
-
-        [BsonElement("Columns"), BsonIgnoreIfNull, JsonIgnore]
-        public int? LegacyColumns
-        {
-            get => null;
-            set { if (value.HasValue) ContainerLayout.Columns = value.Value; }
-        }
-
-        [BsonElement("Gap"), BsonIgnoreIfNull, JsonIgnore]
-        public string? LegacyGap
-        {
-            get => null;
-            set { if (!string.IsNullOrWhiteSpace(value)) ContainerLayout.Gap = value; }
-        }
-
-        [BsonElement("OrbitRadius"), BsonIgnoreIfNull, JsonIgnore]
-        public int? LegacyOrbitRadius
-        {
-            get => null;
-            set { if (value.HasValue) ContainerLayout.OrbitRadius = value.Value; }
-        }
-
-        [BsonElement("OrbitStartAngle"), BsonIgnoreIfNull, JsonIgnore]
-        public int? LegacyOrbitStartAngle
-        {
-            get => null;
-            set { if (value.HasValue) ContainerLayout.OrbitStartAngle = value.Value; }
-        }
-
-        [BsonElement("SemicircleRadius"), BsonIgnoreIfNull, JsonIgnore]
-        public int? LegacySemicircleRadius
-        {
-            get => null;
-            set { if (value.HasValue) ContainerLayout.SemicircleRadius = value.Value; }
-        }
-
-        [BsonElement("SemicircleStartAngle"), BsonIgnoreIfNull, JsonIgnore]
-        public int? LegacySemicircleStartAngle
-        {
-            get => null;
-            set { if (value.HasValue) ContainerLayout.SemicircleStartAngle = value.Value; }
-        }
-
-        [BsonElement("SemicircleEndAngle"), BsonIgnoreIfNull, JsonIgnore]
-        public int? LegacySemicircleEndAngle
-        {
-            get => null;
-            set { if (value.HasValue) ContainerLayout.SemicircleEndAngle = value.Value; }
-        }
     }
 
     // ----------------------------------------------------------------
     // FORM SUBMISSIONS
     // ----------------------------------------------------------------
-
-    // Persisted only to read pre-FormDesign records during idempotent migration.
-    public enum LegacyFormDisplayMode
-    {
-        Modal,
-        Embedded
-    }
-
-    public enum LegacyFormLayout
-    {
-        Stacked,
-        TwoColumns
-    }
 
     [BsonIgnoreExtraElements]
     public class FormDefinition
@@ -1226,8 +1103,6 @@ namespace FullProject.Models
         public List<FormInformationItem>? InformationItems { get; set; }
         [BsonIgnoreIfNull]
         public List<FormAuxiliaryAction>? AuxiliaryActions { get; set; }
-        public LegacyFormDisplayMode DisplayMode { get; set; } = LegacyFormDisplayMode.Embedded;
-        public LegacyFormLayout Layout { get; set; } = LegacyFormLayout.Stacked;
         public FormDesignSettings Design { get; set; } = new();
         public bool Active { get; set; } = true;
         public List<FormDefinitionField> Fields { get; set; } = new();
@@ -1347,42 +1222,6 @@ namespace FullProject.Models
         public int Revision { get; set; }
         public List<string> DefinitionIds { get; set; } = new();
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-    }
-
-    [BsonIgnoreExtraElements]
-    public class FormDesignV2MigrationLease
-    {
-        [BsonId]
-        public string Id { get; set; } = "form-design-v2";
-        public string OwnerId { get; set; } = string.Empty;
-        public DateTime AcquiredAt { get; set; }
-        public DateTime ExpiresAt { get; set; }
-    }
-
-    [BsonIgnoreExtraElements]
-    public class FormDesignV2MigrationRecord
-    {
-        [BsonId]
-        public string Id { get; set; } = string.Empty;
-        public int SourceSchemaVersion { get; set; } = FormDesignPolicy.CurrentSchemaVersion;
-        public int TargetSchemaVersion { get; set; } = FormDesignV2Policy.TargetSchemaVersion;
-        public string Status { get; set; } = "planned";
-        public string OwnerId { get; set; } = string.Empty;
-        public string BackupEvidence { get; set; } = string.Empty;
-        public int DefinitionCount { get; set; }
-        public int ConvertibleCount { get; set; }
-        public int MigratedCount { get; set; }
-        public int AlreadyV2Count { get; set; }
-        public int SubmissionCountBefore { get; set; }
-        public int SubmissionCountAfter { get; set; }
-        public int OrderRevisionBefore { get; set; }
-        public int OrderRevisionAfter { get; set; }
-        public string UnrelatedContentHashBefore { get; set; } = string.Empty;
-        public string UnrelatedContentHashAfter { get; set; } = string.Empty;
-        public List<string> Warnings { get; set; } = new();
-        public string? Error { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime? CompletedAt { get; set; }
     }
 
     [BsonIgnoreExtraElements]
@@ -1511,22 +1350,24 @@ namespace FullProject.Models
     }
     public enum ContentStatus
     {
+        Draft = 0,
+        Submitted = 1,
+        Published = 3,
+        Deleted = 5
+    }
+
+    public enum ContentWorkflowTransition
+    {
         Draft,
         Submitted,
-        // Legacy persisted value. New rejections use Draft + ReviewStatus.
-        Rejected,
-        Published,
-        // Retained only so legacy records remain deserializable.
-        Archived,
-        Deleted
+        Rejected
     }
 
     [BsonIgnoreExtraElements]
     [BsonNoId]
     public class FormDesignSettings
     {
-        [BsonIgnoreIfNull]
-        public bool? UseThemeDefaults { get; set; }
+        public bool UseThemeDefaults { get; set; }
         public int SchemaVersion { get; set; }
         public FormDesignShape Shape { get; set; } = FormDesignShape.Stacked;
         public int WidthPx { get; set; } = FormDesignPolicy.StackedDefaultWidthPx;

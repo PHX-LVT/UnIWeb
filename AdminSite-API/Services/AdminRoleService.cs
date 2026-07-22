@@ -12,7 +12,6 @@ public sealed class AdminRoleService
 
     private readonly IMongoCollection<AdminRoleDefinition> _roles;
     private readonly IMongoCollection<AdminUser> _users;
-    private readonly IMongoCollection<BsonDocument> _userDocuments;
     private readonly IMongoCollection<AdminSessionRecord> _sessions;
     private readonly IAuditTrailWriter _auditWriter;
     private readonly RememberedDeviceService _rememberedDevices;
@@ -24,7 +23,6 @@ public sealed class AdminRoleService
     {
         _roles = database.GetCollection<AdminRoleDefinition>("admin_roles");
         _users = database.GetCollection<AdminUser>("admin_users");
-        _userDocuments = database.GetCollection<BsonDocument>("admin_users");
         _sessions = database.GetCollection<AdminSessionRecord>("admin_sessions");
         _auditWriter = auditWriter;
         _rememberedDevices = rememberedDevices;
@@ -32,8 +30,6 @@ public sealed class AdminRoleService
 
     public async Task EnsureInitializedAsync()
     {
-        await NormalizeLegacyRoleStorageAsync();
-
         var roleCount = await _roles.CountDocumentsAsync(_ => true);
         if (roleCount == 0)
         {
@@ -101,9 +97,6 @@ public sealed class AdminRoleService
             await _roles.InsertManyAsync(roles);
         }
 
-        await MigrateLegacyContentPermissionsAsync();
-        await MigrateLegacyLogPermissionsAsync();
-
         var adminRole = await GetProtectedAdminRoleAsync();
         if (adminRole is null)
         {
@@ -129,252 +122,17 @@ public sealed class AdminRoleService
                     .Set(r => r.UpdatedAt, DateTime.UtcNow));
         }
 
-        await LinkLegacyUsersToRolesAsync();
-    }
-
-    private async Task MigrateLegacyContentPermissionsAsync()
-    {
-        var legacyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            AdminPermissionKeys.ManageContent,
-            AdminPermissionKeys.PublishContent,
-            AdminPermissionKeys.DeleteContent
-        };
-        var affectedUserIds = new HashSet<string>(StringComparer.Ordinal);
-
-        var roles = await _roles.Find(_ => true).ToListAsync();
-        foreach (var role in roles)
-        {
-            if (!role.Permissions.Any(legacyKeys.Contains)) continue;
-
-            var migrated = MigrateLegacyContentPermissionSet(role.Permissions, role.Name);
-            await _roles.UpdateOneAsync(r => r.Id == role.Id,
-                Builders<AdminRoleDefinition>.Update
-                    .Set(r => r.Permissions, migrated)
-                    .Set(r => r.UpdatedAt, DateTime.UtcNow));
-
-            var roleUsers = await _users.Find(user => user.RoleId == role.Id)
-                .Project(user => user.Id)
-                .ToListAsync();
-            foreach (var userId in roleUsers) affectedUserIds.Add(userId);
-        }
-
-        var users = await _users.Find(_ => true).ToListAsync();
-        foreach (var user in users)
-        {
-            var sourceExtras = user.ExtraPermissions.Count > 0
-                ? user.ExtraPermissions
-                : user.Permissions;
-            if (!sourceExtras.Any(legacyKeys.Contains)) continue;
-
-            var migratedExtras = MigrateLegacyContentPermissionSet(sourceExtras, null);
-            await _users.UpdateOneAsync(current => current.Id == user.Id,
-                Builders<AdminUser>.Update.Combine(
-                    Builders<AdminUser>.Update.Set(current => current.ExtraPermissions, migratedExtras),
-                    Builders<AdminUser>.Update.Set(current => current.Permissions, migratedExtras),
-                    Builders<AdminUser>.Update.Set(current => current.UpdatedAt, DateTime.UtcNow)));
-            affectedUserIds.Add(user.Id);
-        }
-
-        if (affectedUserIds.Count == 0) return;
-
-        var ids = affectedUserIds.ToList();
-        await _users.UpdateManyAsync(user => ids.Contains(user.Id),
-            Builders<AdminUser>.Update.Inc(user => user.TokenVersion, 1));
-        await RevokeSessionsForUsersAsync(ids, "system-content-permission-migration", AdminSessionRevokeReason.RoleChanged);
-    }
-
-    private async Task MigrateLegacyLogPermissionsAsync()
-    {
-        var affectedUserIds = new HashSet<string>(StringComparer.Ordinal);
-        var roles = await _roles.Find(role => role.Permissions.Contains(AdminPermissionKeys.ViewLogs)).ToListAsync();
-        foreach (var role in roles)
-        {
-            var migrated = AdminPermissionKeys.ExpandDependencies(role.Permissions);
-            await _roles.UpdateOneAsync(current => current.Id == role.Id,
-                Builders<AdminRoleDefinition>.Update
-                    .Set(current => current.Permissions, migrated)
-                    .Set(current => current.UpdatedAt, DateTime.UtcNow));
-            var userIds = await _users.Find(user => user.RoleId == role.Id).Project(user => user.Id).ToListAsync();
-            foreach (var userId in userIds) affectedUserIds.Add(userId);
-        }
-
-        var users = await _users.Find(user =>
-            user.ExtraPermissions.Contains(AdminPermissionKeys.ViewLogs) ||
-            user.Permissions.Contains(AdminPermissionKeys.ViewLogs)).ToListAsync();
-        foreach (var user in users)
-        {
-            var source = user.ExtraPermissions.Count > 0 ? user.ExtraPermissions : user.Permissions;
-            var migrated = AdminPermissionKeys.ExpandDependencies(source);
-            await _users.UpdateOneAsync(current => current.Id == user.Id,
-                Builders<AdminUser>.Update.Combine(
-                    Builders<AdminUser>.Update.Set(current => current.ExtraPermissions, migrated),
-                    Builders<AdminUser>.Update.Set(current => current.Permissions, migrated),
-                    Builders<AdminUser>.Update.Set(current => current.UpdatedAt, DateTime.UtcNow)));
-            affectedUserIds.Add(user.Id);
-        }
-
-        if (affectedUserIds.Count == 0) return;
-        var ids = affectedUserIds.ToList();
-        await _users.UpdateManyAsync(user => ids.Contains(user.Id),
-            Builders<AdminUser>.Update.Inc(user => user.TokenVersion, 1));
-        await RevokeSessionsForUsersAsync(ids, "system-log-permission-migration", AdminSessionRevokeReason.RoleChanged);
-    }
-
-    private static List<string> MigrateLegacyContentPermissionSet(
-        IEnumerable<string>? permissions,
-        string? roleName)
-    {
-        var source = (permissions ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var migrated = source
-            .Where(permission =>
-                !string.Equals(permission, AdminPermissionKeys.ManageContent, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(permission, AdminPermissionKeys.PublishContent, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(permission, AdminPermissionKeys.DeleteContent, StringComparison.OrdinalIgnoreCase))
+        var knownRoleIds = (await _roles.Find(_ => true).Project(role => role.Id).ToListAsync())
+            .ToHashSet(StringComparer.Ordinal);
+        var unresolvedUsers = (await _users.Find(_ => true).ToListAsync())
+            .Where(user => string.IsNullOrWhiteSpace(user.RoleId) || !knownRoleIds.Contains(user.RoleId))
+            .Select(user => user.Id)
             .ToList();
-
-        if (string.Equals(roleName, "Manager", StringComparison.OrdinalIgnoreCase))
-        {
-            migrated.Add(AdminPermissionKeys.ApproveContent);
-        }
-        else if (string.Equals(roleName, "Writer", StringComparison.OrdinalIgnoreCase))
-        {
-            migrated.Add(AdminPermissionKeys.CreateEditContent);
-        }
-        else
-        {
-            if (source.Contains(AdminPermissionKeys.ManageContent))
-                migrated.Add(AdminPermissionKeys.CreateEditContent);
-            if (source.Contains(AdminPermissionKeys.PublishContent))
-                migrated.Add(AdminPermissionKeys.ApproveContent);
-        }
-
-        if (source.Overlaps(
-            [
-                AdminPermissionKeys.ManageContent,
-                AdminPermissionKeys.PublishContent,
-                AdminPermissionKeys.DeleteContent
-            ]))
-            migrated.Add(AdminPermissionKeys.ViewContent);
-
-        return NormalizePermissions(migrated);
-    }
-
-    private async Task NormalizeLegacyRoleStorageAsync()
-    {
-        // The enum-based model stored the field as "Role". The dynamic-role
-        // model stores the compatibility name as "role". Copy the old value
-        // explicitly before typed AdminUser documents are read; otherwise a
-        // missing field must never be interpreted as AdminAdmin.
-        var legacyFilter = new BsonDocument("$and", new BsonArray
-        {
-            new BsonDocument("role", new BsonDocument("$exists", false)),
-            new BsonDocument("Role", new BsonDocument("$exists", true))
-        });
-        var legacyUsers = await _userDocuments.Find(legacyFilter)
-            .Project(new BsonDocument { { "_id", 1 }, { "Role", 1 } })
-            .ToListAsync();
-
-        var writes = new List<WriteModel<BsonDocument>>();
-        foreach (var document in legacyUsers)
-        {
-            var roleName = ReadLegacyRoleName(document.GetValue("Role", BsonNull.Value));
-            if (string.IsNullOrWhiteSpace(roleName)) continue;
-
-            writes.Add(new UpdateOneModel<BsonDocument>(
-                new BsonDocument("_id", document["_id"]),
-                new BsonDocument
-                {
-                    { "$set", new BsonDocument("role", roleName) },
-                    { "$unset", new BsonDocument("Role", 1) }
-                }));
-        }
-
-        if (writes.Count > 0)
-            await _userDocuments.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false });
-    }
-
-    private async Task LinkLegacyUsersToRolesAsync()
-    {
-        // RoleId is represented as a MongoDB ObjectId. BSON filters avoid
-        // serializing legacy blank strings through the ObjectId serializer.
-        // Link every known legacy role, not only AdminAdmin, so ordinary users
-        // participate correctly in role counts, deletion and reassignment.
-        var roles = await _roles.Find(_ => true).ToListAsync();
-        foreach (var role in roles)
-        {
-            var unassignedRoleFilter = new BsonDocument("$and", new BsonArray
-            {
-                new BsonDocument("role", role.Name),
-                new BsonDocument("$or", new BsonArray
-                {
-                    new BsonDocument("RoleId", new BsonDocument("$exists", false)),
-                    new BsonDocument("RoleId", BsonNull.Value),
-                    new BsonDocument("RoleId", new BsonDocument("$type", "string"))
-                })
-            });
-            var migratedUserDocuments = await _userDocuments.Find(unassignedRoleFilter)
-                .Project(new BsonDocument("_id", 1))
-                .ToListAsync();
-            var migratedUserIds = migratedUserDocuments
-                .Where(document => document["_id"].IsObjectId)
-                .Select(document => document["_id"].AsObjectId.ToString())
-                .ToList();
-
-            var update = new BsonDocument("$set", new BsonDocument
-            {
-                { "RoleId", ObjectId.Parse(role.Id) },
-                { "UpdatedAt", DateTime.UtcNow }
-            });
-            if (!role.IsProtected)
-                update.Add("$inc", new BsonDocument("TokenVersion", 1));
-
-            await _userDocuments.UpdateManyAsync(
-                unassignedRoleFilter,
-                update);
-
-            // A token issued while the legacy field was being misread may carry
-            // incorrect privileges. Revoke repaired ordinary-role sessions at
-            // once; the legitimate protected administrator need not be displaced.
-            if (!role.IsProtected && migratedUserIds.Count > 0)
-            {
-                await RevokeSessionsForUsersAsync(
-                    migratedUserIds,
-                    "system-role-migration",
-                    AdminSessionRevokeReason.RoleChanged);
-            }
-        }
-
-        var knownRoleIds = roles
-            .Select(role => ObjectId.Parse(role.Id))
-            .ToHashSet();
-        var userRoleDocuments = await _userDocuments.Find(FilterDefinition<BsonDocument>.Empty)
-            .Project(new BsonDocument { { "_id", 1 }, { "RoleId", 1 } })
-            .ToListAsync();
-        var unresolvedCount = userRoleDocuments.Count(document =>
-            !document.TryGetValue("RoleId", out var roleId) ||
-            !roleId.IsObjectId ||
-            !knownRoleIds.Contains(roleId.AsObjectId));
-        if (unresolvedCount > 0)
+        if (unresolvedUsers.Count > 0)
         {
             throw new InvalidOperationException(
-                $"{unresolvedCount} admin account(s) could not be linked to a valid role.");
+                $"{unresolvedUsers.Count} admin account(s) do not reference a valid canonical role.");
         }
-    }
-
-    private static string? ReadLegacyRoleName(BsonValue value)
-    {
-        if (value.IsString) return value.AsString.Trim();
-        if (!value.IsInt32) return null;
-
-        return value.AsInt32 switch
-        {
-            0 => ProtectedAdminRoleName,
-            1 => "Manager",
-            2 => "Writer",
-            3 => "Viewer",
-            _ => null
-        };
     }
 
     public async Task<List<AdminRoleDefinition>> GetRolesAsync() =>
@@ -410,13 +168,12 @@ public sealed class AdminRoleService
     public async Task<List<string>> GetEffectivePermissionsAsync(AdminUser user)
     {
         var role = await GetRoleForUserAsync(user);
+        if (role is null) return [];
         if (role?.IsProtected == true)
             return AdminPermissionKeys.All.ToList();
 
         var rolePermissions = NormalizePermissions(role?.Permissions);
-        var extras = NormalizePermissions(user.ExtraPermissions.Count > 0
-            ? user.ExtraPermissions
-            : user.Permissions);
+        var extras = NormalizePermissions(user.ExtraPermissions);
 
         return rolePermissions.Concat(extras)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -499,9 +256,7 @@ public sealed class AdminRoleService
         if (affectedUsers > 0)
         {
             await _users.UpdateManyAsync(u => u.RoleId == id,
-                Builders<AdminUser>.Update.Combine(
-                    Builders<AdminUser>.Update.Set(u => u.LegacyRole, name),
-                    Builders<AdminUser>.Update.PullAll(u => u.ExtraPermissions, permissions)));
+                Builders<AdminUser>.Update.PullAll(u => u.ExtraPermissions, permissions));
         }
 
         await LogAsync("role-updated", actor, role.Id, role.Name,
@@ -544,7 +299,6 @@ public sealed class AdminRoleService
             await _users.UpdateManyAsync(u => u.RoleId == id,
                 Builders<AdminUser>.Update.Combine(
                     Builders<AdminUser>.Update.Set(u => u.RoleId, replacement.Id),
-                    Builders<AdminUser>.Update.Set(u => u.LegacyRole, replacement.Name),
                     Builders<AdminUser>.Update.PullAll(u => u.ExtraPermissions, replacement.Permissions),
                     Builders<AdminUser>.Update.Inc(u => u.TokenVersion, 1),
                     Builders<AdminUser>.Update.Set(u => u.UpdatedById, actor.Id),

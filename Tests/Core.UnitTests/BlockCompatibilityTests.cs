@@ -6,11 +6,9 @@ namespace Core.UnitTests;
 public class BlockCompatibilityTests
 {
     [Fact]
-    public void LegacyContainerWithoutPreset_RemainsLegacyFreeform()
+    public void ContainerWithoutPreset_IsRejected()
     {
-        Assert.Equal(
-            ContainerPresetCatalog.LegacyFreeformKey,
-            ContainerPresetCatalog.EffectiveKey(null));
+        Assert.Throws<ArgumentException>(() => ContainerPresetCatalog.EffectiveKey(null));
     }
 
     [Fact]

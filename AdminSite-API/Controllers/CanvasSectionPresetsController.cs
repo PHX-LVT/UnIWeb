@@ -98,7 +98,7 @@ public sealed class SectionPresetsController : ControllerBase
             LibrarySection library => library.ContentTypes.Count,
             ColumnsSection columns => preset.Blocks.Count > 0
                 ? preset.Blocks.Count
-                : columns.Columns.Sum(column => column.Blocks.Count),
+                : columns.Columns.Count,
             CanvasSection => preset.Blocks.Count,
             _ => 0
         };

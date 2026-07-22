@@ -237,14 +237,6 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok("All sessions and remembered devices were revoked."));
         }
 
-        [HttpPost("login-activity/delete")]
-        public async Task<IActionResult> DeleteLoginActivity([FromBody] AdminBulkDeleteRequest dto)
-        {
-            await Task.CompletedTask;
-            return StatusCode(StatusCodes.Status410Gone,
-                ApiResult.BadRequest("Permanent login-activity deletion was retired. Records are governed by retention policy."));
-        }
-
         [HttpGet("audit")]
         public async Task<IActionResult> GetAuditLogs(
             [FromQuery] string? targetId = null,
@@ -265,14 +257,6 @@ namespace FullProject.Controllers
                 TotalCount = result.Total,
                 TotalPages = totalPages
             }));
-        }
-
-        [HttpPost("audit/delete")]
-        public async Task<IActionResult> DeleteAuditLogs([FromBody] AdminBulkDeleteRequest dto)
-        {
-            await Task.CompletedTask;
-            return StatusCode(StatusCodes.Status410Gone,
-                ApiResult.BadRequest("Permanent audit deletion was retired. Audit evidence is immutable and governed by retention policy."));
         }
 
         [HttpGet("me/sessions")]
@@ -338,18 +322,18 @@ namespace FullProject.Controllers
         {
             AuthService.NormalizeUserDefaults(user);
             var role = await _roles.GetRoleForUserAsync(user);
-            var rolePermissions = AdminRoleService.NormalizePermissions(role?.Permissions);
-            var extras = role is null
-                ? AdminRoleService.NormalizePermissions(user.ExtraPermissions)
-                : _roles.NormalizeExtraPermissions(user.ExtraPermissions.Count > 0 ? user.ExtraPermissions : user.Permissions, role);
+            if (role is null)
+                throw new InvalidOperationException("The administrator account does not reference a valid role.");
+            var rolePermissions = AdminRoleService.NormalizePermissions(role.Permissions);
+            var extras = _roles.NormalizeExtraPermissions(user.ExtraPermissions, role);
             return new AdminUserResponse
             {
                 Id = user.Id,
                 Email = user.Email,
                 FullName = user.FullName,
-                RoleId = role?.Id ?? string.Empty,
-                RoleName = role?.Name ?? user.LegacyRole,
-                IsAdminAdmin = role?.IsProtected == true,
+                RoleId = role.Id,
+                RoleName = role.Name,
+                IsAdminAdmin = role.IsProtected,
                 Status = user.Status,
                 RolePermissions = rolePermissions,
                 ExtraPermissions = extras,
@@ -396,36 +380,6 @@ namespace FullProject.Controllers
             IsRevoked = device.IsRevoked,
             RevokedAt = device.RevokedAt,
             RevokeReason = device.RevokeReason
-        };
-
-        private static AdminLoginActivityResponse MapLoginActivity(AdminLoginActivityRecord activity) => new()
-        {
-            Id = activity.Id,
-            AdminId = activity.AdminId,
-            Email = activity.Email,
-            EventType = activity.EventType,
-            Success = activity.Success,
-            Message = activity.Message,
-            IpAddress = activity.IpAddress,
-            UserAgent = activity.UserAgent,
-            BrowserName = activity.BrowserName,
-            OperatingSystem = activity.OperatingSystem,
-            OccurredAt = activity.OccurredAt
-        };
-
-        private static AdminAuditLogResponse MapAudit(AdminAuditLog log) => new()
-        {
-            Id = log.Id,
-            Area = log.Area,
-            Action = log.Action,
-            ActorId = log.ActorId,
-            ActorEmail = log.ActorEmail,
-            TargetId = log.TargetId,
-            TargetEmail = log.TargetEmail,
-            Message = log.Message,
-            IpAddress = log.IpAddress,
-            UserAgent = log.UserAgent,
-            CreatedAt = log.CreatedAt
         };
 
         private static AdminLoginActivityResponse MapLoginActivityV2(AdminLoginActivityEvent activity, bool includeSensitive) => new()

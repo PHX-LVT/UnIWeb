@@ -38,7 +38,7 @@ public static class BlockStarterPresetCatalog
             MergeContainer(container.ContainerLayout, preset.Container);
             var resolvedKey = ContainerPresetCatalog.ResolveCreationKey(
                 container.PresetKey,
-                container.ContainerLayout.Mode ?? container.LayoutMode);
+                container.ContainerLayout.Mode);
             if (resolvedKey is not null && ContainerPresetCatalog.TryGetGoverned(resolvedKey, out var governed))
             {
                 container.PresetKey = governed.Key;

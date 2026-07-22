@@ -668,7 +668,8 @@ function localizeText(value, fallback) {
     if (!value) return fallback || "";
     if (typeof value === "string") return value;
     const lang = getPublicUiLanguage();
-    return value[lang] || value.en || Object.values(value).find(v => !!v) || fallback || "";
+    const fallbackLanguage = getPublicFallbackLanguage();
+    return value[lang] || value[fallbackLanguage] || fallback || "";
 }
 function buildPublicModalDialog(config) {
     const dialog = document.createElement("div");
@@ -1001,6 +1002,10 @@ function getPublicUiLanguage() {
     }
 }
 
+function getPublicFallbackLanguage() {
+    return normalizePublicUiLanguage(window.cmsPublicFallbackLanguage) || "en";
+}
+
 function readStoredPublicLanguage() {
     const raw = window.localStorage.getItem("lang");
     if (!raw) return "";
@@ -1043,7 +1048,7 @@ function publicUiText(key, lang) {
         LoginRedirecting: { en: "Login successful. Redirecting...", vi: "Ã„ÂÃ„Æ’ng nhÃ¡ÂºÂ­p thÃƒÂ nh cÃƒÂ´ng. Ã„Âang chuyÃ¡Â»Æ’n hÃ†Â°Ã¡Â»â€ºng..." }
     };
 
-    return text[key]?.[lang] || text[key]?.en || key;
+    return text[key]?.[lang] || text[key]?.[getPublicFallbackLanguage()] || key;
 }
 
 function buildPublicApiUrl(path) {

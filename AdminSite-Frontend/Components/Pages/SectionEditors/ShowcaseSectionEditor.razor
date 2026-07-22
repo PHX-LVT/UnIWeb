@@ -513,11 +513,15 @@
         _resourcePickerCard.CardBackgroundType = "image";
     }
 
-    private static string PageTitle(PageModel page) =>
-        page.Name.GetValueOrDefault("en", page.Name.Values.FirstOrDefault() ?? "Untitled");
+    private string PageTitle(PageModel page) =>
+        page.Name.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : page.Name.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage, "Untitled");
 
-    private static string ChildFallbackName(ShowcaseChildCardModel card) =>
-        card.Name.GetValueOrDefault("en", card.Name.Values.FirstOrDefault() ?? "Untitled");
+    private string ChildFallbackName(ShowcaseChildCardModel card) =>
+        card.Name.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
+            ? localized
+            : card.Name.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage, "Untitled");
 
     private string UploadInputId(ShowcaseChildCardModel card) =>
         $"showcase-card-image-{Section.Id}-{card.Id}";

@@ -591,7 +591,7 @@
         Definition.Design ??= new FormDesignSettingsModel();
         Definition.InformationItems ??= new();
         Definition.AuxiliaryActions ??= new();
-        Definition.Design.V2 ??= FormDesignV2Policy.ProjectFromV1(Definition.Id, ToDto(Definition.Design), Definition.Fields.Select(ToDto));
+        Definition.Design.V2 ??= FormDesignV2Policy.CreateDefault(Definition.Id, ToDto(Definition.Design), Definition.Fields.Select(ToDto));
         EnsureRowCoverage();
         EnsureActionLayouts();
         NormalizeDesign(authoringChange: false);
@@ -829,7 +829,7 @@
     {
         if (Disabled || V2.OuterLayout == layout) return;
         V2.OuterLayout = layout;
-        Definition.Design.Shape = (FormDesignShapeModel)FormDesignV2Policy.LegacyShape(layout);
+        Definition.Design.Shape = (FormDesignShapeModel)FormDesignV2Policy.ShapeForOuterLayout(layout);
         Definition.Design.WidthPx = FormDesignV2Policy.DefaultWidth(layout);
         _previewRecenteringPending = true;
         _sortablesRefreshPending = true;
@@ -1449,7 +1449,7 @@
         if (authoringChange)
         {
             Definition.Design.SchemaVersion = FormDesignV2Policy.TargetSchemaVersion;
-            Definition.Design.Shape = (FormDesignShapeModel)FormDesignV2Policy.LegacyShape(normalizedV2.OuterLayout);
+            Definition.Design.Shape = (FormDesignShapeModel)FormDesignV2Policy.ShapeForOuterLayout(normalizedV2.OuterLayout);
             Definition.Design.WidthPx = Math.Clamp(
                 Definition.Design.WidthPx,
                 FormDesignV2Policy.MinimumWidth(normalizedV2.OuterLayout),
@@ -1470,9 +1470,9 @@
     private string Localized(Dictionary<string, string>? values, string fallback = "") =>
         values?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
             ? localized
-            : values?.GetValueOrDefault("en") is { Length: > 0 } english
-                ? english
-                : values?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? fallback;
+            : values?.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) is { Length: > 0 } configuredFallback
+                ? configuredFallback
+                : fallback;
 
     private static bool Move<T>(List<T> values, T value, int delta)
     {

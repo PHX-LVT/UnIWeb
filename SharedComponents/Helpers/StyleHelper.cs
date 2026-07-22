@@ -141,7 +141,7 @@ namespace SharedComponents.Helpers
             if (dict is null) return string.Empty;
             if (dict.TryGetValue(lang, out var val) && !string.IsNullOrEmpty(val)) return val;
             if (dict.TryGetValue(FallbackLanguage, out var fallback) && !string.IsNullOrEmpty(fallback)) return fallback;
-            return dict.Values.FirstOrDefault() ?? string.Empty;
+            return string.Empty;
         }
     }
 }

@@ -32,18 +32,14 @@ namespace FullProject.Data
         // System wide metadata collections
         public IMongoCollection<AdminUser> AdminUsers => _database.GetCollection<AdminUser>("admin_users");
         public IMongoCollection<AdminRoleDefinition> AdminRoles => _database.GetCollection<AdminRoleDefinition>("admin_roles");
-        public IMongoCollection<AdminLoginActivityRecord> AdminLoginActivity => _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
         public IMongoCollection<AdminAuditEvent> AdminAuditEvents => _database.GetCollection<AdminAuditEvent>("admin_audit_events");
         public IMongoCollection<AdminLoginActivityEvent> AdminLoginActivityEvents => _database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_events");
         public IMongoCollection<AdminAuditEvent> AdminAuditEventArchives => _database.GetCollection<AdminAuditEvent>("admin_audit_event_archives");
         public IMongoCollection<AdminLoginActivityEvent> AdminLoginActivityEventArchives => _database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_event_archives");
-        public IMongoCollection<AdminLogMigrationCheckpoint> AdminLogArchiveCheckpoints => _database.GetCollection<AdminLogMigrationCheckpoint>("admin_log_archive_checkpoints");
         public IMongoCollection<AdminLogExportRecord> AdminLogExportRecords => _database.GetCollection<AdminLogExportRecord>("admin_log_export_records");
         public IMongoCollection<AdminLogRetentionLedger> AdminLogRetentionLedger => _database.GetCollection<AdminLogRetentionLedger>("admin_log_retention_ledger");
         public IMongoCollection<FormDefinition> FormDefinitions => _database.GetCollection<FormDefinition>("form_definitions");
         public IMongoCollection<FormDefinitionOrderDocument> FormDefinitionOrder => _database.GetCollection<FormDefinitionOrderDocument>("form_definition_order");
-        public IMongoCollection<FormDesignV2MigrationLease> FormDesignV2MigrationLeases => _database.GetCollection<FormDesignV2MigrationLease>("form_design_migration_leases");
-        public IMongoCollection<FormDesignV2MigrationRecord> FormDesignV2MigrationRecords => _database.GetCollection<FormDesignV2MigrationRecord>("form_design_migration_records");
         public IMongoCollection<FormSubmission> FormSubmissions => _database.GetCollection<FormSubmission>("form_submissions");
         public IMongoCollection<ContentItem> ContentDraft => _database.GetCollection<ContentItem>("content_draft");
         public IMongoCollection<ContentItem> ContentPublished => _database.GetCollection<ContentItem>("content_published");
@@ -53,7 +49,7 @@ namespace FullProject.Data
         public IMongoCollection<ManagedResource> ManagedResources => _database.GetCollection<ManagedResource>("managed_resources");
         public IMongoCollection<ResourceAlbum> ResourceAlbums => _database.GetCollection<ResourceAlbum>("resource_albums");
         public IMongoCollection<VisitorMetricCounter> VisitorMetrics => _database.GetCollection<VisitorMetricCounter>("visitor_metrics");
-        public IMongoCollection<SiteSettings> Settings => _database.GetCollection<SiteSettings>("site_settings");
+        public IMongoCollection<SiteSettings> Settings => _database.GetCollection<SiteSettings>("settings");
         public IMongoCollection<Branding> Branding => _database.GetCollection<Branding>("branding");
 
     }

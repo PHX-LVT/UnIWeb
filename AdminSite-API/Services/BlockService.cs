@@ -318,15 +318,7 @@ namespace FullProject.Services
                     Title = SanitizeDictionary(container.Title),
                     ContainerLayout = BlockContractService.MergeContainerLayout(
                         null,
-                        container.ContainerLayout,
-                        container.LayoutMode,
-                        container.Columns,
-                        container.Gap,
-                        container.OrbitRadius,
-                        container.OrbitStartAngle,
-                        container.SemicircleRadius,
-                        container.SemicircleStartAngle,
-                        container.SemicircleEndAngle)
+                        container.ContainerLayout)
                 },
                 _ => throw new ArgumentException("Unknown block type")
             };
@@ -381,7 +373,7 @@ namespace FullProject.Services
                 createdForm.DefaultHeightPx = defaultSize.HeightPx;
                 block.Layout = MapLayout(BuildGovernedFormLayout(block.Layout, defaultSize));
             }
-            block.Appearance = BlockContractService.MergeAppearance(null, dto.Appearance, dto.Layout);
+            block.Appearance = BlockContractService.MergeAppearance(null, dto.Appearance);
             if (parentBlock is ContainerBlock)
                 block.Appearance.InheritFromContainer = dto.Appearance?.InheritFromContainer ?? true;
             block.Responsive = BlockContractService.MergeResponsive(null, dto.Responsive);
@@ -437,8 +429,7 @@ namespace FullProject.Services
             var targetKey = string.IsNullOrWhiteSpace(requestedPresetKey)
                 ? effectiveKey
                 : requestedPresetKey;
-            if (!string.Equals(targetKey, ContainerPresetCatalog.LegacyFreeformKey, StringComparison.Ordinal) &&
-                !ContainerPresetCatalog.TryGetGoverned(targetKey, out _))
+            if (!ContainerPresetCatalog.TryGetGoverned(targetKey, out var preset))
                 return "Choose a supported Container preset.";
             if (incoming is null) return null;
 
@@ -446,31 +437,21 @@ namespace FullProject.Services
                 .Where(block => block.ParentBlockId == blockId)
                 .ToList();
 
-            ContainerPresetDefinition? preset = null;
-            if (ContainerPresetCatalog.TryGetGoverned(targetKey, out var governedPreset))
-            {
-                preset = governedPreset;
-                if (!ContainerCapacityPolicy.CanConvert(targetKey, children.Select(BlockType), out var conversionError))
-                    return conversionError;
+            if (!ContainerCapacityPolicy.CanConvert(targetKey, children.Select(BlockType), out var conversionError))
+                return conversionError;
 
-                incoming.SchemaVersion = 3;
-                incoming.Mode = preset.LayoutMode;
-                incoming.Purpose = preset.Purpose;
-                incoming.Columns = preset.Columns;
-                incoming.MobileMode = preset.MobileMode;
-            }
+            incoming.SchemaVersion = 3;
+            incoming.Mode = preset.LayoutMode;
+            incoming.Purpose = preset.Purpose;
+            incoming.Columns = preset.Columns;
+            incoming.MobileMode = preset.MobileMode;
 
-            var requestedMode = preset?.LayoutMode ??
-                                ContainerCapacityPolicy.NormalizeMode(incoming.Mode ?? container.ContainerLayout.Mode);
-            var requestedColumns = preset?.Columns ??
-                                   Math.Clamp(incoming.Columns ?? container.ContainerLayout.Columns, 1, 6);
-            var capacity = preset?.MaximumChildren ??
-                           ContainerCapacityPolicy.MaxChildren(requestedMode, requestedColumns);
+            var requestedMode = preset.LayoutMode;
+            var capacity = preset.MaximumChildren;
             if (children.Count > capacity)
                 return $"The {requestedMode} Container supports at most {capacity} direct Blocks. Remove Blocks before changing this layout.";
 
-            var purpose = preset?.Purpose ??
-                          NormalizeContainerPurpose(incoming.Purpose ?? container.ContainerLayout.Purpose);
+            var purpose = preset.Purpose;
             if (purpose == "composition")
             {
                 incoming.Purpose = "composition";
@@ -607,13 +588,13 @@ namespace FullProject.Services
         private static ContainerPresetDefinition PrepareContainerPresetForCreation(
             ContainerBlockCreateDto container)
         {
-            var requestedMode = container.ContainerLayout?.Mode ?? container.LayoutMode;
+            var requestedMode = container.ContainerLayout?.Mode;
             var resolvedKey = ContainerPresetCatalog.ResolveCreationKey(container.PresetKey, requestedMode);
             if (resolvedKey is null ||
                 !ContainerPresetCatalog.TryGetGoverned(resolvedKey, out var preset))
             {
                 throw new ArgumentException(
-                    "Choose a supported Container preset. New legacy-freeform Containers cannot be created.");
+                    "Choose a supported Container preset.");
             }
 
             container.PresetKey = preset.Key;
@@ -722,7 +703,7 @@ namespace FullProject.Services
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Layout, MapLayout(dto.Layout)));
             if (dto.Appearance is not null || dto.Layout is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Appearance,
-                    BlockContractService.MergeAppearance(existing.Appearance, dto.Appearance, dto.Layout)));
+                    BlockContractService.MergeAppearance(existing.Appearance, dto.Appearance)));
             if (dto.Responsive is not null)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Responsive,
                     BlockContractService.MergeResponsive(existing.Responsive, dto.Responsive)));
@@ -917,15 +898,7 @@ namespace FullProject.Services
                                 .Set(b => ((ContainerBlock)b).ContainerLayout,
                                     BlockContractService.MergeContainerLayout(
                                         existingContainer.ContainerLayout,
-                                        containerDto.ContainerLayout,
-                                        containerDto.LayoutMode,
-                                        containerDto.Columns,
-                                        containerDto.Gap,
-                                        containerDto.OrbitRadius,
-                                        containerDto.OrbitStartAngle,
-                                        containerDto.SemicircleRadius,
-                                        containerDto.SemicircleStartAngle,
-                                        containerDto.SemicircleEndAngle))));
+                                        containerDto.ContainerLayout))));
                     if (!string.Equals(existingContainer.PresetKey, nextPresetKey, StringComparison.Ordinal))
                         await ReassignContainerPresetSlotsAsync(pageId, sectionId, existingContainer, nextPresetKey);
                     break;
@@ -1055,7 +1028,7 @@ namespace FullProject.Services
             {
                 Builders<Block>.Update.Set(b => b.Layout, nextLayout),
                 Builders<Block>.Update.Set(b => b.Appearance,
-                    BlockContractService.MergeAppearance(existing.Appearance, null, dto)),
+                    BlockContractService.MergeAppearance(existing.Appearance, null)),
                 Builders<Block>.Update.Set(b => b.UpdatedAt, DateTime.UtcNow),
                 Builders<Block>.Update.Inc(b => b.Version, 1)
             };
@@ -1108,14 +1081,14 @@ namespace FullProject.Services
         {
             switch (existing, dto)
             {
-                case (ImageBlock image, ImageBlockUpdateDto imageDto) when imageDto.ImageUrl != null:
-                    await _assetCleanup.DeleteIfUnusedAsync(image.ImageUrl, imageDto.ImageUrl);
+                case (ImageBlock image, ImageBlockUpdateDto imageDto) when imageDto.Asset?.Url != null:
+                    await _assetCleanup.DeleteIfUnusedAsync(image.Asset.Url, imageDto.Asset.Url);
                     break;
-                case (FileBlock file, FileBlockUpdateDto fileDto) when fileDto.FileUrl != null:
-                    await _assetCleanup.DeleteIfUnusedAsync(file.FileUrl, fileDto.FileUrl);
+                case (FileBlock file, FileBlockUpdateDto fileDto) when fileDto.Asset?.Url != null:
+                    await _assetCleanup.DeleteIfUnusedAsync(file.Asset.Url, fileDto.Asset.Url);
                     break;
-                case (CardBlock card, CardBlockUpdateDto cardDto) when cardDto.ImageUrl != null:
-                    await _assetCleanup.DeleteIfUnusedAsync(card.ImageUrl, cardDto.ImageUrl);
+                case (CardBlock card, CardBlockUpdateDto cardDto) when cardDto.Asset?.Url != null:
+                    await _assetCleanup.DeleteIfUnusedAsync(card.Asset.Url, cardDto.Asset.Url);
                     break;
             }
         }
@@ -1309,12 +1282,9 @@ namespace FullProject.Services
 
         private static FormDesignSettingsDto GovernedFormDesign(FormDefinition definition)
         {
-            var source = definition.Design?.SchemaVersion > 0
-                ? FormDefinitionService.MapDesign(definition.Design)
-                : FormDesignPolicy.CreateDefault(
-                    definition.Layout == LegacyFormLayout.TwoColumns
-                        ? FormDesignShape.TwoColumns
-                        : FormDesignShape.Stacked);
+            var source = FormDefinitionService.MapDesign(definition.Design);
+            if (source.V2 is null)
+                throw new InvalidOperationException($"Form Definition '{definition.Key}' does not contain a schema-v2 design.");
             var fields = definition.Fields.OrderBy(field => field.Order).Select(field => new FormFieldDefinitionDto
                 {
                     Key = field.Key,
@@ -1325,22 +1295,15 @@ namespace FullProject.Services
                     InputBoxSize = field.InputBoxSize,
                     Order = field.Order
                 }).ToList();
-            return source.V2 is not null
-                ? FormDefinitionService.NormalizeV2WriteDesign(
-                    definition.Id,
-                    source,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel,
-                    FormDefinitionService.MapInformationItems(definition.InformationItems),
-                    FormDefinitionService.MapAuxiliaryActions(definition.AuxiliaryActions))
-                : FormDesignPolicy.Normalize(
-                    source,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel);
+            return FormDefinitionService.NormalizeV2WriteDesign(
+                definition.Id,
+                source,
+                fields,
+                definition.Name,
+                definition.Introduction,
+                definition.SubmitButtonLabel,
+                FormDefinitionService.MapInformationItems(definition.InformationItems),
+                FormDefinitionService.MapAuxiliaryActions(definition.AuxiliaryActions));
         }
 
         private async Task GrowSectionForGovernedFormAsync(Section section, BlockLayoutDto layout)

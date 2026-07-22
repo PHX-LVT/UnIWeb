@@ -804,9 +804,10 @@
         if (page?.Name is null) return "Untitled";
         if (page.Name.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
-        if (page.Name.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
-            return en;
-        return page.Name.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "Untitled";
+        if (page.Name.TryGetValue(AdminUiLocalizer.FallbackLanguage, out var configuredFallback) &&
+            !string.IsNullOrWhiteSpace(configuredFallback))
+            return configuredFallback;
+        return "Untitled";
     }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
@@ -1298,9 +1299,10 @@
         if (values is null || values.Count == 0) return null;
         if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
-        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english))
-            return english;
-        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        if (values.TryGetValue(AdminUiLocalizer.FallbackLanguage, out var configuredFallback) &&
+            !string.IsNullOrWhiteSpace(configuredFallback))
+            return configuredFallback;
+        return null;
     }
 
     private static string BlockTypeLabelKey(string? type) => type switch

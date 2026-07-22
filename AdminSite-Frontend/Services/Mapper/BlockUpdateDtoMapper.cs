@@ -21,7 +21,6 @@ public static class BlockUpdateDtoMapper
             "image" => new ImageBlockUpdateDto
             {
                 Asset = ToAssetDto(block.Asset),
-                ImageUrl = block.ImageUrl,
                 AltText = block.AltText ?? new(),
                 Caption = block.Caption ?? new(),
                 OpenInLightbox = block.OpenInLightbox,
@@ -33,7 +32,6 @@ public static class BlockUpdateDtoMapper
             "video" => new VideoBlockUpdateDto
             {
                 Asset = ToAssetDto(block.Asset),
-                EmbedUrl = block.EmbedUrl ?? string.Empty,
                 SourceType = block.SourceType,
                 Title = block.Title ?? new(),
                 ShowControls = block.ShowControls,
@@ -46,10 +44,8 @@ public static class BlockUpdateDtoMapper
             "file" => new FileBlockUpdateDto
             {
                 Asset = ToAssetDto(block.Asset),
-                FileUrl = block.FileUrl,
                 Filename = block.FileName ?? string.Empty,
                 DisplayName = block.DisplayName ?? new(),
-                FileType = block.FileType ?? string.Empty,
                 OpenBehavior = block.OpenBehavior,
                 Visible = block.Visible,
                 Layout = layout
@@ -84,7 +80,6 @@ public static class BlockUpdateDtoMapper
                 Icon = block.Icon ?? string.Empty,
                 Title = block.Title ?? new(),
                 Description = block.Description ?? new(),
-                ImageUrl = block.ImageUrl,
                 Asset = ToAssetDto(block.Asset),
                 ImageAltText = block.AltText ?? new(),
                 ButtonLabel = block.ButtonLabel ?? new(),
@@ -178,7 +173,7 @@ public static class BlockUpdateDtoMapper
         dto.BlockZone = NormalizeBlockZone(block.BlockZone);
         dto.PositionMode = NormalizePositionMode(block.PositionMode);
         dto.ParentBlockId = block.ParentBlockId;
-        dto.Appearance = ToAppearanceDto(block.Appearance, block.Layout);
+        dto.Appearance = ToAppearanceDto(block.Appearance);
         dto.Responsive = ToResponsiveDto(block.Responsive);
         dto.Animation = ToAnimationDto(block.Animation);
         dto.Authoring = ToAuthoringDto(block.Authoring);
@@ -197,17 +192,11 @@ public static class BlockUpdateDtoMapper
         PresetSourceId = value?.PresetSourceId
     };
 
-    public static BlockAppearanceDto ToAppearanceDto(
-        BlockAppearanceModel? appearance,
-        BlockLayoutModel? legacyLayout) => new()
+    public static BlockAppearanceDto ToAppearanceDto(BlockAppearanceModel? appearance) => new()
     {
         SchemaVersion = Math.Max(appearance?.SchemaVersion ?? 0, 2),
-        BackgroundMode = appearance?.SchemaVersion < 2 &&
-            !string.IsNullOrWhiteSpace(appearance?.BackgroundColor ?? legacyLayout?.BackgroundColor)
-                ? "color"
-                : appearance?.BackgroundMode ??
-            (string.IsNullOrWhiteSpace(appearance?.BackgroundColor ?? legacyLayout?.BackgroundColor) ? "none" : "color"),
-        BackgroundColor = appearance?.BackgroundColor ?? legacyLayout?.BackgroundColor,
+        BackgroundMode = appearance?.BackgroundMode ?? "none",
+        BackgroundColor = appearance?.BackgroundColor,
         TextColor = appearance?.TextColor,
         TextAlign = appearance?.TextAlign ?? "inherit",
         FontSizePx = appearance?.FontSizePx,
@@ -219,15 +208,15 @@ public static class BlockUpdateDtoMapper
         BorderColor = appearance?.BorderColor,
         BorderWidth = appearance?.BorderWidth ?? 0,
         BorderStyle = appearance?.BorderStyle ?? "solid",
-        BorderRadius = appearance?.BorderRadius ?? legacyLayout?.BorderRadius ?? "none",
+        BorderRadius = appearance?.BorderRadius ?? "none",
         Shadow = appearance?.Shadow ?? "none",
         Shape = appearance?.Shape ?? "rectangle",
         AspectRatio = appearance?.AspectRatio ?? "auto",
         RotationDeg = appearance?.RotationDeg ?? 0,
         MediaFit = appearance?.MediaFit ?? "cover",
         MediaPosition = appearance?.MediaPosition ?? "center",
-        Padding = appearance?.Padding ?? legacyLayout?.Padding ?? "none",
-        Margin = appearance?.Margin ?? legacyLayout?.Margin ?? "none",
+        Padding = appearance?.Padding ?? "none",
+        Margin = appearance?.Margin ?? "none",
         Decorative = appearance?.Decorative ?? false,
         InheritFromContainer = appearance?.InheritFromContainer ?? false
     };
@@ -300,7 +289,7 @@ public static class BlockUpdateDtoMapper
         CompactChildWidth = Math.Clamp(value?.CompactChildWidth ?? 120, 72, 180),
         GeometryLocked = value?.GeometryLocked ?? false,
         ShareAppearance = value?.ShareAppearance ?? false,
-        SharedAppearance = value?.SharedAppearance is null ? null : ToAppearanceDto(value.SharedAppearance, null),
+        SharedAppearance = value?.SharedAppearance is null ? null : ToAppearanceDto(value.SharedAppearance),
         Diagram = ToDiagramDto(value?.Diagram)
     };
 

@@ -81,79 +81,67 @@ public sealed class BlockAssetMetadataService
 
     private async Task<string?> CanonicalizeImageAsync(ImageBlockCreateDto dto)
     {
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.ImageUrl), "image", false);
+        var result = await CanonicalizeAsync(dto.Asset, "image", false);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.ImageUrl = result.Asset?.Url;
         return null;
     }
 
     private async Task<string?> CanonicalizeImageAsync(ImageBlockUpdateDto dto)
     {
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.ImageUrl), "image", false);
+        var result = await CanonicalizeAsync(dto.Asset, "image", false);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.ImageUrl = result.Asset?.Url;
         return null;
     }
 
     private async Task<string?> CanonicalizeCardAsync(CardBlockCreateDto dto)
     {
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.ImageUrl), "image", false);
+        var result = await CanonicalizeAsync(dto.Asset, "image", false);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.ImageUrl = result.Asset?.Url;
         return null;
     }
 
     private async Task<string?> CanonicalizeCardAsync(CardBlockUpdateDto dto)
     {
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.ImageUrl), "image", false);
+        var result = await CanonicalizeAsync(dto.Asset, "image", false);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.ImageUrl = result.Asset?.Url;
         return null;
     }
 
     private async Task<string?> CanonicalizeFileAsync(FileBlockCreateDto dto)
     {
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.FileUrl, dto.Filename, dto.FileType), "file", false);
+        var result = await CanonicalizeAsync(dto.Asset, "file", false);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.FileUrl = result.Asset?.Url;
-        dto.FileType = result.Asset?.ContentType ?? dto.FileType;
         return null;
     }
 
     private async Task<string?> CanonicalizeFileAsync(FileBlockUpdateDto dto)
     {
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.FileUrl, dto.Filename, dto.FileType), "file", false);
+        var result = await CanonicalizeAsync(dto.Asset, "file", false);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.FileUrl = result.Asset?.Url;
-        dto.FileType = result.Asset?.ContentType ?? dto.FileType;
         return null;
     }
 
     private async Task<string?> CanonicalizeVideoAsync(VideoBlockCreateDto dto)
     {
-        var source = dto.SourceType == "upload" ? "DirectUpload" : "ExternalUrl";
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.EmbedUrl, source: source), "video", true);
+        var result = await CanonicalizeAsync(dto.Asset, "video", true);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.EmbedUrl = result.Asset?.Url ?? string.Empty;
-        dto.SourceType = VideoUrlHelper.IsYouTubeVideoUrl(dto.EmbedUrl) ? "youtube" : "upload";
+        dto.SourceType = VideoUrlHelper.IsYouTubeVideoUrl(result.Asset?.Url) ? "youtube" : "upload";
         return null;
     }
 
     private async Task<string?> CanonicalizeVideoAsync(VideoBlockUpdateDto dto)
     {
-        var source = dto.SourceType == "upload" ? "DirectUpload" : "ExternalUrl";
-        var result = await CanonicalizeAsync(dto.Asset ?? Legacy(dto.EmbedUrl, source: source), "video", true);
+        var result = await CanonicalizeAsync(dto.Asset, "video", true);
         if (result.Error is not null) return result.Error;
         dto.Asset = result.Asset;
-        dto.EmbedUrl = result.Asset?.Url ?? string.Empty;
-        dto.SourceType = VideoUrlHelper.IsYouTubeVideoUrl(dto.EmbedUrl) ? "youtube" : "upload";
+        dto.SourceType = VideoUrlHelper.IsYouTubeVideoUrl(result.Asset?.Url) ? "youtube" : "upload";
         return null;
     }
 
@@ -217,18 +205,6 @@ public sealed class BlockAssetMetadataService
             SizeBytes = Math.Max(input.SizeBytes ?? 0, 0)
         }, null);
     }
-
-    private static BlockAssetReferenceDto Legacy(
-        string? url,
-        string? fileName = null,
-        string? contentType = null,
-        string source = "DirectUpload") => new()
-    {
-        Url = url,
-        FileName = fileName,
-        ContentType = contentType,
-        ResourceSource = source
-    };
 
     private static string NormalizeSource(string? value) => value?.Trim().ToLowerInvariant() switch
     {

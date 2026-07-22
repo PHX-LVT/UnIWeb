@@ -30,7 +30,7 @@
                 </div>
                 @if (ShowTopAction)
                 {
-                    <ActionButton Action="@Section.ActionButton.Action" FormDefinitionId="@Section.ActionButton.FormDefinitionId" Href="@ButtonHref(Section.ActionButton)"
+                    <ActionButton Action="@Section.ActionButton!.Action" FormDefinitionId="@Section.ActionButton.FormDefinitionId" Href="@ButtonHref(Section.ActionButton)"
                                   CssClass="@SectionButtonClass(Section.ActionButton)">
                         @ButtonLabel(Section.ActionButton)
                     </ActionButton>
@@ -99,7 +99,7 @@
         @if (ShowBottomAction)
         {
             <div class="@FooterActionClass">
-                <ActionButton Action="@Section.ActionButton.Action" FormDefinitionId="@Section.ActionButton.FormDefinitionId" Href="@ButtonHref(Section.ActionButton)"
+                <ActionButton Action="@Section.ActionButton!.Action" FormDefinitionId="@Section.ActionButton.FormDefinitionId" Href="@ButtonHref(Section.ActionButton)"
                               CssClass="@SectionButtonClass(Section.ActionButton)">
                     @ButtonLabel(Section.ActionButton)
                 </ActionButton>
@@ -113,7 +113,7 @@
     [Parameter, EditorRequired] public PublicShowcaseSectionDto Section { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
-    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private string _search = string.Empty;
 
@@ -189,7 +189,7 @@
             ? string.Empty
             : StyleHelper.Lang(button.Label, Lang) is { Length: > 0 } label
                 ? label
-                : button.Label.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+                : string.Empty;
 
     private static string ButtonHref(PublicSectionButtonDto? button) =>
         string.IsNullOrWhiteSpace(button?.Href) ? "#" : button.Href!;

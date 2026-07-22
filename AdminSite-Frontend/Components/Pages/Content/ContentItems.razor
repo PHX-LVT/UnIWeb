@@ -629,7 +629,6 @@
     private static bool IsDeleted(ContentItemModel item) => SameStatus(item, "Deleted");
 
     private static bool IsRejected(ContentItemModel item) =>
-        SameStatus(item, "Rejected") ||
         string.Equals(item.ReviewStatus, "Rejected", StringComparison.OrdinalIgnoreCase);
 
     private static bool SameStatus(ContentItemModel item, string status) =>

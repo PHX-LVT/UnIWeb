@@ -515,14 +515,6 @@ namespace FullProject.Controllers
                     dto.PresetKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey);
                     dto.Title = container.Title;
                     dto.ContainerLayout = BlockContractService.ToAdminContainerLayout(container.ContainerLayout);
-                    dto.LayoutMode = container.LayoutMode;
-                    dto.Columns = container.Columns;
-                    dto.Gap = container.Gap;
-                    dto.OrbitRadius = container.OrbitRadius;
-                    dto.OrbitStartAngle = container.OrbitStartAngle;
-                    dto.SemicircleRadius = container.SemicircleRadius;
-                    dto.SemicircleStartAngle = container.SemicircleStartAngle;
-                    dto.SemicircleEndAngle = container.SemicircleEndAngle;
                     break;
             }
 

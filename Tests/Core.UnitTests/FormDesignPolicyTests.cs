@@ -129,8 +129,8 @@ public sealed class FormDesignPolicyTests
             Field("email", "email", 3)
         };
 
-        var first = FormDesignV2Policy.ProjectFromV1("form-1", FormDesignPolicy.CreateDefault(FormDesignShape.TwoColumns), fields);
-        var second = FormDesignV2Policy.ProjectFromV1("form-1", FormDesignPolicy.CreateDefault(FormDesignShape.TwoColumns), fields);
+        var first = FormDesignV2Policy.CreateDefault("form-1", FormDesignPolicy.CreateDefault(FormDesignShape.TwoColumns), fields);
+        var second = FormDesignV2Policy.CreateDefault("form-1", FormDesignPolicy.CreateDefault(FormDesignShape.TwoColumns), fields);
 
         Assert.True(FormDesignV2Policy.AreEquivalent(first, second));
         Assert.All(first.FieldRows.Where(row => row.FieldKeys.Contains("message")), row => Assert.Single(row.FieldKeys));

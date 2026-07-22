@@ -48,9 +48,7 @@
         if (values is null || values.Count == 0) return null;
         if (values.TryGetValue(Language, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
-        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english))
-            return english;
-        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        return values.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage);
     }
 
     private static string BlockTypeKey(string? type) => type switch

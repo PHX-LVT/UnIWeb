@@ -7,9 +7,11 @@ window.userSiteShell.setThemeVars = (css) => {
     }
 };
 
-window.userSiteShell.setLanguage = (lang) => {
+window.userSiteShell.setLanguage = (lang, fallbackLanguage) => {
     const normalized = (lang || "en").toString().trim().toLowerCase() || "en";
+    const normalizedFallback = (fallbackLanguage || "en").toString().trim().toLowerCase() || "en";
     window.cmsPublicLanguage = normalized;
+    window.cmsPublicFallbackLanguage = normalizedFallback;
     document.documentElement.lang = normalized;
 };
 

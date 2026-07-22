@@ -9,5 +9,4 @@ public sealed class LogManagementSettings
     public int CriticalSecurityTotalDays { get; set; } = 1095;
     public int ExportMaximumRows { get; set; } = 100_000;
     public int RetentionBatchSize { get; set; } = 2_000;
-    public int MigrationBatchSize { get; set; } = 1_000;
 }

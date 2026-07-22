@@ -167,8 +167,7 @@ namespace FullProject.Services
                 Builders<ContentItem>.Update.Set(c => c.UpdatedById, actorId)
             };
 
-            if (existing.ReviewStatus == ContentReviewStatus.Rejected ||
-                existing.Status == ContentStatus.Rejected)
+            if (existing.ReviewStatus == ContentReviewStatus.Rejected)
             {
                 updates.Add(Builders<ContentItem>.Update.Set(c => c.Status, ContentStatus.Draft));
                 updates.Add(Builders<ContentItem>.Update.Set(c => c.ReviewStatus, ContentReviewStatus.None));
@@ -325,65 +324,6 @@ namespace FullProject.Services
                 "title" => query.Sort(Builders<ContentItem>.Sort.Ascending("Title.en")),
                 _ => query.SortByDescending(c => c.PublishedAt).ThenByDescending(c => c.UpdatedAt)
             };
-
-        public async Task<(long WorkflowCount, long AuthorCount)> MigrateLegacyWorkflowAsync()
-        {
-            var users = await _context.AdminUsers.Find(_ => true).ToListAsync();
-            var authorNames = users.ToDictionary(
-                user => user.Id,
-                user => NormalizeAuthorName(user.FullName),
-                StringComparer.OrdinalIgnoreCase);
-            var usersByEmail = users
-                .Where(user => !string.IsNullOrWhiteSpace(user.Email))
-                .GroupBy(user => user.Email, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
-            long workflowCount = 0;
-            long authorCount = 0;
-            foreach (var collection in new[] { _context.ContentDraft, _context.ContentPublished })
-            {
-                var items = await collection.Find(_ => true).ToListAsync();
-                var writes = new List<WriteModel<ContentItem>>();
-                foreach (var item in items)
-                {
-                    var updates = new List<UpdateDefinition<ContentItem>>();
-                    var normalizedAuthorId = item.AuthorId;
-                    if (!authorNames.ContainsKey(normalizedAuthorId) &&
-                        usersByEmail.TryGetValue(normalizedAuthorId, out var legacyEmailAuthor))
-                    {
-                        normalizedAuthorId = legacyEmailAuthor.Id;
-                        updates.Add(Builders<ContentItem>.Update.Set(content => content.AuthorId, normalizedAuthorId));
-                        authorCount++;
-                    }
-
-                    if (item.Status == ContentStatus.Rejected)
-                    {
-                        updates.Add(Builders<ContentItem>.Update.Set(content => content.Status, ContentStatus.Draft));
-                        updates.Add(Builders<ContentItem>.Update.Set(content => content.ReviewStatus, ContentReviewStatus.Rejected));
-                        workflowCount++;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(item.AuthorName))
-                    {
-                        var resolvedName = authorNames.GetValueOrDefault(normalizedAuthorId, "Unknown author");
-                        updates.Add(Builders<ContentItem>.Update.Set(content => content.AuthorName, resolvedName));
-                        authorCount++;
-                    }
-
-                    if (updates.Count > 0)
-                    {
-                        writes.Add(new UpdateOneModel<ContentItem>(
-                            Builders<ContentItem>.Filter.Eq(content => content.Id, item.Id),
-                            Builders<ContentItem>.Update.Combine(updates)));
-                    }
-                }
-
-                if (writes.Count > 0)
-                    await collection.BulkWriteAsync(writes);
-            }
-
-            return (workflowCount, authorCount);
-        }
 
         private async Task<string> UniqueSlugAsync(string typeKey, string slug, string? existingId = null)
         {

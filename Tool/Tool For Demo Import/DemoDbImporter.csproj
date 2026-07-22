@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="appsettings.importer.json"
           Condition="Exists('appsettings.importer.json')"
           CopyToOutputDirectory="PreserveNewest"

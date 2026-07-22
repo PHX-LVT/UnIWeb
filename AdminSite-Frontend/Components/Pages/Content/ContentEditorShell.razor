@@ -604,8 +604,7 @@ else
     private bool IsDraft => string.Equals(_status, "Draft", StringComparison.OrdinalIgnoreCase);
     private bool IsSubmitted => string.Equals(_status, "Submitted", StringComparison.OrdinalIgnoreCase);
     private bool IsPublished => string.Equals(_status, "Published", StringComparison.OrdinalIgnoreCase);
-    private bool IsRejected => string.Equals(_status, "Rejected", StringComparison.OrdinalIgnoreCase) ||
-                               string.Equals(_reviewStatus, "Rejected", StringComparison.OrdinalIgnoreCase);
+    private bool IsRejected => string.Equals(_reviewStatus, "Rejected", StringComparison.OrdinalIgnoreCase);
     private bool IsDeleted => string.Equals(_status, "Deleted", StringComparison.OrdinalIgnoreCase);
     private bool IsMine => !string.IsNullOrWhiteSpace(_authorId) &&
                            (string.Equals(_authorId, Auth.CurrentUser?.AdminId, StringComparison.OrdinalIgnoreCase) ||

@@ -41,7 +41,7 @@ namespace Contracts.Public
     {
         public Dictionary<string, string>? Heading { get; set; }
         public Dictionary<string, string>? Subtext { get; set; }
-        public string? Layout { get; set; }
+        public string Layout { get; set; } = "center";
         public PublicSectionButtonDto? Button { get; set; }
         public List<PublicSectionButtonDto>? Buttons { get; set; }
     }

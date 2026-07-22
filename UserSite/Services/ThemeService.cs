@@ -1,20 +1,29 @@
 using Contracts.Global;
 
+using Contracts.Public;
+
 namespace UserSite.Services
 {
     public class ThemeService
     {
         private readonly PublicApiService _api;
         private PublicTheme? _theme;
+        public PublicOperationStatus LastLoadStatus { get; private set; } = PublicOperationStatus.Success;
+        public string LastLoadMessage { get; private set; } = string.Empty;
 
         public ThemeService(PublicApiService api)
         {
             _api = api;
         }
 
-        public async Task<PublicTheme> GetAsync()
+        public async Task<PublicTheme> GetAsync(bool forceReload = false)
         {
-            _theme ??= Normalize(await _api.GetThemeAsync());
+            if (_theme is not null && !forceReload) return _theme;
+
+            var result = await _api.GetThemeAsync();
+            LastLoadStatus = result.Status;
+            LastLoadMessage = result.Message;
+            _theme = Normalize(result.Data);
             return _theme;
         }
 

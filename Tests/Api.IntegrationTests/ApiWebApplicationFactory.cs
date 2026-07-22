@@ -30,7 +30,9 @@ internal sealed class ApiWebApplicationFactory : WebApplicationFactory<FullProje
                 ["RememberedDevice:Enabled"] = "true",
                 ["RememberedDevice:LifetimeDays"] = "30",
                 ["RememberedDevice:MaximumDevicesPerAccount"] = "5",
-                ["RememberedDevice:TokenBytes"] = "32"
+                ["RememberedDevice:TokenBytes"] = "32",
+                ["Cors:AdminOrigin"] = "https://admin.test",
+                ["Cors:UserOrigin"] = "https://public.test"
             });
         });
     }

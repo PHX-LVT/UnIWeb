@@ -24,10 +24,9 @@ namespace FullProject.Services.CloneServices
         public Section CloneSection(Section source, CloneProfile profile, DateTime? timestamp = null)
         {
             var now = timestamp ?? DateTime.UtcNow;
-            var clone = CloneSectionDocument(source);
+            var clone = _documents.Clone(source);
 
             ApplySectionIdentity(source, clone, profile, now);
-            NormalizeSectionClone(clone);
             return clone;
         }
 
@@ -303,43 +302,6 @@ namespace FullProject.Services.CloneServices
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(profile), profile, null);
-            }
-        }
-
-        private static void NormalizeSectionClone(Section clone)
-        {
-            if (clone is not ColumnsSection columnsSection) return;
-
-            foreach (var column in columnsSection.Columns)
-            {
-                column.Blocks = new List<Block>();
-            }
-        }
-
-        private Section CloneSectionDocument(Section source)
-        {
-            if (source is not ColumnsSection columnsSection)
-                return _documents.Clone(source);
-
-            var originalBlocks = columnsSection.Columns
-                .Select(column => column.Blocks)
-                .ToList();
-
-            try
-            {
-                foreach (var column in columnsSection.Columns)
-                {
-                    column.Blocks = new List<Block>();
-                }
-
-                return _documents.Clone(source);
-            }
-            finally
-            {
-                for (var i = 0; i < columnsSection.Columns.Count && i < originalBlocks.Count; i++)
-                {
-                    columnsSection.Columns[i].Blocks = originalBlocks[i];
-                }
             }
         }
 

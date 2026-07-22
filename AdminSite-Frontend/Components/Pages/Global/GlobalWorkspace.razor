@@ -1,0 +1,9 @@
+@page "/global"
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized()
+    {
+        Nav.NavigateTo("/global/branding", replace: true);
+    }
+}

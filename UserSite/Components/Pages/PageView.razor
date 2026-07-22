@@ -16,6 +16,14 @@ else if (_notFound)
         <h1>Page not found</h1>
     </div>
 }
+else if (_loadFailed)
+{
+    <div class="sc-not-found" role="alert">
+        <h1>Page temporarily unavailable</h1>
+        <p>@_loadMessage</p>
+        <button type="button" class="sc-btn sc-btn--theme" @onclick="LoadPageAsync">Try again</button>
+    </div>
+}
 
 @code {
     [Parameter] public string? Slug { get; set; }
@@ -24,6 +32,8 @@ else if (_notFound)
 
     private PublicPageDto? _page;
     private bool _notFound = false;
+    private bool _loadFailed;
+    private string _loadMessage = string.Empty;
     private string? _widgetsInitializedForPageId;
     private string _lang = "en";
 
@@ -44,22 +54,30 @@ else if (_notFound)
 
     protected override async Task OnParametersSetAsync()
     {
-        _notFound = false;
-        _page = !string.IsNullOrEmpty(ChildSlug)
-            ? await Api.GetChildPageAsync(ParentSlug!, ChildSlug)
-            : await Api.GetPageAsync(Slug!);
-
-        if (_page is null) _notFound = true;
+        await LoadPageAsync();
     }
 
-    private async Task<bool> HandleFormSubmit(
+    private async Task LoadPageAsync()
+    {
+        _notFound = false;
+        _loadFailed = false;
+        var result = !string.IsNullOrEmpty(ChildSlug)
+            ? await Api.GetChildPageAsync(ParentSlug!, ChildSlug)
+            : await Api.GetPageAsync(Slug!);
+        _page = result.Data;
+        _notFound = result.Status == PublicOperationStatus.NotFound;
+        _loadFailed = !result.IsSuccess && !_notFound;
+        _loadMessage = result.Message;
+    }
+
+    private Task<PublicFormSubmitResult> HandleFormSubmit(
      string pageId, string sectionId, string blockId,
      Dictionary<string, string> data)
     {
         if (!string.IsNullOrEmpty(ChildSlug))
-            return await Api.SubmitChildFormAsync(ParentSlug!, ChildSlug, sectionId, blockId, data, _lang);
+            return Api.SubmitChildFormAsync(ParentSlug!, ChildSlug, sectionId, blockId, data, _lang);
 
-        return await Api.SubmitFormAsync(Slug!, sectionId, blockId, data, _lang);
+        return Api.SubmitFormAsync(Slug!, sectionId, blockId, data, _lang);
     }
 
     private void HandleLanguageChanged(string lang)

@@ -385,7 +385,7 @@
     [Parameter, EditorRequired] public PublicLibrarySectionDto Section { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
-    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private string _search = string.Empty;
     private string _filter = string.Empty;

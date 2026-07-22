@@ -198,16 +198,16 @@ namespace FullProject.Services
             {
                 switch (block)
                 {
-                    case ImageBlock image when ManagedResourceReferenceHelper.SameUrl(image.ImageUrl, resource.Url):
+                    case ImageBlock image when ManagedResourceReferenceHelper.SameUrl(image.Asset.Url, resource.Url):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, FirstText(image.AltText), "Image block", string.Empty, block.UpdatedAt));
                         break;
-                    case FileBlock file when ManagedResourceReferenceHelper.SameUrl(file.FileUrl, resource.Url):
-                        references.Add(UsageRef(resource, source, block.Id, block.StableId, file.Filename, "File block", file.FileType, block.UpdatedAt));
+                    case FileBlock file when ManagedResourceReferenceHelper.SameUrl(file.Asset.Url, resource.Url):
+                        references.Add(UsageRef(resource, source, block.Id, block.StableId, file.Filename, "File block", file.Asset.ContentType ?? string.Empty, block.UpdatedAt));
                         break;
-                    case VideoBlock video when ManagedResourceReferenceHelper.MatchesAnyUrl(video.EmbedUrl, ManagedResourceReferenceHelper.ResourceUrlVariants(resource.Url)):
+                    case VideoBlock video when ManagedResourceReferenceHelper.MatchesAnyUrl(video.Asset.Url, ManagedResourceReferenceHelper.ResourceUrlVariants(resource.Url)):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, FirstText(video.Title), "Video block", string.Empty, block.UpdatedAt));
                         break;
-                    case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.ImageUrl, resource.Url):
+                    case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.Asset.Url, resource.Url):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, FirstText(card.Title), "Card block image", string.Empty, block.UpdatedAt));
                         break;
                 }
@@ -247,12 +247,7 @@ namespace FullProject.Services
                 Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Style.BackgroundImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Style.BackgroundVideoUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.ImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.FileUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.EmbedUrl", url));
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url));
 
         private static IEnumerable<ManagedResourceUsageReferenceDto> BuildContentReferences(
             ContentItem item,
@@ -310,7 +305,7 @@ namespace FullProject.Services
         {
             if (values is null || values.Count == 0) return string.Empty;
             if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en)) return en;
-            return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
+            return string.Empty;
         }
 
         private static string SectionTitle(Section section) => section switch

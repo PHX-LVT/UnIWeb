@@ -4,6 +4,7 @@
 @inject IHttpService Http
 @inject IJSRuntime JS
 @inject AdminAuthService Auth
+@inject ILogger<Dashboard> Logger
 @using Contracts.Admin
 @implements IAsyncDisposable
 
@@ -85,6 +86,19 @@
                 <span>@ActiveModeLabel</span>
             </button>
         </div>
+
+        @if (!string.IsNullOrWhiteSpace(_previewRefreshError))
+        {
+            <div class="ez-canvas__feedback-row" role="status">
+                <span class="admin-inline-status admin-inline-status--warning">
+                    <span class="admin-inline-status__dot"></span>
+                    <span>@_previewRefreshError</span>
+                    <button type="button" class="ez-icon-btn" title='@T("Retry")' @onclick="ReloadPreviewSafelyAsync">
+                        <i class="fas fa-rotate-right"></i>
+                    </button>
+                </span>
+            </div>
+        }
 
         <div class="ez-dashboard__canvas">
             @if (_selectedPage is not null)
@@ -346,6 +360,7 @@
     private bool _loading = true;
     private bool _pageLoadDenied;
     private string? _pageLoadError;
+    private string? _previewRefreshError;
     private bool _saving = false;
     private bool _pageSortableInitialized = false;
     private bool _childPageSortableInitialized = false;
@@ -408,9 +423,10 @@
         if (value is null) return fallback;
         if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
-        if (value.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
-            return en;
-        return value.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+        if (value.TryGetValue(AdminUiLocalizer.FallbackLanguage, out var configuredFallback) &&
+            !string.IsNullOrWhiteSpace(configuredFallback))
+            return configuredFallback;
+        return fallback;
     }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
@@ -1044,10 +1060,16 @@
         try
         {
             await JS.InvokeVoidAsync("reloadPreviewIframe");
+            _previewRefreshError = null;
         }
-        catch
+        catch (JSDisconnectedException)
         {
-            // The next Canvas render/navigation will refresh the preview.
+            // Expected while the circuit is being disposed.
+        }
+        catch (JSException ex)
+        {
+            _previewRefreshError = T("PreviewRefreshFailed");
+            Logger.LogWarning(ex, "The Canvas preview iframe could not be refreshed.");
         }
     }
 

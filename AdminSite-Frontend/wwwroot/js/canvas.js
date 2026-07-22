@@ -1,8 +1,14 @@
+window.destroySortableSafely = window.destroySortableSafely || (sortable => {
+    if (!sortable || !sortable.el || typeof sortable.destroy !== "function") return false;
+    sortable.destroy();
+    return true;
+});
+
 window.initSortable = (container, dotnet) => {
     if (!container || typeof Sortable === "undefined") return;
 
     if (window.__ezSectionSortable) {
-        window.__ezSectionSortable.destroy();
+        window.destroySortableSafely(window.__ezSectionSortable);
         window.__ezSectionSortable = null;
     }
 
@@ -300,7 +306,7 @@ window.initAdminSortable = (key, container, dotnet, methodName, idAttribute, han
 
     window.__ezAdminSortables = window.__ezAdminSortables || {};
     if (window.__ezAdminSortables[key]) {
-        window.__ezAdminSortables[key].destroy();
+        window.destroySortableSafely(window.__ezAdminSortables[key]);
         window.__ezAdminSortables[key] = null;
     }
 
@@ -331,7 +337,7 @@ window.initBlockListSortable = (key, container, dotnet) => {
 
     window.__ezAdminSortables = window.__ezAdminSortables || {};
     if (window.__ezAdminSortables[key]) {
-        window.__ezAdminSortables[key].destroy();
+        window.destroySortableSafely(window.__ezAdminSortables[key]);
         window.__ezAdminSortables[key] = null;
     }
 
@@ -373,7 +379,7 @@ window.initBlockListSortable = (key, container, dotnet) => {
 
 window.destroyBlockSelectorSortables = root => {
     if (!root || !Array.isArray(root.__blockSelectorSortables)) return;
-    root.__blockSelectorSortables.forEach(sortable => sortable?.destroy());
+    root.__blockSelectorSortables.forEach(window.destroySortableSafely);
     root.__blockSelectorSortables = [];
 };
 
@@ -447,7 +453,7 @@ window.initFooterLinkSortables = (root, dotnet) => {
         const key = `footer-links-${groupId}`;
         window.__ezAdminSortables = window.__ezAdminSortables || {};
         if (window.__ezAdminSortables[key]) {
-            window.__ezAdminSortables[key].destroy();
+            window.destroySortableSafely(window.__ezAdminSortables[key]);
             window.__ezAdminSortables[key] = null;
         }
 
@@ -481,7 +487,7 @@ window.disposeFooterLinkSortables = () => {
 window.disposeAdminSortable = (key) => {
     if (!window.__ezAdminSortables) return;
     if (key && window.__ezAdminSortables[key]) {
-        window.__ezAdminSortables[key].destroy();
+        window.destroySortableSafely(window.__ezAdminSortables[key]);
         window.__ezAdminSortables[key] = null;
         return;
     }
@@ -489,7 +495,7 @@ window.disposeAdminSortable = (key) => {
     if (!key) {
         Object.keys(window.__ezAdminSortables).forEach(sortableKey => {
             if (window.__ezAdminSortables[sortableKey]) {
-                window.__ezAdminSortables[sortableKey].destroy();
+                window.destroySortableSafely(window.__ezAdminSortables[sortableKey]);
                 window.__ezAdminSortables[sortableKey] = null;
             }
         });
@@ -557,7 +563,7 @@ window.disposeCanvasOverlay = function () {
         window.__ezCanvasAuthoringKeyHandler = null;
     }
     if (window.__ezSectionSortable) {
-        window.__ezSectionSortable.destroy();
+        window.destroySortableSafely(window.__ezSectionSortable);
         window.__ezSectionSortable = null;
     }
 
@@ -586,7 +592,7 @@ window.reloadPreviewIframe = function () {
 window.blockEditor = window.blockEditor || {};
 window.blockEditor.initItemSortable = (root, dotnet) => {
     if (!root || !dotnet || typeof Sortable === "undefined") return;
-    root.__blockItemSortable?.destroy();
+    window.destroySortableSafely(root.__blockItemSortable);
     root.__blockItemSortable = Sortable.create(root, {
         handle: ".block-item-list__drag",
         draggable: ".block-item-list__row",
@@ -598,7 +604,7 @@ window.blockEditor.initItemSortable = (root, dotnet) => {
     });
 };
 window.blockEditor.destroyItemSortable = root => {
-    root?.__blockItemSortable?.destroy();
+    window.destroySortableSafely(root?.__blockItemSortable);
     if (root) root.__blockItemSortable = null;
 };
 

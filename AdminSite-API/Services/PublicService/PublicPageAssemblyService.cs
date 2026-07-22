@@ -1170,7 +1170,7 @@ namespace FullProject.Services.PublicService
                 return localized;
             if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english))
                 return english;
-            return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+            return fallback;
         }
 
         private static int EstimateReadTime(ContentItem item, string lang)
@@ -1539,15 +1539,7 @@ namespace FullProject.Services.PublicService
                     Type = "container",
                     PresetKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey),
                     Title = container.Title,
-                    ContainerLayout = BlockContractService.ToPublicContainerLayout(container.ContainerLayout),
-                    LayoutMode = container.LayoutMode,
-                    Columns = container.Columns,
-                    Gap = container.Gap,
-                    OrbitRadius = container.OrbitRadius,
-                    OrbitStartAngle = container.OrbitStartAngle,
-                    SemicircleRadius = container.SemicircleRadius,
-                    SemicircleStartAngle = container.SemicircleStartAngle,
-                    SemicircleEndAngle = container.SemicircleEndAngle
+                    ContainerLayout = BlockContractService.ToPublicContainerLayout(container.ContainerLayout)
                 },
                 _ => null
             };

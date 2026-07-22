@@ -1,0 +1,33 @@
+<div class="global-workspace-header">
+    <div class="page-header global-workspace-header__title-row">
+        <h1 class="page-title">
+            <i class="fas fa-globe" aria-hidden="true"></i>
+            @T("Global")
+        </h1>
+    </div>
+
+    <nav class="global-workspace-tabs" aria-label="@T("Global")">
+        <NavLink class="global-workspace-tab" href="/global/branding" Match="NavLinkMatch.All">
+            <i class="fas fa-paint-brush" aria-hidden="true"></i>
+            <span>@T("Branding")</span>
+        </NavLink>
+        <NavLink class="global-workspace-tab" href="/global/buttons" Match="NavLinkMatch.All">
+            <i class="fas fa-hand-pointer" aria-hidden="true"></i>
+            <span>@T("GlobalButtons")</span>
+        </NavLink>
+        <NavLink class="global-workspace-tab" href="/global/footer" Match="NavLinkMatch.All">
+            <i class="fas fa-grip-horizontal" aria-hidden="true"></i>
+            <span>@T("Footer")</span>
+        </NavLink>
+        <NavLink class="global-workspace-tab" href="/global/social" Match="NavLinkMatch.All">
+            <i class="fas fa-share-alt" aria-hidden="true"></i>
+            <span>@T("Social")</span>
+        </NavLink>
+    </nav>
+</div>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+}

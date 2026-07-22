@@ -1,8 +1,6 @@
 using System.Text.RegularExpressions;
 using Contracts.Forms;
 using FullProject.Models;
-using FullProject.Settings;
-using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -18,18 +16,15 @@ public sealed class FormDefinitionService
     private readonly IMongoCollection<FormDefinition> _definitions;
     private readonly FormInputTypeService _inputTypes;
     private readonly FormDefinitionOrderService _order;
-    private readonly FormDesignV2RuntimeSettings _v2Settings;
 
     public FormDefinitionService(
         IMongoDatabase database,
         FormInputTypeService inputTypes,
-        FormDefinitionOrderService order,
-        IOptions<FormDesignV2RuntimeSettings> v2Settings)
+        FormDefinitionOrderService order)
     {
         _database = database;
         _inputTypes = inputTypes;
         _order = order;
-        _v2Settings = v2Settings.Value;
         _definitions = database.GetCollection<FormDefinition>("form_definitions");
     }
 
@@ -100,9 +95,6 @@ public sealed class FormDefinitionService
             existing = await GetByIdAsync(id);
         }
 
-        if (existing?.Design?.SchemaVersion >= FormDesignV2Policy.TargetSchemaVersion && !_v2Settings.CanWriteV2)
-            throw new InvalidOperationException("This schema-v2 Form Definition is read-only until v2 writes are activated.");
-
         var previousDesign = existing?.Design is null ? null : MapDesign(existing.Design);
         var rawDefinitions = _database.GetCollection<BsonDocument>("form_definitions");
         var previousDefinitionDocument = existing is null
@@ -129,30 +121,18 @@ public sealed class FormDefinitionService
             .Select((field, index) => MapRequestField(field, index, capabilities))
             .ToList();
         var fieldDtos = definition.Fields.Select(MapFieldDto).ToList();
-        var normalizedDesign = _v2Settings.CanWriteV2
-            ? NormalizeV2WriteDesign(
-                definition.Id,
-                request.Design,
-                fieldDtos,
-                definition.Name,
-                definition.Introduction,
-                definition.SubmitButtonLabel,
-                request.InformationItems,
-                request.AuxiliaryActions)
-            : FormDesignPolicy.Normalize(
-                request.Design,
-                fieldDtos,
-                definition.Name,
-                definition.Introduction,
-                definition.SubmitButtonLabel);
-        definition.Design = _v2Settings.CanWriteV2
-            ? MapDesignV2Write(normalizedDesign)
-            : MapDesign(normalizedDesign);
-        if (_v2Settings.CanWriteV2)
-        {
-            definition.InformationItems = MapInformationItems(request.InformationItems);
-            definition.AuxiliaryActions = MapAuxiliaryActions(request.AuxiliaryActions);
-        }
+        var normalizedDesign = NormalizeV2WriteDesign(
+            definition.Id,
+            request.Design,
+            fieldDtos,
+            definition.Name,
+            definition.Introduction,
+            definition.SubmitButtonLabel,
+            request.InformationItems,
+            request.AuxiliaryActions);
+        definition.Design = MapDesignV2Write(normalizedDesign);
+        definition.InformationItems = MapInformationItems(request.InformationItems);
+        definition.AuxiliaryActions = MapAuxiliaryActions(request.AuxiliaryActions);
         definition.UpdatedAt = now;
 
         try
@@ -416,23 +396,18 @@ public sealed class FormDefinitionService
                 (int)Math.Round(16d * scale),
                 FormDesignV2Policy.MinimumFieldGapPx,
                 FormDesignV2Policy.MaximumFieldGapPx);
+            if (requested.V2 is null)
+                throw new InvalidOperationException($"Form Definition '{definition.Key}' does not contain a schema-v2 design.");
             var fields = definition.Fields.Select(MapFieldDto).ToList();
-            var normalized = requested.V2 is not null
-                ? NormalizeV2WriteDesign(
-                    definition.Id,
-                    requested,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel,
-                    MapInformationItems(definition.InformationItems),
-                    MapAuxiliaryActions(definition.AuxiliaryActions))
-                : FormDesignPolicy.Normalize(
-                    requested,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel);
+            var normalized = NormalizeV2WriteDesign(
+                definition.Id,
+                requested,
+                fields,
+                definition.Name,
+                definition.Introduction,
+                definition.SubmitButtonLabel,
+                MapInformationItems(definition.InformationItems),
+                MapAuxiliaryActions(definition.AuxiliaryActions));
             if (DesignsEqual(previous, normalized)) continue;
 
             var rawId = ObjectId.TryParse(definition.Id, out var objectId)
@@ -441,7 +416,7 @@ public sealed class FormDefinitionService
             var original = await rawDefinitions
                 .Find(Builders<BsonDocument>.Filter.Eq("_id", rawId))
                 .FirstOrDefaultAsync();
-            definition.Design = normalized.V2 is not null ? MapDesignV2Write(normalized) : MapDesign(normalized);
+            definition.Design = MapDesignV2Write(normalized);
             definition.UpdatedAt = DateTime.UtcNow;
             try
             {
@@ -818,7 +793,7 @@ public sealed class FormDefinitionService
         if (document.TryGetValue("en", out var english) && english.IsString && !string.IsNullOrWhiteSpace(english.AsString))
             return english.AsString;
 
-        return document.Values.FirstOrDefault(item => item.IsString && !string.IsNullOrWhiteSpace(item.AsString))?.AsString;
+        return null;
     }
 
     private static string ReadType(BsonDocument document, string fallback)
@@ -871,222 +846,6 @@ public sealed class FormDefinitionService
             }
         }
 
-        await EnsureDesignMigrationAsync();
-        await EnsureThemeInheritanceMigrationAsync();
-        await EnsureFormBlockLayoutMigrationAsync();
-        await EnsureInsightSubscriptionMigrationAsync();
-    }
-
-    private async Task EnsureThemeInheritanceMigrationAsync()
-    {
-        var missingMarker = Builders<FormDefinition>.Filter.Exists("Design.UseThemeDefaults", false);
-        var definitions = await _definitions.Find(missingMarker).ToListAsync();
-        foreach (var definition in definitions.Where(item => item.Design is not null))
-        {
-            var inheritTheme = IsUntouchedLegacyAppearance(definition.Design!);
-            await _definitions.UpdateOneAsync(
-                item => item.Id == definition.Id,
-                Builders<FormDefinition>.Update.Set("Design.UseThemeDefaults", inheritTheme));
-        }
-    }
-
-    private async Task EnsureFormBlockLayoutMigrationAsync()
-    {
-        var definitions = await _definitions
-            .Find(definition => definition.Active)
-            .ToListAsync();
-        foreach (var definition in definitions)
-        {
-            if (!await HasOutdatedFormBlockAsync(definition.Id, definition.Design?.SchemaVersion ?? FormDesignPolicy.CurrentSchemaVersion))
-                continue;
-
-            var source = MapDesign(definition.Design);
-            var fields = definition.Fields.Select(MapFieldDto).ToList();
-            var normalized = source.V2 is not null
-                ? NormalizeV2WriteDesign(
-                    definition.Id,
-                    source,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel,
-                    MapInformationItems(definition.InformationItems),
-                    MapAuxiliaryActions(definition.AuxiliaryActions))
-                : FormDesignPolicy.Normalize(
-                    source,
-                    fields,
-                    definition.Name,
-                    definition.Introduction,
-                    definition.SubmitButtonLabel);
-            await PropagateDesignToFormBlocksAsync(definition.Id, normalized, DateTime.UtcNow);
-        }
-    }
-
-    private async Task<bool> HasOutdatedFormBlockAsync(string formDefinitionId, int targetSchemaVersion)
-    {
-        var filter = Builders<BsonDocument>.Filter.And(
-            FormBlockReferenceFilter(formDefinitionId),
-            Builders<BsonDocument>.Filter.Or(
-                Builders<BsonDocument>.Filter.Exists("DesignSchemaVersion", false),
-                Builders<BsonDocument>.Filter.Lt("DesignSchemaVersion", targetSchemaVersion),
-                Builders<BsonDocument>.Filter.Exists("Fields", true),
-                Builders<BsonDocument>.Filter.Exists("SubmitButtonLabel", true)));
-        foreach (var collectionName in new[] { "blocks_draft", "blocks_published" })
-        {
-            if (await _database.GetCollection<BsonDocument>(collectionName).Find(filter).Limit(1).AnyAsync())
-                return true;
-        }
-        return false;
-    }
-
-    private async Task EnsureInsightSubscriptionMigrationAsync()
-    {
-        var definition = await _definitions
-            .Find(item => item.Key == "insight-subscription")
-            .FirstOrDefaultAsync();
-        if (definition is null) return;
-
-        var sourceDesign = MapDesign(definition.Design);
-        var fields = definition.Fields.Select(MapFieldDto).ToList();
-        var design = sourceDesign.V2 is not null
-            ? NormalizeV2WriteDesign(
-                definition.Id,
-                sourceDesign,
-                fields,
-                definition.Name,
-                definition.Introduction,
-                definition.SubmitButtonLabel,
-                MapInformationItems(definition.InformationItems),
-                MapAuxiliaryActions(definition.AuxiliaryActions))
-            : FormDesignPolicy.Normalize(
-                sourceDesign,
-                fields,
-                definition.Name,
-                definition.Introduction,
-                definition.SubmitButtonLabel);
-
-        foreach (var source in new[]
-                 {
-                     new FormUsageCollections("blocks_draft", "sections_draft"),
-                     new FormUsageCollections("blocks_published", "sections_published")
-                 })
-        {
-            var sections = _database.GetCollection<BsonDocument>(source.Sections);
-            var blocks = _database.GetCollection<BsonDocument>(source.Blocks);
-            var section = await sections
-                .Find(Builders<BsonDocument>.Filter.Eq("StableId", "insight-stay-ahead-subscribe"))
-                .FirstOrDefaultAsync();
-            if (section is null) continue;
-
-            var blockFilter = Builders<BsonDocument>.Filter.And(
-                Builders<BsonDocument>.Filter.Eq("StableId", "insight-subscribe-form-block"),
-                Builders<BsonDocument>.Filter.Eq("SectionStableId", "insight-stay-ahead-subscribe"));
-            var block = await blocks.Find(blockFilter).FirstOrDefaultAsync();
-            if (block is null) continue;
-
-            var style = section.TryGetValue("Style", out var styleValue) && styleValue.IsBsonDocument
-                ? styleValue.AsBsonDocument
-                : new BsonDocument();
-            var defaultSize = FormBlockLayoutPolicy.CalculateDefaultSize(
-                design,
-                FormBlockLayoutPolicy.AvailableContentWidthPx(ReadString(style, "ContentWidth")));
-            var sectionHeight = Math.Clamp(
-                defaultSize.HeightPx + FormBlockLayoutPolicy.SectionBottomPaddingPx,
-                120,
-                FormBlockLayoutPolicy.MaximumSectionHeightPx);
-
-            var sectionNeedsMigration = ReadType(section, string.Empty) != "canvas" ||
-                                        section.Contains("Content") ||
-                                        !string.Equals(ReadString(style, "BlockLayoutMode"), "freeform", StringComparison.Ordinal) ||
-                                        ReadInteger(style, "CustomMinHeightPx", 0) != sectionHeight;
-            if (sectionNeedsMigration)
-            {
-                await sections.UpdateOneAsync(
-                    Builders<BsonDocument>.Filter.Eq("_id", section["_id"]),
-                    Builders<BsonDocument>.Update
-                        .Set("_t", new BsonArray { "Section", "canvas" })
-                        .Set("Style.BlockLayoutMode", "freeform")
-                        .Set("Style.Height", "custom")
-                        .Set("Style.CustomMinHeightPx", sectionHeight)
-                        .Set("Style.Padding", "none")
-                        .Set("UpdatedAt", DateTime.UtcNow)
-                        .Inc("Version", 1)
-                        .Unset("Content"));
-            }
-
-            var layout = block.TryGetValue("Layout", out var layoutValue) && layoutValue.IsBsonDocument
-                ? layoutValue.AsBsonDocument
-                : new BsonDocument();
-            layout["Width"] = "custom";
-            layout["ColumnSpan"] = defaultSize.WidthUnits;
-            layout["X"] = 0;
-            layout["Y"] = 0;
-            layout["W"] = defaultSize.WidthUnits;
-            layout["H"] = Math.Clamp((int)Math.Ceiling(defaultSize.HeightPx / 48d), 1, 40);
-            layout["LeftPercent"] = 0d;
-            layout["TopPx"] = 0d;
-            layout["WidthPercent"] = defaultSize.WidthPercent;
-            layout["HeightPx"] = defaultSize.HeightPx;
-
-            var blockNeedsMigration = !string.Equals(ReadString(block, "FormDefinitionId"), definition.Id, StringComparison.Ordinal) ||
-                                      ReadInteger(block, "DesignSchemaVersion", 0) != design.SchemaVersion ||
-                                      block.Contains("Fields") ||
-                                      block.Contains("SubmitButtonLabel") ||
-                                      Math.Abs(ReadNumber(block, "DefaultWidthPercent", 0d) - defaultSize.WidthPercent) > 0.001d ||
-                                      Math.Abs(ReadNumber(block, "DefaultHeightPx", 0d) - defaultSize.HeightPx) > 0.001d;
-            if (blockNeedsMigration)
-            {
-                await blocks.UpdateOneAsync(
-                    Builders<BsonDocument>.Filter.Eq("_id", block["_id"]),
-                    Builders<BsonDocument>.Update
-                        .Set("FormDefinitionId", definition.Id)
-                        .Set("DesignSchemaVersion", design.SchemaVersion)
-                        .Set("FormScale", 1d)
-                        .Set("DefaultWidthPx", defaultSize.WidthPx)
-                        .Set("DefaultWidthPercent", defaultSize.WidthPercent)
-                        .Set("DefaultHeightPx", defaultSize.HeightPx)
-                        .Set("PositionMode", "freeform")
-                        .Set("BlockZone", "canvas")
-                        .Set("Layout", layout)
-                        .Set("UpdatedAt", DateTime.UtcNow)
-                        .Inc("Version", 1)
-                        .Unset("Fields")
-                        .Unset("SubmitButtonLabel"));
-            }
-        }
-    }
-
-    public async Task<int> EnsureDesignMigrationAsync()
-    {
-        var definitions = await _definitions.Find(_ => true).ToListAsync();
-        var migrated = 0;
-        foreach (var definition in definitions)
-        {
-            if (definition.Design?.SchemaVersion >= FormDesignV2Policy.TargetSchemaVersion && definition.Design.V2 is not null)
-                continue;
-
-            var source = definition.Design?.SchemaVersion > 0
-                ? MapDesign(definition.Design)
-                : FormDesignPolicy.CreateDefault(
-                    definition.Layout == LegacyFormLayout.TwoColumns
-                        ? FormDesignShape.TwoColumns
-                        : FormDesignShape.Stacked);
-            var normalized = FormDesignPolicy.Normalize(
-                source,
-                definition.Fields.Select(MapFieldDto),
-                definition.Name,
-                definition.Introduction,
-                definition.SubmitButtonLabel);
-            var current = definition.Design is null ? null : MapDesign(definition.Design);
-            if (current is not null && DesignsEqual(current, normalized))
-                continue;
-
-            definition.Design = MapDesign(normalized);
-            definition.UpdatedAt = definition.UpdatedAt == default ? DateTime.UtcNow : definition.UpdatedAt;
-            await _definitions.ReplaceOneAsync(item => item.Id == definition.Id, definition);
-            migrated++;
-        }
-        return migrated;
     }
 
     public static string? NormalizeKey(string? key)
@@ -1101,7 +860,7 @@ public sealed class FormDefinitionService
     {
         var capabilities = await _inputTypes.GetCapabilityLookupAsync();
         var resourceUrls = await LoadManagedResourceUrlsAsync(new[] { definition });
-        return MapPublic(definition, capabilities, resourceUrls, _v2Settings.CanReadV2);
+        return MapPublic(definition, capabilities, resourceUrls);
     }
 
     public async Task<List<FormDefinitionResponse>> MapPublicAsync(IEnumerable<FormDefinition> definitions)
@@ -1109,14 +868,13 @@ public sealed class FormDefinitionService
         var source = definitions.ToList();
         var capabilities = await _inputTypes.GetCapabilityLookupAsync();
         var resourceUrls = await LoadManagedResourceUrlsAsync(source);
-        return source.Select(definition => MapPublic(definition, capabilities, resourceUrls, _v2Settings.CanReadV2)).ToList();
+        return source.Select(definition => MapPublic(definition, capabilities, resourceUrls)).ToList();
     }
 
     public static FormDefinitionResponse MapPublic(
         FormDefinition definition,
         IReadOnlyDictionary<string, FormInputTypeCapability>? capabilities = null,
-        IReadOnlyDictionary<string, string>? managedResourceUrls = null,
-        bool readStoredV2 = true)
+        IReadOnlyDictionary<string, string>? managedResourceUrls = null)
     {
         var fields = definition.Fields
             .OrderBy(field => field.Order)
@@ -1129,13 +887,9 @@ public sealed class FormDefinitionService
             Name = new(definition.Name),
             Introduction = new(definition.Introduction),
             SubmitButtonLabel = new(definition.SubmitButtonLabel),
-            InformationItems = readStoredV2
-                ? MapInformationItems(definition.InformationItems, managedResourceUrls)
-                : new List<FormInformationItemDto>(),
-            AuxiliaryActions = readStoredV2
-                ? MapAuxiliaryActions(definition.AuxiliaryActions, managedResourceUrls)
-                : new List<FormAuxiliaryActionDto>(),
-            Design = MapDesign(definition.Design, includeV2Projection: true, definition.Id, fields, readStoredV2),
+            InformationItems = MapInformationItems(definition.InformationItems, managedResourceUrls),
+            AuxiliaryActions = MapAuxiliaryActions(definition.AuxiliaryActions, managedResourceUrls),
+            Design = MapDesign(definition.Design),
             Active = definition.Active,
             Fields = fields,
             CreatedAt = definition.CreatedAt,
@@ -1191,7 +945,7 @@ public sealed class FormDefinitionService
     private static IEnumerable<FormDefinition> DefaultDefinitions()
     {
         var now = DateTime.UtcNow;
-        yield return new FormDefinition
+        var quote = new FormDefinition
         {
             Id = ObjectId.GenerateNewId().ToString(),
             Key = "quote",
@@ -1202,8 +956,7 @@ public sealed class FormDefinitionService
                 ["vi"] = "Điền thông tin bên dưới và đội ngũ tư vấn sẽ liên hệ với bạn sớm."
             },
             SubmitButtonLabel = new() { ["en"] = "Submit Request", ["vi"] = "Gửi yêu cầu" },
-            DisplayMode = LegacyFormDisplayMode.Modal,
-            Design = MapDesign(FormDesignPolicy.Normalize(
+            Design = MapBaseDesign(FormDesignPolicy.Normalize(
                 new FormDesignSettingsDto
                 {
                     UseThemeDefaults = true,
@@ -1234,8 +987,10 @@ public sealed class FormDefinitionService
                 Field("Phone", "tel", "Phone Number", true, 0, 40, 3)
             ]
         };
+        quote.Design = CreateDefaultDesign(quote);
+        yield return quote;
 
-        yield return new FormDefinition
+        var expert = new FormDefinition
         {
             Id = ObjectId.GenerateNewId().ToString(),
             Key = "expert",
@@ -1246,8 +1001,7 @@ public sealed class FormDefinitionService
                 ["vi"] = "Chuyên gia của chúng tôi sẽ hỗ trợ câu hỏi và đề xuất giải pháp phù hợp."
             },
             SubmitButtonLabel = new() { ["en"] = "Submit", ["vi"] = "Gửi" },
-            DisplayMode = LegacyFormDisplayMode.Modal,
-            Design = MapDesign(FormDesignPolicy.Normalize(
+            Design = MapBaseDesign(FormDesignPolicy.Normalize(
                 new FormDesignSettingsDto
                 {
                     UseThemeDefaults = true,
@@ -1283,6 +1037,8 @@ public sealed class FormDefinitionService
                 Field("Message", "textarea", "Your Message", false, 0, 2000, 5)
             ]
         };
+        expert.Design = CreateDefaultDesign(expert);
+        yield return expert;
 
         var insightFields = new List<FormDefinitionField>
         {
@@ -1332,21 +1088,35 @@ public sealed class FormDefinitionService
             insightName,
             insightIntroduction,
             insightSubmit);
-        yield return new FormDefinition
+        var insight = new FormDefinition
         {
             Id = InsightSubscriptionDefinitionId,
             Key = "insight-subscription",
             Name = insightName,
             Introduction = insightIntroduction,
             SubmitButtonLabel = insightSubmit,
-            DisplayMode = LegacyFormDisplayMode.Embedded,
-            Layout = LegacyFormLayout.Stacked,
-            Design = MapDesign(insightDesign),
+            Design = MapBaseDesign(insightDesign),
             Active = true,
             CreatedAt = now,
             UpdatedAt = now,
             Fields = insightFields
         };
+        insight.Design = CreateDefaultDesign(insight);
+        yield return insight;
+    }
+
+    private static FormDesignSettings CreateDefaultDesign(FormDefinition definition)
+    {
+        var fields = definition.Fields.Select(MapFieldDto).ToList();
+        var design = MapDesign(definition.Design);
+        design.V2 = FormDesignV2Policy.CreateDefault(definition.Id, design, fields);
+        return MapDesignV2Write(NormalizeV2WriteDesign(
+            definition.Id,
+            design,
+            fields,
+            definition.Name,
+            definition.Introduction,
+            definition.SubmitButtonLabel));
     }
 
     private static FormDefinitionField Field(
@@ -1383,18 +1153,13 @@ public sealed class FormDefinitionService
         Order = order
     };
 
-    public static FormDesignSettingsDto MapDesign(
-        FormDesignSettings? design,
-        bool includeV2Projection = false,
-        string? definitionId = null,
-        IEnumerable<FormFieldDefinitionDto>? fields = null,
-        bool readStoredV2 = true)
+    public static FormDesignSettingsDto MapDesign(FormDesignSettings? design)
     {
         var mapped = design is null
             ? FormDesignPolicy.CreateDefault()
             : new FormDesignSettingsDto
         {
-            UseThemeDefaults = design.UseThemeDefaults ?? IsUntouchedLegacyAppearance(design),
+            UseThemeDefaults = design.UseThemeDefaults,
             SchemaVersion = design.SchemaVersion,
             Shape = design.Shape,
             WidthPx = design.WidthPx,
@@ -1415,17 +1180,13 @@ public sealed class FormDefinitionService
             ButtonWidth = design.ButtonWidth
         };
 
-        if (design?.V2 is not null && readStoredV2)
+        if (design?.V2 is not null)
             mapped.V2 = MapDesignV2(design.V2);
-        else if (includeV2Projection)
-            mapped.V2 = FormDesignV2Policy.ProjectFromV1(definitionId, mapped, fields);
         return mapped;
     }
 
-    public static FormDesignSettings MapDesign(FormDesignSettingsDto design) => new()
+    private static FormDesignSettings MapBaseDesign(FormDesignSettingsDto design) => new()
     {
-        // Phases 2-15 are deliberately v1-write only. The v2 projection is never
-        // copied into Mongo by an ordinary Form Definition save.
         UseThemeDefaults = design.UseThemeDefaults,
         SchemaVersion = FormDesignPolicy.CurrentSchemaVersion,
         Shape = design.Shape,
@@ -1448,41 +1209,6 @@ public sealed class FormDefinitionService
         V2 = null
     };
 
-    public static bool IsUntouchedLegacyAppearance(FormDesignSettings design)
-    {
-        static bool Same(string? left, string right) =>
-            string.Equals(left?.Trim(), right, StringComparison.OrdinalIgnoreCase);
-
-        var expectedWidths = design.Shape switch
-        {
-            FormDesignShape.TwoColumns => new[] { FormDesignPolicy.TwoColumnDefaultWidthPx, 980 },
-            FormDesignShape.Cta => new[] { FormDesignPolicy.CtaDefaultWidthPx, 980 },
-            _ => new[] { FormDesignPolicy.StackedDefaultWidthPx }
-        };
-        var v2UsesDefaultColors = design.V2 is null ||
-            Same(design.V2.InformationBackgroundColor, "#0f2740") &&
-            Same(design.V2.InformationTextColor, "#ffffff") &&
-            Same(design.V2.FormBackgroundColor, "#ffffff") &&
-            Same(design.V2.FormTextColor, "#0f172a");
-
-        return expectedWidths.Contains(design.WidthPx) &&
-               design.BackgroundMode == FormDesignBackgroundMode.Solid &&
-               Same(design.BackgroundColor, "#ffffff") &&
-               Same(design.TextColor, "#0f172a") &&
-               Same(design.AccentColor, "#1d4ed8") &&
-               Same(design.BorderColor, "#dbe3ef") &&
-               design.BorderWidthPx == 1 &&
-               design.BorderRadiusPx == 16 &&
-               Same(design.Shadow, "small") &&
-               design.PaddingPx == 32 &&
-               design.FieldGapPx == 16 &&
-               design.TextAlign == FormDesignTextAlign.Left &&
-               design.LabelMode == FormLabelMode.Visible &&
-               Same(design.ButtonStyle, "filled") &&
-               design.ButtonWidth == FormDesignButtonWidth.Full &&
-               v2UsesDefaultColors;
-    }
-
     public static FormDesignSettingsDto NormalizeV2WriteDesign(
         string definitionId,
         FormDesignSettingsDto design,
@@ -1493,34 +1219,34 @@ public sealed class FormDefinitionService
         IEnumerable<FormInformationItemDto>? informationItems = null,
         IEnumerable<FormAuxiliaryActionDto>? auxiliaryActions = null)
     {
-        var normalizedLegacy = FormDesignPolicy.Normalize(
+        var normalizedBase = FormDesignPolicy.Normalize(
             design,
             fields,
             name,
             introduction,
             submitLabel);
-        var normalizedV2 = design.V2 is null
-            ? FormDesignV2Policy.ProjectFromV1(definitionId, normalizedLegacy, fields)
-            : FormDesignV2Policy.Normalize(design.V2);
+        if (design.V2 is null)
+            throw new ArgumentException("A schema-v2 Form Design is required.", nameof(design));
+        var normalizedV2 = FormDesignV2Policy.Normalize(design.V2);
 
-        normalizedLegacy.SchemaVersion = FormDesignV2Policy.TargetSchemaVersion;
-        normalizedLegacy.Shape = FormDesignV2Policy.LegacyShape(normalizedV2.OuterLayout);
-        normalizedLegacy.WidthPx = Math.Clamp(
+        normalizedBase.SchemaVersion = FormDesignV2Policy.TargetSchemaVersion;
+        normalizedBase.Shape = FormDesignV2Policy.ShapeForOuterLayout(normalizedV2.OuterLayout);
+        normalizedBase.WidthPx = Math.Clamp(
             design.WidthPx,
             FormDesignV2Policy.MinimumWidth(normalizedV2.OuterLayout),
             FormDesignV2Policy.MaximumWidth(normalizedV2.OuterLayout));
-        normalizedLegacy.FieldGapPx = Math.Clamp(
+        normalizedBase.FieldGapPx = Math.Clamp(
             design.FieldGapPx,
             FormDesignV2Policy.MinimumFieldGapPx,
             FormDesignV2Policy.MaximumFieldGapPx);
-        normalizedLegacy.BackgroundColor = normalizedV2.FormBackgroundColor;
-        normalizedLegacy.TextColor = normalizedV2.FormTextColor;
-        normalizedLegacy.ButtonWidth = normalizedV2.SubmitLayout == FormSubmitLayout.Full
+        normalizedBase.BackgroundColor = normalizedV2.FormBackgroundColor;
+        normalizedBase.TextColor = normalizedV2.FormTextColor;
+        normalizedBase.ButtonWidth = normalizedV2.SubmitLayout == FormSubmitLayout.Full
             ? FormDesignButtonWidth.Full
             : FormDesignButtonWidth.Content;
-        normalizedLegacy.V2 = normalizedV2;
-        normalizedLegacy.CalculatedHeightPx = FormDesignV2Policy.CalculateHeight(
-            normalizedLegacy,
+        normalizedBase.V2 = normalizedV2;
+        normalizedBase.CalculatedHeightPx = FormDesignV2Policy.CalculateHeight(
+            normalizedBase,
             normalizedV2,
             fields,
             name,
@@ -1528,7 +1254,7 @@ public sealed class FormDefinitionService
             submitLabel,
             informationItems,
             auxiliaryActions);
-        return normalizedLegacy;
+        return normalizedBase;
     }
 
     public static FormDesignSettings MapDesignV2Write(FormDesignSettingsDto design)
@@ -1536,7 +1262,7 @@ public sealed class FormDefinitionService
         if (design.V2 is null)
             throw new ArgumentException("A normalized Form Design v2 payload is required.", nameof(design));
 
-        var mapped = MapDesign(design);
+        var mapped = MapBaseDesign(design);
         mapped.SchemaVersion = FormDesignV2Policy.TargetSchemaVersion;
         mapped.V2 = MapDesignV2Model(design.V2);
         return mapped;

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Contracts.Api;
@@ -27,198 +28,327 @@ namespace UserSite.Services
             _logger = logger;
         }
 
-        public async Task<List<PublicGlobalButton>> GetGlobalButtonsAsync()
-        {
-            var r = await _http.GetFromJsonAsync<ApiResponse<List<PublicGlobalButton>>>(
-                "api/public/global-buttons", _json);
-            return r?.Data ?? new();
-        }
-        public async Task<PublicTheme> GetThemeAsync()
-        {
-            var r = await _http.GetFromJsonAsync<ApiResponse<PublicTheme>>(
-                "api/public/theme", _json);
-            return r?.Data ?? new PublicTheme();
-        }
+        public Task<PublicOperationResult<List<PublicGlobalButton>>> GetGlobalButtonsAsync() =>
+            GetResourceAsync<List<PublicGlobalButton>>("api/public/global-buttons", "global buttons");
 
-        public async Task<PublicLanguageSettings> GetLanguageSettingsAsync()
-        {
-            var r = await _http.GetFromJsonAsync<ApiResponse<PublicLanguageSettings>>(
-                "api/public/languages", _json);
-            return r?.Data ?? new PublicLanguageSettings();
-        }
+        public Task<PublicOperationResult<PublicTheme>> GetThemeAsync() =>
+            GetResourceAsync<PublicTheme>("api/public/theme", "theme");
 
-        public async Task<PublicBranding> GetBrandingAsync()
-        {
-            var r = await _http.GetFromJsonAsync<ApiResponse<PublicBranding>>(
-                "api/public/branding", _json);
-            return r?.Data ?? new PublicBranding();
-        }
+        public Task<PublicOperationResult<PublicLanguageSettings>> GetLanguageSettingsAsync() =>
+            GetResourceAsync<PublicLanguageSettings>("api/public/languages", "language settings");
 
-        public async Task<List<PublicNavItem>> GetNavigationAsync()
-        {
-            var r = await _http.GetFromJsonAsync<ApiResponse<List<PublicNavItem>>>(
-                "api/public/navigation", _json);
-            return r?.Data ?? new();
-        }
+        public Task<PublicOperationResult<PublicBranding>> GetBrandingAsync() =>
+            GetResourceAsync<PublicBranding>("api/public/branding", "branding");
 
-        public async Task<PublicFooter> GetFooterAsync()
-        {
-            var r = await _http.GetFromJsonAsync<ApiResponse<PublicFooter>>(
-                "api/public/footer", _json);
-            return r?.Data ?? new PublicFooter();
-        }
-       
+        public Task<PublicOperationResult<List<PublicNavItem>>> GetNavigationAsync() =>
+            GetResourceAsync<List<PublicNavItem>>("api/public/navigation", "navigation");
 
-        public async Task<List<PublicSocialButton>> GetSocialAsync()
-        {
-            var r = await _http.GetFromJsonAsync<ApiResponse<SocialGroupResponse>>(
-                "api/public/social", _json);
-            return r?.Data?.Buttons ?? new();
-        }
+        public Task<PublicOperationResult<PublicFooter>> GetFooterAsync() =>
+            GetResourceAsync<PublicFooter>("api/public/footer", "footer");
 
-        public async Task<PublicPageDto?> GetPageAsync(string slug)
+        public async Task<PublicOperationResult<List<PublicSocialButton>>> GetSocialAsync()
         {
-            try
+            var result = await GetResourceAsync<SocialGroupResponse>("api/public/social", "social buttons");
+            return result.Status switch
             {
-                var r = await _http.GetFromJsonAsync<ApiResponse<JsonElement>>(
-                    $"api/public/pages/{slug}", _json);
-                return r is null ? null : MapPage(r.Data);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load public page for slug {Slug}.", slug);
-                return null;
-            }
+                PublicOperationStatus.Success => PublicOperationResult<List<PublicSocialButton>>.Succeeded(result.Data?.Buttons ?? []),
+                PublicOperationStatus.NotConfigured => new PublicOperationResult<List<PublicSocialButton>>(PublicOperationStatus.NotConfigured, []),
+                _ => PublicOperationResult<List<PublicSocialButton>>.Failed(result.Status, result.Message, result.CorrelationId)
+            };
         }
 
-        public async Task<PublicPageDto?> GetChildPageAsync(string parentSlug, string childSlug)
-        {
-            try
-            {
-                var r = await _http.GetFromJsonAsync<ApiResponse<JsonElement>>(
-                    $"api/public/pages/{parentSlug}/{childSlug}", _json);
-                return r is null ? null : MapPage(r.Data);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to load public child page for slug {ParentSlug}/{ChildSlug}.",
-                    parentSlug,
-                    childSlug);
-                return null;
-            }
-        }
+        public Task<PublicOperationResult<PublicPageDto>> GetPageAsync(string slug) =>
+            GetPageResourceAsync($"api/public/pages/{Uri.EscapeDataString(slug)}", $"page '{slug}'");
 
-        public async Task<PublicPageDto?> GetContentPageAsync(string typeKey, string slug)
-        {
-            try
-            {
-                var r = await _http.GetFromJsonAsync<ApiResponse<JsonElement>>(
-                    $"api/public/content/{typeKey}/{slug}", _json);
-                return r is null ? null : MapPage(r.Data);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to load public content page for {TypeKey}/{Slug}.",
-                    typeKey,
-                    slug);
-                return null;
-            }
-        }
+        public Task<PublicOperationResult<PublicPageDto>> GetChildPageAsync(string parentSlug, string childSlug) =>
+            GetPageResourceAsync(
+                $"api/public/pages/{Uri.EscapeDataString(parentSlug)}/{Uri.EscapeDataString(childSlug)}",
+                $"child page '{parentSlug}/{childSlug}'");
 
-        public async Task<bool> SubmitFormAsync(
+        public Task<PublicOperationResult<PublicPageDto>> GetContentPageAsync(string typeKey, string slug) =>
+            GetPageResourceAsync(
+                $"api/public/content/{Uri.EscapeDataString(typeKey)}/{Uri.EscapeDataString(slug)}",
+                $"content page '{typeKey}/{slug}'");
+
+        public Task<PublicFormSubmitResult> SubmitFormAsync(
             string slug, string sectionId, string blockId,
             Dictionary<string, string> data,
-            string language = "en")
-        {
-            try
-            {
-                var honeypot = data.GetValueOrDefault("__website") ?? string.Empty;
-                data.Remove("__website");
-                var res = await _http.PostAsJsonAsync(
-                    $"api/public/pages/{slug}/sections/{sectionId}/blocks/{blockId}/form/submit",
-                    new { Data = data, Language = language, SourcePage = slug, Honeypot = honeypot });
-                return res.IsSuccessStatusCode;
-            }
-            catch { return false; }
-        }
-        public async Task<bool> SubmitChildFormAsync(
+            string language = "en") =>
+            SubmitFormCoreAsync(
+                $"api/public/pages/{Uri.EscapeDataString(slug)}/sections/{Uri.EscapeDataString(sectionId)}/blocks/{Uri.EscapeDataString(blockId)}/form/submit",
+                data,
+                language,
+                slug,
+                $"embedded form on '{slug}'");
+
+        public Task<PublicFormSubmitResult> SubmitChildFormAsync(
              string parentSlug, string childSlug, string sectionId, string blockId,
             Dictionary<string, string> data,
-            string language = "en")
-        {
-            try
-            {
-                var honeypot = data.GetValueOrDefault("__website") ?? string.Empty;
-                data.Remove("__website");
-                var res = await _http.PostAsJsonAsync(
-                    $"api/public/pages/{parentSlug}/{childSlug}/sections/{sectionId}/blocks/{blockId}/form/submit",
-                    new { Data = data, Language = language, SourcePage = $"{parentSlug}/{childSlug}", Honeypot = honeypot });
-                return res.IsSuccessStatusCode;
-            }
-            catch { return false; }
-        }
+            string language = "en") =>
+            SubmitFormCoreAsync(
+                $"api/public/pages/{Uri.EscapeDataString(parentSlug)}/{Uri.EscapeDataString(childSlug)}/sections/{Uri.EscapeDataString(sectionId)}/blocks/{Uri.EscapeDataString(blockId)}/form/submit",
+                data,
+                language,
+                $"{parentSlug}/{childSlug}",
+                $"embedded form on '{parentSlug}/{childSlug}'");
 
-        public async Task<FormDefinitionResponse?> GetFormDefinitionByIdAsync(string id)
-        {
-            try
-            {
-                var result = await _http.GetFromJsonAsync<ApiResponse<FormDefinitionResponse>>(
-                    $"api/public/forms/by-id/{Uri.EscapeDataString(id)}", _json);
-                return result?.Data;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to load public form definition {FormDefinitionId}.", id);
-                return null;
-            }
-        }
+        public Task<PublicOperationResult<FormDefinitionResponse>> GetFormDefinitionByIdAsync(string id) =>
+            GetResourceAsync<FormDefinitionResponse>(
+                $"api/public/forms/by-id/{Uri.EscapeDataString(id)}",
+                $"form definition '{id}'");
 
-        public async Task<FormDefinitionResponse?> GetFormDefinitionByKeyAsync(string key)
-        {
-            try
-            {
-                var result = await _http.GetFromJsonAsync<ApiResponse<FormDefinitionResponse>>(
-                    $"api/public/forms/{Uri.EscapeDataString(key)}", _json);
-                return result?.Data;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to load public form definition {FormKey}.", key);
-                return null;
-            }
-        }
+        public Task<PublicOperationResult<FormDefinitionResponse>> GetFormDefinitionByKeyAsync(string key) =>
+            GetResourceAsync<FormDefinitionResponse>(
+                $"api/public/forms/{Uri.EscapeDataString(key)}",
+                $"form definition '{key}'");
 
-        public async Task<bool> SubmitDefinitionFormAsync(
+        public Task<PublicFormSubmitResult> SubmitDefinitionFormAsync(
+            string formKey,
+            Dictionary<string, string> data,
+            string language,
+            string sourcePage) =>
+            SubmitDefinitionFormCoreAsync(formKey, data, language, sourcePage);
+
+        private async Task<PublicFormSubmitResult> SubmitDefinitionFormCoreAsync(
             string formKey,
             Dictionary<string, string> data,
             string language,
             string sourcePage)
         {
+            var payload = CopySubmissionData(data, out var honeypot);
+            return await SendSubmissionAsync(
+                $"api/public/forms/{Uri.EscapeDataString(formKey)}/submit",
+                new PublicFormSubmitRequest
+                {
+                    Data = payload,
+                    Language = language,
+                    SourcePage = sourcePage,
+                    Honeypot = honeypot
+                },
+                $"form definition '{formKey}'");
+        }
+
+        private Task<PublicFormSubmitResult> SubmitFormCoreAsync(
+            string path,
+            Dictionary<string, string> data,
+            string language,
+            string sourcePage,
+            string operation)
+        {
+            var payload = CopySubmissionData(data, out var honeypot);
+            return SendSubmissionAsync(
+                path,
+                new { Data = payload, Language = language, SourcePage = sourcePage, Honeypot = honeypot },
+                operation);
+        }
+
+        private async Task<PublicOperationResult<PublicPageDto>> GetPageResourceAsync(
+            string path,
+            string operation)
+        {
+            var response = await GetResourceAsync<JsonElement>(path, operation);
+            if (!response.IsSuccess)
+            {
+                return PublicOperationResult<PublicPageDto>.Failed(
+                    response.Status,
+                    response.Message,
+                    response.CorrelationId);
+            }
+
             try
             {
-                var payload = new Dictionary<string, string>(data, StringComparer.OrdinalIgnoreCase);
-                var honeypot = payload.GetValueOrDefault("__website") ?? string.Empty;
-                payload.Remove("__website");
-                var response = await _http.PostAsJsonAsync(
-                    $"api/public/forms/{Uri.EscapeDataString(formKey)}/submit",
-                    new PublicFormSubmitRequest
-                    {
-                        Data = payload,
-                        Language = language,
-                        SourcePage = sourcePage,
-                        Honeypot = honeypot
-                    });
-                return response.IsSuccessStatusCode;
+                var page = MapPage(response.Data);
+                if (page is not null)
+                    return PublicOperationResult<PublicPageDto>.Succeeded(page);
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Failed to submit public form definition {FormKey}.", formKey);
-                return false;
+                _logger.LogError(ex, "The public API returned an invalid payload for {Operation}.", operation);
             }
+
+            return PublicOperationResult<PublicPageDto>.Failed(
+                PublicOperationStatus.InvalidResponse,
+                "The page data is temporarily unavailable.",
+                response.CorrelationId);
+        }
+
+        private async Task<PublicOperationResult<T>> GetResourceAsync<T>(
+            string path,
+            string operation)
+        {
+            try
+            {
+                using var response = await _http.GetAsync(path);
+                var correlationId = ReadCorrelationId(response);
+                var payload = await ReadEnvelopeAsync<T>(response);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var status = MapStatus(response.StatusCode);
+                    var message = SafeMessage(payload?.Message, status, operation);
+                    _logger.LogWarning(
+                        "Public API request for {Operation} failed with {StatusCode}. CorrelationId: {CorrelationId}",
+                        operation,
+                        (int)response.StatusCode,
+                        correlationId);
+                    return PublicOperationResult<T>.Failed(status, message, correlationId);
+                }
+
+                if (payload?.Success != true)
+                {
+                    _logger.LogError(
+                        "Public API request for {Operation} returned an unsuccessful or invalid success envelope. CorrelationId: {CorrelationId}",
+                        operation,
+                        correlationId);
+                    return PublicOperationResult<T>.Failed(
+                        PublicOperationStatus.InvalidResponse,
+                        $"The {operation} response is invalid.",
+                        correlationId);
+                }
+
+                if (payload.Data is null)
+                {
+                    return new PublicOperationResult<T>(
+                        PublicOperationStatus.NotConfigured,
+                        default,
+                        $"The {operation} has not been configured.",
+                        correlationId);
+                }
+
+                return new PublicOperationResult<T>(
+                    PublicOperationStatus.Success,
+                    payload.Data,
+                    payload.Message ?? string.Empty,
+                    correlationId);
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Public API request for {Operation} timed out.", operation);
+                return PublicOperationResult<T>.Failed(
+                    PublicOperationStatus.Timeout,
+                    $"The {operation} request timed out. Please try again.");
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "Public API request for {Operation} is unavailable.", operation);
+                return PublicOperationResult<T>.Failed(
+                    PublicOperationStatus.Unavailable,
+                    $"The {operation} service is temporarily unavailable.");
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Public API request for {Operation} returned invalid JSON.", operation);
+                return PublicOperationResult<T>.Failed(
+                    PublicOperationStatus.InvalidResponse,
+                    $"The {operation} response is invalid.");
+            }
+        }
+
+        private async Task<PublicFormSubmitResult> SendSubmissionAsync(
+            string path,
+            object request,
+            string operation)
+        {
+            try
+            {
+                using var response = await _http.PostAsJsonAsync(path, request, _json);
+                var correlationId = ReadCorrelationId(response);
+                var payload = await ReadEnvelopeAsync<JsonElement>(response);
+                var status = MapStatus(response.StatusCode);
+
+                if (response.IsSuccessStatusCode && payload?.Success != false)
+                    return new PublicFormSubmitResult(PublicOperationStatus.Success, payload?.Message ?? string.Empty, correlationId);
+
+                var message = SafeMessage(payload?.Message, status, operation);
+                _logger.LogWarning(
+                    "Public submission for {Operation} failed with {StatusCode}. CorrelationId: {CorrelationId}",
+                    operation,
+                    (int)response.StatusCode,
+                    correlationId);
+                return PublicFormSubmitResult.Rejected(status, message, correlationId);
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Public submission for {Operation} timed out.", operation);
+                return PublicFormSubmitResult.Rejected(
+                    PublicOperationStatus.Timeout,
+                    "The submission timed out. Your entries are still available; please try again.");
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "Public submission service for {Operation} is unavailable.", operation);
+                return PublicFormSubmitResult.Rejected(
+                    PublicOperationStatus.Unavailable,
+                    "The form service is temporarily unavailable. Your entries are still available; please try again.");
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Public submission for {Operation} returned invalid JSON.", operation);
+                return PublicFormSubmitResult.Rejected(
+                    PublicOperationStatus.InvalidResponse,
+                    "The form service returned an invalid response. Your entries were not cleared.");
+            }
+        }
+
+        private static Dictionary<string, string> CopySubmissionData(
+            Dictionary<string, string> source,
+            out string honeypot)
+        {
+            var payload = new Dictionary<string, string>(source, StringComparer.OrdinalIgnoreCase);
+            honeypot = payload.GetValueOrDefault("__website") ?? string.Empty;
+            payload.Remove("__website");
+            return payload;
+        }
+
+        private static async Task<ApiResponse<T>?> ReadEnvelopeAsync<T>(HttpResponseMessage response)
+        {
+            if (response.Content.Headers.ContentLength == 0)
+                return null;
+
+            return await response.Content.ReadFromJsonAsync<ApiResponse<T>>(_json);
+        }
+
+        private static PublicOperationStatus MapStatus(HttpStatusCode statusCode) => statusCode switch
+        {
+            HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity => PublicOperationStatus.ValidationFailed,
+            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => PublicOperationStatus.Unauthorized,
+            HttpStatusCode.NotFound => PublicOperationStatus.NotFound,
+            HttpStatusCode.TooManyRequests => PublicOperationStatus.RateLimited,
+            HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout => PublicOperationStatus.Timeout,
+            _ when (int)statusCode >= 500 => PublicOperationStatus.Unavailable,
+            _ => PublicOperationStatus.InvalidResponse
+        };
+
+        private static string SafeMessage(
+            string? apiMessage,
+            PublicOperationStatus status,
+            string operation)
+        {
+            if (!string.IsNullOrWhiteSpace(apiMessage) &&
+                status is PublicOperationStatus.ValidationFailed or PublicOperationStatus.NotFound or PublicOperationStatus.RateLimited)
+            {
+                return apiMessage;
+            }
+
+            return status switch
+            {
+                PublicOperationStatus.NotFound => $"The {operation} was not found.",
+                PublicOperationStatus.ValidationFailed => "Please review the submitted values and try again.",
+                PublicOperationStatus.Unauthorized => "This request is not permitted.",
+                PublicOperationStatus.RateLimited => "Too many requests were received. Please wait and try again.",
+                PublicOperationStatus.Timeout => "The request timed out. Please try again.",
+                PublicOperationStatus.Unavailable => "The service is temporarily unavailable. Please try again.",
+                _ => "The service returned an invalid response."
+            };
+        }
+
+        private static string? ReadCorrelationId(HttpResponseMessage response)
+        {
+            if (response.Headers.TryGetValues("X-Correlation-ID", out var values))
+                return values.FirstOrDefault();
+            if (response.Headers.TryGetValues("traceparent", out values))
+                return values.FirstOrDefault();
+            return null;
         }
 
         // -- Private response wrappers -------------------------

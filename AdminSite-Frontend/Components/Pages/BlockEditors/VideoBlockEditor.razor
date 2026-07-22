@@ -107,9 +107,9 @@ else
     {
         if (_loadedBlockId == Block.Id) return;
         _loadedBlockId = Block.Id;
-        _asset = CopyAsset(Block.Asset, Block.EmbedUrl);
-        _sourceType = ResolveSourceType(Block.SourceType, Block.Asset, Block.EmbedUrl);
-        _youtubeUrl = _sourceType == "youtube" ? Block.EmbedUrl : null;
+        _asset = CopyAsset(Block.Asset);
+        _sourceType = ResolveSourceType(Block.SourceType, Block.Asset, Block.Asset.Url);
+        _youtubeUrl = _sourceType == "youtube" ? Block.Asset.Url : null;
         _title = new(Block.Title ?? new());
         _showControls = Block.ShowControls;
         _autoplay = Block.Autoplay;
@@ -175,7 +175,6 @@ else
             var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new VideoBlockUpdateDto
             {
                 Asset = asset,
-                EmbedUrl = asset.Url ?? string.Empty,
                 SourceType = _sourceType,
                 Title = _title,
                 ShowControls = _showControls,
@@ -191,9 +190,9 @@ else
         finally { _saving = false; }
     }
 
-    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? value, string? legacyUrl) => new()
+    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? value) => new()
     {
-        SchemaVersion = 1, Url = value?.Url ?? legacyUrl, ResourceId = value?.ResourceId,
+        SchemaVersion = 1, Url = value?.Url, ResourceId = value?.ResourceId,
         ResourceSource = value?.ResourceSource ?? "DirectUpload", StorageKey = value?.StorageKey,
         FileName = value?.FileName, ContentType = value?.ContentType, SizeBytes = value?.SizeBytes ?? 0
     };

@@ -34,7 +34,7 @@ public static class Program
         TestPresetSectionProfiles();
         TestPresetBlockProfiles();
         TestPublishDiffService();
-        TestBlockContractCompatibility();
+        TestCanonicalBlockPersistence();
         TestBlockContractDtoRoundTrip();
         TestBlockContractNormalization();
         TestBlockContractPropertyParity();
@@ -119,7 +119,6 @@ public static class Program
                 {
                     Expect(cloneColumns.Columns[i].Id == sourceColumns.Columns[i].Id, "ColumnsSection should preserve ColumnSlot.Id.");
                     Expect(cloneColumns.Columns[i].Order == sourceColumns.Columns[i].Order, "ColumnsSection should preserve ColumnSlot.Order.");
-                    Expect(cloneColumns.Columns[i].Blocks.Count == 0, "ColumnsSection clone should keep embedded ColumnSlot.Blocks empty.");
                 }
             }
         }
@@ -367,7 +366,7 @@ public static class Program
         }
     }
 
-    private static void TestBlockContractCompatibility()
+    private static void TestCanonicalBlockPersistence()
     {
         var source = WithBlockBase(new ContainerBlock
         {
@@ -417,27 +416,6 @@ public static class Program
         Expect(roundTripContainer.ContainerLayout.Diagram.Connectors.Count == 1, "Block contract BSON round-trip should preserve diagram connectors.");
         Expect(roundTripContainer.ContainerLayout.Diagram.Decorations[0].Kind == "arc", "Block contract BSON round-trip should preserve diagram decorations.");
 
-        var legacyDocument = source.ToBsonDocument();
-        legacyDocument.Remove(nameof(Block.Appearance));
-        legacyDocument.Remove(nameof(Block.Responsive));
-        legacyDocument.Remove(nameof(Block.Animation));
-        legacyDocument.Remove(nameof(ContainerBlock.ContainerLayout));
-        legacyDocument.Remove(nameof(ContainerBlock.PresetKey));
-        legacyDocument[nameof(ContainerBlock.LayoutMode)] = "semicircle";
-        legacyDocument[nameof(ContainerBlock.Columns)] = 4;
-        legacyDocument[nameof(ContainerBlock.Gap)] = "small";
-        legacyDocument[nameof(ContainerBlock.SemicircleRadius)] = 210;
-        legacyDocument[nameof(ContainerBlock.SemicircleStartAngle)] = 120;
-        legacyDocument[nameof(ContainerBlock.SemicircleEndAngle)] = 300;
-
-        var legacy = BsonSerializer.Deserialize<Block>(legacyDocument) as ContainerBlock;
-        Expect(legacy is not null, "Legacy Block BSON should still deserialize as ContainerBlock.");
-        Expect(legacy?.ContainerLayout.Mode == "semicircle", "Legacy Container LayoutMode should populate the unified contract.");
-        Expect(legacy?.ContainerLayout.Columns == 4, "Legacy Container Columns should populate the unified contract.");
-        Expect(legacy?.ContainerLayout.SemicircleRadius == 210, "Legacy Container geometry should populate the unified contract.");
-        Expect(legacy?.Appearance is not null, "Legacy Block should receive default appearance settings.");
-        Expect(legacy?.Responsive is not null, "Legacy Block should receive default responsive settings.");
-        Expect(legacy?.Animation is not null, "Legacy Block should receive default animation settings.");
     }
 
     private static void TestBlockContractDtoRoundTrip()
@@ -544,10 +522,12 @@ public static class Program
 
     private static void TestBlockContractNormalization()
     {
-        var legacy = new TextBlock
+        var block = new TextBlock
         {
-            Layout = new BlockLayout
+            Appearance = new BlockAppearance
             {
+                SchemaVersion = 2,
+                BackgroundMode = "color",
                 BackgroundColor = "#112233",
                 BorderRadius = "large",
                 Padding = "medium",
@@ -555,20 +535,12 @@ public static class Program
             }
         };
 
-        var legacyAppearance = BlockContractService.ToAdminAppearance(legacy);
-        Expect(legacyAppearance.BorderRadius == "large", "Legacy layout appearance should be exposed through the unified contract.");
+        var initialAppearance = BlockContractService.ToAdminAppearance(block);
+        Expect(initialAppearance.BorderRadius == "large", "Canonical appearance should preserve its governed radius.");
+        Expect(initialAppearance.BackgroundMode == "color", "Canonical appearance should preserve its background mode.");
 
-        legacy.Appearance = new BlockAppearance
-        {
-            SchemaVersion = 1,
-            BackgroundColor = "#334455"
-        };
-        var versionOneAppearance = BlockContractService.ToAdminAppearance(legacy);
-        Expect(versionOneAppearance.BackgroundMode == "color",
-            "Version-one appearance documents should infer color mode from their stored background color.");
-
-        legacy.Appearance = BlockContractService.MergeAppearance(
-            legacy.Appearance,
+        block.Appearance = BlockContractService.MergeAppearance(
+            block.Appearance,
             new BlockAppearanceDto
             {
                 BorderRadius = "none",
@@ -577,9 +549,9 @@ public static class Program
                 BorderWidth = 100
             });
 
-        var configuredAppearance = BlockContractService.ToAdminAppearance(legacy);
-        Expect(configuredAppearance.BorderRadius == "none", "Explicit unified appearance should override legacy layout values.");
-        Expect(configuredAppearance.Padding == "none", "Explicit unified spacing should override legacy layout values.");
+        var configuredAppearance = BlockContractService.ToAdminAppearance(block);
+        Expect(configuredAppearance.BorderRadius == "none", "Explicit appearance should update its radius.");
+        Expect(configuredAppearance.Padding == "none", "Explicit appearance should update its spacing.");
         Expect(configuredAppearance.Opacity == 1, "Appearance opacity should be clamped.");
         Expect(configuredAppearance.BorderWidth == 20, "Appearance border width should be clamped.");
 
@@ -608,7 +580,7 @@ public static class Program
 
         var invalidVisual = BlockContractService.Validate(new ImageBlockUpdateDto
         {
-            ImageUrl = "/image.jpg",
+            Asset = new BlockAssetReferenceDto { SchemaVersion = 1, Url = "/image.jpg" },
             Appearance = new BlockAppearanceDto
             {
                 BackgroundMode = "color",
@@ -657,15 +629,7 @@ public static class Program
                         }
                     ]
                 }
-            },
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null);
+            });
 
         Expect(container.SchemaVersion == 2, "Container contract should be versioned when normalized.");
         Expect(container.Purpose == "collection" && container.AllowedChildType is null,
@@ -796,12 +760,6 @@ public static class Program
         Expect(restored.OpenInLightbox && restored.FocalPointX == 32 && restored.FocalPointY == 68,
             "BSON round-trip should preserve Image Block behavior.");
 
-        document.Remove("Asset");
-        document["ImageUrl"] = "/legacy/image.jpg";
-        var restoredLegacy = BsonSerializer.Deserialize<ImageBlock>(document);
-        Expect(restoredLegacy.Asset.Url == "/legacy/image.jpg",
-            "Legacy URL-only Block documents should hydrate the unified asset contract.");
-
         BlockUpdateDto update = new VideoBlockUpdateDto
         {
             Asset = new BlockAssetReferenceDto
@@ -840,11 +798,12 @@ public static class Program
         presetBlock.ParentBlockId = null;
         var lockedBlock = WithBlockBase(new IconBlock { Icon = "lock", Label = Lang("Locked icon") });
         lockedBlock.ParentBlockId = null;
-        var legacyPreset = new SectionPreset
+        var preset = new SectionPreset
         {
             Id = NewId(),
-            Name = Lang("Legacy preset"),
-            SchemaVersion = 1,
+            Name = Lang("Canonical preset"),
+            SchemaVersion = FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion,
+            Section = PresetSection(),
             Blocks = [presetBlock, lockedBlock],
             LockPolicy = new CanvasPresetLockPolicy
             {
@@ -862,13 +821,11 @@ public static class Program
                 }
             ]
         };
-        var validation = contract.PrepareAndValidate(legacyPreset);
-        Expect(validation is null, "Supported legacy preset schemas should migrate and validate.");
-        Expect(legacyPreset.SchemaVersion == FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion,
-            "Preset migration should advance to the current schema.");
-        Expect(legacyPreset.EditableSlots[0].Name == "heading-slot",
+        var validation = contract.PrepareAndValidate(preset);
+        Expect(validation is null, "Canonical preset schemas should validate.");
+        Expect(preset.EditableSlots[0].Name == "heading-slot",
             "Preset editable slot names should be normalized.");
-        var serializedPreset = legacyPreset.ToBson();
+        var serializedPreset = preset.ToBson();
         var restoredPreset = BsonSerializer.Deserialize<SectionPreset>(serializedPreset);
         Expect(restoredPreset.Section is CanvasSection,
             "Section preset BSON round-trip should preserve the polymorphic Section snapshot.");
@@ -877,6 +834,7 @@ public static class Program
         {
             Name = Lang("Future"),
             SchemaVersion = FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion + 1,
+            Section = PresetSection(),
             Blocks = [presetBlock]
         };
         Expect(!contract.Compatibility(futurePreset).IsCompatible,
@@ -886,6 +844,7 @@ public static class Program
         {
             Name = Lang("Unsupported slot"),
             SchemaVersion = FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion,
+            Section = PresetSection(),
             Blocks = [presetBlock],
             EditableSlots =
             [
@@ -904,6 +863,7 @@ public static class Program
         {
             Name = Lang("Duplicate Block slot"),
             SchemaVersion = FullProject.Services.SectionServices.SectionPresetContractService.CurrentSchemaVersion,
+            Section = PresetSection(),
             Blocks = [presetBlock],
             EditableSlots =
             [
@@ -915,14 +875,14 @@ public static class Program
             "Preset validation should prevent assigning one Block to multiple editable slots.");
 
         var firstApply = CloneService.CloneBlocksForPresetApply(
-            legacyPreset.Blocks, "page-one", "section-one", ClonePublishedAt);
+            preset.Blocks, "page-one", "section-one", ClonePublishedAt);
         var secondApply = CloneService.CloneBlocksForPresetApply(
-            legacyPreset.Blocks, "page-two", "section-two", ClonePublishedAt);
+            preset.Blocks, "page-two", "section-two", ClonePublishedAt);
         Expect(firstApply[0].Id != secondApply[0].Id && firstApply[0].StableId != secondApply[0].StableId,
             "Repeated preset application should create independent IDs and stable identities.");
         Expect(firstApply[0].Authoring.PresetSlotName == presetBlock.Authoring.PresetSlotName,
             "Preset cloning should preserve authoring metadata until apply policy is assigned.");
-        contract.ApplyPolicy(legacyPreset, firstApply);
+        contract.ApplyPolicy(preset, firstApply);
         Expect(firstApply.All(block => block.Authoring.GeometryLocked),
             "Preset geometry policy should lock every applied Block.");
         Expect(firstApply[0].Authoring.PresetSlotName == "heading-slot" && !firstApply[0].Authoring.ContentLocked,
@@ -950,6 +910,15 @@ public static class Program
         Expect(disabled.Contains("--theme-motion-play-state: paused;", StringComparison.Ordinal),
             "A Theme with animations disabled should pause continuous Block motion.");
     }
+
+    private static CanvasSection PresetSection() => new()
+    {
+        Id = NewId(),
+        StableId = Guid.NewGuid().ToString(),
+        PageStableId = string.Empty,
+        AdminLabel = Lang("Preset section"),
+        Style = new SectionStyle()
+    };
 
     private static ContainerDiagramSettings DiagramFixture() => new()
     {
@@ -1069,8 +1038,7 @@ public static class Program
                 new ColumnSlot
                 {
                     Id = "slot-a",
-                    Order = 1,
-                    Blocks = [new TextBlock { Title = Lang("Embedded"), Content = Lang("Should not clone here") }]
+                    Order = 1
                 }
             ]
         });
@@ -1649,9 +1617,6 @@ public static class Program
             ownerType is not null &&
             (ownerType == typeof(ContainerConnectorSettings) || ownerType == typeof(ContainerDecorationSettings)) &&
             propertyName is nameof(ContainerConnectorSettings.FromAnchor) or nameof(ContainerConnectorSettings.ToAnchor))
-            return true;
-
-        if (ownerType == typeof(ColumnSlot) && propertyName == nameof(ColumnSlot.Blocks))
             return true;
 
         return false;

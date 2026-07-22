@@ -99,7 +99,7 @@
     [Parameter] public string? ParentBlockId { get; set; }
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
-    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private IEnumerable<PublicBlockDto> ZoneBlocks =>
         (Blocks ?? new())
@@ -375,7 +375,7 @@
         var parts = new List<string>();
         var backgroundColor = NormalizeBackgroundMode(appearance.BackgroundMode) == "color" && !string.IsNullOrWhiteSpace(appearance.BackgroundColor)
             ? appearance.BackgroundColor
-            : appearance.SchemaVersion == 0 ? layout.BackgroundColor : null;
+            : null;
         if (!string.IsNullOrWhiteSpace(backgroundColor))
             parts.Add($"background-color: {backgroundColor}");
 

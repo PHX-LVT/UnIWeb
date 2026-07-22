@@ -101,7 +101,7 @@
     {
         if (_loadedBlockId == Block.Id) return;
         _loadedBlockId = Block.Id;
-        _asset = CopyAsset(Block.Asset, Block.ImageUrl);
+        _asset = CopyAsset(Block.Asset);
         _altText = new(Block.AltText ?? new());
         _caption = new(Block.Caption ?? new());
         _openInLightbox = Block.OpenInLightbox;
@@ -149,12 +149,11 @@
         _saving = true;
         try
         {
-            var appearance = BlockUpdateDtoMapper.ToAppearanceDto(Block.Appearance, Block.Layout);
+            var appearance = BlockUpdateDtoMapper.ToAppearanceDto(Block.Appearance);
             appearance.Decorative = _decorative;
             var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new ImageBlockUpdateDto
             {
                 Asset = AssetDto(_asset),
-                ImageUrl = _asset.Url,
                 AltText = _decorative ? new() : _altText,
                 Caption = _caption,
                 OpenInLightbox = _openInLightbox,
@@ -170,10 +169,10 @@
         finally { _saving = false; }
     }
 
-    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? value, string? legacyUrl) => new()
+    private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? value) => new()
     {
         SchemaVersion = 1,
-        Url = value?.Url ?? legacyUrl,
+        Url = value?.Url,
         ResourceId = value?.ResourceId,
         ResourceSource = value?.ResourceSource ?? "DirectUpload",
         StorageKey = value?.StorageKey,

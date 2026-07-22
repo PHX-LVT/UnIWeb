@@ -61,13 +61,7 @@ namespace FullProject.Services.AssetService
 
         private static async Task<bool> BlockReferencesAsync(IMongoCollection<Block> blocks, string url)
         {
-            var filter = Builders<Block>.Filter.Or(
-                Builders<Block>.Filter.Eq("Asset.Url", url),
-                Builders<Block>.Filter.Eq("ImageUrl", url),
-                Builders<Block>.Filter.Eq("FileUrl", url),
-                Builders<Block>.Filter.Eq("EmbedUrl", url));
-
-            return await blocks.Find(filter).AnyAsync();
+            return await blocks.Find(Builders<Block>.Filter.Eq("Asset.Url", url)).AnyAsync();
         }
 
         private async Task<bool> SectionPresetReferencesAsync(string url)
@@ -79,12 +73,7 @@ namespace FullProject.Services.AssetService
                 Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Style.BackgroundImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Style.BackgroundVideoUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.ImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.FileUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.EmbedUrl", url));
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url));
 
             return await _context.SectionPresets.Find(filter).AnyAsync();
         }

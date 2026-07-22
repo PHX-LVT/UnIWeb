@@ -1,4 +1,9 @@
 window.formDesignEditor = window.formDesignEditor || {};
+window.formDesignEditor.destroySortable = sortable => {
+    if (!sortable || !sortable.el || typeof sortable.destroy !== "function") return false;
+    sortable.destroy();
+    return true;
+};
 const isFormDesignElement = value => typeof Element !== "undefined" && value instanceof Element;
 
 window.formDesignEditor.beginWidthDrag = (dotNetRef, startX, startWidth, minimum, maximum, direction, stage) => {
@@ -56,7 +61,7 @@ window.formDesignEditor.centerPreview = stage => {
 
 window.formDesignEditor.destroyDefinitionSortable = container => {
     if (!isFormDesignElement(container) || !container.__formDefinitionSortable) return;
-    container.__formDefinitionSortable.destroy();
+    window.formDesignEditor.destroySortable(container.__formDefinitionSortable);
     delete container.__formDefinitionSortable;
 };
 
@@ -94,7 +99,7 @@ window.formDesignEditor.initDefinitionSortable = (container, dotNetRef, enabled)
 
 window.formDesignEditor.destroyCardSortable = container => {
     if (!isFormDesignElement(container)) return;
-    container.__formDesignCardSortable?.destroy();
+    window.formDesignEditor.destroySortable(container.__formDesignCardSortable);
     delete container.__formDesignCardSortable;
     container.classList.remove("is-sorting-cards");
 };
@@ -103,8 +108,8 @@ window.formDesignEditor.destroyDesignSortables = (root, informationRoot, auxilia
     window.formDesignEditor.destroyCardSortable(informationRoot);
     window.formDesignEditor.destroyCardSortable(auxiliaryRoot);
     if (!isFormDesignElement(root)) return;
-    root.__formDesignRowSortable?.destroy();
-    (root.__formDesignFieldSortables || []).forEach(sortable => sortable?.destroy());
+    window.formDesignEditor.destroySortable(root.__formDesignRowSortable);
+    (root.__formDesignFieldSortables || []).forEach(window.formDesignEditor.destroySortable);
     root.__formDesignDragController?.abort();
     delete root.__formDesignRowSortable;
     delete root.__formDesignFieldSortables;

@@ -247,29 +247,6 @@ namespace FullProject.Services
                     .Ascending(device => device.ExpiresAt),
                 IndexOptions("ix_admin_remembered_devices_revoked_expiry"));
 
-            var adminLoginActivity = _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
-            await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
-                Builders<AdminLoginActivityRecord>.IndexKeys.Descending(l => l.OccurredAt)));
-            await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
-                Builders<AdminLoginActivityRecord>.IndexKeys
-                    .Ascending(l => l.AdminId)
-                    .Descending(l => l.OccurredAt)));
-            await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
-                Builders<AdminLoginActivityRecord>.IndexKeys
-                    .Ascending(l => l.Success)
-                    .Descending(l => l.OccurredAt)));
-
-            var adminAuditLogs = _database.GetCollection<AdminAuditLog>("admin_audit_logs");
-            await adminAuditLogs.Indexes.CreateOneAsync(new CreateIndexModel<AdminAuditLog>(
-                Builders<AdminAuditLog>.IndexKeys.Descending(l => l.CreatedAt)));
-            await adminAuditLogs.Indexes.CreateOneAsync(new CreateIndexModel<AdminAuditLog>(
-                Builders<AdminAuditLog>.IndexKeys
-                    .Ascending(l => l.TargetId)
-                    .Descending(l => l.CreatedAt)));
-            await adminAuditLogs.Indexes.CreateOneAsync(new CreateIndexModel<AdminAuditLog>(
-                Builders<AdminAuditLog>.IndexKeys
-                    .Ascending(l => l.ActorId)
-                    .Descending(l => l.CreatedAt)));
         }
 
 
@@ -310,9 +287,6 @@ namespace FullProject.Services
                     .Ascending(item => item.Outcome)
                     .Descending(item => item.OccurredAtUtc),
                 IndexOptions("ix_admin_audit_domain_action_outcome_time"));
-            await EnsureIndexAsync(audit,
-                Builders<AdminAuditEvent>.IndexKeys.Ascending(item => item.LegacySourceId),
-                new CreateIndexOptions { Name = "ux_admin_audit_legacy", Unique = true, Sparse = true });
 
             var login = _database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_events");
             await EnsureIndexAsync(login,
@@ -327,9 +301,6 @@ namespace FullProject.Services
                     .Ascending(item => item.Outcome)
                     .Descending(item => item.OccurredAtUtc),
                 IndexOptions("ix_admin_login_event_outcome_time"));
-            await EnsureIndexAsync(login,
-                Builders<AdminLoginActivityEvent>.IndexKeys.Ascending(item => item.LegacySourceId),
-                new CreateIndexOptions { Name = "ux_admin_login_legacy", Unique = true, Sparse = true });
 
             var auditArchive = _database.GetCollection<AdminAuditEvent>("admin_audit_event_archives");
             await EnsureIndexAsync(auditArchive,

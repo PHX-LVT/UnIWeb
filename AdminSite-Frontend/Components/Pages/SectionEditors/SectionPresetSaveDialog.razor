@@ -173,9 +173,8 @@
         {
             if (value is null) continue;
             if (value.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized)) return localized;
-            if (value.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english)) return english;
-            var first = value.Values.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item));
-            if (!string.IsNullOrWhiteSpace(first)) return first;
+            if (value.TryGetValue(AdminUiLocalizer.FallbackLanguage, out var configuredFallback) &&
+                !string.IsNullOrWhiteSpace(configuredFallback)) return configuredFallback;
         }
         return null;
     }

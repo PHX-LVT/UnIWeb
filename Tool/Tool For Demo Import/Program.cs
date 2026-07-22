@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Contracts.Auth;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
@@ -49,8 +50,18 @@ internal static class Program
 
             var database = client.GetDatabase(AllowedDatabaseName);
 
+            ObjectId? demoAdminId = null;
+            if (config.Import.CreateDemoAdmin)
+            {
+                demoAdminId = await CreateDemoAdminAsync(database, config.Import);
+                Console.WriteLine($"Demo admin ready: {config.Import.DemoAdminEmail} / {config.Import.DemoAdminPassword}");
+            }
+
             foreach (var import in imports)
             {
+                if (demoAdminId.HasValue)
+                    NormalizeDemoAdminReferences(import.Documents, demoAdminId.Value);
+
                 var collection = database.GetCollection<BsonDocument>(import.CollectionName);
                 if (!config.Import.DropExistingTargetDatabase)
                     await collection.DeleteManyAsync(FilterDefinition<BsonDocument>.Empty);
@@ -59,12 +70,6 @@ internal static class Program
                     await collection.InsertManyAsync(import.Documents);
 
                 Console.WriteLine($"Imported {import.Documents.Count,5} document(s) into {import.CollectionName}");
-            }
-
-            if (config.Import.CreateDemoAdmin)
-            {
-                await CreateDemoAdminAsync(database, config.Import);
-                Console.WriteLine($"Demo admin ready: {config.Import.DemoAdminEmail} / {config.Import.DemoAdminPassword}");
             }
 
             await CreateImportMetadataAsync(database, manifest, startedAt, DateTime.UtcNow);
@@ -238,21 +243,27 @@ internal static class Program
         return value.AsBsonDocument;
     }
 
-    static async Task CreateDemoAdminAsync(IMongoDatabase database, ImportSettings settings)
+    static async Task<ObjectId> CreateDemoAdminAsync(IMongoDatabase database, ImportSettings settings)
     {
         var users = database.GetCollection<BsonDocument>("admin_users");
+        var roles = database.GetCollection<BsonDocument>("admin_roles");
         await users.DeleteManyAsync(FilterDefinition<BsonDocument>.Empty);
+        await roles.DeleteManyAsync(FilterDefinition<BsonDocument>.Empty);
 
         var now = DateTime.UtcNow;
+        var roleDocuments = CreateDefaultRoles(now);
+        await roles.InsertManyAsync(roleDocuments);
+        var protectedRoleId = roleDocuments.Single(role => role["IsProtected"].AsBoolean)["_id"].AsObjectId;
+        var adminId = ObjectId.GenerateNewId();
         var admin = new BsonDocument
         {
-            ["_id"] = ObjectId.GenerateNewId(),
+            ["_id"] = adminId,
             ["Email"] = settings.DemoAdminEmail.Trim().ToLowerInvariant(),
             ["FullName"] = "Demo Admin",
             ["PasswordHash"] = BCrypt.Net.BCrypt.HashPassword(settings.DemoAdminPassword),
-            ["Role"] = "AdminAdmin",
+            ["RoleId"] = protectedRoleId,
             ["Status"] = "Active",
-            ["Permissions"] = new BsonArray(AdminPermissions),
+            ["ExtraPermissions"] = new BsonArray(),
             ["TokenVersion"] = 1,
             ["FailedLoginAttempts"] = 0,
             ["LockedUntil"] = BsonNull.Value,
@@ -270,6 +281,85 @@ internal static class Program
         await users.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
             Builders<BsonDocument>.IndexKeys.Ascending("Email"),
             new CreateIndexOptions { Unique = true, Name = "ux_admin_users_email" }));
+        await roles.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
+            Builders<BsonDocument>.IndexKeys.Ascending("NormalizedName"),
+            new CreateIndexOptions { Unique = true, Name = "ux_admin_roles_normalized_name" }));
+
+        return adminId;
+    }
+
+    static List<BsonDocument> CreateDefaultRoles(DateTime now) =>
+    [
+        CreateRole("AdminAdmin", "Protected full-access administrator role.", AdminPermissionKeys.All, true, now),
+        CreateRole("Manager", "Content publishing and form-management role.",
+        [
+            AdminPermissionKeys.ViewContent,
+            AdminPermissionKeys.ApproveContent,
+            AdminPermissionKeys.ViewFormDefinitions,
+            AdminPermissionKeys.EditFormDefinitions,
+            AdminPermissionKeys.ViewFormSubmissions,
+            AdminPermissionKeys.ManageFormSubmissions,
+            AdminPermissionKeys.ExportFormSubmissions
+        ], false, now),
+        CreateRole("Writer", "Content drafting and form-management role.",
+        [
+            AdminPermissionKeys.ViewContent,
+            AdminPermissionKeys.CreateEditContent,
+            AdminPermissionKeys.ViewFormDefinitions,
+            AdminPermissionKeys.EditFormDefinitions,
+            AdminPermissionKeys.ViewFormSubmissions,
+            AdminPermissionKeys.ManageFormSubmissions,
+            AdminPermissionKeys.ExportFormSubmissions
+        ], false, now),
+        CreateRole("Viewer", "Read-only administrative role.",
+        [AdminPermissionKeys.ViewContent], false, now)
+    ];
+
+    static BsonDocument CreateRole(
+        string name,
+        string description,
+        IEnumerable<string> permissions,
+        bool isProtected,
+        DateTime now) => new()
+    {
+        ["_id"] = ObjectId.GenerateNewId(),
+        ["Name"] = name,
+        ["NormalizedName"] = name.Trim().ToUpperInvariant(),
+        ["Description"] = description,
+        ["Permissions"] = new BsonArray(AdminPermissionKeys.ExpandDependencies(permissions)),
+        ["IsProtected"] = isProtected,
+        ["IsSystem"] = true,
+        ["IsDeleting"] = false,
+        ["CreatedAt"] = now,
+        ["UpdatedAt"] = now
+    };
+
+    static void NormalizeDemoAdminReferences(IEnumerable<BsonDocument> documents, ObjectId adminId)
+    {
+        foreach (var document in documents)
+            NormalizeDemoAdminReferences(document, adminId.ToString());
+    }
+
+    static void NormalizeDemoAdminReferences(BsonDocument document, string adminId)
+    {
+        foreach (var element in document.Elements.ToList())
+        {
+            if (AdminReferenceFields.Contains(element.Name) &&
+                element.Value.IsString &&
+                LegacyDemoAdminAliases.Contains(element.Value.AsString))
+            {
+                document[element.Name] = adminId;
+                continue;
+            }
+
+            if (element.Value.IsBsonDocument)
+                NormalizeDemoAdminReferences(element.Value.AsBsonDocument, adminId);
+            else if (element.Value.IsBsonArray)
+            {
+                foreach (var child in element.Value.AsBsonArray.Where(value => value.IsBsonDocument))
+                    NormalizeDemoAdminReferences(child.AsBsonDocument, adminId);
+            }
+        }
     }
 
     static async Task CreateImportMetadataAsync(IMongoDatabase database, SeedManifest manifest, DateTime startedAt, DateTime completedAt)
@@ -349,21 +439,26 @@ internal static class Program
     "global_buttons",
     "social",
     "settings",
-    "site_settings",
     "glossary",
     "form_definitions"
 };
 
-    static readonly string[] AdminPermissions =
-    [
-        "page-builder",
-    "manage-content",
-    "publish-content",
-    "manage-users",
-    "manage-settings",
-    "delete-content",
-    "view-logs"
-    ];
+    static readonly HashSet<string> AdminReferenceFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AuthorId",
+        "CreatedById",
+        "UpdatedById",
+        "PublishedById",
+        "RejectedById",
+        "OwnerId",
+        "ActorId"
+    };
+
+    static readonly HashSet<string> LegacyDemoAdminAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "admin",
+        "6a05676a4b5370e52b805d45"
+    };
 }
 
 public sealed class ImporterConfig

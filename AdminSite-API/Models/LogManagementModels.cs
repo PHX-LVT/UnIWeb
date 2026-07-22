@@ -44,8 +44,6 @@ public sealed class AdminAuditEvent
     public string RequestMethod { get; set; } = string.Empty;
     public string RetentionClass { get; set; } = "standard";
     public string Source { get; set; } = "v2";
-    [BsonIgnoreIfNull]
-    public string? LegacySourceId { get; set; }
 }
 
 [BsonIgnoreExtraElements]
@@ -74,18 +72,6 @@ public sealed class AdminLoginActivityEvent
     public string ResultMessage { get; set; } = string.Empty;
     public string RetentionClass { get; set; } = "security";
     public string Source { get; set; } = "v2";
-    [BsonIgnoreIfNull]
-    public string? LegacySourceId { get; set; }
-}
-
-[BsonIgnoreExtraElements]
-public sealed class AdminLogMigrationCheckpoint
-{
-    [BsonId]
-    public string SourceName { get; set; } = string.Empty;
-    public string LastLegacyId { get; set; } = string.Empty;
-    public bool Completed { get; set; }
-    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
 [BsonIgnoreExtraElements]

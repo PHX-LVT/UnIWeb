@@ -2,12 +2,10 @@ using Contracts.Forms;
 using FullProject.Models;
 using FullProject.Services;
 using FullProject.Services.FormServices;
-using FullProject.Settings;
 using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Auth;
-using Microsoft.Extensions.Options;
 
 namespace FullProject.Controllers
 {
@@ -22,7 +20,6 @@ namespace FullProject.Controllers
         private readonly FormInputTypeService _inputTypes;
         private readonly FormValidationService _validation;
         private readonly FormDefinitionOrderService _definitionOrder;
-        private readonly FormDesignV2RuntimeSettings _v2Settings;
         private readonly AuthService _auth;
 
         public FormsController(
@@ -32,7 +29,6 @@ namespace FullProject.Controllers
             FormInputTypeService inputTypes,
             FormValidationService validation,
             FormDefinitionOrderService definitionOrder,
-            IOptions<FormDesignV2RuntimeSettings> v2Settings,
             AuthService auth)
         {
             _submissions = submissions;
@@ -41,7 +37,6 @@ namespace FullProject.Controllers
             _inputTypes = inputTypes;
             _validation = validation;
             _definitionOrder = definitionOrder;
-            _v2Settings = v2Settings.Value;
             _auth = auth;
         }
 
@@ -208,9 +203,6 @@ namespace FullProject.Controllers
             {
                 FormDefinitionOrderMutationStatus.Applied => Ok(ApiResult.Ok(result.Order, result.Message)),
                 FormDefinitionOrderMutationStatus.Conflict => Conflict(ApiResult.Conflict(result.Order, result.Message)),
-                FormDefinitionOrderMutationStatus.Disabled => StatusCode(
-                    StatusCodes.Status503ServiceUnavailable,
-                    ApiResult.Unavailable(result.Order, result.Message)),
                 _ => BadRequest(ApiResult.BadRequest(result.Message))
             };
         }
@@ -244,9 +236,6 @@ namespace FullProject.Controllers
             var errors = await _validation.ValidateDefinitionAsync(request);
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
-            if (!_v2Settings.CanWriteV2 && HasV2WritePayload(request, null))
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, ApiResult.Unavailable("Form Design v2 writes are not enabled. The submitted v2 content was not saved."));
-
             var normalizedRequestKey = FormDefinitionService.NormalizeKey(request.Key);
             if (normalizedRequestKey is not null && await _definitions.GetByKeyAsync(normalizedRequestKey) is not null)
                 return BadRequest(ApiResult.BadRequest("Form Key already exists. Use a different Form Key."));
@@ -284,14 +273,6 @@ namespace FullProject.Controllers
             var errors = await _validation.ValidateDefinitionAsync(request, permittedInactiveTypes);
             if (errors.Count > 0)
                 return BadRequest(ApiResult.BadRequest(string.Join(" ", errors)));
-            if (!_v2Settings.CanWriteV2 &&
-                ((request.InformationItems?.Count ?? 0) > 0 ||
-                 (request.AuxiliaryActions?.Count ?? 0) > 0 ||
-                 HasV2WritePayload(request, existing.Id)))
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, ApiResult.Unavailable("Form Design v2 writes are not enabled. The submitted v2 changes were not saved."));
-            }
-
             try
             {
                 var definition = await _definitions.UpsertAsync(request, id);
@@ -300,10 +281,6 @@ namespace FullProject.Controllers
             catch (InvalidOperationException ex) when (ex.Message.Contains("saved Field Key", StringComparison.OrdinalIgnoreCase))
             {
                 return BadRequest(ApiResult.BadRequest(ex.Message));
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("schema-v2", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, ApiResult.Unavailable(ex.Message));
             }
         }
 
@@ -339,14 +316,6 @@ namespace FullProject.Controllers
                 ? Ok(ApiResult.Ok("Form definition deleted."))
                 : NotFound(ApiResult.NotFound("Form definition not found."));
         }
-
-        private static bool HasV2WritePayload(FormDefinitionUpsertRequest request, string? definitionId)
-            => !FormDesignV2Policy.IsReadOnlyProjection(
-                definitionId,
-                request.Design,
-                request.Fields,
-                request.InformationItems,
-                request.AuxiliaryActions);
 
         private static ManagedFormSubmissionResponse MapSubmission(
             Models.FormSubmission submission,

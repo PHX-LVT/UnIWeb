@@ -506,7 +506,7 @@ namespace FullProject.DTOs
 
     public class ContentStatusUpdateDto
     {
-        public ContentStatus Status { get; set; }
+        public ContentWorkflowTransition Status { get; set; }
         public string? Message { get; set; }
     }
 

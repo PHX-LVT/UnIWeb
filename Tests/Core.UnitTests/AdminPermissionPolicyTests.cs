@@ -14,14 +14,12 @@ public sealed class AdminPermissionPolicyTests
     }
 
     [Fact]
-    public void ExpandDependencies_MigratesLegacyLogPermission()
+    public void ExpandDependencies_AddsRequiredFormDefinitionPermission()
     {
-        var permissions = AdminPermissionKeys.ExpandDependencies([AdminPermissionKeys.ViewLogs]);
+        var permissions = AdminPermissionKeys.ExpandDependencies([AdminPermissionKeys.EditFormDefinitions]);
 
-        Assert.Contains(AdminPermissionKeys.ViewAuditTrail, permissions);
-        Assert.Contains(AdminPermissionKeys.ViewLoginActivity, permissions);
-        Assert.Contains(AdminPermissionKeys.ViewWebsiteActivity, permissions);
-        Assert.DoesNotContain(AdminPermissionKeys.ViewLogs, permissions);
+        Assert.Contains(AdminPermissionKeys.EditFormDefinitions, permissions);
+        Assert.Contains(AdminPermissionKeys.ViewFormDefinitions, permissions);
     }
 
     [Fact]

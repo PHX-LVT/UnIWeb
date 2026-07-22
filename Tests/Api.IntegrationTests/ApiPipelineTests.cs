@@ -59,6 +59,39 @@ public sealed class ApiPipelineTests(MongoApiFixture mongo) : IClassFixture<Mong
         Assert.Contains("cleared", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task HealthEndpoints_AreAnonymousAndReportReadiness()
+    {
+        var live = await CreateClient().GetAsync("/health/live", TestContext.Current.CancellationToken);
+        var ready = await CreateClient().GetAsync("/health/ready", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        Assert.Contains("mongodb", await ready.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Cors_AllowsConfiguredOriginAndRejectsUnknownOrigin()
+    {
+        using var allowedRequest = Preflight("https://admin.test");
+        using var allowed = await CreateClient().SendAsync(allowedRequest, TestContext.Current.CancellationToken);
+        Assert.Equal("https://admin.test", allowed.Headers.GetValues("Access-Control-Allow-Origin").Single());
+
+        using var rejectedRequest = Preflight("https://unknown.test");
+        using var rejected = await CreateClient().SendAsync(rejectedRequest, TestContext.Current.CancellationToken);
+        Assert.False(rejected.Headers.Contains("Access-Control-Allow-Origin"));
+    }
+
+    private static HttpRequestMessage Preflight(string origin)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/auth/login");
+        request.Headers.Add("Origin", origin);
+        request.Headers.Add("Access-Control-Request-Method", "POST");
+        return request;
+    }
+
     public async ValueTask DisposeAsync()
     {
         _client?.Dispose();

@@ -34,17 +34,17 @@ public sealed class ContentWorkflowPolicy
         return normalizedScope switch
         {
             "my" => items.Where(item =>
-                IsOwner(user, actorId, item) &&
+                IsOwner(item, actorId) &&
                 IsMyContentStatus(item)),
 
             "submitted" => items.Where(item =>
                 item.Status == ContentStatus.Submitted &&
-                (isAdmin || canApprove || (canAuthor && IsOwner(user, actorId, item)))),
+                (isAdmin || canApprove || (canAuthor && IsOwner(item, actorId)))),
 
             "published" => isAdmin || canAuthor || canApprove
                 ? items.Where(item =>
                     item.Status == ContentStatus.Published &&
-                    IsOwner(user, actorId, item))
+                    IsOwner(item, actorId))
                 : [],
 
             "deleted" => isAdmin
@@ -53,7 +53,7 @@ public sealed class ContentWorkflowPolicy
 
             _ => isAdmin || canApprove
                 ? items.Where(item =>
-                    item.Status is not ContentStatus.Deleted and not ContentStatus.Archived)
+                    item.Status != ContentStatus.Deleted)
                 : items.Where(item => item.Status == ContentStatus.Published)
         };
     }
@@ -62,17 +62,17 @@ public sealed class ContentWorkflowPolicy
     {
         if (!CanViewModule(user)) return false;
         if (AdminAuthorization.IsAdminAdmin(user)) return true;
-        if (item.Status is ContentStatus.Deleted or ContentStatus.Archived) return false;
+        if (item.Status == ContentStatus.Deleted) return false;
         if (item.Status == ContentStatus.Published) return true;
         if (AdminAuthorization.HasPermission(user, AdminPermissionKeys.ApproveContent)) return true;
 
         return AdminAuthorization.HasPermission(user, AdminPermissionKeys.CreateEditContent) &&
-               IsOwner(user, actorId, item);
+               IsOwner(item, actorId);
     }
 
     public bool CanEdit(ClaimsPrincipal user, string actorId, ContentItem item)
     {
-        if (item.Status is ContentStatus.Deleted or ContentStatus.Archived) return false;
+        if (item.Status == ContentStatus.Deleted) return false;
         if (AdminAuthorization.IsAdminAdmin(user)) return true;
 
         if (AdminAuthorization.HasPermission(user, AdminPermissionKeys.ApproveContent) &&
@@ -80,8 +80,8 @@ public sealed class ContentWorkflowPolicy
             return true;
 
         return AdminAuthorization.HasPermission(user, AdminPermissionKeys.CreateEditContent) &&
-               IsOwner(user, actorId, item) &&
-               item.Status is ContentStatus.Draft or ContentStatus.Rejected;
+               IsOwner(item, actorId) &&
+               item.Status == ContentStatus.Draft;
     }
 
     public bool CanSubmit(ClaimsPrincipal user, string actorId, ContentItem item) =>
@@ -89,13 +89,13 @@ public sealed class ContentWorkflowPolicy
         item.ReviewStatus != ContentReviewStatus.Rejected &&
         (AdminAuthorization.IsAdminAdmin(user) ||
          (AdminAuthorization.HasPermission(user, AdminPermissionKeys.CreateEditContent) &&
-          IsOwner(user, actorId, item)));
+          IsOwner(item, actorId)));
 
     public bool CanWithdraw(ClaimsPrincipal user, string actorId, ContentItem item) =>
         item.Status == ContentStatus.Submitted &&
         (AdminAuthorization.IsAdminAdmin(user) ||
          (AdminAuthorization.HasPermission(user, AdminPermissionKeys.CreateEditContent) &&
-          IsOwner(user, actorId, item)));
+          IsOwner(item, actorId)));
 
     public bool CanReject(ClaimsPrincipal user, ContentItem item) =>
         item.Status == ContentStatus.Submitted &&
@@ -116,18 +116,18 @@ public sealed class ContentWorkflowPolicy
 
     public bool CanForceReturnToDraft(ClaimsPrincipal user, ContentItem item) =>
         AdminAuthorization.IsAdminAdmin(user) &&
-        item.Status is not ContentStatus.Deleted and not ContentStatus.Archived;
+        item.Status != ContentStatus.Deleted;
 
     public bool CanDelete(ClaimsPrincipal user, string actorId, ContentItem item)
     {
-        if (item.Status is ContentStatus.Published or ContentStatus.Deleted or ContentStatus.Archived)
+        if (item.Status is ContentStatus.Published or ContentStatus.Deleted)
             return false;
 
         if (AdminAuthorization.IsAdminAdmin(user)) return true;
 
         return AdminAuthorization.HasPermission(user, AdminPermissionKeys.CreateEditContent) &&
-               IsOwner(user, actorId, item) &&
-               item.Status is ContentStatus.Draft or ContentStatus.Rejected;
+               IsOwner(item, actorId) &&
+               item.Status == ContentStatus.Draft;
     }
 
     public bool CanRestore(ClaimsPrincipal user, ContentItem item) =>
@@ -146,7 +146,7 @@ public sealed class ContentWorkflowPolicy
         (AdminAuthorization.IsAdminAdmin(user) ||
          AdminAuthorization.HasPermission(user, AdminPermissionKeys.ApproveContent) ||
          (AdminAuthorization.HasPermission(user, AdminPermissionKeys.CreateEditContent) &&
-          IsOwner(user, actorId, item)));
+          IsOwner(item, actorId)));
 
     public static bool IsOwner(ContentItem item, string actorId) =>
         !string.IsNullOrWhiteSpace(actorId) &&
@@ -155,16 +155,6 @@ public sealed class ContentWorkflowPolicy
     private static bool IsMyContentStatus(ContentItem item) =>
         item.Status is ContentStatus.Draft or
             ContentStatus.Submitted or
-            ContentStatus.Rejected or
             ContentStatus.Published;
 
-    private static bool IsOwner(ClaimsPrincipal user, string actorId, ContentItem item)
-    {
-        if (IsOwner(item, actorId)) return true;
-
-        var legacyEmail = user.FindFirst(ClaimTypes.Email)?.Value ??
-                          user.FindFirst(ClaimTypes.Name)?.Value;
-        return !string.IsNullOrWhiteSpace(legacyEmail) &&
-               string.Equals(item.AuthorId, legacyEmail, StringComparison.OrdinalIgnoreCase);
-    }
 }

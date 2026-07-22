@@ -10,7 +10,7 @@ public class BlockContractTests
     {
         var dto = new ImageBlockUpdateDto
         {
-            ImageUrl = "/assets/background.webp",
+            Asset = new() { SchemaVersion = 1, Url = "/assets/background.webp" },
             Appearance = new() { Decorative = true },
             AltText = new()
         };
@@ -24,7 +24,7 @@ public class BlockContractTests
     {
         var dto = new ImageBlockUpdateDto
         {
-            ImageUrl = "/assets/team.webp",
+            Asset = new() { SchemaVersion = 1, Url = "/assets/team.webp" },
             Appearance = new() { Decorative = false },
             AltText = new()
         };

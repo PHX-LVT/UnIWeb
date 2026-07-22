@@ -1,5 +1,7 @@
 ﻿using Blazored.LocalStorage;
 
+using Contracts.Public;
+
 namespace UserSite.Services
 {
     public class LanguageService
@@ -24,6 +26,8 @@ namespace UserSite.Services
         public event Action<string>? Changed;
         public IReadOnlyList<LanguageOption> Languages => _languages;
         public string FallbackLanguage => _fallbackLanguage;
+        public PublicOperationStatus LastLoadStatus { get; private set; } = PublicOperationStatus.Success;
+        public string LastLoadMessage { get; private set; } = string.Empty;
 
         public async Task<string> GetAsync()
         {
@@ -45,9 +49,11 @@ namespace UserSite.Services
 
         public async Task LoadSettingsAsync()
         {
-            try
+            var result = await _api.GetLanguageSettingsAsync();
+            LastLoadStatus = result.Status;
+            LastLoadMessage = result.Message;
+            if (result.Data is { } settings && result.IsSuccess)
             {
-                var settings = await _api.GetLanguageSettingsAsync();
                 _fallbackLanguage = string.IsNullOrWhiteSpace(settings.DefaultLanguage)
                     ? "en"
                     : settings.DefaultLanguage;
@@ -63,10 +69,6 @@ namespace UserSite.Services
 
                 if (languages.Count > 0)
                     _languages = languages;
-            }
-            catch
-            {
-                // Keep built-in defaults if the API is temporarily unavailable.
             }
 
             _lang = Normalize(_lang);

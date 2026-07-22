@@ -42,7 +42,7 @@
     [Parameter] public string? SectionId { get; set; }
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
-    [Parameter] public Func<string, Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private string TitleText => StyleHelper.Lang(Block.Title, Lang);
     private bool IsPatternLayout => EffectiveLayoutMode is "orbit" or "semicircle";
@@ -62,26 +62,22 @@
             : null
     };
 
-    private bool HasUnifiedLayout => Block.ContainerLayout.SchemaVersion > 0;
-    private string EffectivePurpose => HasUnifiedLayout && Block.ContainerLayout.Purpose == "collection"
+    private string EffectivePurpose => Block.ContainerLayout.Purpose == "collection"
         ? "collection"
         : "composition";
-    private string EffectiveLayoutMode => NormalizeLayout(
-        HasUnifiedLayout ? Block.ContainerLayout.Mode : Block.LayoutMode);
-    private string EffectiveGap => NormalizeGap(
-        HasUnifiedLayout ? Block.ContainerLayout.Gap : Block.Gap);
-    private string EffectiveMobileMode => ResolveAutomaticMobileMode(
-        HasUnifiedLayout ? Block.ContainerLayout.MobileMode : null);
+    private string EffectiveLayoutMode => NormalizeLayout(Block.ContainerLayout.Mode);
+    private string EffectiveGap => NormalizeGap(Block.ContainerLayout.Gap);
+    private string EffectiveMobileMode => ResolveAutomaticMobileMode(Block.ContainerLayout.MobileMode);
     private int EffectiveColumns => EffectiveLayoutMode == "split"
         ? 2
-        : Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.Columns : Block.Columns ?? 2, 1, 6);
+        : Math.Clamp(Block.ContainerLayout.Columns, 1, 6);
     private int? DefaultChildColumnSpan => EffectiveLayoutMode is "grid" or "split" ? 1 : null;
-    private string EffectiveAlignItems => HasUnifiedLayout ? Block.ContainerLayout.AlignItems : "stretch";
-    private string EffectiveJustifyContent => HasUnifiedLayout ? Block.ContainerLayout.JustifyContent : "start";
-    private bool EffectiveWrap => !HasUnifiedLayout || Block.ContainerLayout.Wrap;
-    private string EffectiveOrbitDirection => HasUnifiedLayout ? Block.ContainerLayout.OrbitDirection : "clockwise";
-    private int EffectiveCompactRadius => Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.CompactRadius : 120, 60, 220);
-    private int EffectiveCompactChildWidth => Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.CompactChildWidth : 120, 72, 180);
+    private string EffectiveAlignItems => Block.ContainerLayout.AlignItems;
+    private string EffectiveJustifyContent => Block.ContainerLayout.JustifyContent;
+    private bool EffectiveWrap => Block.ContainerLayout.Wrap;
+    private string EffectiveOrbitDirection => Block.ContainerLayout.OrbitDirection;
+    private int EffectiveCompactRadius => Math.Clamp(Block.ContainerLayout.CompactRadius, 60, 220);
+    private int EffectiveCompactChildWidth => Math.Clamp(Block.ContainerLayout.CompactChildWidth, 72, 180);
 
     private string GetContainerClass()
     {
@@ -91,18 +87,16 @@
     }
 
     private int PatternRadius => EffectiveLayoutMode == "semicircle"
-        ? Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.SemicircleRadius : Block.SemicircleRadius, 80, 480)
-        : Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.OrbitRadius : Block.OrbitRadius, 80, 480);
+        ? Math.Clamp(Block.ContainerLayout.SemicircleRadius, 80, 480)
+        : Math.Clamp(Block.ContainerLayout.OrbitRadius, 80, 480);
 
     private int PatternStartAngle => EffectiveLayoutMode == "semicircle"
-        ? Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.SemicircleStartAngle : Block.SemicircleStartAngle, -360, 360)
-        : Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.OrbitStartAngle : Block.OrbitStartAngle, -360, 360);
+        ? Math.Clamp(Block.ContainerLayout.SemicircleStartAngle, -360, 360)
+        : Math.Clamp(Block.ContainerLayout.OrbitStartAngle, -360, 360);
 
     private int PatternEndAngle => EffectiveLayoutMode == "semicircle"
-        ? Math.Clamp(HasUnifiedLayout ? Block.ContainerLayout.SemicircleEndAngle : Block.SemicircleEndAngle, -360, 360)
-        : HasUnifiedLayout
-            ? Math.Clamp(Block.ContainerLayout.OrbitEndAngle, -360, 360)
-            : PatternStartAngle + 360;
+        ? Math.Clamp(Block.ContainerLayout.SemicircleEndAngle, -360, 360)
+        : Math.Clamp(Block.ContainerLayout.OrbitEndAngle, -360, 360);
 
     private static string NormalizeLayout(string? layout) => layout switch
     {

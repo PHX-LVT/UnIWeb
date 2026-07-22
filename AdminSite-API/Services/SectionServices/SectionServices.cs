@@ -70,7 +70,7 @@ namespace FullProject.Services.SectionServices
                 },
                 CtaSectionCreateDto c => new CtaSection
                 {
-                    Layout = c.Layout,
+                    Layout = RequireCtaLayout(c.Layout),
                     Heading = c.Heading,
                     Subtext = c.Subtext,
                     Button = c.Button != null ? MapButton(c.Button) : null,
@@ -332,7 +332,7 @@ namespace FullProject.Services.SectionServices
                 case (CtaSection _, CtaSectionUpdateDto cDto):
                     {
                         var u = new List<UpdateDefinition<Section>>(baseUpdate);
-                        if (cDto.Layout != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Layout, cDto.Layout));
+                        if (cDto.Layout != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Layout, RequireCtaLayout(cDto.Layout)));
                         if (cDto.Heading != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Heading, cDto.Heading));
                         if (cDto.Subtext != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Subtext, cDto.Subtext));
                         if (cDto.Button != null) u.Add(Builders<Section>.Update.Set(s => ((CtaSection)s).Button, MapButton(cDto.Button)));
@@ -652,6 +652,16 @@ namespace FullProject.Services.SectionServices
                     break;
             }
         }
+
+        private static string RequireCtaLayout(string? value) => value switch
+        {
+            "center" => "center",
+            "left" => "left",
+            "right" => "right",
+            "final-card" => "final-card",
+            "about-final" => "about-final",
+            _ => throw new ArgumentException("Choose a supported CTA layout.")
+        };
 
         private static string NormalizeBlockLayoutMode(string? value) => value switch
         {

@@ -3,6 +3,12 @@
 @using Contracts.Forms
 @using SharedComponents.Helpers
 
+@if (!HasValidDesign)
+{
+    <div class="sc-form-error" role="status">This form is temporarily unavailable.</div>
+}
+else
+{
 <form class="@FormClass"
       style="@DesignStyle"
       novalidate
@@ -228,13 +234,14 @@
         }
     </div>
 </form>
+}
 
 @code {
     [Parameter, EditorRequired] public PublicFormBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public string Context { get; set; } = "embedded";
     [Parameter] public bool PreviewOnly { get; set; }
-    [Parameter] public Func<Dictionary<string, string>, Task<bool>>? OnSubmit { get; set; }
+    [Parameter] public Func<Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private Dictionary<string, string> _data = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, string> _fieldErrors = new(StringComparer.OrdinalIgnoreCase);
@@ -264,19 +271,9 @@
                 Order = option.Order
             }).ToList()
         }).ToList();
-    private FormDesignV2SettingsDto EffectiveV2
-    {
-        get
-        {
-            if (Design.V2 is { } v2 &&
-                FormDesignV2Policy.Validate(v2, DefinitionFields, Block.InformationItems, Block.AuxiliaryActions).Count == 0)
-            {
-                return FormDesignV2Policy.Normalize(v2);
-            }
-
-            return FormDesignV2Policy.ProjectFromV1(Block.FormDefinitionId ?? Block.Id, Design, DefinitionFields);
-        }
-    }
+    private bool HasValidDesign => Design.V2 is { } v2 &&
+        FormDesignV2Policy.Validate(v2, DefinitionFields, Block.InformationItems, Block.AuxiliaryActions).Count == 0;
+    private FormDesignV2SettingsDto EffectiveV2 => FormDesignV2Policy.Normalize(Design.V2!);
     private List<FormFieldRowDto> EffectiveRows => EffectiveV2.FieldRows.OrderBy(row => row.Order).ToList();
     private List<FormInformationItemDto> InformationItems => (Block.InformationItems ?? new()).OrderBy(item => item.Order).ToList();
     private bool ShowInformationItems => EffectiveV2.OuterLayout == FormOuterLayout.SplitPanel && InformationItems.Count > 0;
@@ -390,8 +387,8 @@
             {
                 ["__website"] = _honeypot
             };
-            var success = await OnSubmit(payload);
-            if (success)
+            var result = await OnSubmit(payload);
+            if (result.Success)
             {
                 _submitted = true;
                 _honeypot = string.Empty;
@@ -402,7 +399,13 @@
             else
             {
                 _error = true;
+                _errorMessage = string.IsNullOrWhiteSpace(result.Message) ? FailureText : result.Message;
             }
+        }
+        catch
+        {
+            _error = true;
+            _errorMessage = FailureText;
         }
         finally
         {

@@ -234,8 +234,9 @@
     {
         if (values is null) return fallback;
         if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized)) return localized;
-        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english)) return english;
-        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? fallback;
+        if (values.TryGetValue(AdminUiLocalizer.FallbackLanguage, out var configuredFallback) &&
+            !string.IsNullOrWhiteSpace(configuredFallback)) return configuredFallback;
+        return fallback;
     }
 
     private string SectionTypeLabel(string type) => type switch

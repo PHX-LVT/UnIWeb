@@ -14,12 +14,12 @@
     [Parameter, EditorRequired] public PublicPageDto Page { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
-    [Parameter] public Func<string, string, string, Dictionary<string, string>, Task<bool>>? OnFormSubmit { get; set; }
+    [Parameter] public Func<string, string, string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnFormSubmit { get; set; }
 
     // Change parameter type to accept the base abstract class PublicSectionDto
     private RenderFragment RenderSection(PublicSectionDto section)
     {
-        Func<string, Dictionary<string, string>, Task<bool>>? submitForSection = OnFormSubmit is null
+        Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? submitForSection = OnFormSubmit is null
             ? null
             : (blockId, data) => OnFormSubmit(Page.Id, section.Id, blockId, data);
 

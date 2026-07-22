@@ -7,9 +7,6 @@ namespace FullProject.Services
 {
     public class ManagedResourceAlbumService
     {
-        public const string DefaultMediaAlbumName = "Unsorted Media";
-        public const string DefaultFileAlbumName = "Unsorted Files";
-
         private readonly MongoDbContext _context;
 
         public ManagedResourceAlbumService(MongoDbContext context)
@@ -34,33 +31,6 @@ namespace FullProject.Services
         {
             if (string.IsNullOrWhiteSpace(id)) return null;
             return await _context.ResourceAlbums.Find(a => a.Id == id).FirstOrDefaultAsync();
-        }
-
-        public async Task<(int AlbumCount, int ResourceCount)> RemoveLegacyDefaultAlbumsAsync(string actorId = "system")
-        {
-            var legacyFilter = Builders<ResourceAlbum>.Filter.Or(
-                Builders<ResourceAlbum>.Filter.And(
-                    Builders<ResourceAlbum>.Filter.Eq(a => a.Scope, "media"),
-                    Builders<ResourceAlbum>.Filter.Eq(a => a.Name, DefaultMediaAlbumName)),
-                Builders<ResourceAlbum>.Filter.And(
-                    Builders<ResourceAlbum>.Filter.Eq(a => a.Scope, "file"),
-                    Builders<ResourceAlbum>.Filter.Eq(a => a.Name, DefaultFileAlbumName)));
-
-            var legacyAlbums = await _context.ResourceAlbums.Find(legacyFilter).ToListAsync();
-            var albumIds = legacyAlbums.Select(a => a.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
-            if (albumIds.Count == 0)
-                return (0, 0);
-
-            var now = DateTime.UtcNow;
-            var resourceResult = await _context.ManagedResources.UpdateManyAsync(
-                r => albumIds.Contains(r.AlbumId!),
-                Builders<ManagedResource>.Update
-                    .Unset(r => r.AlbumId)
-                    .Set(r => r.UpdatedById, actorId)
-                    .Set(r => r.UpdatedAt, now));
-
-            var albumResult = await _context.ResourceAlbums.DeleteManyAsync(a => albumIds.Contains(a.Id));
-            return ((int)albumResult.DeletedCount, (int)resourceResult.ModifiedCount);
         }
 
         public async Task<Dictionary<string, int>> GetResourceCountsAsync(IEnumerable<ResourceAlbum> albums)

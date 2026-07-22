@@ -77,14 +77,14 @@
 }
 
 .sc-contact-card__list i {
-    color: var(--gold);
+    color: var(--theme-color-accent);
     line-height: 1.45;
 }
 
 .sc-contact-card__form {
     padding: clamp(26px, 3vw, 38px);
     background: #fff;
-    color: var(--navy);
+    color: var(--theme-color-primary);
 }
 
 .sc-contact-card__grid {
@@ -99,7 +99,7 @@
     width: 100%;
     min-height: 48px;
     padding: 12px 14px;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     background: #fff;
     border: 1px solid #cfd8e3;
     border-radius: 8px;
@@ -128,7 +128,7 @@
 
 .sc-contact-section-title {
     margin: 0 0 42px;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     text-align: center;
     font-size: clamp(30px, 4vw, 48px);
     font-weight: 800;
@@ -158,14 +158,14 @@
     display: grid;
     place-items: center;
     color: #392a0c;
-    background: var(--gold-gradient);
+    background: var(--theme-gold-gradient);
     border-radius: 16px;
     font-size: 24px;
 }
 
 .sc-contact-support__card h3 {
     margin: 0 0 16px;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     font-size: 21px;
     font-weight: 800;
 }
@@ -204,7 +204,7 @@
 .sc-contact-global h2 {
     max-width: 920px;
     margin: 0 auto 22px;
-    color: var(--navy);
+    color: var(--theme-color-primary);
     font-size: clamp(30px, 4vw, 46px);
     line-height: 1.25;
     font-weight: 760;

@@ -2,8 +2,11 @@
 @inject SocialService SocialService
 @inject IHttpService Http
 
-<div class="page-header">
-    <h1 class="page-title"><i class="fas fa-share-alt"></i> @T("SocialButtons")</h1>
+<GlobalWorkspaceHeader />
+
+<div class="global-workspace-content">
+<div class="page-header global-workspace-section-header">
+    <h2 class="global-workspace-section-title"><i class="fas fa-share-alt"></i> @T("SocialButtons")</h2>
     <div class="page-actions">
         @if (_group is not null)
         {
@@ -60,6 +63,7 @@ else if (_group is not null)
         }
     </div>
 }
+</div>
 
 @if (_showModal)
 {

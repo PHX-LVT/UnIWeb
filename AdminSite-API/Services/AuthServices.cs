@@ -319,7 +319,7 @@ namespace FullProject.Services
             if (role.IsProtected && !await _roles.IsAdminAdminAsync(actor))
                 return (null, ["Only AdminAdmin can assign the AdminAdmin role."]);
 
-            var requestedExtras = dto.ExtraPermissions.Count > 0 ? dto.ExtraPermissions : dto.Permissions;
+            var requestedExtras = dto.ExtraPermissions;
             if (!await CanGrantAsync(actor, role, requestedExtras))
                 return (null, ["You cannot grant a role or permission that you do not possess."]);
 
@@ -328,10 +328,8 @@ namespace FullProject.Services
                 Email = email,
                 FullName = string.IsNullOrWhiteSpace(dto.FullName) ? email : dto.FullName.Trim(),
                 PasswordHash = HashPassword(dto.Password),
-                LegacyRole = role.Name,
                 RoleId = role.Id,
                 Status = dto.Active ? AdminUserStatus.Active : AdminUserStatus.Disabled,
-                Permissions = [],
                 ExtraPermissions = role.IsProtected ? [] : _roles.NormalizeExtraPermissions(requestedExtras, role),
                 TokenVersion = 1,
                 DisabledAt = dto.Active ? null : DateTime.UtcNow,
@@ -343,7 +341,7 @@ namespace FullProject.Services
             };
 
             await _users.InsertOneAsync(user);
-            await LogAsync(AdminAuditArea.UserManagement, "user-created", actor.Id, actor.Email, user.Id, user.Email, $"Created account with role {role.Name}.", ipAddress, userAgent);
+            await LogAsync("user-management", "user.created", "user", false, actor.Id, actor.Email, user.Id, user.Email, $"Created account with role {role.Name}.", ipAddress, userAgent);
             return (user, []);
         }
 
@@ -385,10 +383,9 @@ namespace FullProject.Services
             if (roleChanged)
             {
                 updates.Add(Builders<AdminUser>.Update.Set(u => u.RoleId, requestedRole.Id));
-                updates.Add(Builders<AdminUser>.Update.Set(u => u.LegacyRole, requestedRole.Name));
             }
 
-            var requestedExtras = dto.ExtraPermissions ?? dto.Permissions;
+            var requestedExtras = dto.ExtraPermissions;
             if ((roleChanged || requestedExtras is not null) &&
                 !await CanGrantAsync(actor, requestedRole, requestedExtras ?? user.ExtraPermissions))
                 return (null, ["You cannot grant a role or permission that you do not possess."]);
@@ -398,7 +395,6 @@ namespace FullProject.Services
                     ? []
                     : _roles.NormalizeExtraPermissions(requestedExtras ?? user.ExtraPermissions, requestedRole);
                 updates.Add(Builders<AdminUser>.Update.Set(u => u.ExtraPermissions, extras));
-                updates.Add(Builders<AdminUser>.Update.Set(u => u.Permissions, new List<string>()));
             }
 
             var statusChanged = dto.Active is not null &&
@@ -430,7 +426,7 @@ namespace FullProject.Services
             if (roleChanged || requestedExtras is not null || (statusChanged && dto.Active == false))
                 await RevokeAllUserSessionsAsync(id, actor.Id, AdminSessionRevokeReason.RoleChanged, ipAddress);
 
-            await LogAsync(AdminAuditArea.UserManagement, "user-updated", actor.Id, actor.Email, user.Id, user.Email, "Updated account settings.", ipAddress, userAgent);
+            await LogAsync("user-management", "user.updated", "user", false, actor.Id, actor.Email, user.Id, user.Email, "Updated account settings.", ipAddress, userAgent);
             return (await GetByIdAsync(id), []);
         }
 
@@ -466,7 +462,7 @@ namespace FullProject.Services
             if (!enabled)
                 await RevokeAllUserSessionsAsync(id, actor.Id, AdminSessionRevokeReason.UserDisabled, ipAddress);
 
-            await LogAsync(AdminAuditArea.UserManagement, enabled ? "user-enabled" : "user-disabled", actor.Id, actor.Email, user.Id, user.Email, enabled ? "Enabled account." : "Disabled account.", ipAddress, userAgent);
+            await LogAsync("user-management", enabled ? "user.enabled" : "user.disabled", "user", !enabled, actor.Id, actor.Email, user.Id, user.Email, enabled ? "Enabled account." : "Disabled account.", ipAddress, userAgent);
             return (await GetByIdAsync(id), []);
         }
 
@@ -488,7 +484,7 @@ namespace FullProject.Services
                     .Set(u => u.UpdatedAt, DateTime.UtcNow));
 
             await RevokeAllUserSessionsAsync(id, actor.Id, AdminSessionRevokeReason.PasswordChanged, ipAddress);
-            await LogAsync(AdminAuditArea.UserManagement, "password-reset", actor.Id, actor.Email, user.Id, user.Email, "Reset account password.", ipAddress, userAgent);
+            await LogAsync("user-management", "user.password-reset", "user", true, actor.Id, actor.Email, user.Id, user.Email, "Reset account password.", ipAddress, userAgent);
             return (await GetByIdAsync(id), []);
         }
 
@@ -512,7 +508,7 @@ namespace FullProject.Services
 
             await RevokeAllUserSessionsAsync(id, actor.Id, AdminSessionRevokeReason.AccountDeleted, ipAddress);
             await _users.DeleteOneAsync(u => u.Id == id);
-            await LogAsync(AdminAuditArea.UserManagement, "user-deleted", actor.Id, actor.Email, user.Id, user.Email, "Deleted admin account and revoked existing sessions.", ipAddress, userAgent);
+            await LogAsync("user-management", "user.deleted", "user", true, actor.Id, actor.Email, user.Id, user.Email, "Deleted admin account and revoked existing sessions.", ipAddress, userAgent);
             return (user, []);
         }
 
@@ -526,7 +522,7 @@ namespace FullProject.Services
                     .Set(a => a.UpdatedAt, DateTime.UtcNow));
 
             await RevokeAllUserSessionsAsync(user.Id, user.Id, AdminSessionRevokeReason.PasswordChanged, ipAddress);
-            await LogAsync(AdminAuditArea.Auth, "password-changed", user.Id, user.Email, user.Id, user.Email, "Changed own password.", ipAddress, userAgent);
+            await LogAsync("authentication", "user.password-changed", "user", true, user.Id, user.Email, user.Id, user.Email, "Changed own password.", ipAddress, userAgent);
         }
 
         public async Task<List<AdminSessionRecord>> GetSessionsAsync(string? adminId = null, bool includeRevoked = true)
@@ -582,7 +578,7 @@ namespace FullProject.Services
                     Builders<AdminSessionRecord>.Filter.Lte(s => s.ExpiresAt, now)));
 
             var result = await _sessions.DeleteManyAsync(filter);
-            await LogAsync(AdminAuditArea.UserManagement, "sessions-deleted", actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} inactive session record(s).", ipAddress, userAgent);
+            await LogAsync("authentication", "session-record.deleted", "session-record", true, actor.Id, actor.Email, null, null, $"Deleted {result.DeletedCount} inactive session record(s).", ipAddress, userAgent);
             return result.DeletedCount;
         }
 
@@ -610,8 +606,10 @@ namespace FullProject.Services
             if (count > 0)
             {
                 await LogAsync(
-                    AdminAuditArea.UserManagement,
-                    "remembered-devices-revoked",
+                    "authentication",
+                    "remembered-device.revoked",
+                    "remembered-device",
+                    true,
                     actor.Id,
                     actor.Email,
                     null,
@@ -645,8 +643,10 @@ namespace FullProject.Services
                 AdminSessionRevokeReason.AdminRevoked,
                 ipAddress);
             await LogAsync(
-                AdminAuditArea.Auth,
-                "all-access-revoked",
+                "authentication",
+                "session.all-access-revoked",
+                "session",
+                true,
                 actor.Id,
                 actor.Email,
                 actor.Id,
@@ -671,10 +671,8 @@ namespace FullProject.Services
                 Email = normalizedEmail,
                 FullName = "Admin",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-                LegacyRole = AdminRoleService.ProtectedAdminRoleName,
                 RoleId = adminRole.Id,
                 Status = AdminUserStatus.Active,
-                Permissions = AdminPermissionKeys.All.ToList(),
                 ExtraPermissions = [],
                 TokenVersion = 1,
                 CreatedAt = DateTime.UtcNow,
@@ -698,7 +696,6 @@ namespace FullProject.Services
                 user.FullName = user.Email;
             if (user.TokenVersion <= 0)
                 user.TokenVersion = 1;
-            user.Permissions ??= new();
             user.ExtraPermissions ??= new();
         }
 
@@ -825,36 +822,45 @@ namespace FullProject.Services
                 MapRememberedDeviceReason(reason));
         }
 
-        private async Task LogAsync(AdminAuditArea area, string action, string actorId, string actorEmail, string? targetId, string? targetEmail, string message, string ipAddress, string userAgent, string? sessionId = null)
+        private async Task LogAsync(
+            string domainCode,
+            string actionCode,
+            string targetTypeCode,
+            bool critical,
+            string actorId,
+            string actorEmail,
+            string? targetId,
+            string? targetEmail,
+            string message,
+            string ipAddress,
+            string userAgent,
+            string? sessionId = null)
         {
-            var mapping = AuditActionCatalog.ResolveLegacy(area.ToString(), action);
             try
             {
                 await _auditWriter.WriteAsync(new AuditWriteRequest
                 {
-                    DomainCode = mapping.DomainCode,
-                    ActionCode = mapping.ActionCode,
-                    Outcome = action.Contains("denied", StringComparison.OrdinalIgnoreCase)
-                        ? AdminAuditOutcome.Denied
-                        : AdminAuditOutcome.Succeeded,
-                    Severity = mapping.Critical ? AdminAuditSeverity.Warning : AdminAuditSeverity.Information,
+                    DomainCode = domainCode,
+                    ActionCode = actionCode,
+                    Outcome = AdminAuditOutcome.Succeeded,
+                    Severity = critical ? AdminAuditSeverity.Warning : AdminAuditSeverity.Information,
                     ActorId = actorId,
                     ActorEmail = actorEmail,
                     SessionId = sessionId,
-                    TargetTypeCode = mapping.TargetTypeCode,
+                    TargetTypeCode = targetTypeCode,
                     TargetId = targetId,
                     TargetLabel = targetEmail,
-                    ChangeCount = action.Contains("denied", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
-                    MessageKey = $"audit.{mapping.ActionCode}",
+                    ChangeCount = 1,
+                    MessageKey = $"audit.{actionCode}",
                     ResultMessage = message,
                     IpAddress = ipAddress,
                     UserAgent = userAgent,
-                    RetentionClass = mapping.Critical ? "critical" : "standard"
+                    RetentionClass = critical ? "critical" : "standard"
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to write audit event {ActionCode} for {ActorId}.", mapping.ActionCode, actorId);
+                _logger.LogError(ex, "Failed to write audit event {ActionCode} for {ActorId}.", actionCode, actorId);
             }
         }
 

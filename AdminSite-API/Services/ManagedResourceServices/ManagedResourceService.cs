@@ -339,21 +339,7 @@ namespace FullProject.Services
                 }
                 if (preset.Section is not null && ReplaceSectionReferences(preset.Section, resource, oldUrl))
                 {
-                    preset.Style = preset.Section.Style;
                     changed = true;
-                }
-                else
-                {
-                    if (ManagedResourceReferenceHelper.SameUrl(preset.Style.BackgroundImageUrl, oldUrl))
-                    {
-                        preset.Style.BackgroundImageUrl = resource.Url;
-                        changed = true;
-                    }
-                    if (ManagedResourceReferenceHelper.SameUrl(preset.Style.BackgroundVideoUrl, oldUrl))
-                    {
-                        preset.Style.BackgroundVideoUrl = resource.Url;
-                        changed = true;
-                    }
                 }
 
                 foreach (var block in preset.Blocks)
@@ -497,19 +483,19 @@ namespace FullProject.Services
         {
             switch (block)
             {
-                case ImageBlock image when ManagedResourceReferenceHelper.SameUrl(image.ImageUrl, oldUrl):
-                    image.ImageUrl = resource.Url;
+                case ImageBlock image when ManagedResourceReferenceHelper.SameUrl(image.Asset.Url, oldUrl):
+                    image.Asset.Url = resource.Url;
                     return true;
-                case FileBlock file when ManagedResourceReferenceHelper.SameUrl(file.FileUrl, oldUrl):
-                    file.FileUrl = resource.Url;
+                case FileBlock file when ManagedResourceReferenceHelper.SameUrl(file.Asset.Url, oldUrl):
+                    file.Asset.Url = resource.Url;
                     file.Filename = resource.FileName;
-                    file.FileType = resource.ContentType;
+                    file.Asset.ContentType = resource.ContentType;
                     return true;
-                case VideoBlock video when ManagedResourceReferenceHelper.SameUrl(video.EmbedUrl, oldUrl):
-                    video.EmbedUrl = resource.Url;
+                case VideoBlock video when ManagedResourceReferenceHelper.SameUrl(video.Asset.Url, oldUrl):
+                    video.Asset.Url = resource.Url;
                     return true;
-                case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.ImageUrl, oldUrl):
-                    card.ImageUrl = resource.Url;
+                case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.Asset.Url, oldUrl):
+                    card.Asset.Url = resource.Url;
                     return true;
                 default:
                     return false;
@@ -533,12 +519,7 @@ namespace FullProject.Services
                 Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", oldUrl),
                 Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", oldUrl),
                 Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", oldUrl),
-                Builders<SectionPreset>.Filter.Eq("Style.BackgroundImageUrl", oldUrl),
-                Builders<SectionPreset>.Filter.Eq("Style.BackgroundVideoUrl", oldUrl),
-                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", oldUrl),
-                Builders<SectionPreset>.Filter.Eq("Blocks.ImageUrl", oldUrl),
-                Builders<SectionPreset>.Filter.Eq("Blocks.FileUrl", oldUrl),
-                Builders<SectionPreset>.Filter.Eq("Blocks.EmbedUrl", oldUrl));
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", oldUrl));
 
         private static string ThumbnailReplacementUrl(ManagedResource resource) =>
             string.Equals(resource.Kind, "image", StringComparison.OrdinalIgnoreCase)

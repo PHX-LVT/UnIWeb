@@ -63,8 +63,6 @@ public static class AuditActionCatalog
         new Dictionary<string, AuditActionDefinition>(StringComparer.OrdinalIgnoreCase)
         {
             ["AdminRoles.GetUpdateImpact"] = new("role-management", "role.impact-calculated", "role", ShouldAudit: false),
-            ["AdminUsers.DeleteLoginActivity"] = new("system", "legacy-login-activity.deletion-rejected", "legacy-login-activity", true),
-            ["AdminUsers.DeleteAuditLogs"] = new("system", "legacy-audit-log.deletion-rejected", "legacy-audit-log", true),
             ["AdminUsers.RevokeRememberedDevices"] = new("authentication", "remembered-device.revoked", "remembered-device", true),
             ["AdminUsers.RevokeMyRememberedDevices"] = new("authentication", "remembered-device.revoked", "remembered-device", true),
 
@@ -138,49 +136,6 @@ public static class AuditActionCatalog
         var critical = verb is "deleted" or "password-reset" or "password-changed" or
             "published" or "reset" or "retention-run";
         return new AuditActionDefinition(mapping.Domain, code, mapping.Target, critical);
-    }
-
-    public static (string DomainCode, string ActionCode, string TargetTypeCode, bool Critical)
-        ResolveLegacy(string area, string action)
-    {
-        var domain = area.ToLowerInvariant() switch
-        {
-            "auth" => "authentication",
-            "usermanagement" => action.StartsWith("role-", StringComparison.OrdinalIgnoreCase)
-                ? "role-management"
-                : "user-management",
-            "content" => "content",
-            "settings" => "settings",
-            _ => "legacy"
-        };
-        var normalized = action.Trim().ToLowerInvariant();
-        var actionCode = normalized switch
-        {
-            "login-success" => "login.succeeded",
-            "login-denied" => "login.denied",
-            "logout" => "session.logged-out",
-            "password-changed" => "user.password-changed",
-            "password-reset" => "user.password-reset",
-            "user-created" => "user.created",
-            "user-updated" => "user.updated",
-            "user-enabled" => "user.enabled",
-            "user-disabled" => "user.disabled",
-            "user-deleted" => "user.deleted",
-            "role-created" => "role.created",
-            "role-updated" => "role.updated",
-            "role-deleted" => "role.deleted",
-            "sessions-deleted" => "session-record.deleted",
-            "remembered-devices-revoked" => "remembered-device.revoked",
-            "all-access-revoked" => "session.all-access-revoked",
-            "login-activity-deleted" => "legacy-login-activity.deleted",
-            "audit-logs-deleted" => "legacy-audit-log.deleted",
-            _ => $"legacy.{ToCode(normalized)}"
-        };
-        var target = actionCode.Split('.')[0];
-        var critical = actionCode.Contains("deleted", StringComparison.Ordinal) ||
-                       actionCode.Contains("password", StringComparison.Ordinal) ||
-                       actionCode.Contains("denied", StringComparison.Ordinal);
-        return (domain, actionCode, target, critical);
     }
 
     private static string ResolveVerb(string action)

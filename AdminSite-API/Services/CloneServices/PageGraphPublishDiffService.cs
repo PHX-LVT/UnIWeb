@@ -145,9 +145,7 @@ namespace FullProject.Services.CloneServices
 
         private static BsonDocument ToComparableDocument(object source, PageGraphDocumentKind documentKind)
         {
-            var document = source is ColumnsSection columnsSection
-                ? ToBsonDocumentWithoutEmbeddedColumnBlocks(columnsSection)
-                : source.ToBsonDocument(source.GetType());
+            var document = source.ToBsonDocument(source.GetType());
 
             RemoveRootFields(
                 document,
@@ -162,30 +160,6 @@ namespace FullProject.Services.CloneServices
                 document.Remove("Status");
 
             return document;
-        }
-
-        private static BsonDocument ToBsonDocumentWithoutEmbeddedColumnBlocks(ColumnsSection section)
-        {
-            var originalBlocks = section.Columns
-                .Select(column => column.Blocks)
-                .ToList();
-
-            try
-            {
-                foreach (var column in section.Columns)
-                {
-                    column.Blocks = new List<Block>();
-                }
-
-                return section.ToBsonDocument(section.GetType());
-            }
-            finally
-            {
-                for (var i = 0; i < section.Columns.Count && i < originalBlocks.Count; i++)
-                {
-                    section.Columns[i].Blocks = originalBlocks[i];
-                }
-            }
         }
 
         private static void RemoveRootFields(BsonDocument document, params string[] fieldNames)

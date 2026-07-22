@@ -1313,7 +1313,7 @@ else
     private ContainerPresetDefinition? ActiveContainerPreset => AddTargetContainer is null
         ? null
         : ContainerPresetCatalog.ForExisting(AddTargetContainer.PresetKey);
-    private string ContainerPresetDisplayName => ActiveContainerPreset?.DisplayName ?? T("LegacyContainerPreset");
+    private string ContainerPresetDisplayName => ActiveContainerPreset?.DisplayName ?? string.Empty;
     private string ContainerPresetPolicyLabel
     {
         get
@@ -2230,10 +2230,11 @@ else
         if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
 
-        if (values.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
-            return en;
+        if (values.TryGetValue(AdminUiLocalizer.FallbackLanguage, out var configuredFallback) &&
+            !string.IsNullOrWhiteSpace(configuredFallback))
+            return configuredFallback;
 
-        return values.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+        return null;
     }
 
     private static string BlockLabelKey(string type) => type switch

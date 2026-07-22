@@ -14,10 +14,20 @@ else if (_notFound)
         <h1>Page not found</h1>
     </div>
 }
+else if (_loadFailed)
+{
+    <div class="sc-not-found" role="alert">
+        <h1>Page temporarily unavailable</h1>
+        <p>@_loadMessage</p>
+        <button type="button" class="sc-btn sc-btn--theme" @onclick="LoadPageAsync">Try again</button>
+    </div>
+}
 
 @code {
     private PublicPageDto? _page;
     private bool _notFound = false;
+    private bool _loadFailed;
+    private string _loadMessage = string.Empty;
     private bool _widgetsInitialized = false;
     private string _lang = "en";
 
@@ -34,15 +44,27 @@ else if (_notFound)
     {
         LangService.Changed += HandleLanguageChanged;
         _lang = await LangService.GetAsync();
-        _page = await Api.GetPageAsync("home");
-        if (_page is null) _notFound = true;
+        await LoadPageAsync();
     }
 
-    private async Task<bool> HandleFormSubmit(
+    private async Task LoadPageAsync()
+    {
+        _notFound = false;
+        _loadFailed = false;
+        var result = await Api.GetPageAsync("home");
+        _page = result.Data;
+        _notFound = result.Status == PublicOperationStatus.NotFound;
+        _loadFailed = !result.IsSuccess && !_notFound;
+        _loadMessage = result.Message;
+    }
+
+    private Task<PublicFormSubmitResult> HandleFormSubmit(
         string pageId, string sectionId, string blockId,
         Dictionary<string, string> data)
     {
-        return await Api.SubmitFormAsync(_page!.Slug, sectionId, blockId, data, _lang);
+        return _page is null
+            ? Task.FromResult(PublicFormSubmitResult.Rejected(PublicOperationStatus.Unavailable, "The page is not ready for submission."))
+            : Api.SubmitFormAsync(_page.Slug, sectionId, blockId, data, _lang);
     }
 
     private void HandleLanguageChanged(string lang)

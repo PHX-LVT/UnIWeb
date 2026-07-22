@@ -15,6 +15,14 @@ else if (_notFound)
         <h1>Page not found</h1>
     </div>
 }
+else if (_loadFailed)
+{
+    <div class="sc-not-found" role="alert">
+        <h1>Content temporarily unavailable</h1>
+        <p>@_loadMessage</p>
+        <button type="button" class="sc-btn sc-btn--theme" @onclick="LoadPageAsync">Try again</button>
+    </div>
+}
 
 @code {
     [Parameter] public string ContentType { get; set; } = string.Empty;
@@ -22,6 +30,8 @@ else if (_notFound)
 
     private PublicPageDto? _page;
     private bool _notFound;
+    private bool _loadFailed;
+    private string _loadMessage = string.Empty;
     private string? _widgetsInitializedForPageId;
     private string _lang = "en";
 
@@ -33,11 +43,19 @@ else if (_notFound)
 
     protected override async Task OnParametersSetAsync()
     {
+        await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
+    {
         _notFound = false;
+        _loadFailed = false;
         _widgetsInitializedForPageId = null;
-        _page = await Api.GetContentPageAsync(ContentType, ContentSlug);
-        if (_page is null)
-            _notFound = true;
+        var result = await Api.GetContentPageAsync(ContentType, ContentSlug);
+        _page = result.Data;
+        _notFound = result.Status == PublicOperationStatus.NotFound;
+        _loadFailed = !result.IsSuccess && !_notFound;
+        _loadMessage = result.Message;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -49,14 +67,15 @@ else if (_notFound)
         }
     }
 
-    private async Task<bool> HandleFormSubmit(
+    private Task<PublicFormSubmitResult> HandleFormSubmit(
         string pageId,
         string sectionId,
         string blockId,
         Dictionary<string, string> data)
     {
-        return _page is not null &&
-               await Api.SubmitFormAsync(_page.FullSlug ?? _page.Slug, sectionId, blockId, data, _lang);
+        return _page is null
+            ? Task.FromResult(PublicFormSubmitResult.Rejected(PublicOperationStatus.Unavailable, "The content page is not ready for submission."))
+            : Api.SubmitFormAsync(_page.FullSlug ?? _page.Slug, sectionId, blockId, data, _lang);
     }
 
     private void HandleLanguageChanged(string lang)

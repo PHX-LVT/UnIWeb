@@ -125,9 +125,7 @@ else if (!string.IsNullOrWhiteSpace(_formDefinitionId))
         if (values is null) return string.Empty;
         if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
             return localized;
-        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english))
-            return english;
-        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+        return values.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? string.Empty;
     }
 }
 

@@ -233,7 +233,7 @@
 }
 
 .content-body-item__toolbar strong {
-    color: var(--navy);
+    color: var(--theme-color-primary);
     font-size: .86rem;
 }
 
@@ -304,7 +304,7 @@
     border: 1px solid #d8e0ea;
     border-radius: 6px;
     background: #fff;
-    color: var(--navy);
+    color: var(--theme-color-primary);
 }
 
 .content-rich-select {

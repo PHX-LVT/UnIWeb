@@ -23,7 +23,7 @@ namespace FullProject.Services
             {
                 Kind = NormalizeKind(dto.Kind) ?? "file",
                 Name = NormalizeLang(dto.Name),
-                Description = NormalizeLang(dto.Description, requireEnglish: false),
+                Description = NormalizeLang(dto.Description),
                 Url = CleanUrl(dto.Url) ?? string.Empty,
                 StorageKey = CleanStorageKey(dto.StorageKey),
                 ThumbnailUrl = CleanUrl(dto.ThumbnailUrl, required: false),
@@ -60,7 +60,7 @@ namespace FullProject.Services
 
             if (dto.Kind is not null) resource.Kind = NormalizeKind(dto.Kind) ?? resource.Kind;
             if (dto.Name is not null) resource.Name = NormalizeLang(dto.Name);
-            if (dto.Description is not null) resource.Description = NormalizeLang(dto.Description, requireEnglish: false);
+            if (dto.Description is not null) resource.Description = NormalizeLang(dto.Description);
             if (dto.Url is not null) resource.Url = CleanUrl(dto.Url) ?? string.Empty;
             if (dto.StorageKey is not null) resource.StorageKey = CleanStorageKey(dto.StorageKey);
             if (dto.ThumbnailUrl is not null) resource.ThumbnailUrl = CleanUrl(dto.ThumbnailUrl, required: false);
@@ -271,7 +271,7 @@ namespace FullProject.Services
             return normalized is "external-url" or "managed-upload" ? normalized : "external-url";
         }
 
-        private static Dictionary<string, string> NormalizeLang(Dictionary<string, string>? source, bool requireEnglish = true)
+        private static Dictionary<string, string> NormalizeLang(Dictionary<string, string>? source)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (source is not null)
@@ -285,12 +285,6 @@ namespace FullProject.Services
 
             foreach (var lang in RequiredLanguages)
                 result.TryAdd(lang, string.Empty);
-
-            if (requireEnglish && string.IsNullOrWhiteSpace(result.GetValueOrDefault("en")))
-            {
-                var first = result.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-                if (!string.IsNullOrWhiteSpace(first)) result["en"] = first;
-            }
 
             return result;
         }

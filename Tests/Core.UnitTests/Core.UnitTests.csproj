@@ -3,5 +3,6 @@
     <ProjectReference Include="..\..\AdminSite-API\Main-API.csproj" />
     <ProjectReference Include="..\..\Contracts\Contracts.csproj" />
     <ProjectReference Include="..\..\SharedComponents\SharedComponents.csproj" />
+    <ProjectReference Include="..\..\UserSite\UserSite.csproj" />
   </ItemGroup>
 </Project>
