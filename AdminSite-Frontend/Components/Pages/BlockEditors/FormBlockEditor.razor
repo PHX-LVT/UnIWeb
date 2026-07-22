@@ -14,6 +14,35 @@
     </select>
 </div>
 
+@if (SelectedDefinition is { } selected)
+{
+    <div class="form-block-summary">
+        <div>
+            <strong>@DefinitionName(selected)</strong>
+            <span class="form-block-summary__status form-block-summary__status--active">@T("Active")</span>
+        </div>
+        <span>@selected.Fields.Count @T("Fields") · @selected.AuxiliaryActions.Count @T("AuxiliaryActions")</span>
+        @if (!string.IsNullOrWhiteSpace(Localized(selected.Introduction)))
+        {
+            <p>@Localized(selected.Introduction)</p>
+        }
+        <a class="btn-admin btn-ghost" href="/forms/definitions"><i class="fas fa-pen"></i> @T("ManageFormDefinition")</a>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(_formDefinitionId))
+{
+    <div class="form-block-summary form-block-summary--warning">
+        <strong>@T("UnavailableFormDefinition")</strong>
+        <span>@T("ChooseAnActiveFormBeforePublishing")</span>
+    </div>
+}
+
+<label class="form-group">
+    <span class="form-label">@T("FormScale")</span>
+    <input class="form-control" type="range" min="0.5" max="1.5" step="0.05" @bind="_formScale" />
+    <span class="form-hint">@($"{_formScale * 100:0}%")</span>
+</label>
+
 <div class="ez-editor-actions">
     <button class="btn-admin btn-primary"
             @onclick="Save"
@@ -34,6 +63,7 @@
     private string _formDefinitionId = string.Empty;
     private bool _saving;
     private string? _loadedBlockId;
+    private double _formScale = 1d;
 
     private FormDefinitionModel? SelectedDefinition =>
         _definitions.FirstOrDefault(item => item.Id == _formDefinitionId && item.Active);
@@ -48,6 +78,7 @@
 
         _loadedBlockId = Block.Id;
         _formDefinitionId = Block.FormDefinitionId ?? string.Empty;
+        _formScale = Math.Clamp(Block.FormScale, 0.5d, 1.5d);
         var response = await FormService.GetDefinitionsAsync();
         _definitions = response.Data ?? new();
     }
@@ -66,6 +97,7 @@
             var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new FormBlockUpdateDto
             {
                 FormDefinitionId = _formDefinitionId,
+                FormScale = _formScale,
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
@@ -98,3 +130,12 @@
         return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 }
+
+<style>
+    .form-block-summary { display:grid; gap:.4rem; margin:.5rem 0 1rem; padding:.8rem; border:1px solid var(--border); border-radius:9px; background:var(--surface-subtle,#f8fafc); }
+    .form-block-summary>div { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
+    .form-block-summary p { margin:0; color:var(--text-muted); }
+    .form-block-summary__status { padding:.15rem .45rem; border-radius:999px; font-size:.75rem; font-weight:700; }
+    .form-block-summary__status--active { color:#166534; background:#dcfce7; }
+    .form-block-summary--warning { border-color:#f59e0b; background:#fffbeb; color:#92400e; }
+</style>

@@ -15,14 +15,19 @@ public sealed class AdminRoleService
     private readonly IMongoCollection<BsonDocument> _userDocuments;
     private readonly IMongoCollection<AdminSessionRecord> _sessions;
     private readonly IAuditTrailWriter _auditWriter;
+    private readonly RememberedDeviceService _rememberedDevices;
 
-    public AdminRoleService(IMongoDatabase database, IAuditTrailWriter auditWriter)
+    public AdminRoleService(
+        IMongoDatabase database,
+        IAuditTrailWriter auditWriter,
+        RememberedDeviceService rememberedDevices)
     {
         _roles = database.GetCollection<AdminRoleDefinition>("admin_roles");
         _users = database.GetCollection<AdminUser>("admin_users");
         _userDocuments = database.GetCollection<BsonDocument>("admin_users");
         _sessions = database.GetCollection<AdminSessionRecord>("admin_sessions");
         _auditWriter = auditWriter;
+        _rememberedDevices = rememberedDevices;
     }
 
     public async Task EnsureInitializedAsync()
@@ -593,6 +598,10 @@ public sealed class AdminRoleService
                 .Set(s => s.RevokedAt, DateTime.UtcNow)
                 .Set(s => s.RevokedById, actorId)
                 .Set(s => s.RevokeReason, reason));
+        await _rememberedDevices.RevokeAllForUsersAsync(
+            userIds,
+            actorId,
+            AdminRememberedDeviceRevokeReason.RoleChanged);
     }
 
     private async Task LogAsync(

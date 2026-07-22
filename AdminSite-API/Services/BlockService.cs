@@ -154,6 +154,14 @@ namespace FullProject.Services
                     actionError = ValidateAction(card.Action, card.Href, card.FormDefinitionId, requireComplete && updateCardHasAction);
                     AddFormReference(card.Action, card.FormDefinitionId, formIds);
                     break;
+                case IconBlockCreateDto icon when icon.ActionEnabled:
+                    actionError = ValidateAction(icon.Action, icon.Href, icon.FormDefinitionId, requireComplete);
+                    AddFormReference(icon.Action, icon.FormDefinitionId, formIds);
+                    break;
+                case IconBlockUpdateDto icon when icon.ActionEnabled:
+                    actionError = ValidateAction(icon.Action, icon.Href, icon.FormDefinitionId, requireComplete);
+                    AddFormReference(icon.Action, icon.FormDefinitionId, formIds);
+                    break;
             }
 
             if (actionError is not null) return actionError;
@@ -223,6 +231,7 @@ namespace FullProject.Services
                 {
                     Asset = BlockAssetMetadataService.ToModel(f.Asset),
                     Filename = f.Filename,
+                    DisplayName = SanitizeDictionary(f.DisplayName),
                     OpenBehavior = NormalizeFileOpenBehavior(f.OpenBehavior)
                 },
                 MapBlockCreateDto m => new MapBlock
@@ -237,7 +246,9 @@ namespace FullProject.Services
                         Label = p.Label,
                         Lat = p.Lat,
                         Lng = p.Lng,
-                        Href = CleanUrl(p.Href)
+                        Href = CleanUrl(p.Href),
+                        Visible = p.Visible,
+                        Order = p.Order
                     }).ToList()
                 },
                 FormBlockCreateDto form => new FormBlock
@@ -252,13 +263,17 @@ namespace FullProject.Services
                     Title = card.Title,
                     Description = SanitizeDictionary(card.Description),
                     Asset = BlockAssetMetadataService.ToModel(card.Asset),
+                    ImageAltText = SanitizeDictionary(card.ImageAltText),
                     ButtonLabel = card.ButtonLabel,
                     Href = CleanUrl(card.Href),
                     Action = NormalizeBlockAction(card.Action),
-                    FormDefinitionId = IsOpenFormAction(card.Action) ? card.FormDefinitionId : null
+                    FormDefinitionId = IsOpenFormAction(card.Action) ? card.FormDefinitionId : null,
+                    ButtonStyle = NormalizeButtonStyle(card.ButtonStyle)
                 },
                 ButtonBlockCreateDto button => new ButtonBlock
                 {
+                    Icon = button.Icon,
+                    IconPosition = NormalizeIconPosition(button.IconPosition),
                     Label = button.Label,
                     Href = CleanUrl(button.Href),
                     Action = NormalizeBlockAction(button.Action),
@@ -282,6 +297,7 @@ namespace FullProject.Services
                 StepBlockCreateDto step => new StepBlock
                 {
                     Icon = step.Icon,
+                    AutoNumber = step.AutoNumber,
                     StepLabel = step.StepLabel,
                     Title = step.Title,
                     Description = SanitizeDictionary(step.Description)
@@ -290,7 +306,11 @@ namespace FullProject.Services
                 {
                     Icon = icon.Icon,
                     Label = icon.Label,
-                    Description = SanitizeDictionary(icon.Description)
+                    Description = SanitizeDictionary(icon.Description),
+                    ActionEnabled = icon.ActionEnabled,
+                    Href = icon.ActionEnabled ? CleanUrl(icon.Href) : null,
+                    Action = NormalizeBlockAction(icon.Action),
+                    FormDefinitionId = icon.ActionEnabled && IsOpenFormAction(icon.Action) ? icon.FormDefinitionId : null
                 },
                 ContainerBlockCreateDto container => new ContainerBlock
                 {
@@ -414,11 +434,12 @@ namespace FullProject.Services
             if (existing is not ContainerBlock container) return "Container not found.";
 
             var effectiveKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey);
-            if (!string.IsNullOrWhiteSpace(requestedPresetKey) &&
-                !string.Equals(requestedPresetKey, effectiveKey, StringComparison.Ordinal))
-            {
-                return "A Container's preset is fixed after creation. Create another Container to use a different preset.";
-            }
+            var targetKey = string.IsNullOrWhiteSpace(requestedPresetKey)
+                ? effectiveKey
+                : requestedPresetKey;
+            if (!string.Equals(targetKey, ContainerPresetCatalog.LegacyFreeformKey, StringComparison.Ordinal) &&
+                !ContainerPresetCatalog.TryGetGoverned(targetKey, out _))
+                return "Choose a supported Container preset.";
             if (incoming is null) return null;
 
             var children = (await GetBySectionAsync(pageId, sectionId))
@@ -426,25 +447,11 @@ namespace FullProject.Services
                 .ToList();
 
             ContainerPresetDefinition? preset = null;
-            if (ContainerPresetCatalog.TryGetGoverned(container.PresetKey, out var governedPreset))
+            if (ContainerPresetCatalog.TryGetGoverned(targetKey, out var governedPreset))
             {
                 preset = governedPreset;
-                if (incoming.Mode is not null &&
-                    !string.Equals(incoming.Mode, preset.LayoutMode, StringComparison.Ordinal))
-                    return "The Container layout mode is governed by its preset and cannot be changed.";
-                if (incoming.Purpose is not null &&
-                    !string.Equals(incoming.Purpose, preset.Purpose, StringComparison.Ordinal))
-                    return "The Container purpose is governed by its preset and cannot be changed.";
-                if (incoming.Columns.HasValue && incoming.Columns.Value != preset.Columns)
-                    return "The Container column structure is governed by its preset and cannot be changed.";
-                if (incoming.MobileMode is not null &&
-                    !string.Equals(incoming.MobileMode, preset.MobileMode, StringComparison.Ordinal))
-                    return "The Container responsive behavior is governed by its preset and cannot be changed.";
-
-                var disallowedType = children.Select(BlockType)
-                    .FirstOrDefault(type => !preset.AllowedBlockTypes.Contains(type, StringComparer.Ordinal));
-                if (disallowedType is not null)
-                    return $"The {preset.DisplayName} preset does not allow {disallowedType} Blocks.";
+                if (!ContainerCapacityPolicy.CanConvert(targetKey, children.Select(BlockType), out var conversionError))
+                    return conversionError;
 
                 incoming.SchemaVersion = 3;
                 incoming.Mode = preset.LayoutMode;
@@ -476,6 +483,8 @@ namespace FullProject.Services
                 return "A Collection Container can contain only one Block type. Remove mixed children before changing its purpose.";
 
             var lockedType = childTypes.FirstOrDefault() ?? container.ContainerLayout.AllowedChildType;
+            if (children.Count == 0)
+                lockedType = null;
             if (!string.IsNullOrWhiteSpace(incoming.AllowedChildType) &&
                 !string.IsNullOrWhiteSpace(lockedType) &&
                 !string.Equals(incoming.AllowedChildType, lockedType, StringComparison.Ordinal))
@@ -764,6 +773,7 @@ namespace FullProject.Services
                             Builders<Block>.Update
                                 .Set(b => ((FileBlock)b).Asset, BlockAssetMetadataService.ToModel(fDto.Asset))
                                 .Set(b => ((FileBlock)b).Filename, fDto.Filename)
+                                .Set(b => ((FileBlock)b).DisplayName, SanitizeDictionary(fDto.DisplayName))
                                 .Set(b => ((FileBlock)b).OpenBehavior, NormalizeFileOpenBehavior(fDto.OpenBehavior))));
                     break;
 
@@ -782,7 +792,9 @@ namespace FullProject.Services
                                         Label = p.Label,
                                         Lat = p.Lat,
                                         Lng = p.Lng,
-                                        Href = CleanUrl(p.Href)
+                                        Href = CleanUrl(p.Href),
+                                        Visible = p.Visible,
+                                        Order = p.Order
                                     }).ToList())));
                     break;
 
@@ -825,17 +837,21 @@ namespace FullProject.Services
                                 .Set(b => ((CardBlock)b).Title, cardDto.Title)
                                 .Set(b => ((CardBlock)b).Description, SanitizeDictionary(cardDto.Description))
                                 .Set(b => ((CardBlock)b).Asset, BlockAssetMetadataService.ToModel(cardDto.Asset))
+                                .Set(b => ((CardBlock)b).ImageAltText, SanitizeDictionary(cardDto.ImageAltText))
                                 .Set(b => ((CardBlock)b).ButtonLabel, cardDto.ButtonLabel)
                                 .Set(b => ((CardBlock)b).Href, CleanUrl(cardDto.Href))
                                 .Set(b => ((CardBlock)b).Action, NormalizeBlockAction(cardDto.Action))
                                 .Set(b => ((CardBlock)b).FormDefinitionId,
-                                    IsOpenFormAction(cardDto.Action) ? cardDto.FormDefinitionId : null)));
+                                    IsOpenFormAction(cardDto.Action) ? cardDto.FormDefinitionId : null)
+                                .Set(b => ((CardBlock)b).ButtonStyle, NormalizeButtonStyle(cardDto.ButtonStyle))));
                     break;
 
                 case (ButtonBlock _, ButtonBlockUpdateDto buttonDto):
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
+                                .Set(b => ((ButtonBlock)b).Icon, buttonDto.Icon)
+                                .Set(b => ((ButtonBlock)b).IconPosition, NormalizeIconPosition(buttonDto.IconPosition))
                                 .Set(b => ((ButtonBlock)b).Label, buttonDto.Label)
                                 .Set(b => ((ButtonBlock)b).Href, CleanUrl(buttonDto.Href))
                                 .Set(b => ((ButtonBlock)b).Action, NormalizeBlockAction(buttonDto.Action))
@@ -869,6 +885,7 @@ namespace FullProject.Services
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
                                 .Set(b => ((StepBlock)b).Icon, stepDto.Icon)
+                                .Set(b => ((StepBlock)b).AutoNumber, stepDto.AutoNumber)
                                 .Set(b => ((StepBlock)b).StepLabel, stepDto.StepLabel)
                                 .Set(b => ((StepBlock)b).Title, stepDto.Title)
                                 .Set(b => ((StepBlock)b).Description, SanitizeDictionary(stepDto.Description))));
@@ -880,13 +897,22 @@ namespace FullProject.Services
                             Builders<Block>.Update
                                 .Set(b => ((IconBlock)b).Icon, iconDto.Icon)
                                 .Set(b => ((IconBlock)b).Label, iconDto.Label)
-                                .Set(b => ((IconBlock)b).Description, SanitizeDictionary(iconDto.Description))));
+                                .Set(b => ((IconBlock)b).Description, SanitizeDictionary(iconDto.Description))
+                                .Set(b => ((IconBlock)b).ActionEnabled, iconDto.ActionEnabled)
+                                .Set(b => ((IconBlock)b).Href, iconDto.ActionEnabled ? CleanUrl(iconDto.Href) : null)
+                                .Set(b => ((IconBlock)b).Action, NormalizeBlockAction(iconDto.Action))
+                                .Set(b => ((IconBlock)b).FormDefinitionId,
+                                    iconDto.ActionEnabled && IsOpenFormAction(iconDto.Action) ? iconDto.FormDefinitionId : null)));
                     break;
 
                 case (ContainerBlock existingContainer, ContainerBlockUpdateDto containerDto):
+                    var nextPresetKey = string.IsNullOrWhiteSpace(containerDto.PresetKey)
+                        ? existingContainer.PresetKey
+                        : ContainerPresetCatalog.EffectiveKey(containerDto.PresetKey);
                     await _context.BlocksDraft.UpdateOneAsync(b => b.Id == blockId,
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
+                                .Set(b => ((ContainerBlock)b).PresetKey, nextPresetKey)
                                 .Set(b => ((ContainerBlock)b).Title, SanitizeDictionary(containerDto.Title))
                                 .Set(b => ((ContainerBlock)b).ContainerLayout,
                                     BlockContractService.MergeContainerLayout(
@@ -900,6 +926,8 @@ namespace FullProject.Services
                                         containerDto.SemicircleRadius,
                                         containerDto.SemicircleStartAngle,
                                         containerDto.SemicircleEndAngle))));
+                    if (!string.Equals(existingContainer.PresetKey, nextPresetKey, StringComparison.Ordinal))
+                        await ReassignContainerPresetSlotsAsync(pageId, sectionId, existingContainer, nextPresetKey);
                     break;
 
                 default:
@@ -913,6 +941,36 @@ namespace FullProject.Services
                 await GrowSectionForGovernedFormAsync(governedFormSection, dto.Layout);
 
             return await GetByIdAsync(pageId, sectionId, blockId);
+        }
+
+        private async Task ReassignContainerPresetSlotsAsync(
+            string pageId,
+            string sectionId,
+            ContainerBlock container,
+            string? presetKey)
+        {
+            var children = (await GetBySectionAsync(pageId, sectionId))
+                .Where(block => block.ParentBlockId == container.Id)
+                .OrderBy(block => block.Order)
+                .ToList();
+            if (!ContainerPresetCatalog.TryGetGoverned(presetKey, out var preset)) return;
+
+            for (var index = 0; index < children.Count; index++)
+            {
+                var child = children[index];
+                var slot = preset.Slots.ElementAtOrDefault(index);
+                var policy = child.Authoring ?? new BlockAuthoringPolicy();
+                policy.SchemaVersion = Math.Max(policy.SchemaVersion, 1);
+                policy.PresetSlotName = slot?.Key;
+                policy.PresetSourceId = preset.Key;
+                await _context.BlocksDraft.UpdateOneAsync(
+                    block => block.Id == child.Id,
+                    Builders<Block>.Update
+                        .Set(block => block.Authoring, policy)
+                        .Set(block => block.PositionMode, preset.LayoutMode == "freeform" ? "freeform" : "flow")
+                        .Set(block => block.UpdatedAt, DateTime.UtcNow)
+                        .Inc(block => block.Version, 1));
+            }
         }
 
         public async Task<string?> ValidateParentAsync(
@@ -1077,6 +1135,9 @@ namespace FullProject.Services
             "ghost" => "ghost",
             _ => "filled"
         };
+
+        private static string NormalizeIconPosition(string? position) =>
+            string.Equals(position, "right", StringComparison.OrdinalIgnoreCase) ? "right" : "left";
         public async Task<bool> DeleteAsync(string pageId, string sectionId, string blockId)
         {
             var page = await _context.PagesDraft.Find(p => p.Id == pageId).FirstOrDefaultAsync();

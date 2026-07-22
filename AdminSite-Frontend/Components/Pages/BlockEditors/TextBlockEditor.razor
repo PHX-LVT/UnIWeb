@@ -1,6 +1,7 @@
 @inject AdminBlockService BlockService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
+@inject AdminFormSubmissionService FormService
 @using Contracts.Admin
 @using Contracts.Global
 
@@ -13,7 +14,7 @@
                                Placeholder="@T("Content")"
                                ShowTypographyTools="false"
                                ShowBlockAppearanceTools="true"
-                               ShowLinkTool="false"
+                               ShowLinkTool="true"
                                ShowClearFormattingTool="false"
                                FontFamily="@_fontFamily"
                                FontFamilyChanged="SetFontFamily"
@@ -30,6 +31,29 @@
                                TextAlignChanged="SetTextAlign" />
     </div>
 </div>
+
+<details class="text-block-actions">
+    <summary>@T("Actions") (@_buttons.Count)</summary>
+    @foreach (var button in _buttons.OrderBy(button => button.Order))
+    {
+        <div class="text-block-actions__item" @key="button.Id">
+            <LangField @bind-Value="button.Label" Languages="Languages" />
+            <ButtonActionFields @bind-Action="button.Action"
+                                @bind-Href="button.Href"
+                                @bind-FormDefinitionId="button.FormDefinitionId"
+                                FormDefinitions="_formDefinitions"
+                                ExternalActionValue="externalUrl"
+                                DownloadActionValue="downloadFile"
+                                AdminLanguage="AdminLanguage" />
+            <label><input type="checkbox" @bind="button.Visible" /> @T("Visible")</label>
+            <button type="button" class="btn-admin btn-danger" @onclick="() => RemoveAction(button)"><i class="fas fa-trash"></i></button>
+        </div>
+    }
+    @if (_buttons.Count < 2)
+    {
+        <button type="button" class="btn-admin btn-outline" @onclick="AddAction"><i class="fas fa-plus"></i> @T("AddAction")</button>
+    }
+</details>
 
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
@@ -55,6 +79,8 @@
     private string _textAlign = "inherit";
     private bool _saving;
     private BlockModel? _loadedBlock;
+    private List<BlockButtonModel> _buttons = new();
+    private List<FormDefinitionModel> _formDefinitions = new();
 
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
@@ -65,7 +91,23 @@
         if (ReferenceEquals(_loadedBlock, Block)) return;
         _loadedBlock = Block;
         _content = new(Block.Content ?? new());
+        _buttons = (Block.Buttons ?? new()).OrderBy(button => button.Order).Select(button => new BlockButtonModel
+        {
+            Id = string.IsNullOrWhiteSpace(button.Id) ? $"button-{Guid.NewGuid():N}" : button.Id,
+            Label = new(button.Label ?? new()),
+            Action = button.Action ?? "linkToPage",
+            Href = button.Href,
+            FormDefinitionId = button.FormDefinitionId,
+            Visible = button.Visible,
+            Order = button.Order
+        }).Take(2).ToList();
         LoadAppearance();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var response = await FormService.GetDefinitionsAsync();
+        _formDefinitions = response.Data?.Where(definition => definition.Active).ToList() ?? new();
     }
 
     private string ActiveLanguage =>
@@ -135,6 +177,15 @@
                 Content = _content,
                 Visible = Block.Visible,
                 Appearance = BuildAppearanceDto(),
+                Buttons = _buttons.Select((button, index) => new BlockButtonDto
+                {
+                    Label = button.Label,
+                    Action = ParseAction(button.Action),
+                    Href = button.Href,
+                    FormDefinitionId = button.FormDefinitionId,
+                    Visible = button.Visible,
+                    Order = index
+                }).ToList(),
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
             Http.Notify(res.Message, res.StatusCode);
@@ -145,6 +196,29 @@
             _saving = false;
         }
     }
+
+    private void AddAction() => _buttons.Add(new BlockButtonModel
+    {
+        Id = $"button-{Guid.NewGuid():N}",
+        Label = new(),
+        Action = "linkToPage",
+        Visible = true,
+        Order = _buttons.Count
+    });
+
+    private void RemoveAction(BlockButtonModel button)
+    {
+        _buttons.Remove(button);
+        for (var index = 0; index < _buttons.Count; index++) _buttons[index].Order = index;
+    }
+
+    private static BlockButtonAction ParseAction(string? action) => action switch
+    {
+        "openForm" => BlockButtonAction.OpenForm,
+        "downloadFile" => BlockButtonAction.DownloadFile,
+        "externalUrl" => BlockButtonAction.ExternalUrl,
+        _ => BlockButtonAction.LinkToPage
+    };
 
     private void LoadAppearance()
     {
@@ -323,3 +397,10 @@
             _ => "center"
         };
 }
+
+<style>
+    .text-block-actions { margin-top:.75rem; border:1px solid var(--border); border-radius:8px; padding:.65rem; }
+    .text-block-actions summary { cursor:pointer; font-weight:700; }
+    .text-block-actions__item { display:grid; grid-template-columns:minmax(140px,.7fr) minmax(280px,1.3fr) auto 38px; gap:.5rem; align-items:end; margin-top:.65rem; padding:.55rem; border:1px solid var(--border); border-radius:7px; }
+    @@media(max-width:760px){.text-block-actions__item{grid-template-columns:1fr}.text-block-actions__item>button{justify-self:end}}
+</style>

@@ -887,6 +887,26 @@
     color: inherit;
 }
 
+.sc-icon-block__action {
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.sc-icon-block__label {
+    color: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.sc-icon-block__description {
+    color: inherit;
+    opacity: .82;
+    line-height: 1.65;
+}
+
 .sc-button-block {
     display: flex;
 }
@@ -927,6 +947,10 @@
 }
 
 .sc-button-block .sc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
     min-height: 44px;
 }
 

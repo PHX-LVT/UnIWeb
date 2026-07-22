@@ -9,11 +9,11 @@
         }
         else
         {
-            <span>@StyleHelper.Lang(Block.StepLabel, Lang)</span>
+            <span>@MarkerLabel</span>
         }
     </div>
     <div>
-        <div class="sc-step-block__label">@StyleHelper.Lang(Block.StepLabel, Lang)</div>
+        <div class="sc-step-block__label">@MarkerLabel</div>
         <h3>@StyleHelper.Lang(Block.Title, Lang)</h3>
         <p>@StyleHelper.Lang(Block.Description, Lang)</p>
     </div>
@@ -22,4 +22,7 @@
 @code {
     [Parameter, EditorRequired] public PublicStepBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
+    private string MarkerLabel => Block.AutoNumber
+        ? $"{(Block.SequenceNumber ?? Block.Order + 1):00}"
+        : StyleHelper.Lang(Block.StepLabel, Lang);
 }

@@ -583,6 +583,248 @@ window.reloadPreviewIframe = function () {
     if (iframe) iframe.src = iframe.src;
 };
 
+window.blockEditor = window.blockEditor || {};
+window.blockEditor.initItemSortable = (root, dotnet) => {
+    if (!root || !dotnet || typeof Sortable === "undefined") return;
+    root.__blockItemSortable?.destroy();
+    root.__blockItemSortable = Sortable.create(root, {
+        handle: ".block-item-list__drag",
+        draggable: ".block-item-list__row",
+        dataIdAttr: "data-block-item-id",
+        animation: 150,
+        chosenClass: "sortable-chosen",
+        ghostClass: "sortable-ghost",
+        onEnd: () => dotnet.invokeMethodAsync("OnItemsReordered", root.__blockItemSortable.toArray()).catch(() => {})
+    });
+};
+window.blockEditor.destroyItemSortable = root => {
+    root?.__blockItemSortable?.destroy();
+    if (root) root.__blockItemSortable = null;
+};
+
+window.patchPreviewSectionStyle = function (sectionId, style) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    if (!iframe || !iframe.contentDocument || !sectionId || !style) return;
+
+    const section = [...iframe.contentDocument.querySelectorAll("[data-section-id]")]
+        .find(item => item.getAttribute("data-section-id") === sectionId);
+    if (!section) return;
+
+    const token = (value, allowed, fallback) => {
+        const normalized = String(value || "").trim().toLowerCase();
+        return allowed.includes(normalized) ? normalized : fallback;
+    };
+    const color = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
+    const backgroundType = token(style.backgroundType, ["none", "theme", "color", "image", "gradient", "video"], "color");
+    const backgroundColor = color(style.backgroundColor, "#ffffff");
+    const imageFit = token(style.backgroundImageFit, ["cover", "contain"], "cover");
+    const imagePosition = token(style.backgroundImagePosition, ["center", "top", "bottom", "left", "right"], "center");
+    const imagePositionCss = {
+        center: "center center",
+        top: "center top",
+        bottom: "center bottom",
+        left: "left center",
+        right: "right center"
+    }[imagePosition];
+    const gradientDirection = ["to right", "to bottom", "to bottom right", "to bottom left"]
+        .includes(String(style.gradientDirection || "").toLowerCase())
+        ? String(style.gradientDirection).toLowerCase()
+        : "to bottom";
+
+    section.style.removeProperty("background");
+    section.style.removeProperty("background-color");
+    section.style.removeProperty("background-image");
+    section.style.removeProperty("background-size");
+    section.style.removeProperty("background-position");
+    section.style.removeProperty("background-repeat");
+
+    if (backgroundType === "theme") {
+        section.style.backgroundColor = "var(--theme-color-background)";
+    } else if (backgroundType === "color") {
+        section.style.backgroundColor = backgroundColor;
+    } else if (backgroundType === "image" && style.backgroundImageUrl) {
+        const safeUrl = String(style.backgroundImageUrl).replace(/["\\\r\n]/g, "");
+        section.style.backgroundImage = `url("${safeUrl}")`;
+        section.style.backgroundSize = imageFit;
+        section.style.backgroundPosition = imagePositionCss;
+        section.style.backgroundRepeat = "no-repeat";
+    } else if (backgroundType === "gradient") {
+        section.style.background = `linear-gradient(${gradientDirection}, ${color(style.gradientFrom, "#001a33")}, ${color(style.gradientTo, "#e5c076")})`;
+    } else if (backgroundType === "video") {
+        section.style.backgroundColor = backgroundColor;
+    }
+
+    const height = token(style.height, ["auto", "half", "full", "custom"], "auto");
+    section.style.removeProperty("min-height");
+    if (height === "half") section.style.minHeight = "50vh";
+    if (height === "full") section.style.minHeight = "100vh";
+    if (height === "custom") {
+        const customHeight = Math.min(Math.max(Number.parseInt(style.customMinHeightPx, 10) || 640, 120), 3000);
+        section.style.minHeight = `${customHeight}px`;
+    }
+
+    section.style.removeProperty("color");
+    if (String(style.textColor).toLowerCase() === "light") section.style.color = "#ffffff";
+
+    ["none", "sm", "md", "lg", "xl"].forEach(value => section.classList.remove(`sc-pad-${value}`));
+    const padding = token(style.padding, ["none", "small", "medium", "large", "xl"], "medium");
+    section.classList.add(`sc-pad-${{ none: "none", small: "sm", medium: "md", large: "lg", xl: "xl" }[padding]}`);
+
+    ["narrow", "normal", "full"].forEach(value => section.classList.remove(`sc-width-${value}`));
+    section.classList.add(`sc-width-${token(style.contentWidth, ["narrow", "normal", "full"], "normal")}`);
+    section.classList.toggle("sc-mobile-hide", String(style.mobileLayout).toLowerCase() === "hide");
+
+    let video = [...section.children].find(item => item.classList?.contains("sc-section-bg-video"));
+    if (backgroundType === "video" && style.backgroundVideoUrl) {
+        if (!video) {
+            video = iframe.contentDocument.createElement("video");
+            video.className = "sc-section-bg-video";
+            video.autoplay = true;
+            video.muted = true;
+            video.loop = true;
+            video.playsInline = true;
+            video.preload = "metadata";
+            video.setAttribute("aria-hidden", "true");
+            section.insertBefore(video, section.firstChild);
+        }
+        if (video.getAttribute("src") !== String(style.backgroundVideoUrl)) video.setAttribute("src", String(style.backgroundVideoUrl));
+        video.play?.().catch(() => {});
+    } else if (video) {
+        video.remove();
+    }
+
+    const overlay = [...section.children].find(item => item.classList?.contains("sc-section-overlay"));
+    if (overlay) {
+        const opacity = Math.min(Math.max(Number(style.overlayOpacity) || 0, 0), 1);
+        const overlayColor = color(style.overlayColor, "#000000");
+        if (opacity <= 0 || !style.overlayColor) {
+            overlay.style.display = "none";
+        } else {
+            overlay.style.cssText = `position:absolute;inset:0;background-color:${overlayColor};opacity:${opacity};pointer-events:none;z-index:0`;
+        }
+    }
+
+    const layoutMode = token(style.blockLayoutMode, ["stack", "grid", "split"], "stack");
+    const gap = token(style.blockGap, ["none", "small", "medium", "large"], "medium");
+    const mobile = token(style.mobileLayout, ["stack", "scroll", "hide"], "stack");
+    const columns = Math.min(Math.max(Number.parseInt(style.blockGridColumns, 10) || 12, 1), 12);
+    section.querySelectorAll(".sc-section-blocks").forEach(container => {
+        const layoutClasses = ["stack", "grid", "split", "row", "orbit", "semicircle", "freeform"]
+            .map(value => `sc-section-blocks--${value}`);
+        [...container.classList]
+            .filter(name => name.startsWith("sc-section-blocks--") &&
+                !name.startsWith("sc-section-blocks--force-") &&
+                (name.includes("gap-") || name.includes("mobile-") || layoutClasses.includes(name)))
+            .forEach(name => container.classList.remove(name));
+        container.classList.add(`sc-section-blocks--${layoutMode}`);
+        container.classList.add(`sc-section-blocks--gap-${gap}`);
+        container.classList.add(`sc-section-blocks--mobile-${mobile}`);
+        container.style.setProperty("--sc-block-grid-columns", String(layoutMode === "split" ? 2 : columns));
+    });
+
+    window.requestAnimationFrame(() => window.__ezCanvasRequestPositions?.());
+};
+
+window.destroySectionEditorPanelSizing = function () {
+    const state = window.__ezSectionEditorSizing;
+    if (!state) return;
+    state.handle?.removeEventListener("pointerdown", state.pointerDown);
+    state.handle?.removeEventListener("keydown", state.keyDown);
+    window.removeEventListener("pointermove", state.pointerMove);
+    window.removeEventListener("pointerup", state.pointerUp);
+    window.removeEventListener("resize", state.resize);
+    document.body.classList.remove("ez-section-editor-resizing");
+    window.__ezSectionEditorSizing = null;
+};
+
+window.initSectionEditorPanelSizing = function () {
+    const root = document.querySelector(".ez-section-editor-window");
+    const handle = root?.querySelector(".ez-section-editor-resize-handle");
+    if (!root || !handle) return;
+    if (window.__ezSectionEditorSizing?.root === root) return;
+    window.destroySectionEditorPanelSizing?.();
+
+    const minimum = 420;
+    const maximum = 720;
+    const storageKey = "admin-section-editor-width";
+    const clampWidth = value => Math.min(Math.max(value, Math.min(minimum, window.innerWidth - 24)), Math.min(maximum, window.innerWidth - 24));
+    let stored = 560;
+    try {
+        stored = Number.parseInt(localStorage.getItem(storageKey) || "560", 10);
+    } catch { }
+    const initialRight = root.getBoundingClientRect().right;
+    const initialWidth = clampWidth(Number.isFinite(stored) ? stored : 560);
+    root.style.width = `${initialWidth}px`;
+    root.style.left = `${Math.max(0, initialRight - initialWidth)}px`;
+
+    const state = {
+        root,
+        handle,
+        dragging: false,
+        startX: 0,
+        startWidth: initialWidth,
+        right: 0
+    };
+    const applyWidth = (width, right = root.getBoundingClientRect().right) => {
+        const clamped = clampWidth(width);
+        root.style.width = `${clamped}px`;
+        root.style.left = `${Math.max(0, right - clamped)}px`;
+        return clamped;
+    };
+    const saveWidth = () => {
+        try {
+            localStorage.setItem(storageKey, String(Math.round(root.getBoundingClientRect().width)));
+        } catch { }
+    };
+    state.pointerDown = event => {
+        if (event.button !== 0) return;
+        const rect = root.getBoundingClientRect();
+        state.dragging = true;
+        state.startX = event.clientX;
+        state.startWidth = rect.width;
+        state.right = rect.right;
+        handle.setPointerCapture?.(event.pointerId);
+        document.body.classList.add("ez-section-editor-resizing");
+        event.preventDefault();
+    };
+    state.pointerMove = event => {
+        if (!state.dragging) return;
+        applyWidth(state.startWidth + state.startX - event.clientX, state.right);
+    };
+    state.pointerUp = () => {
+        if (!state.dragging) return;
+        state.dragging = false;
+        document.body.classList.remove("ez-section-editor-resizing");
+        saveWidth();
+    };
+    state.keyDown = event => {
+        const supported = ["ArrowLeft", "ArrowRight", "Home", "End"];
+        if (!supported.includes(event.key)) return;
+        const rect = root.getBoundingClientRect();
+        const step = event.shiftKey ? 40 : 16;
+        const width = event.key === "Home"
+            ? minimum
+            : event.key === "End"
+                ? maximum
+                : rect.width + (event.key === "ArrowLeft" ? step : -step);
+        applyWidth(width, rect.right);
+        saveWidth();
+        event.preventDefault();
+    };
+    state.resize = () => {
+        const right = root.getBoundingClientRect().right;
+        const width = clampWidth(root.getBoundingClientRect().width);
+        root.style.width = `${width}px`;
+        root.style.left = `${Math.max(0, right - width)}px`;
+    };
+    handle.addEventListener("pointerdown", state.pointerDown);
+    handle.addEventListener("keydown", state.keyDown);
+    window.addEventListener("pointermove", state.pointerMove);
+    window.addEventListener("pointerup", state.pointerUp);
+    window.addEventListener("resize", state.resize);
+    window.__ezSectionEditorSizing = state;
+};
+
 window.replayPreviewBlockAnimations = function (blockIds) {
     const iframe = document.getElementById("ez-preview-iframe");
     if (!iframe || !iframe.contentWindow) return;

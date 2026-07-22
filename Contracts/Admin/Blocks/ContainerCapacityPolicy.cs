@@ -3,10 +3,10 @@ namespace Contracts.Admin;
 public static class ContainerCapacityPolicy
 {
     public static IReadOnlyList<string> ChildBlockTypes { get; } =
-    [
-        "text", "bullet-list", "image", "video", "file", "card",
-        "metric", "step", "icon", "button", "map", "form"
-    ];
+        BlockCapabilityCatalog.All
+            .Where(definition => definition.CanBeContainerChild)
+            .Select(definition => definition.Type)
+            .ToArray();
 
     public static bool CanOwn(string? blockType) =>
         !string.IsNullOrWhiteSpace(blockType) && ChildBlockTypes.Contains(blockType, StringComparer.Ordinal);
@@ -71,6 +71,59 @@ public static class ContainerCapacityPolicy
         return preset.Slots.FirstOrDefault(slot =>
             string.Equals(slot.Key, slotKey, StringComparison.Ordinal))?.DisplayName
             ?? slotKey;
+    }
+
+    public static IReadOnlyList<ContainerPresetSlotDefinition> MissingRequiredSlots(
+        string? presetKey,
+        IEnumerable<string?> occupiedSlotKeys)
+    {
+        if (!ContainerPresetCatalog.TryGetGoverned(presetKey, out var preset))
+            return Array.Empty<ContainerPresetSlotDefinition>();
+
+        var occupied = (occupiedSlotKeys ?? Array.Empty<string?>())
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Select(key => key!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return preset.Slots
+            .Where(slot => slot.Required && !occupied.Contains(slot.Key))
+            .ToArray();
+    }
+
+    public static bool CanConvert(
+        string? targetPresetKey,
+        IEnumerable<string> childTypes,
+        out string? error)
+    {
+        error = null;
+        if (!ContainerPresetCatalog.TryGetGoverned(targetPresetKey, out var target))
+        {
+            error = "Choose a supported Container preset.";
+            return false;
+        }
+
+        var children = (childTypes ?? Array.Empty<string>()).ToList();
+        if (children.Count > target.MaximumChildren)
+        {
+            error = $"The {target.DisplayName} preset supports at most {target.MaximumChildren} Blocks.";
+            return false;
+        }
+
+        var unsupported = children.FirstOrDefault(type =>
+            !target.AllowedBlockTypes.Contains(type, StringComparer.Ordinal));
+        if (unsupported is not null)
+        {
+            error = $"The {target.DisplayName} preset does not allow {unsupported} Blocks.";
+            return false;
+        }
+
+        if (target.Purpose == "collection" && children.Distinct(StringComparer.Ordinal).Skip(1).Any())
+        {
+            error = "A Collection Container can contain only one Block type.";
+            return false;
+        }
+
+        return true;
     }
 
     public static string NormalizeMode(string? mode) => mode switch

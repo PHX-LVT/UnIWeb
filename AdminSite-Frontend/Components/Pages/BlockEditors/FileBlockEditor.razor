@@ -10,7 +10,7 @@
             <i class="fas @FileIcon"></i>
             <div>
                 <strong>@(_fileName ?? _asset.FileName)</strong>
-                <span>@(_asset.ContentType ?? T("File"))</span>
+                <span>@FileMetadata</span>
             </div>
             <button type="button" class="btn-admin btn-ghost" @onclick="ClearFile">
                 <i class="fas fa-times"></i> @T("Remove")
@@ -36,7 +36,11 @@
 
 <div class="form-group">
     <label class="form-label">@T("DisplayName")</label>
-    <DxTextBox @bind-Text="_fileName" CssClass="w-100" NullText="@T("DisplayNamePlaceholder")" />
+    <LangField @bind-Value="_displayName" Languages="Languages" NullText="@T("DisplayNamePlaceholder")" />
+    @if (!string.IsNullOrWhiteSpace(_fileName))
+    {
+        <div class="form-hint">@T("OriginalFileName"): @_fileName</div>
+    }
 </div>
 
 <div class="form-group">
@@ -59,14 +63,17 @@
     [Parameter] public BlockModel Block { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private BlockAssetReferenceModel _asset = new();
     private string? _fileName;
+    private Dictionary<string, string> _displayName = new();
     private string _openBehavior = "open";
     private bool _saving;
     private bool _resourcePickerOpen;
+    private string? _loadedBlockId;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string FileIcon => (_asset.ContentType ?? string.Empty).ToLowerInvariant() switch
     {
@@ -76,11 +83,19 @@
         var type when type.Contains("powerpoint") || type.Contains("presentation") => "fa-file-powerpoint",
         _ => "fa-file"
     };
+    private string FileMetadata => string.Join(" · ", new[]
+    {
+        _asset.ContentType,
+        _asset.SizeBytes > 0 ? FormatBytes(_asset.SizeBytes) : null
+    }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
     protected override void OnParametersSet()
     {
+        if (_loadedBlockId == Block.Id) return;
+        _loadedBlockId = Block.Id;
         _asset = CopyAsset(Block.Asset, Block.FileUrl, Block.FileName, Block.FileType);
         _fileName = Block.FileName ?? _asset.FileName;
+        _displayName = new(Block.DisplayName ?? new());
         _openBehavior = Block.OpenBehavior == "download" ? "download" : "open";
     }
 
@@ -103,6 +118,8 @@
 
         _asset = DirectAsset(response.Data);
         _fileName = response.Data.FileName;
+        if (!_displayName.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            _displayName = new() { ["en"] = response.Data.FileName };
         Http.Notify(T("FileUploaded"), response.StatusCode);
     }
 
@@ -112,6 +129,8 @@
         _fileName = string.IsNullOrWhiteSpace(resource.FileName)
             ? resource.Name.GetValueOrDefault("en")
             : resource.FileName;
+        if (!_displayName.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            _displayName = new(resource.Name);
     }
 
     private void ClearFile()
@@ -130,6 +149,7 @@
                 Asset = AssetDto(_asset),
                 FileUrl = _asset.Url,
                 Filename = _fileName ?? _asset.FileName ?? string.Empty,
+                DisplayName = _displayName,
                 FileType = _asset.ContentType ?? string.Empty,
                 OpenBehavior = _openBehavior,
                 Visible = Block.Visible,
@@ -162,4 +182,13 @@
         SchemaVersion = 1, Url = value.Url, ResourceId = value.ResourceId, ResourceSource = value.ResourceSource,
         StorageKey = value.StorageKey, FileName = value.FileName, ContentType = value.ContentType, SizeBytes = value.SizeBytes
     };
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        var value = (double)Math.Max(0, bytes);
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
+        return $"{value:0.#} {units[unit]}";
+    }
 }

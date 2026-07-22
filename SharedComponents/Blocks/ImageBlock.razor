@@ -1,10 +1,10 @@
 @using Contracts.Public
 @using SharedComponents.Helpers
 
-<figure class="sc-block sc-block--image">
+<figure class="sc-block sc-block--image" aria-hidden="@(Block.Appearance.Decorative ? "true" : null)">
     @if (!string.IsNullOrEmpty(Block.ImageUrl))
     {
-        @if (Block.OpenInLightbox)
+        @if (Block.OpenInLightbox && !Block.Appearance.Decorative)
         {
             <button type="button"
                     class="sc-block__image-trigger"
@@ -30,7 +30,7 @@
     [Parameter, EditorRequired] public PublicImageBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
 
-    private string AltText => StyleHelper.Lang(Block.AltText, Lang);
+    private string AltText => Block.Appearance.Decorative ? string.Empty : StyleHelper.Lang(Block.AltText, Lang);
     private string CaptionText => StyleHelper.Lang(Block.Caption, Lang);
     private string LightboxTitle => string.IsNullOrWhiteSpace(CaptionText)
         ? (string.IsNullOrWhiteSpace(AltText) ? "Image" : AltText)

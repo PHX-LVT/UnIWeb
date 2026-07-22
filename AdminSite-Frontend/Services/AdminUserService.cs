@@ -65,8 +65,38 @@ namespace AdminSite.Services
                 Ids = ids.ToList()
             });
 
+        public Task<ApiResponse<AdminPagedResponse<AdminRememberedDeviceResponse>>> GetRememberedDevicesAsync(
+            int page,
+            int pageSize,
+            string? adminId = null)
+        {
+            var query = $"?page={page}&pageSize={pageSize}";
+            if (!string.IsNullOrWhiteSpace(adminId))
+                query += $"&adminId={Uri.EscapeDataString(adminId)}";
+            return _http.GetAsync<AdminPagedResponse<AdminRememberedDeviceResponse>>(
+                $"api/admin/users/remembered-devices{query}");
+        }
+
+        public Task<ApiResponse<long>> RevokeRememberedDevicesAsync(IEnumerable<string> ids) =>
+            _http.PostAsync<long>("api/admin/users/remembered-devices/revoke", new AdminBulkDeleteRequest
+            {
+                Ids = ids.ToList()
+            });
+
         public Task<ApiResponse<List<AdminSessionResponse>>> GetMySessionsAsync() =>
             _http.GetAsync<List<AdminSessionResponse>>("api/admin/users/me/sessions");
+
+        public Task<ApiResponse<List<AdminRememberedDeviceResponse>>> GetMyRememberedDevicesAsync() =>
+            _http.GetAsync<List<AdminRememberedDeviceResponse>>("api/admin/users/me/remembered-devices");
+
+        public Task<ApiResponse<long>> RevokeMyRememberedDevicesAsync(IEnumerable<string> ids) =>
+            _http.PostAsync<long>("api/admin/users/me/remembered-devices/revoke", new AdminBulkDeleteRequest
+            {
+                Ids = ids.ToList()
+            });
+
+        public Task<ApiResponse<string>> SignOutAllMyDevicesAsync() =>
+            _http.PostAsync<string>("api/admin/users/me/sign-out-all", new { });
 
         public Task<ApiResponse<List<AdminLoginActivityResponse>>> GetMyLoginActivityAsync() =>
             _http.GetAsync<List<AdminLoginActivityResponse>>("api/admin/users/me/login-activity");

@@ -56,7 +56,8 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
         "accountDisabled",
         "accountDeleted",
         "accountUpdated",
-        "accessDenied"
+        "accessDenied",
+        "rememberedDeviceExpired"
     ];
 
     private static readonly IReadOnlyDictionary<string, string> LoginTextCatalogKeys =
@@ -87,7 +88,8 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
             ["accountDisabled"] = "AdminLoginAccountDisabled",
             ["accountDeleted"] = "AdminLoginAccountDeleted",
             ["accountUpdated"] = "AdminLoginAccountUpdated",
-            ["accessDenied"] = "AdminLoginAccessDenied"
+            ["accessDenied"] = "AdminLoginAccessDenied",
+            ["rememberedDeviceExpired"] = "AdminLoginRememberedDeviceExpired"
         };
 
     private readonly AdminApiAuthenticationClient _authenticationClient;
@@ -132,6 +134,28 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
 
         ReturnUrl = SafeReturnUrl(returnUrl);
         StatusReason = NormalizeReason(reason);
+
+        var rememberedCredential = Request.Cookies[AdminAuthConstants.RememberedDeviceCookieName];
+        if (!string.IsNullOrWhiteSpace(rememberedCredential))
+        {
+            var rememberedResult = await _authenticationClient.ExchangeRememberedDeviceAsync(
+                rememberedCredential,
+                cancellationToken);
+            if (rememberedResult.Status == AdminRememberedDeviceLoginStatus.Accepted &&
+                rememberedResult.Login is not null &&
+                await TrySignInAsync(rememberedResult.Login, true, ReturnUrl))
+            {
+                WriteRememberedDeviceCookie(rememberedResult.Login.RememberedDevice);
+                return LocalRedirect(ReturnUrl);
+            }
+
+            if (rememberedResult.Status == AdminRememberedDeviceLoginStatus.Invalid)
+            {
+                DeleteRememberedDeviceCookie();
+                StatusReason = "rememberedDeviceExpired";
+            }
+        }
+
         await LoadLoginAppearanceStateAsync(cancellationToken);
         await LoadLoginLanguageStateAsync(null, cancellationToken);
         StatusMessage = StatusReason.Length > 0 ? Text[StatusReason] : null;
@@ -151,6 +175,8 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
         var result = await _authenticationClient.LoginAsync(
             Input.Email,
             Input.Password,
+            Input.RememberDevice,
+            Request.Cookies[AdminAuthConstants.RememberedDeviceCookieName],
             cancellationToken);
 
         if (!result.Success || result.Login is null)
@@ -159,23 +185,40 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
             return Page();
         }
 
-        if (string.IsNullOrWhiteSpace(result.Login.Email) ||
-            string.IsNullOrWhiteSpace(result.Login.RoleId) ||
-            string.IsNullOrWhiteSpace(result.Login.RoleName) ||
-            result.Login.Status != AdminUserStatus.Active ||
-            !AdminAuthConstants.TryReadJwtMetadata(
-                result.Login.Token,
-                out var expiresUtc,
-                out var tokenId,
-                out var jwtAdminId) ||
-            !string.Equals(jwtAdminId, result.Login.AdminId, StringComparison.Ordinal))
+        if (!await TrySignInAsync(result.Login, Input.RememberDevice, ReturnUrl))
         {
             _logger.LogWarning("Admin login returned a malformed or expired JWT.");
             ModelState.AddModelError(string.Empty, Text["invalidSession"]);
             return Page();
         }
 
-        var principal = AdminAuthConstants.CreatePrincipal(result.Login, tokenId);
+        if (Input.RememberDevice)
+            WriteRememberedDeviceCookie(result.Login.RememberedDevice);
+        else
+            DeleteRememberedDeviceCookie();
+
+        _logger.LogInformation("Admin {AdminId} signed in.", result.Login.AdminId);
+        return LocalRedirect(ReturnUrl);
+    }
+
+    private async Task<bool> TrySignInAsync(LoginResponse login, bool persistent, string redirectUrl)
+    {
+        if (string.IsNullOrWhiteSpace(login.Email) ||
+            string.IsNullOrWhiteSpace(login.RoleId) ||
+            string.IsNullOrWhiteSpace(login.RoleName) ||
+            login.Status != AdminUserStatus.Active ||
+            !AdminAuthConstants.TryReadJwtMetadata(
+                login.Token,
+                out var expiresUtc,
+                out var tokenId,
+                out var jwtAdminId) ||
+            !string.Equals(jwtAdminId, login.AdminId, StringComparison.Ordinal))
+            return false;
+
+        var principal = AdminAuthConstants.CreatePrincipal(
+            login,
+            tokenId,
+            login.RememberedDevice?.DeviceId);
         await HttpContext.SignInAsync(
             AdminAuthConstants.Scheme,
             principal,
@@ -183,14 +226,49 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
             {
                 AllowRefresh = false,
                 ExpiresUtc = expiresUtc,
-                IsPersistent = Input.RememberMe,
+                IsPersistent = persistent,
                 IssuedUtc = DateTimeOffset.UtcNow,
-                RedirectUri = ReturnUrl
+                RedirectUri = redirectUrl
             });
-
-        _logger.LogInformation("Admin {AdminId} signed in.", result.Login.AdminId);
-        return LocalRedirect(ReturnUrl);
+        return true;
     }
+
+    private void WriteRememberedDeviceCookie(RememberedDeviceCredentialResponse? rememberedDevice)
+    {
+        if (rememberedDevice is null ||
+            string.IsNullOrWhiteSpace(rememberedDevice.Credential) ||
+            rememberedDevice.ExpiresAt <= DateTime.UtcNow)
+        {
+            DeleteRememberedDeviceCookie();
+            return;
+        }
+
+        Response.Cookies.Append(
+            AdminAuthConstants.RememberedDeviceCookieName,
+            rememberedDevice.Credential,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Lax,
+                IsEssential = true,
+                Path = "/",
+                Expires = new DateTimeOffset(DateTime.SpecifyKind(rememberedDevice.ExpiresAt, DateTimeKind.Utc)),
+                MaxAge = rememberedDevice.ExpiresAt - DateTime.UtcNow
+            });
+    }
+
+    private void DeleteRememberedDeviceCookie() =>
+        Response.Cookies.Delete(
+            AdminAuthConstants.RememberedDeviceCookieName,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Lax,
+                IsEssential = true,
+                Path = "/"
+            });
 
     private async Task LoadLoginAppearanceStateAsync(CancellationToken cancellationToken)
     {
@@ -365,6 +443,7 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
         "account-deleted" => "accountDeleted",
         "account-updated" => "accountUpdated",
         "access-denied" => "accessDenied",
+        "remembered-device-expired" => "rememberedDeviceExpired",
         _ => string.Empty
     };
 
@@ -395,7 +474,7 @@ public sealed class AdminLoginModel : Microsoft.AspNetCore.Mvc.RazorPages.PageMo
 
         public string Password { get; set; } = string.Empty;
 
-        public bool RememberMe { get; set; }
+        public bool RememberDevice { get; set; }
     }
 
     public sealed record LoginLanguageOption(string Code, string Name, string NativeName, string Direction);

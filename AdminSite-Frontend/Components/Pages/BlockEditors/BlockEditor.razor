@@ -93,8 +93,8 @@ else
                         </button>
                         <button class="btn-admin btn-danger"
                                 style="padding:3px 8px"
-                                disabled="@(block.Authoring.FullLocked || block.Authoring.ContentLocked || IsRequiredContainerSlot(block))"
-                                title="@(IsRequiredContainerSlot(block) ? T("RequiredContainerSlotCannotDelete") : T("Delete"))"
+                                disabled="@(block.Authoring.FullLocked || block.Authoring.ContentLocked)"
+                                title="@T("Delete")"
                                 @onclick="() => _confirmDelete = block">
                             <i class="fas fa-trash"></i>
                         </button>
@@ -180,11 +180,33 @@ else
                                         @T(_fullBlock.Visible ? "Hide" : "Show")
                                     </button>
                                     <button type="button" class="btn-admin btn-danger"
-                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked || IsRequiredContainerSlot(_fullBlock))"
+                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked)"
                                             @onclick="() => _confirmDelete = _fullBlock">
                                         <i class="fas fa-trash"></i> @T("Delete")
                                     </button>
                                 </div>
+                                }
+
+                                @if (_fullBlock.Type != "container" &&
+                                     (!string.IsNullOrWhiteSpace(_fullBlock.ParentBlockId) || MoveTargetOptions.Count > 0))
+                                {
+                                    <div class="block-focused-inspector__move" @onclick:stopPropagation="true">
+                                        <label>
+                                            <span>@T("MoveBlockTo")</span>
+                                            <select @bind="_moveTargetParentId" disabled="@(!CanMoveSelectedBlock)">
+                                                <option value="">@T("SelectedSection")</option>
+                                                @foreach (var target in MoveTargetOptions)
+                                                {
+                                                    <option value="@target.Id">@BlockDisplayName(target) (@TargetChildCount(target)/@TargetCapacity(target))</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <button type="button" class="btn-admin btn-ghost"
+                                                disabled="@(!CanMoveSelectedBlock || NormalizeParent(_moveTargetParentId) == NormalizeParent(_fullBlock.ParentBlockId))"
+                                                @onclick="MoveSelectedBlock">
+                                            <i class="fas fa-arrows-alt"></i> @T("Move")
+                                        </button>
+                                    </div>
                                 }
 
                                 <details class="block-focused-inspector__governance">
@@ -196,7 +218,7 @@ else
                                 </details>
                             </div>
 
-                            @if (UseArrangeWorkspace && AddTargetContainer is not null)
+                                @if (AddTargetContainer is not null)
                             {
                                 <section class="container-owned-manager">
                                     <header>
@@ -293,6 +315,7 @@ else
                                     <FileBlockEditor Block="_fullBlock"
                                                      PageId="@PageId"
                                                      SectionId="@SectionId"
+                                                     Languages="Languages"
                                                      OnSaved="HandleBlockSaved" />
                                     break;
                                 case "map":
@@ -308,13 +331,20 @@ else
                                                      Languages="Languages"
                                                      OnSaved="HandleBlockSaved" />
                                     break;
+                                case "container":
+                                    <ContainerBlockEditor Block="_fullBlock"
+                                                          PageId="@PageId"
+                                                          SectionId="@SectionId"
+                                                          Languages="Languages"
+                                                          Children="ContainerChildren"
+                                                          OnSaved="HandleBlockSaved" />
+                                    break;
                                 case "card":
                                 case "button":
                                 case "metric":
                                 case "bullet-list":
                                 case "step":
                                 case "icon":
-                                case "container":
                                     <DesignBlockEditor Block="_fullBlock"
                                                        PageId="@PageId"
                                                        SectionId="@SectionId"
@@ -601,6 +631,18 @@ else
         flex-wrap: wrap;
         gap: .45rem;
     }
+    .block-focused-inspector__move {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) auto;
+        gap: .5rem;
+        align-items: end;
+        padding: .6rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+    }
+    .block-focused-inspector__move label { display:grid; gap:.25rem; color:var(--text-muted); font-size:.68rem; }
+    .block-focused-inspector__move select { min-height:36px; border:1px solid var(--border); border-radius:6px; background:#fff; padding:.35rem .5rem; }
     .block-focused-inspector__governance {
         padding-top: .65rem;
         border-top: 1px solid var(--border);
@@ -1033,6 +1075,8 @@ else
     private BlockModel?      _confirmDelete;
     private bool             _loading    = true;
     private bool             _reorderingBlock = false;
+    private bool             _movingBlock = false;
+    private string           _moveTargetParentId = string.Empty;
     private bool             _savingLayout = false;
     private string?          _visualValidationMessage;
     private string?          _visualHistoryBlockId;
@@ -1208,18 +1252,6 @@ else
         var listBlock = _blocks.FirstOrDefault(block => block.Id == _fullBlock.Id);
         if (listBlock is not null)
             listBlock.EditorLabel = new Dictionary<string, string>(title);
-    }
-
-    private bool IsRequiredContainerSlot(BlockModel block)
-    {
-        if (string.IsNullOrWhiteSpace(block.ParentBlockId) ||
-            string.IsNullOrWhiteSpace(block.Authoring?.PresetSlotName))
-            return false;
-
-        var parent = _blocks.FirstOrDefault(candidate =>
-            candidate.Id == block.ParentBlockId && candidate.Type == "container");
-        return parent is not null &&
-               ContainerCapacityPolicy.IsRequiredSlot(parent.PresetKey, block.Authoring.PresetSlotName);
     }
 
     private bool PresetAllowsChildReorder(BlockModel block)
@@ -1521,6 +1553,62 @@ else
             false));
     }
 
+    private IReadOnlyList<BlockModel> MoveTargetOptions => _blocks
+        .Where(block => block.Type == "container" && block.Id != _fullBlock?.Id)
+        .Where(block => block.Id != _fullBlock?.ParentBlockId)
+        .Where(block => TargetChildCount(block) < TargetCapacity(block))
+        .Where(CanMoveSelectedBlockTo)
+        .OrderBy(BlockDisplayName)
+        .ToList();
+
+    private bool CanMoveSelectedBlockTo(BlockModel target)
+    {
+        if (_fullBlock is null || !ContainerCapacityPolicy.CanOwn(_fullBlock.Type)) return false;
+        if (!ContainerCapacityPolicy.AllowedChildTypes(target.PresetKey).Contains(_fullBlock.Type, StringComparer.Ordinal))
+            return false;
+        if (!string.Equals(target.ContainerLayout?.Purpose, "collection", StringComparison.Ordinal))
+            return true;
+        var lockedType = target.ContainerLayout?.AllowedChildType;
+        return string.IsNullOrWhiteSpace(lockedType) || string.Equals(lockedType, _fullBlock.Type, StringComparison.Ordinal);
+    }
+
+    private bool CanMoveSelectedBlock =>
+        !_movingBlock && _fullBlock is not null && _fullBlock.Type != "container" &&
+        !_fullBlock.Authoring.FullLocked && !_fullBlock.Authoring.GeometryLocked;
+
+    private int TargetChildCount(BlockModel target) =>
+        _blocks.Count(block => block.ParentBlockId == target.Id);
+
+    private static int TargetCapacity(BlockModel target) =>
+        ContainerCapacityPolicy.MaxChildren(
+            target.PresetKey,
+            target.ContainerLayout?.Mode,
+            target.ContainerLayout?.Columns);
+
+    private async Task MoveSelectedBlock()
+    {
+        if (!CanMoveSelectedBlock || _fullBlock is null) return;
+        _movingBlock = true;
+        try
+        {
+            var response = await BlockService.MoveAsync(PageId, SectionId, new BlockMoveRequestDto
+            {
+                BlockId = _fullBlock.Id,
+                TargetParentBlockId = string.IsNullOrWhiteSpace(_moveTargetParentId) ? null : _moveTargetParentId
+            });
+            Http.Notify(response, T("NotificationOrderSaved"));
+            if (!response.Success) return;
+            var activeId = _fullBlock.Id;
+            await ReloadBlocks();
+            await RestoreActiveBlock(activeId);
+            await NotifyChangedAsync();
+        }
+        finally
+        {
+            _movingBlock = false;
+        }
+    }
+
     private async Task ToggleVisibility(BlockModel block)
     {
         var res = await BlockService.SetVisibilityAsync(
@@ -1701,6 +1789,7 @@ else
         _renameBeforeEdit = string.Empty;
         if (_fullBlock is not null)
         {
+            _moveTargetParentId = _fullBlock.ParentBlockId ?? string.Empty;
             _fullBlock.Layout ??= new BlockLayoutModel();
             _fullBlock.Appearance ??= new BlockAppearanceModel();
             _fullBlock.Responsive ??= new BlockResponsiveSettingsModel();

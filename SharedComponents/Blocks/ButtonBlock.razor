@@ -5,7 +5,15 @@
     <ActionButton Action="@Block.Action" FormDefinitionId="@Block.FormDefinitionId" Href="@(string.IsNullOrWhiteSpace(Block.Href) ? "#" : Block.Href)"
                   Target="@Target" Rel="@Rel" Download="@Downloads"
                   CssClass="@($"sc-btn sc-btn--{(string.IsNullOrWhiteSpace(Block.Style) ? "filled" : Block.Style)}")">
+        @if (!string.IsNullOrWhiteSpace(Block.Icon) && Block.IconPosition != "right")
+        {
+            <i class="@Block.Icon" aria-hidden="true"></i>
+        }
         @StyleHelper.Lang(Block.Label, Lang)
+        @if (!string.IsNullOrWhiteSpace(Block.Icon) && Block.IconPosition == "right")
+        {
+            <i class="@Block.Icon" aria-hidden="true"></i>
+        }
     </ActionButton>
 </div>
 

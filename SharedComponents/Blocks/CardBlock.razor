@@ -6,7 +6,7 @@
     {
         <div class="sc-card-block__media">
             <img src="@Block.ImageUrl"
-                 alt="@StyleHelper.Lang(Block.Title, Lang)" />
+                 alt="@ImageAltText" />
         </div>
     }
     <div class="sc-card-block__body">
@@ -18,7 +18,7 @@
         <p>@StyleHelper.Lang(Block.Description, Lang)</p>
         @if (HasAction)
         {
-            <ActionButton CssClass="sc-btn sc-btn--outline"
+            <ActionButton CssClass="@($"sc-btn sc-btn--{ButtonStyle}")"
                           Action="@Block.Action"
                           FormDefinitionId="@Block.FormDefinitionId"
                           Href="@Block.Href"
@@ -39,6 +39,10 @@
     private bool IsExternal => string.Equals(Block.Action, "externalUrl", StringComparison.OrdinalIgnoreCase);
     private bool HasAction => !string.IsNullOrWhiteSpace(StyleHelper.Lang(Block.ButtonLabel, Lang)) &&
         (OpensForm ? !string.IsNullOrWhiteSpace(Block.FormDefinitionId) : !string.IsNullOrWhiteSpace(Block.Href));
+    private string ImageAltText => StyleHelper.Lang(Block.ImageAltText, Lang) is { Length: > 0 } value
+        ? value
+        : StyleHelper.Lang(Block.Title, Lang);
+    private string ButtonStyle => Block.ButtonStyle is "filled" or "ghost" ? Block.ButtonStyle : "outline";
     private string? Target => IsExternal ? "_blank" : null;
     private string? Rel => IsExternal ? "noopener noreferrer" : null;
 }

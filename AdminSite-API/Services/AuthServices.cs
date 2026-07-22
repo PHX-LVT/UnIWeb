@@ -19,6 +19,7 @@ namespace FullProject.Services
         private readonly IMongoCollection<AdminUser> _users;
         private readonly IMongoCollection<AdminSessionRecord> _sessions;
         private readonly AdminRoleService _roles;
+        private readonly RememberedDeviceService _rememberedDevices;
         private readonly JwtSettings _jwt;
         private readonly IAuditTrailWriter _auditWriter;
         private readonly ILoginActivityWriter _loginWriter;
@@ -28,6 +29,7 @@ namespace FullProject.Services
             IMongoDatabase db,
             IOptions<JwtSettings> jwt,
             AdminRoleService roles,
+            RememberedDeviceService rememberedDevices,
             IAuditTrailWriter auditWriter,
             ILoginActivityWriter loginWriter,
             ILogger<AuthService> logger)
@@ -35,13 +37,20 @@ namespace FullProject.Services
             _users = db.GetCollection<AdminUser>("admin_users");
             _sessions = db.GetCollection<AdminSessionRecord>("admin_sessions");
             _roles = roles;
+            _rememberedDevices = rememberedDevices;
             _jwt = jwt.Value;
             _auditWriter = auditWriter;
             _loginWriter = loginWriter;
             _logger = logger;
         }
 
-        public async Task<LoginResponseDto?> LoginAsync(string email, string password, string ipAddress, string userAgent)
+        public async Task<LoginResponseDto?> LoginAsync(
+            string email,
+            string password,
+            bool rememberDevice,
+            string? existingRememberedDeviceCredential,
+            string ipAddress,
+            string userAgent)
         {
             var normalizedEmail = NormalizeEmail(email);
             var user = await _users.Find(u => u.Email == normalizedEmail).FirstOrDefaultAsync();
@@ -64,32 +73,13 @@ namespace FullProject.Services
                 return null;
             }
 
-            var tokenId = Guid.NewGuid().ToString("N");
-            var expiresAt = DateTime.UtcNow.AddHours(_jwt.ExpiryHour);
-            var role = await _roles.GetRoleForUserAsync(user);
-            if (role is null)
+            var issued = await IssueSessionAsync(user, ipAddress, userAgent);
+            if (issued is null)
             {
                 await RecordLoginActivityAsync(user, user.Email, "login-denied", false, "Assigned role is unavailable.", ipAddress, userAgent);
                 return null;
             }
-            var effectivePermissions = await _roles.GetEffectivePermissionsAsync(user);
-            var token = GenerateJwt(user, role, tokenId, effectivePermissions, expiresAt);
-            var session = new AdminSessionRecord
-            {
-                AdminId = user.Id,
-                Email = user.Email,
-                TokenId = tokenId,
-                TokenVersion = user.TokenVersion,
-                LoginAt = DateTime.UtcNow,
-                LastActivityAt = DateTime.UtcNow,
-                ExpiresAt = expiresAt,
-                IpAddress = ipAddress,
-                UserAgent = userAgent,
-                BrowserName = ParseBrowser(userAgent),
-                OperatingSystem = ParseOperatingSystem(userAgent)
-            };
 
-            await _sessions.InsertOneAsync(session);
             await _users.UpdateOneAsync(u => u.Id == user.Id,
                 Builders<AdminUser>.Update
                     .Set(u => u.Status, AdminUserStatus.Active)
@@ -101,20 +91,138 @@ namespace FullProject.Services
             user.Status = AdminUserStatus.Active;
             user.FailedLoginAttempts = 0;
             user.LockedUntil = null;
-            await RecordLoginActivityAsync(user, user.Email, "login-success", true, "Admin logged in.", ipAddress, userAgent, tokenId);
+            issued.Login.Status = AdminUserStatus.Active;
+            await RecordLoginActivityAsync(user, user.Email, "login-success", true, "Admin logged in.", ipAddress, userAgent, issued.TokenId);
 
-            return new LoginResponseDto
+            if (!string.IsNullOrWhiteSpace(existingRememberedDeviceCredential))
             {
-                Token = token,
-                AdminId = user.Id,
-                Email = user.Email,
-                FullName = DisplayName(user),
-                RoleId = role.Id,
-                RoleName = role.Name,
-                IsAdminAdmin = role.IsProtected,
-                Status = user.Status,
-                Permissions = effectivePermissions
+                _ = await _rememberedDevices.RevokeCredentialAsync(
+                    existingRememberedDeviceCredential,
+                    user.Id,
+                    AdminRememberedDeviceRevokeReason.UserRequested,
+                    user.Id);
+            }
+
+            if (rememberDevice && _rememberedDevices.Enabled)
+            {
+                var remembered = await _rememberedDevices.CreateAsync(user, ipAddress, userAgent);
+                if (remembered is not null)
+                {
+                    issued.Login.RememberedDevice = MapCredential(remembered);
+                    await RecordLoginActivityAsync(
+                        user,
+                        user.Email,
+                        "remembered-device-registered",
+                        true,
+                        "Remembered device registered.",
+                        ipAddress,
+                        userAgent,
+                        issued.TokenId);
+                }
+            }
+
+            return issued.Login;
+        }
+
+        public async Task<(LoginResponseDto? Login, RememberedDeviceExchangeStatus Status)> ExchangeRememberedDeviceAsync(
+            string credential,
+            string ipAddress,
+            string userAgent,
+            CancellationToken cancellationToken = default)
+        {
+            var exchange = await _rememberedDevices.ExchangeAsync(
+                credential,
+                ipAddress,
+                userAgent,
+                cancellationToken);
+            var knownUser = exchange.Record is null
+                ? null
+                : await GetByIdAsync(exchange.Record.AdminId);
+
+            if (exchange.Status != RememberedDeviceExchangeStatus.Succeeded ||
+                exchange.Record is null ||
+                string.IsNullOrWhiteSpace(exchange.Credential))
+            {
+                await RecordLoginActivityAsync(
+                    knownUser,
+                    knownUser?.Email ?? string.Empty,
+                    exchange.Status == RememberedDeviceExchangeStatus.ReuseDetected
+                        ? "remembered-device-reuse-detected"
+                        : "remembered-device-denied",
+                    false,
+                    RememberedDeviceFailureMessage(exchange.Status),
+                    ipAddress,
+                    userAgent);
+                return (null, exchange.Status);
+            }
+
+            var user = knownUser;
+            if (user is null)
+            {
+                await _rememberedDevices.RevokeCredentialAsync(
+                    exchange.Credential,
+                    exchange.Record.AdminId,
+                    AdminRememberedDeviceRevokeReason.AccountDeleted,
+                    exchange.Record.AdminId,
+                    cancellationToken);
+                return (null, RememberedDeviceExchangeStatus.Invalid);
+            }
+
+            NormalizeUserDefaults(user);
+            if (!CanLogin(user) || user.TokenVersion != exchange.Record.TokenVersion)
+            {
+                var reason = user.Status == AdminUserStatus.Disabled
+                    ? AdminRememberedDeviceRevokeReason.UserDisabled
+                    : AdminRememberedDeviceRevokeReason.RoleChanged;
+                await _rememberedDevices.RevokeAllAsync(user.Id, user.Id, reason, cancellationToken);
+                await RecordLoginActivityAsync(
+                    user,
+                    user.Email,
+                    "remembered-device-denied",
+                    false,
+                    "Remembered device no longer matches the account security state.",
+                    ipAddress,
+                    userAgent);
+                return (null, RememberedDeviceExchangeStatus.Revoked);
+            }
+
+            var issued = await IssueSessionAsync(user, ipAddress, userAgent, cancellationToken);
+            if (issued is null)
+            {
+                await _rememberedDevices.RevokeAllAsync(
+                    user.Id,
+                    user.Id,
+                    AdminRememberedDeviceRevokeReason.RoleChanged,
+                    cancellationToken);
+                await RecordLoginActivityAsync(user, user.Email, "remembered-device-denied", false, "Assigned role is unavailable.", ipAddress, userAgent);
+                return (null, RememberedDeviceExchangeStatus.Revoked);
+            }
+
+            issued.Login.RememberedDevice = new RememberedDeviceCredentialResponse
+            {
+                DeviceId = exchange.Record.Id,
+                Credential = exchange.Credential,
+                ExpiresAt = exchange.Record.ExpiresAt
             };
+            await RecordLoginActivityAsync(
+                user,
+                user.Email,
+                "remembered-device-authenticated",
+                true,
+                "Remembered device created a new session.",
+                ipAddress,
+                userAgent,
+                issued.TokenId);
+            await RecordLoginActivityAsync(
+                user,
+                user.Email,
+                "remembered-device-rotated",
+                true,
+                "Remembered-device credential rotated.",
+                ipAddress,
+                userAgent,
+                issued.TokenId);
+            return (issued.Login, RememberedDeviceExchangeStatus.Succeeded);
         }
 
         public async Task<bool> ValidateSessionAsync(string adminId, string tokenId, int tokenVersion)
@@ -149,12 +257,46 @@ namespace FullProject.Services
             return true;
         }
 
-        public async Task LogoutAsync(string adminId, string tokenId, string ipAddress, string userAgent)
+        public async Task LogoutAsync(
+            string adminId,
+            string tokenId,
+            string? rememberedDeviceCredential,
+            string ipAddress,
+            string userAgent)
         {
             await RevokeSessionByTokenIdAsync(tokenId, adminId, AdminSessionRevokeReason.Logout, ipAddress);
             var user = await GetByIdAsync(adminId);
             await RecordLoginActivityAsync(user, user?.Email ?? string.Empty, "logout", true, "Admin logged out.", ipAddress, userAgent, tokenId);
+            if (await _rememberedDevices.RevokeCredentialAsync(
+                    rememberedDeviceCredential,
+                    adminId,
+                    AdminRememberedDeviceRevokeReason.Logout,
+                    adminId))
+            {
+                await RecordLoginActivityAsync(
+                    user,
+                    user?.Email ?? string.Empty,
+                    "remembered-device-revoked",
+                    true,
+                    "Remembered device revoked during logout.",
+                    ipAddress,
+                    userAgent,
+                    tokenId);
+            }
         }
+
+        public Task<bool> RevokeRememberedDeviceCredentialAsync(
+            string credential,
+            string actorId,
+            AdminRememberedDeviceRevokeReason reason,
+            string? expectedAdminId = null,
+            CancellationToken cancellationToken = default) =>
+            _rememberedDevices.RevokeCredentialAsync(
+                credential,
+                actorId,
+                reason,
+                expectedAdminId,
+                cancellationToken);
 
         public async Task<AdminUser?> GetByIdAsync(string adminId) =>
             await _users.Find(u => u.Id == adminId).FirstOrDefaultAsync();
@@ -444,6 +586,76 @@ namespace FullProject.Services
             return result.DeletedCount;
         }
 
+        public Task<(List<AdminRememberedDeviceRecord> Items, long TotalCount, int Page, int PageSize)> GetRememberedDevicesPageAsync(
+            int page,
+            int pageSize,
+            string? adminId = null,
+            bool includeRevoked = true,
+            CancellationToken cancellationToken = default) =>
+            _rememberedDevices.GetPageAsync(page, pageSize, adminId, includeRevoked, cancellationToken);
+
+        public async Task<long> RevokeRememberedDevicesAsync(
+            IEnumerable<string> ids,
+            AdminUser actor,
+            string ipAddress,
+            string userAgent,
+            CancellationToken cancellationToken = default)
+        {
+            var count = await _rememberedDevices.RevokeByIdsAsync(
+                ids,
+                actor.Id,
+                AdminRememberedDeviceRevokeReason.AdminRevoked,
+                null,
+                cancellationToken);
+            if (count > 0)
+            {
+                await LogAsync(
+                    AdminAuditArea.UserManagement,
+                    "remembered-devices-revoked",
+                    actor.Id,
+                    actor.Email,
+                    null,
+                    null,
+                    $"Revoked {count} remembered device(s).",
+                    ipAddress,
+                    userAgent);
+            }
+            return count;
+        }
+
+        public Task<long> RevokeOwnRememberedDevicesAsync(
+            IEnumerable<string> ids,
+            AdminUser actor,
+            CancellationToken cancellationToken = default) =>
+            _rememberedDevices.RevokeByIdsAsync(
+                ids,
+                actor.Id,
+                AdminRememberedDeviceRevokeReason.UserRequested,
+                actor.Id,
+                cancellationToken);
+
+        public async Task RevokeAllOwnAccessAsync(
+            AdminUser actor,
+            string ipAddress,
+            string userAgent)
+        {
+            await RevokeAllUserSessionsAsync(
+                actor.Id,
+                actor.Id,
+                AdminSessionRevokeReason.AdminRevoked,
+                ipAddress);
+            await LogAsync(
+                AdminAuditArea.Auth,
+                "all-access-revoked",
+                actor.Id,
+                actor.Email,
+                actor.Id,
+                actor.Email,
+                "Signed out all sessions and remembered devices.",
+                ipAddress,
+                userAgent);
+        }
+
         public async Task SeedAdminAsync(string email, string password)
         {
             var normalizedEmail = NormalizeEmail(email);
@@ -488,6 +700,48 @@ namespace FullProject.Services
                 user.TokenVersion = 1;
             user.Permissions ??= new();
             user.ExtraPermissions ??= new();
+        }
+
+        private async Task<IssuedAdminSession?> IssueSessionAsync(
+            AdminUser user,
+            string ipAddress,
+            string userAgent,
+            CancellationToken cancellationToken = default)
+        {
+            var role = await _roles.GetRoleForUserAsync(user);
+            if (role is null) return null;
+
+            var tokenId = Guid.NewGuid().ToString("N");
+            var expiresAt = DateTime.UtcNow.AddHours(_jwt.ExpiryHour);
+            var effectivePermissions = await _roles.GetEffectivePermissionsAsync(user);
+            var token = GenerateJwt(user, role, tokenId, effectivePermissions, expiresAt);
+            await _sessions.InsertOneAsync(new AdminSessionRecord
+            {
+                AdminId = user.Id,
+                Email = user.Email,
+                TokenId = tokenId,
+                TokenVersion = user.TokenVersion,
+                LoginAt = DateTime.UtcNow,
+                LastActivityAt = DateTime.UtcNow,
+                ExpiresAt = expiresAt,
+                IpAddress = ipAddress,
+                UserAgent = userAgent,
+                BrowserName = ParseBrowser(userAgent),
+                OperatingSystem = ParseOperatingSystem(userAgent)
+            }, cancellationToken: cancellationToken);
+
+            return new IssuedAdminSession(new LoginResponseDto
+            {
+                Token = token,
+                AdminId = user.Id,
+                Email = user.Email,
+                FullName = DisplayName(user),
+                RoleId = role.Id,
+                RoleName = role.Name,
+                IsAdminAdmin = role.IsProtected,
+                Status = user.Status,
+                Permissions = effectivePermissions
+            }, tokenId);
         }
 
         private string GenerateJwt(AdminUser user, AdminRoleDefinition role, string tokenId, List<string> permissions, DateTime expiresAt)
@@ -565,6 +819,10 @@ namespace FullProject.Services
                     .Set(s => s.RevokedAt, DateTime.UtcNow)
                     .Set(s => s.RevokedById, actorId)
                     .Set(s => s.RevokeReason, reason));
+            await _rememberedDevices.RevokeAllAsync(
+                adminId,
+                actorId,
+                MapRememberedDeviceReason(reason));
         }
 
         private async Task LogAsync(AdminAuditArea area, string action, string actorId, string actorEmail, string? targetId, string? targetEmail, string message, string ipAddress, string userAgent, string? sessionId = null)
@@ -607,6 +865,12 @@ namespace FullProject.Services
                 "login-success" => "login.succeeded",
                 "login-denied" => "login.denied",
                 "logout" => "session.logged-out",
+                "remembered-device-registered" => "remembered-device.registered",
+                "remembered-device-authenticated" => "remembered-device.authenticated",
+                "remembered-device-rotated" => "remembered-device.rotated",
+                "remembered-device-denied" => "remembered-device.denied",
+                "remembered-device-revoked" => "remembered-device.revoked",
+                "remembered-device-reuse-detected" => "remembered-device.reuse-detected",
                 _ => eventType.Replace('-', '.')
             };
             var reasonCode = message switch
@@ -615,6 +879,9 @@ namespace FullProject.Services
                 var value when value.Contains("disabled or locked", StringComparison.OrdinalIgnoreCase) => "account-unavailable",
                 var value when value.Contains("role", StringComparison.OrdinalIgnoreCase) => "role-unavailable",
                 var value when value.Contains("Invalid password", StringComparison.OrdinalIgnoreCase) => "invalid-credential",
+                var value when value.Contains("expired", StringComparison.OrdinalIgnoreCase) => "expired",
+                var value when value.Contains("reuse", StringComparison.OrdinalIgnoreCase) => "token-reuse",
+                var value when value.Contains("revoked", StringComparison.OrdinalIgnoreCase) => "revoked",
                 _ when eventType == "logout" => "user-requested",
                 _ when success => "authenticated",
                 _ => "rejected"
@@ -679,6 +946,32 @@ namespace FullProject.Services
         private static string DisplayName(AdminUser user) =>
             string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName;
 
+        private static RememberedDeviceCredentialResponse MapCredential(RememberedDeviceIssue issue) => new()
+        {
+            DeviceId = issue.Record.Id,
+            Credential = issue.Credential,
+            ExpiresAt = issue.Record.ExpiresAt
+        };
+
+        private static string RememberedDeviceFailureMessage(RememberedDeviceExchangeStatus status) => status switch
+        {
+            RememberedDeviceExchangeStatus.Disabled => "Remembered-device authentication is disabled.",
+            RememberedDeviceExchangeStatus.Expired => "Remembered device expired.",
+            RememberedDeviceExchangeStatus.Revoked => "Remembered device was revoked.",
+            RememberedDeviceExchangeStatus.ReuseDetected => "Remembered-device token reuse was detected.",
+            _ => "Remembered-device credential was invalid."
+        };
+
+        private static AdminRememberedDeviceRevokeReason MapRememberedDeviceReason(AdminSessionRevokeReason reason) => reason switch
+        {
+            AdminSessionRevokeReason.Logout => AdminRememberedDeviceRevokeReason.Logout,
+            AdminSessionRevokeReason.UserDisabled => AdminRememberedDeviceRevokeReason.UserDisabled,
+            AdminSessionRevokeReason.PasswordChanged => AdminRememberedDeviceRevokeReason.PasswordChanged,
+            AdminSessionRevokeReason.RoleChanged => AdminRememberedDeviceRevokeReason.RoleChanged,
+            AdminSessionRevokeReason.AccountDeleted => AdminRememberedDeviceRevokeReason.AccountDeleted,
+            _ => AdminRememberedDeviceRevokeReason.AdminRevoked
+        };
+
         private static string ParseBrowser(string userAgent)
         {
             if (string.IsNullOrWhiteSpace(userAgent)) return "Unknown";
@@ -699,5 +992,7 @@ namespace FullProject.Services
             if (userAgent.Contains("Linux", StringComparison.OrdinalIgnoreCase)) return "Linux";
             return "Unknown";
         }
+
+        private sealed record IssuedAdminSession(LoginResponseDto Login, string TokenId);
     }
 }

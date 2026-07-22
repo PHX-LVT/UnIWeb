@@ -162,6 +162,81 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(count, $"Deleted {count} inactive session record(s)."));
         }
 
+        [HttpGet("remembered-devices")]
+        public async Task<IActionResult> GetRememberedDevices(
+            [FromQuery] string? adminId = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            var actor = await CurrentAdminAsync();
+            if (!CanManageUsers()) return Forbid();
+
+            var result = await _auth.GetRememberedDevicesPageAsync(
+                page,
+                pageSize,
+                adminId,
+                cancellationToken: HttpContext.RequestAborted);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(result.TotalCount / (double)result.PageSize));
+            return Ok(ApiResult.Ok(new AdminPagedResponse<AdminRememberedDeviceResponse>
+            {
+                Items = result.Items.Select(MapRememberedDevice).ToList(),
+                Page = result.Page,
+                PageSize = result.PageSize,
+                TotalCount = result.TotalCount,
+                TotalPages = totalPages
+            }));
+        }
+
+        [HttpPost("remembered-devices/revoke")]
+        public async Task<IActionResult> RevokeRememberedDevices([FromBody] AdminBulkDeleteRequest dto)
+        {
+            var actor = await CurrentAdminAsync();
+            if (!IsAdminAdmin()) return Forbid();
+
+            var count = await _auth.RevokeRememberedDevicesAsync(
+                dto.Ids,
+                actor!,
+                ClientIp,
+                UserAgent,
+                HttpContext.RequestAborted);
+            return Ok(ApiResult.Ok(count, $"Revoked {count} remembered device(s)."));
+        }
+
+        [HttpGet("me/remembered-devices")]
+        public async Task<IActionResult> GetMyRememberedDevices()
+        {
+            var actor = await CurrentAdminAsync();
+            if (actor is null) return Unauthorized(ApiResult.Unauthorized<List<AdminRememberedDeviceResponse>>());
+
+            var result = await _auth.GetRememberedDevicesPageAsync(
+                1,
+                100,
+                actor.Id,
+                cancellationToken: HttpContext.RequestAborted);
+            return Ok(ApiResult.Ok(result.Items.Select(MapRememberedDevice).ToList()));
+        }
+
+        [HttpPost("me/remembered-devices/revoke")]
+        public async Task<IActionResult> RevokeMyRememberedDevices([FromBody] AdminBulkDeleteRequest dto)
+        {
+            var actor = await CurrentAdminAsync();
+            if (actor is null) return Unauthorized(ApiResult.Unauthorized<long>());
+            var count = await _auth.RevokeOwnRememberedDevicesAsync(
+                dto.Ids,
+                actor,
+                HttpContext.RequestAborted);
+            return Ok(ApiResult.Ok(count, $"Revoked {count} remembered device(s)."));
+        }
+
+        [HttpPost("me/sign-out-all")]
+        public async Task<IActionResult> SignOutAllMyDevices()
+        {
+            var actor = await CurrentAdminAsync();
+            if (actor is null) return Unauthorized(ApiResult.Unauthorized<string>());
+            await _auth.RevokeAllOwnAccessAsync(actor, ClientIp, UserAgent);
+            return Ok(ApiResult.Ok("All sessions and remembered devices were revoked."));
+        }
+
         [HttpPost("login-activity/delete")]
         public async Task<IActionResult> DeleteLoginActivity([FromBody] AdminBulkDeleteRequest dto)
         {
@@ -305,6 +380,22 @@ namespace FullProject.Controllers
             IsRevoked = session.IsRevoked,
             RevokedAt = session.RevokedAt,
             RevokeReason = session.RevokeReason
+        };
+
+        private static AdminRememberedDeviceResponse MapRememberedDevice(AdminRememberedDeviceRecord device) => new()
+        {
+            Id = device.Id,
+            AdminId = device.AdminId,
+            Email = device.Email,
+            CreatedAt = device.CreatedAt,
+            LastUsedAt = device.LastUsedAt,
+            ExpiresAt = device.ExpiresAt,
+            LastUsedIp = device.LastUsedIp,
+            BrowserName = device.BrowserName,
+            OperatingSystem = device.OperatingSystem,
+            IsRevoked = device.IsRevoked,
+            RevokedAt = device.RevokedAt,
+            RevokeReason = device.RevokeReason
         };
 
         private static AdminLoginActivityResponse MapLoginActivity(AdminLoginActivityRecord activity) => new()

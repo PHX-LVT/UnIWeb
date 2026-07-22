@@ -235,6 +235,18 @@ namespace FullProject.Services
                     .Ascending(s => s.ExpiresAt),
                 IndexOptions("ix_admin_sessions_revoked_expiry"));
 
+            var rememberedDevices = _database.GetCollection<AdminRememberedDeviceRecord>("admin_remembered_devices");
+            await EnsureIndexAsync(rememberedDevices,
+                Builders<AdminRememberedDeviceRecord>.IndexKeys
+                    .Ascending(device => device.AdminId)
+                    .Descending(device => device.LastUsedAt),
+                IndexOptions("ix_admin_remembered_devices_admin_last_used"));
+            await EnsureIndexAsync(rememberedDevices,
+                Builders<AdminRememberedDeviceRecord>.IndexKeys
+                    .Ascending(device => device.IsRevoked)
+                    .Ascending(device => device.ExpiresAt),
+                IndexOptions("ix_admin_remembered_devices_revoked_expiry"));
+
             var adminLoginActivity = _database.GetCollection<AdminLoginActivityRecord>("admin_login_activity");
             await adminLoginActivity.Indexes.CreateOneAsync(new CreateIndexModel<AdminLoginActivityRecord>(
                 Builders<AdminLoginActivityRecord>.IndexKeys.Descending(l => l.OccurredAt)));

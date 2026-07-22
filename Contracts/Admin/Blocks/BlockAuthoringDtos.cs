@@ -38,6 +38,14 @@ public sealed class BlockAuthoringOperationResponseDto
     public List<string> BlockIds { get; set; } = new();
 }
 
+public sealed class BlockMoveRequestDto
+{
+    public string BlockId { get; set; } = string.Empty;
+    public string? TargetParentBlockId { get; set; }
+    public string? TargetSlotName { get; set; }
+    public int? TargetIndex { get; set; }
+}
+
 public sealed class CanvasPresetEditableSlotDto
 {
     public string Name { get; set; } = string.Empty;

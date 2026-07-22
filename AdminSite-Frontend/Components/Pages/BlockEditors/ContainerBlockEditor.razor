@@ -1,0 +1,292 @@
+@inject AdminBlockService BlockService
+@inject IHttpService Http
+@using AdminSite.Services.Mapper
+@using Contracts.Admin
+
+<div class="container-editor">
+    <header class="container-editor__summary">
+        <span>
+            <small>@T("ContainerPreset")</small>
+            <strong>@SelectedPreset.DisplayName</strong>
+        </span>
+        <b class="@(IsComplete ? "is-complete" : "is-incomplete")">
+            <i class="fas @(IsComplete ? "fa-check-circle" : "fa-exclamation-triangle")"></i>
+            @(IsComplete ? T("Complete") : T("Incomplete"))
+        </b>
+    </header>
+
+    <div class="form-group">
+        <label class="form-label">@T("Title")</label>
+        <LangField @bind-Value="Block.Title" Languages="Languages" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("ContainerPreset")</label>
+        <select class="form-control" value="@Block.PresetKey" @onchange="ChangePreset">
+            @if (SelectedPreset.Legacy)
+            {
+                <option value="@ContainerPresetCatalog.LegacyFreeformKey">@SelectedPreset.DisplayName</option>
+            }
+            @foreach (var preset in ContainerPresetCatalog.All)
+            {
+                <option value="@preset.Key">@preset.DisplayName</option>
+            }
+        </select>
+        @if (!string.Equals(_originalPresetKey, Block.PresetKey, StringComparison.Ordinal))
+        {
+            <div class="form-hint container-editor__warning">
+                <i class="fas fa-exchange-alt"></i> @T("ContainerPresetConversionWarning")
+            </div>
+        }
+        @if (ConversionError is not null)
+        {
+            <div class="form-hint container-editor__error"><i class="fas fa-circle-exclamation"></i> @ConversionError</div>
+        }
+    </div>
+
+    <div class="container-editor__facts">
+        <span><small>@T("ContainerPurpose")</small><strong>@SelectedPreset.Purpose</strong></span>
+        <span><small>@T("ContainerCapacity")</small><strong>@Children.Count/@SelectedPreset.MaximumChildren</strong></span>
+        <span><small>@T("MobileLayout")</small><strong>@Block.ContainerLayout.MobileMode</strong></span>
+        @if (!string.IsNullOrWhiteSpace(Block.ContainerLayout.AllowedChildType))
+        {
+            <span><small>@T("AllowedChildType")</small><strong>@Block.ContainerLayout.AllowedChildType</strong></span>
+        }
+    </div>
+
+    @if (SelectedPreset.Slots.Count > 0)
+    {
+        <section class="container-editor__slots">
+            <strong>@T("ContainerSlots")</strong>
+            <div>
+                @foreach (var slot in SelectedPreset.Slots)
+                {
+                    var child = ChildForSlot(slot.Key);
+                    <span class="@(child is null ? "is-empty" : "is-filled") @(slot.Required ? "is-required" : null)">
+                        <i class="fas @(child is null ? "fa-plus" : "fa-cube")"></i>
+                        <small>@slot.DisplayName</small>
+                        <b>@(child is null ? T("Empty") : ChildName(child))</b>
+                    </span>
+                }
+            </div>
+        </section>
+    }
+
+    <details class="container-editor__section" open>
+        <summary>@T("ContainerLayoutSettings")</summary>
+        <div class="container-editor__grid">
+            <label><span>@T("Gap")</span>
+                <select @bind="Block.ContainerLayout.Gap">
+                    <option value="none">@T("None")</option>
+                    <option value="small">@T("Small")</option>
+                    <option value="medium">@T("Medium")</option>
+                    <option value="large">@T("Large")</option>
+                </select>
+            </label>
+            <label><span>@T("AlignItems")</span>
+                <select @bind="Block.ContainerLayout.AlignItems">
+                    <option value="stretch">@T("Stretch")</option>
+                    <option value="start">@T("Start")</option>
+                    <option value="center">@T("Center")</option>
+                    <option value="end">@T("End")</option>
+                </select>
+            </label>
+            <label><span>@T("JustifyContent")</span>
+                <select @bind="Block.ContainerLayout.JustifyContent">
+                    <option value="start">@T("Start")</option>
+                    <option value="center">@T("Center")</option>
+                    <option value="end">@T("End")</option>
+                    <option value="between">@T("SpaceBetween")</option>
+                    <option value="around">@T("SpaceAround")</option>
+                    <option value="evenly">@T("SpaceEvenly")</option>
+                </select>
+            </label>
+            @if (Block.ContainerLayout.Mode == "row")
+            {
+                <label class="container-editor__check"><input type="checkbox" @bind="Block.ContainerLayout.Wrap" /><span>@T("Wrap")</span></label>
+            }
+            <label><span>@T("MobileLayout")</span>
+                <select @bind="Block.ContainerLayout.MobileMode">
+                    <option value="stack">@T("Stack")</option>
+                    <option value="compact-preserve">@T("CompactPreserve")</option>
+                    <option value="horizontal-scroll">@T("HorizontalScroll")</option>
+                    <option value="custom">@T("Custom")</option>
+                    <option value="hide">@T("Hide")</option>
+                </select>
+            </label>
+        </div>
+    </details>
+
+    @if (Block.ContainerLayout.Mode is "orbit" or "semicircle")
+    {
+        <details class="container-editor__section" open>
+            <summary>@T("PatternSettings")</summary>
+            <div class="container-editor__grid">
+                @if (Block.ContainerLayout.Mode == "orbit")
+                {
+                    <label><span>@T("Radius")</span><input type="number" min="80" max="480" @bind="Block.ContainerLayout.OrbitRadius" /></label>
+                    <label><span>@T("StartAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.OrbitStartAngle" /></label>
+                    <label><span>@T("EndAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.OrbitEndAngle" /></label>
+                    <label><span>@T("Direction")</span><select @bind="Block.ContainerLayout.OrbitDirection"><option value="clockwise">@T("Clockwise")</option><option value="counter-clockwise">@T("CounterClockwise")</option></select></label>
+                }
+                else
+                {
+                    <label><span>@T("Radius")</span><input type="number" min="80" max="480" @bind="Block.ContainerLayout.SemicircleRadius" /></label>
+                    <label><span>@T("StartAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.SemicircleStartAngle" /></label>
+                    <label><span>@T("EndAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.SemicircleEndAngle" /></label>
+                }
+                <label><span>@T("CompactRadius")</span><input type="number" min="60" max="220" @bind="Block.ContainerLayout.CompactRadius" /></label>
+                <label><span>@T("CompactChildWidth")</span><input type="number" min="72" max="180" @bind="Block.ContainerLayout.CompactChildWidth" /></label>
+            </div>
+        </details>
+    }
+
+    <details class="container-editor__section">
+        <summary>@T("SharedAppearance")</summary>
+        <label class="container-editor__check"><input type="checkbox" @bind="Block.ContainerLayout.ShareAppearance" @bind:after="EnsureSharedAppearance" /><span>@T("ShareAppearanceWithChildren")</span></label>
+        @if (Block.ContainerLayout.ShareAppearance && Block.ContainerLayout.SharedAppearance is not null)
+        {
+            <div class="container-editor__grid">
+                <label><span>@T("BackgroundColor")</span><input type="color" @bind="Block.ContainerLayout.SharedAppearance.BackgroundColor" /></label>
+                <label><span>@T("TextColor")</span><input type="color" @bind="Block.ContainerLayout.SharedAppearance.TextColor" /></label>
+                <label><span>@T("BorderRadius")</span><select @bind="Block.ContainerLayout.SharedAppearance.BorderRadius"><option value="none">@T("None")</option><option value="small">@T("Small")</option><option value="medium">@T("Medium")</option><option value="large">@T("Large")</option></select></label>
+            </div>
+        }
+    </details>
+
+    @if (Block.ContainerLayout.Mode == "freeform")
+    {
+        <details class="container-editor__section">
+            <summary>@T("DiagramLayer")</summary>
+            <ContainerDiagramEditor Value="Block.ContainerLayout.Diagram" Children="Children" Language="AdminLanguage" />
+        </details>
+    }
+
+    <details class="container-editor__section">
+        <summary>@T("Animation")</summary>
+        <BlockAnimationEditor Value="Block.Animation" BlockId="Block.Id" Language="AdminLanguage" IsContainer="true" AllowContinuous="Block.Appearance.Decorative" />
+    </details>
+
+    <div class="ez-editor-actions">
+        <button type="button" class="btn-admin btn-primary" disabled="@(_saving || ConversionError is not null)" @onclick="Save">
+            <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BlockModel Block { get; set; } = default!;
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public IReadOnlyList<BlockModel> Children { get; set; } = Array.Empty<BlockModel>();
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private bool _saving;
+    private string? _loadedBlockId;
+    private string? _originalPresetKey;
+    private ContainerPresetDefinition SelectedPreset => ContainerPresetCatalog.ForExisting(Block.PresetKey);
+    private IReadOnlyList<ContainerPresetSlotDefinition> MissingRequiredSlots =>
+        ContainerCapacityPolicy.MissingRequiredSlots(Block.PresetKey, Children.Select(child => child.Authoring?.PresetSlotName));
+    private bool IsComplete => MissingRequiredSlots.Count == 0;
+    private string? ConversionError
+    {
+        get
+        {
+            if (string.Equals(_originalPresetKey, Block.PresetKey, StringComparison.Ordinal)) return null;
+            return ContainerCapacityPolicy.CanConvert(Block.PresetKey, Children.Select(child => child.Type), out var error)
+                ? null
+                : error;
+        }
+    }
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override void OnParametersSet()
+    {
+        Block.ContainerLayout ??= new();
+        Block.ContainerLayout.Diagram ??= new();
+        Block.Animation ??= new();
+        Block.Appearance ??= new();
+        Block.Title ??= new();
+        if (_loadedBlockId == Block.Id) return;
+        _loadedBlockId = Block.Id;
+        Block.PresetKey = ContainerPresetCatalog.EffectiveKey(Block.PresetKey);
+        _originalPresetKey = Block.PresetKey;
+    }
+
+    private void ChangePreset(ChangeEventArgs args)
+    {
+        var key = args.Value?.ToString();
+        if (!ContainerPresetCatalog.TryGetGoverned(key, out var preset)) return;
+        Block.PresetKey = preset.Key;
+        Block.ContainerLayout.SchemaVersion = 3;
+        Block.ContainerLayout.Mode = preset.LayoutMode;
+        Block.ContainerLayout.Purpose = preset.Purpose;
+        Block.ContainerLayout.Columns = preset.Columns;
+        Block.ContainerLayout.MobileMode = preset.MobileMode;
+        if (preset.Purpose != "collection") Block.ContainerLayout.AllowedChildType = null;
+    }
+
+    private BlockModel? ChildForSlot(string key) => Children.FirstOrDefault(child =>
+        string.Equals(child.Authoring?.PresetSlotName, key, StringComparison.Ordinal));
+    private string ChildName(BlockModel child) =>
+        child.EditorLabel?.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? child.Type;
+
+    private void EnsureSharedAppearance()
+    {
+        if (!Block.ContainerLayout.ShareAppearance) return;
+        Block.ContainerLayout.SharedAppearance ??= new BlockAppearanceModel
+        {
+            SchemaVersion = 2,
+            BackgroundMode = "color",
+            BackgroundColor = "#ffffff",
+            TextColor = "#0f172a",
+            BorderRadius = "medium"
+        };
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var dto = BlockUpdateDtoMapper.Build(Block);
+            var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, dto);
+            Http.Notify(response, T("NotificationBlockUpdated"));
+            if (!response.Success || response.Data is null) return;
+            _originalPresetKey = response.Data.PresetKey;
+            await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
+
+<style>
+    .container-editor { display:grid; gap:.85rem; }
+    .container-editor__summary,.container-editor__facts,.container-editor__slots>div { display:flex; gap:.6rem; flex-wrap:wrap; }
+    .container-editor__summary { justify-content:space-between; align-items:center; padding:.75rem; border:1px solid var(--border); border-radius:10px; background:var(--surface-soft,#f8fafc); }
+    .container-editor__summary span,.container-editor__facts span { display:grid; gap:.12rem; }
+    .container-editor__summary small,.container-editor__facts small { color:var(--text-muted); font-size:.65rem; }
+    .container-editor__summary b { border-radius:999px; padding:.3rem .55rem; font-size:.7rem; }
+    .container-editor__summary b.is-complete { color:#166534; background:#dcfce7; }
+    .container-editor__summary b.is-incomplete { color:#9a3412; background:#ffedd5; }
+    .container-editor__facts span { min-width:115px; padding:.55rem; border:1px solid var(--border); border-radius:8px; }
+    .container-editor__slots { display:grid; gap:.45rem; }
+    .container-editor__slots span { min-width:105px; display:grid; gap:.15rem; padding:.55rem; border:1px dashed var(--border); border-radius:8px; }
+    .container-editor__slots span.is-required { border-color:#f59e0b; }
+    .container-editor__slots span.is-filled { border-style:solid; background:#f8fafc; }
+    .container-editor__section { border:1px solid var(--border); border-radius:9px; padding:.65rem; }
+    .container-editor__section summary { cursor:pointer; font-weight:700; color:var(--text); }
+    .container-editor__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; margin-top:.65rem; }
+    .container-editor__grid label { display:grid; gap:.25rem; font-size:.7rem; color:var(--text-muted); }
+    .container-editor__grid select,.container-editor__grid input { width:100%; border:1px solid var(--border); border-radius:7px; padding:.45rem; background:#fff; }
+    .container-editor__check { display:flex!important; align-items:center; gap:.45rem; margin-top:.65rem; }
+    .container-editor__check input { width:auto; }
+    .container-editor__warning { color:#9a3412; }
+    .container-editor__error { color:#b91c1c; font-weight:600; }
+    @@media(max-width:720px){.container-editor__grid{grid-template-columns:1fr;}}
+</style>

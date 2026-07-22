@@ -30,11 +30,58 @@ namespace FullProject.Controllers
                 string.IsNullOrWhiteSpace(dto.Password))
                 return BadRequest(ApiResult.BadRequest("Email and password are required."));
 
-            var result = await _service.LoginAsync(dto.Email, dto.Password, ClientIp, UserAgent);
+            var result = await _service.LoginAsync(
+                dto.Email,
+                dto.Password,
+                dto.RememberDevice,
+                dto.ExistingRememberedDeviceCredential,
+                ClientIp,
+                UserAgent);
             if (result is null)
                 return Unauthorized(ApiResult.Unauthorized<LoginResponseDto>("Invalid email or password."));
 
             return Ok(ApiResult.Ok(result, "Login successful."));
+        }
+
+        [AllowAnonymous]
+        [EnableRateLimiting("admin-remembered-device")]
+        [HttpPost("remembered-device/exchange")]
+        public async Task<IActionResult> ExchangeRememberedDevice(
+            [FromBody] RememberedDeviceExchangeRequest dto,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Credential))
+                return Unauthorized(ApiResult.Unauthorized<LoginResponseDto>("Remembered device is invalid."));
+
+            var result = await _service.ExchangeRememberedDeviceAsync(
+                dto.Credential,
+                ClientIp,
+                UserAgent,
+                cancellationToken);
+            if (result.Login is null)
+                return Unauthorized(ApiResult.Unauthorized<LoginResponseDto>("Remembered device is invalid or expired."));
+
+            return Ok(ApiResult.Ok(result.Login, "Remembered device authenticated."));
+        }
+
+        [AllowAnonymous]
+        [EnableRateLimiting("admin-remembered-device")]
+        [HttpPost("remembered-device/revoke")]
+        public async Task<IActionResult> RevokeRememberedDevice(
+            [FromBody] RememberedDeviceExchangeRequest dto,
+            CancellationToken cancellationToken)
+        {
+            if (!string.IsNullOrWhiteSpace(dto.Credential))
+            {
+                _ = await _service.RevokeRememberedDeviceCredentialAsync(
+                    dto.Credential,
+                    "self",
+                    AdminRememberedDeviceRevokeReason.UserRequested,
+                    cancellationToken: cancellationToken);
+            }
+
+            // Do not disclose whether a bearer credential existed.
+            return Ok(ApiResult.Ok("Remembered device cleared."));
         }
 
         [Authorize]
@@ -61,14 +108,19 @@ namespace FullProject.Controllers
 
         [HttpPost("logout")]
         [Authorize]
-        public async Task<IActionResult> Logout()
+        public async Task<IActionResult> Logout([FromBody] AdminLogoutRequest? request)
         {
             var adminId = User.FindFirst("adminId")?.Value ?? string.Empty;
             var tokenId = User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value ??
                           User.FindFirst("jti")?.Value ??
                           string.Empty;
 
-            await _service.LogoutAsync(adminId, tokenId, ClientIp, UserAgent);
+            await _service.LogoutAsync(
+                adminId,
+                tokenId,
+                request?.RememberedDeviceCredential,
+                ClientIp,
+                UserAgent);
             return Ok(ApiResult.Ok("Logged out successfully."));
         }
 

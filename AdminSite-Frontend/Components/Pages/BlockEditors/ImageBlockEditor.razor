@@ -7,7 +7,10 @@
     @if (!string.IsNullOrWhiteSpace(_asset.Url))
     {
         <div class="block-media-selection">
-            <img src="@_asset.Url" alt="" />
+            <div class="image-focal-preview">
+                <img src="@_asset.Url" alt="" style="object-position:@FocalPosition" />
+                <span class="image-focal-preview__marker" style="left:@($"{_focalPointX:0.##}%");top:@($"{_focalPointY:0.##}%")"></span>
+            </div>
             <button type="button" class="btn-admin btn-ghost" @onclick="ClearImage">
                 <i class="fas fa-times"></i> @T("Remove")
             </button>
@@ -31,7 +34,14 @@
 
 <div class="form-group">
     <label class="form-label">@T("AltText")</label>
-    <LangField @bind-Value="_altText" Languages="Languages" NullText="@T("AltTextHint")" />
+    @if (_decorative)
+    {
+        <div class="form-hint">@T("DecorativeImageAltTextHint")</div>
+    }
+    else
+    {
+        <LangField @bind-Value="_altText" Languages="Languages" NullText="@T("AltTextHint")" />
+    }
 </div>
 <div class="form-group">
     <label class="form-label">@T("Caption")</label>
@@ -50,8 +60,12 @@
     </label>
 </div>
 <label class="block-layout-panel__check">
-    <input type="checkbox" @bind="_openInLightbox" />
+    <input type="checkbox" @bind="_openInLightbox" disabled="@_decorative" />
     <span>@T("OpenImageInLightbox")</span>
+</label>
+<label class="block-layout-panel__check">
+    <input type="checkbox" @bind="_decorative" @bind:after="ApplyDecorativeRules" />
+    <span>@T("DecorativeImage")</span>
 </label>
 
 <div class="ez-editor-actions">
@@ -76,18 +90,24 @@
     private bool _openInLightbox;
     private double _focalPointX = 50;
     private double _focalPointY = 50;
+    private bool _decorative;
     private bool _saving;
     private bool _resourcePickerOpen;
+    private string? _loadedBlockId;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string FocalPosition => $"{_focalPointX:0.##}% {_focalPointY:0.##}%";
 
     protected override void OnParametersSet()
     {
+        if (_loadedBlockId == Block.Id) return;
+        _loadedBlockId = Block.Id;
         _asset = CopyAsset(Block.Asset, Block.ImageUrl);
         _altText = new(Block.AltText ?? new());
         _caption = new(Block.Caption ?? new());
         _openInLightbox = Block.OpenInLightbox;
         _focalPointX = Math.Clamp(Block.FocalPointX, 0, 100);
         _focalPointY = Math.Clamp(Block.FocalPointY, 0, 100);
+        _decorative = Block.Appearance.Decorative;
     }
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
@@ -118,21 +138,30 @@
 
     private void ClearImage() => _asset = new BlockAssetReferenceModel { SchemaVersion = 1 };
 
+    private void ApplyDecorativeRules()
+    {
+        if (!_decorative) return;
+        _openInLightbox = false;
+    }
+
     private async Task Save()
     {
         _saving = true;
         try
         {
+            var appearance = BlockUpdateDtoMapper.ToAppearanceDto(Block.Appearance, Block.Layout);
+            appearance.Decorative = _decorative;
             var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, new ImageBlockUpdateDto
             {
                 Asset = AssetDto(_asset),
                 ImageUrl = _asset.Url,
-                AltText = _altText,
+                AltText = _decorative ? new() : _altText,
                 Caption = _caption,
                 OpenInLightbox = _openInLightbox,
                 FocalPointX = _focalPointX,
                 FocalPointY = _focalPointY,
                 Visible = Block.Visible,
+                Appearance = appearance,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
             Http.Notify(response.Message, response.StatusCode);
@@ -175,3 +204,9 @@
         FileName = value.FileName, ContentType = value.ContentType, SizeBytes = value.SizeBytes
     };
 }
+
+<style>
+    .image-focal-preview { position:relative; width:180px; height:112px; overflow:hidden; border-radius:7px; background:#e2e8f0; }
+    .image-focal-preview img { width:100%; height:100%; object-fit:cover; }
+    .image-focal-preview__marker { position:absolute; width:16px; height:16px; border:2px solid #fff; border-radius:50%; background:var(--primary); box-shadow:0 0 0 2px rgba(15,23,42,.45); transform:translate(-50%,-50%); pointer-events:none; }
+</style>

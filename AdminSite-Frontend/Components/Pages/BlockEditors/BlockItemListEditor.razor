@@ -1,0 +1,90 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="block-item-list" @ref="_root">
+    @foreach (var item in Items.OrderBy(item => item.Order))
+    {
+        <div class="block-item-list__row" data-block-item-id="@item.Id" @key="item.Id">
+            <button type="button" class="block-item-list__drag" title="@T("DragToReorder")" aria-label="@T("DragToReorder")"><i class="fas fa-grip-vertical"></i></button>
+            <IconPickerField @bind-Value="item.Icon" Label="@T("IconClass")" />
+            <LangField Value="@(item.Text ?? new())" ValueChanged="@(value => item.Text = value)" Languages="Languages" />
+            <label class="block-item-list__visible" title="@T(item.Visible ? "Hide" : "Show")"><input type="checkbox" @bind="item.Visible" /><i class="fas @(item.Visible ? "fa-eye" : "fa-eye-slash")"></i></label>
+            <button type="button" class="btn-admin btn-danger" title="@T("Delete")" @onclick="() => Remove(item)"><i class="fas fa-trash"></i></button>
+        </div>
+    }
+</div>
+<button type="button" class="btn-admin btn-outline" @onclick="Add"><i class="fas fa-plus"></i> @T("AddItem")</button>
+
+@code {
+    [Parameter, EditorRequired] public List<BulletListItemModel> Items { get; set; } = new();
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
+    [Parameter] public string Language { get; set; } = "en";
+
+    private ElementReference _root;
+    private DotNetObjectReference<BlockItemListEditor>? _reference;
+    private bool _initialized;
+    private string T(string key) => AdminUiLocalizer.T(key, Language);
+
+    protected override void OnParametersSet()
+    {
+        for (var index = 0; index < Items.Count; index++)
+        {
+            Items[index].Id = string.IsNullOrWhiteSpace(Items[index].Id) ? $"item-{Guid.NewGuid():N}" : Items[index].Id;
+            Items[index].Order = index;
+            Items[index].Text ??= new();
+        }
+        _initialized = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_initialized) return;
+        _reference ??= DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("blockEditor.initItemSortable", _root, _reference);
+        _initialized = true;
+    }
+
+    private void Add()
+    {
+        Items.Add(new BulletListItemModel { Id = $"item-{Guid.NewGuid():N}", Icon = "fas fa-check", Text = new(), Visible = true, Order = Items.Count });
+        _initialized = false;
+    }
+
+    private void Remove(BulletListItemModel item)
+    {
+        Items.Remove(item);
+        NormalizeOrder();
+        _initialized = false;
+    }
+
+    [JSInvokable]
+    public Task OnItemsReordered(List<string> ids)
+    {
+        var byId = Items.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        if (ids.Count != Items.Count || ids.Any(id => !byId.ContainsKey(id))) return Task.CompletedTask;
+        Items.Clear();
+        Items.AddRange(ids.Select(id => byId[id]));
+        NormalizeOrder();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void NormalizeOrder()
+    {
+        for (var index = 0; index < Items.Count; index++) Items[index].Order = index;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("blockEditor.destroyItemSortable", _root); } catch { }
+        _reference?.Dispose();
+    }
+}
+
+<style>
+    .block-item-list { display:grid; gap:.5rem; margin-bottom:.55rem; }
+    .block-item-list__row { display:grid; grid-template-columns:34px 190px minmax(0,1fr) 34px 38px; gap:.45rem; align-items:start; padding:.5rem; border:1px solid var(--border); border-radius:8px; background:#fff; }
+    .block-item-list__drag { width:34px; height:38px; border:0; background:transparent; color:var(--text-muted); cursor:grab; }
+    .block-item-list__visible { width:34px; height:38px; display:grid; place-items:center; cursor:pointer; }
+    .block-item-list__visible input { position:absolute; opacity:0; pointer-events:none; }
+    @@media(max-width:760px){.block-item-list__row{grid-template-columns:34px minmax(0,1fr) 34px 38px}.block-item-list__row>.icon-picker-field{grid-column:2/3}.block-item-list__row>div:nth-of-type(2){grid-column:2/3}}
+</style>

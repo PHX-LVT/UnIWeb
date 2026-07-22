@@ -17,5 +17,6 @@
     [Parameter, EditorRequired] public PublicMapBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
     private string PinsJson => JsonSerializer.Serialize((Block.Pins ?? new())
+        .OrderBy(pin => pin.Order)
         .Select(pin => new { pin.Label, pin.Lat, pin.Lng, pin.Href }));
 }

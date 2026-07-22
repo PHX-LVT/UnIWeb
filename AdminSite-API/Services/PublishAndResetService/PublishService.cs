@@ -2,6 +2,7 @@ using FullProject.Data;
 using FullProject.Models;
 using FullProject.Services.AssetService;
 using FullProject.Services.CloneServices;
+using FullProject.Services.BlockServices;
 using MongoDB.Driver;
 
 namespace FullProject.Services.PublishAndResetService
@@ -51,6 +52,14 @@ namespace FullProject.Services.PublishAndResetService
                 var blocks = await _context.BlocksDraft
                     .Find(session, b => b.PageStableId == page.StableId)
                     .ToListAsync();
+
+                var blockValidationErrors = BlockPublishValidationService.Validate(blocks);
+                if (blockValidationErrors.Count > 0)
+                {
+                    await session.AbortTransactionAsync();
+                    return PublishResult.Fail(
+                        $"Publish failed: {string.Join(" ", blockValidationErrors)}");
+                }
 
                 var existingPublishedPage = await _context.PagesPublished
                     .Find(session, p => p.StableId == page.StableId)

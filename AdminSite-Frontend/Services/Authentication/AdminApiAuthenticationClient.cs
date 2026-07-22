@@ -21,6 +21,17 @@ public sealed record AdminLoginResult(bool Success, LoginResponse? Login, string
 
 public sealed record AdminSessionCheck(AdminSessionCheckStatus Status, SessionResponse? Session = null);
 
+public enum AdminRememberedDeviceLoginStatus
+{
+    Accepted,
+    Invalid,
+    Unavailable
+}
+
+public sealed record AdminRememberedDeviceLoginResult(
+    AdminRememberedDeviceLoginStatus Status,
+    LoginResponse? Login = null);
+
 public sealed class AdminApiAuthenticationClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
@@ -43,13 +54,21 @@ public sealed class AdminApiAuthenticationClient
     public async Task<AdminLoginResult> LoginAsync(
         string email,
         string password,
+        bool rememberDevice,
+        string? existingRememberedDeviceCredential,
         CancellationToken cancellationToken = default)
     {
         try
         {
             using var response = await CreateClient().PostAsJsonAsync(
                 "api/auth/login",
-                new LoginRequest { Email = email, Password = password },
+                new LoginRequest
+                {
+                    Email = email,
+                    Password = password,
+                    RememberDevice = rememberDevice,
+                    ExistingRememberedDeviceCredential = existingRememberedDeviceCredential
+                },
                 JsonOptions,
                 cancellationToken);
 
@@ -71,6 +90,46 @@ public sealed class AdminApiAuthenticationClient
         {
             _logger.LogWarning(ex, "Admin login API request failed.");
             return AdminLoginResult.Rejected("Unable to sign in. Please try again.");
+        }
+    }
+
+    public async Task<AdminRememberedDeviceLoginResult> ExchangeRememberedDeviceAsync(
+        string credential,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(credential))
+            return new AdminRememberedDeviceLoginResult(AdminRememberedDeviceLoginStatus.Invalid);
+
+        try
+        {
+            using var response = await CreateClient().PostAsJsonAsync(
+                "api/auth/remembered-device/exchange",
+                new RememberedDeviceExchangeRequest { Credential = credential },
+                JsonOptions,
+                cancellationToken);
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
+                return new AdminRememberedDeviceLoginResult(AdminRememberedDeviceLoginStatus.Invalid);
+            if (!response.IsSuccessStatusCode)
+                return new AdminRememberedDeviceLoginResult(AdminRememberedDeviceLoginStatus.Unavailable);
+
+            var payload = await ReadResponseAsync<LoginResponse>(response, cancellationToken);
+            if (payload?.Success != true || payload.Data is null ||
+                string.IsNullOrWhiteSpace(payload.Data.Token) ||
+                string.IsNullOrWhiteSpace(payload.Data.RememberedDevice?.Credential))
+                return new AdminRememberedDeviceLoginResult(AdminRememberedDeviceLoginStatus.Invalid);
+
+            return new AdminRememberedDeviceLoginResult(
+                AdminRememberedDeviceLoginStatus.Accepted,
+                payload.Data);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Remembered-device authentication request failed.");
+            return new AdminRememberedDeviceLoginResult(AdminRememberedDeviceLoginStatus.Unavailable);
         }
     }
 
@@ -114,6 +173,7 @@ public sealed class AdminApiAuthenticationClient
 
     public async Task<bool> TryLogoutAsync(
         string token,
+        string? rememberedDeviceCredential,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(token)) return false;
@@ -124,7 +184,10 @@ public sealed class AdminApiAuthenticationClient
             boundedCancellation.CancelAfter(TimeSpan.FromSeconds(3));
             using var request = new HttpRequestMessage(HttpMethod.Post, "api/auth/logout")
             {
-                Content = JsonContent.Create(new { })
+                Content = JsonContent.Create(new AdminLogoutRequest
+                {
+                    RememberedDeviceCredential = rememberedDeviceCredential
+                }, options: JsonOptions)
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var response = await CreateClient().SendAsync(request, boundedCancellation.Token);
@@ -139,6 +202,27 @@ public sealed class AdminApiAuthenticationClient
         {
             _logger.LogWarning(ex, "Admin API logout request failed; the local cookie will still be cleared.");
             return false;
+        }
+    }
+
+    public async Task TryRevokeRememberedDeviceAsync(
+        string? credential,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(credential)) return;
+        try
+        {
+            using var boundedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            boundedCancellation.CancelAfter(TimeSpan.FromSeconds(3));
+            using var response = await CreateClient().PostAsJsonAsync(
+                "api/auth/remembered-device/revoke",
+                new RememberedDeviceExchangeRequest { Credential = credential },
+                JsonOptions,
+                boundedCancellation.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Remembered-device revocation request failed; the local cookie will still be cleared.");
         }
     }
 

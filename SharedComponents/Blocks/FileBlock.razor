@@ -11,14 +11,14 @@
                data-sc-download="@(Downloads ? "true" : null)"
                class="sc-file-link">
             <i class="@FileIcon" aria-hidden="true"></i>
-            @Block.Filename
+            @DisplayName
         </a>
     }
     else
     {
         <span class="sc-file-link sc-file-link--unavailable">
             <i class="fas fa-file"></i>
-            @Block.Filename
+            @DisplayName
         </span>
     }
 </div>
@@ -26,6 +26,9 @@
 @code {
     [Parameter, EditorRequired] public PublicFileBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
+    private string DisplayName => StyleHelper.Lang(Block.DisplayName, Lang) is { Length: > 0 } value
+        ? value
+        : Block.Filename ?? string.Empty;
     private bool Downloads => string.Equals(Block.OpenBehavior, "download", StringComparison.OrdinalIgnoreCase);
     private string FileIcon => (Block.FileType ?? string.Empty).ToLowerInvariant() switch
     {

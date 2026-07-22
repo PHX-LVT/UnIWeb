@@ -687,6 +687,13 @@ namespace FullProject.Services.PublicService
                 .Select(b => b!)
                 .ToList();
 
+            var stepNumber = 0;
+            foreach (var step in mapped.OfType<PublicStepBlockDto>())
+            {
+                stepNumber++;
+                if (step.AutoNumber) step.SequenceNumber = stepNumber;
+            }
+
             foreach (var container in mapped.OfType<PublicContainerBlockDto>())
             {
                 container.Children = MapPublicBlocks(blockList, formDefinitions, formInputCapabilities, formResourceUrls, container.Id);
@@ -1434,6 +1441,7 @@ namespace FullProject.Services.PublicService
                     Asset = BlockAssetMetadataService.ToPublic(file.Asset),
                     FileUrl = file.FileUrl,
                     Filename = file.Filename,
+                    DisplayName = file.DisplayName,
                     FileType = file.FileType,
                     OpenBehavior = file.OpenBehavior
                 },
@@ -1443,13 +1451,17 @@ namespace FullProject.Services.PublicService
                     CenterLat = map.CenterLat,
                     CenterLng = map.CenterLng,
                     DefaultZoom = map.DefaultZoom,
-                    Pins = map.Pins.Select(p => new PublicMapPinDto
+                    Pins = map.Pins
+                        .Where(p => p.Visible)
+                        .OrderBy(p => p.Order)
+                        .Select(p => new PublicMapPinDto
                     {
                         Id = p.Id,
                         Label = p.Label,
                         Lat = p.Lat,
                         Lng = p.Lng,
-                        Href = p.Href
+                        Href = p.Href,
+                        Order = p.Order
                     }).ToList()
                 },
                 FormBlock form => MapFormBlock(form, formDefinitions, formInputCapabilities, formResourceUrls),
@@ -1461,14 +1473,18 @@ namespace FullProject.Services.PublicService
                     Description = card.Description,
                     ImageUrl = card.ImageUrl,
                     Asset = BlockAssetMetadataService.ToPublic(card.Asset),
+                    ImageAltText = card.ImageAltText,
                     ButtonLabel = card.ButtonLabel,
                     Href = card.Href,
                     Action = card.Action,
-                    FormDefinitionId = card.FormDefinitionId
+                    FormDefinitionId = card.FormDefinitionId,
+                    ButtonStyle = card.ButtonStyle
                 },
                 ButtonBlock button => new PublicButtonBlockDto
                 {
                     Type = "button",
+                    Icon = button.Icon,
+                    IconPosition = button.IconPosition,
                     Label = button.Label,
                     Href = button.Href,
                     Action = button.Action,
@@ -1502,6 +1518,7 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "step",
                     Icon = step.Icon,
+                    AutoNumber = step.AutoNumber,
                     StepLabel = step.StepLabel,
                     Title = step.Title,
                     Description = step.Description
@@ -1511,7 +1528,11 @@ namespace FullProject.Services.PublicService
                     Type = "icon",
                     Icon = icon.Icon,
                     Label = icon.Label,
-                    Description = icon.Description
+                    Description = icon.Description,
+                    ActionEnabled = icon.ActionEnabled,
+                    Href = icon.Href,
+                    Action = icon.Action,
+                    FormDefinitionId = icon.FormDefinitionId
                 },
                 ContainerBlock container => new PublicContainerBlockDto
                 {

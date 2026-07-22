@@ -3,151 +3,83 @@
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
-@*@inject AdminStyleService StyleService *@
-
 
 <div class="ez-right-panel">
-    <div class="ez-right-panel__header">
+    <div class="ez-section-editor-resize-handle"
+         role="separator"
+         aria-orientation="vertical"
+         aria-label="@T("ResizePanel")"
+         title="@T("ResizePanel")"
+         tabindex="0"></div>
+
+    <header class="ez-right-panel__header">
         <span class="ez-right-panel__title">
-            <i class="fas fa-sliders-h"></i>
-            @Section.Type?.ToUpper() @T("Content")
+            <i class="fas fa-sliders-h" aria-hidden="true"></i>
+            <span>@Section.Type?.ToUpperInvariant()</span>
+            <span class="ez-right-panel__title-divider">/</span>
+            <strong>@T(TabLabelKey)</strong>
         </span>
         <div class="ez-right-panel__header-actions">
-            <button type="button" class="btn-admin btn-ghost ez-section-preset-trigger" @onclick="OpenPresetDialog">
-                <i class="fas fa-bookmark"></i>
-                <span>@T("SaveAsPreset")</span>
-            </button>
-            <button class="ez-icon-btn" @onclick="OnClose">
-                <i class="fas fa-times"></i>
+            <div class="ez-section-actions">
+                <button type="button"
+                        class="ez-icon-btn"
+                        title="@T("MoreActions")"
+                        aria-label="@T("MoreActions")"
+                        aria-expanded="@_actionsOpen"
+                        @onclick="ToggleActions">
+                    <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
+                </button>
+                @if (_actionsOpen)
+                {
+                    <div class="ez-section-actions__menu">
+                        <button type="button" @onclick="OpenPresetDialog">
+                            <i class="fas fa-bookmark" aria-hidden="true"></i>@T("SaveAsPreset")
+                        </button>
+                    </div>
+                }
+            </div>
+            <button type="button" class="ez-icon-btn" title="@T("Close")" aria-label="@T("Close")" @onclick="RequestClose">
+                <i class="fas fa-times" aria-hidden="true"></i>
             </button>
         </div>
-    </div>
+    </header>
 
-    <div class="ez-right-panel__tabs">
-        <button class="ez-panel-tab @(_tab == "style" ? "active" : "")"
-                @onclick='() => _tab = "style"'>
-            @T("Style")
+    <nav class="ez-right-panel__tabs" aria-label="@T("SectionEditorTabs")">
+        <button type="button" class="ez-panel-tab @(_tab == "design" ? "active" : null)" aria-selected="@(_tab == "design")" @onclick='() => SelectTab("design")'>
+            <i class="fas fa-paint-roller" aria-hidden="true"></i>@T("Design")
         </button>
-        <button class="ez-panel-tab @(_tab == "content" ? "active" : "")"
-                @onclick='() => _tab = "content"'>
-            @T("Content")
+        <button type="button" class="ez-panel-tab @(_tab == "content" ? "active" : null)" aria-selected="@(_tab == "content")" @onclick='() => SelectTab("content")'>
+            <i class="fas fa-edit" aria-hidden="true"></i>@T("Content")
         </button>
-        <button class="ez-panel-tab @(_tab == "blocks" ? "active" : "")"
-                @onclick='() => _tab = "blocks"'>
-            @T("Blocks")
+        <button type="button" class="ez-panel-tab @(_tab == "blocks" ? "active" : null)" aria-selected="@(_tab == "blocks")" @onclick='() => SelectTab("blocks")'>
+            <i class="fas fa-cubes" aria-hidden="true"></i>@T("Blocks")
         </button>
-    </div>
+    </nav>
 
-    <div class="ez-right-panel__body">
-        @if (_tab == "style")
+    <main class="ez-right-panel__body">
+        @if (_tab == "design")
         {
-            <SectionStylePanel PageId="@EffectivePageId"
-                               SectionId="@Section.Id"
-                               Style="@(Section.Style ?? new())"
-                               OnSaved="HandleSectionSaved"
-                               OnClose="OnClose" />
+            <SectionDesignTab SectionId="@Section.Id"
+                              Draft="@_designDraft"
+                              Dirty="@HasUnsavedDesignChanges"
+                              Changed="DesignChanged" />
         }
         else if (_tab == "content")
         {
             <div class="ez-editor-language-notice">
-                <i class="fas fa-language"></i>
+                <i class="fas fa-language" aria-hidden="true"></i>
                 <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
             </div>
 
-            @if (Section.Type == "hero")
-            {
-                <HeroSectionEditor Section="Section"
-                                   PageId="@EffectivePageId"
-                                   Languages="_languages"
-                                   OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "cta")
-            {
-                <CtaSectionEditor Section="Section"
-                                  PageId="@EffectivePageId"
-                                  Languages="_languages"
-                                  OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "list")
-            {
-                <ListSectionEditor Section="Section"
-                                   PageId="@EffectivePageId"
-                                   Languages="_languages"
-                                   OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "showcase")
-            {
-                <ShowcaseSectionEditor Section="Section"
-                                          PageId="@EffectivePageId"
-                                          Languages="_languages"
-                                          OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "library")
-            {
-                <LibrarySectionEditor @key="Section.Id"
-                                      Section="Section"
-                                      PageId="@EffectivePageId"
-                                      Languages="_languages"
-                                      OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "html")
-            {
-                <HtmlSectionEditor Section="Section"
-                                   PageId="@EffectivePageId"
-                                   Languages="_languages"
-                                   OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "columns")
-            {
-                <ColumnsSectionEditor Section="Section"
-                                      PageId="@EffectivePageId"
-                                      Languages="_languages"
-                                      OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "stats")
-            {
-                <StatsSectionEditor Section="Section"
-                                    PageId="@EffectivePageId"
-                                    Languages="_languages"
-                                    OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "carousel")
-            {
-                <CarouselSectionEditor Section="Section"
-                                       PageId="@EffectivePageId"
-                                       Languages="_languages"
-                                       OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "network-map")
-            {
-                <NetworkMapSectionEditor Section="Section"
-                                         PageId="@EffectivePageId"
-                                         Languages="_languages"
-                                         OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "testimonial")
-            {
-                <TestimonialSectionEditor Section="Section"
-                                          PageId="@EffectivePageId"
-                                          Languages="_languages"
-                                          OnSaved="HandleSectionSaved" />
-            }
-            else if (Section.Type == "canvas")
-            {
-                <CanvasSectionEditor Section="Section"
-                                     PageId="@EffectivePageId"
-                                     OnSaved="HandleSectionSaved"
-                                     OnSectionsChanged="OnSectionsChanged" />
-            }
-            else
-            {
-                <p class="text-muted" style="padding:1rem;font-size:.85rem">
-                    @T("NoEditorForType"): @Section.Type
-                </p>
-            }
+            <SectionContentTab Section="Section"
+                               PageId="@EffectivePageId"
+                               Languages="_languages"
+                               OnSaved="HandleSectionSaved" />
         }
         else if (_tab == "blocks")
         {
+            <SectionBlockArrangementEditor Draft="@_designDraft" Changed="DesignChanged" />
+
             @if (CanArrangeBlocks)
             {
                 <div class="ez-blocks-tab-actions">
@@ -156,20 +88,20 @@
                         <span>@T("ArrangeBlocksHint")</span>
                     </div>
                     <button type="button" class="btn-admin btn-primary" @onclick="RequestArrangeBlocks">
-                        <i class="fas fa-object-group"></i> @T("ArrangeBlocks")
+                        <i class="fas fa-object-group" aria-hidden="true"></i>@T("ArrangeBlocks")
                     </button>
                 </div>
             }
 
             <div class="ez-editor-language-notice">
-                <i class="fas fa-language"></i>
+                <i class="fas fa-language" aria-hidden="true"></i>
                 <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
             </div>
 
             <BlockEditor PageId="@EffectivePageId"
                          SectionId="@Section.Id"
                          SectionType="@Section.Type"
-                         SectionBlockLayoutMode="@Section.Style?.BlockLayoutMode"
+                         SectionBlockLayoutMode="@_designDraft.BlockLayoutMode"
                          UseArrangeWorkspace="@CanArrangeBlocks"
                          InitialBlockId="@InitialBlockId"
                          RefreshVersion="@BlockEditorRefreshVersion"
@@ -178,13 +110,58 @@
                          ActiveBlockChanged="OnActiveBlockChanged"
                          OnChanged="OnBlocksChanged" />
         }
-    </div>
+    </main>
 
-    <div class="ez-right-panel__footer">
-        <button class="btn-admin btn-ghost" @onclick="OnClose">
-            <i class="fas fa-times"></i> @T("Close")
-        </button>
-    </div>
+    <footer class="ez-right-panel__footer">
+        @if (_tab is "design" or "blocks")
+        {
+            <div class="ez-design-footer__status" aria-live="polite">
+                @if (_savingDesign)
+                {
+                    <i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>@T("Saving")</span>
+                }
+                else if (HasUnsavedDesignChanges)
+                {
+                    <i class="fas fa-circle" aria-hidden="true"></i><span>@T("UnsavedChanges")</span>
+                }
+                else
+                {
+                    <i class="fas fa-check-circle" aria-hidden="true"></i><span>@T("NotificationSaved")</span>
+                }
+            </div>
+            <div class="ez-design-footer__reset">
+                <button type="button"
+                        class="ez-icon-btn"
+                        title="@T("RestoreLastSaved")"
+                        aria-label="@T("RestoreLastSaved")"
+                        disabled="@(!HasUnsavedDesignChanges || _savingDesign)"
+                        @onclick="RestoreLastSaved">
+                    <i class="fas fa-rotate-left" aria-hidden="true"></i>
+                </button>
+                @if (_tab == "design")
+                {
+                    <button type="button" class="btn-admin btn-ghost" disabled="@_savingDesign" @onclick="LoadDefaultDesign">
+                        @T("DefaultDesign")
+                    </button>
+                }
+            </div>
+            <div class="ez-design-footer__actions">
+                <button type="button" class="btn-admin btn-ghost" disabled="@(!HasUnsavedDesignChanges || _savingDesign)" @onclick="RestoreLastSaved">
+                    @T("Discard")
+                </button>
+                <button type="button" class="btn-admin btn-primary" disabled="@(!HasUnsavedDesignChanges || _savingDesign)" @onclick="SaveDesign">
+                    <i class="fas fa-save" aria-hidden="true"></i>@(_tab == "blocks" ? T("SaveLayout") : T("SaveChanges"))
+                </button>
+            </div>
+        }
+        else
+        {
+            <span></span>
+            <button type="button" class="btn-admin btn-ghost" @onclick="RequestClose">
+                <i class="fas fa-times" aria-hidden="true"></i>@T("Close")
+            </button>
+        }
+    </footer>
 </div>
 
 <DxWindow Visible="_showArrangeGuard"
@@ -199,22 +176,45 @@
     <BodyTemplate>
         <div class="block-arrange-guard" role="alertdialog" aria-labelledby="block-arrange-guard-title">
             <header id="block-arrange-guard-title">
-                <i class="fas fa-exclamation-triangle"></i>
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
                 <strong>@T("UnsavedSectionChanges")</strong>
             </header>
             <p>@T("UnsavedSectionArrangeHint")</p>
             <footer>
-                <button type="button" class="btn-admin btn-ghost" @onclick="KeepEditingSection">
-                    @T("KeepEditing")
-                </button>
+                <button type="button" class="btn-admin btn-ghost" @onclick="KeepEditingSection">@T("KeepEditing")</button>
                 <button type="button" class="btn-admin btn-danger" @onclick="DiscardAndArrange">
-                    <i class="fas fa-trash-alt"></i> @T("DiscardAndArrange")
+                    <i class="fas fa-trash-alt" aria-hidden="true"></i>@T("DiscardAndArrange")
                 </button>
             </footer>
         </div>
     </BodyTemplate>
 </DxWindow>
 
+<DxWindow Visible="_showCloseGuard"
+          VisibleChanged="OnCloseGuardVisibilityChanged"
+          Width="440px"
+          MaxWidth="calc(100vw - 32px)"
+          ShowCloseButton="false"
+          CloseOnEscape="true"
+          AllowResize="false"
+          HorizontalAlignment="HorizontalAlignment.Center"
+          VerticalAlignment="VerticalAlignment.Center">
+    <BodyTemplate>
+        <div class="block-arrange-guard" role="alertdialog" aria-labelledby="section-close-guard-title">
+            <header id="section-close-guard-title">
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+                <strong>@T("UnsavedSectionChanges")</strong>
+            </header>
+            <p>@T("UnsavedSectionCloseHint")</p>
+            <footer>
+                <button type="button" class="btn-admin btn-ghost" @onclick="KeepEditingSection">@T("KeepEditing")</button>
+                <button type="button" class="btn-admin btn-danger" @onclick="DiscardAndClose">
+                    <i class="fas fa-trash-alt" aria-hidden="true"></i>@T("DiscardChanges")
+                </button>
+            </footer>
+        </div>
+    </BodyTemplate>
+</DxWindow>
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
@@ -227,27 +227,42 @@
     [Parameter] public EventCallback<string?> OnActiveBlockChanged { get; set; }
     [Parameter] public EventCallback<string> OnArrangeBlocksRequested { get; set; }
     [Parameter] public EventCallback<string> OnDiscardAndArrangeRequested { get; set; }
+    [Parameter] public EventCallback<string> OnDiscardRequested { get; set; }
     [Parameter] public EventCallback<string> OnSaveAsPresetRequested { get; set; }
+    [Parameter] public EventCallback<SectionStyleModel> OnDesignPreviewChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnDirtyChanged { get; set; }
     [Parameter] public bool CanArrangeBlocks { get; set; }
-    [Parameter] public string InitialTab { get; set; } = "style";
+    [Parameter] public string InitialTab { get; set; } = "design";
     [Parameter] public string? InitialBlockId { get; set; }
     [Parameter] public int BlockEditorRefreshVersion { get; set; }
     [Parameter] public EventCallback<BlockCreationRequest> OnAddBlockRequested { get; set; }
 
-    private string _tab = "style";
-    private List<string> _languages = new() { "en" };
+    private string _tab = "design";
+    private List<string> _languages = ["en"];
     private string? _loadedSectionId;
     private string? _loadedInitialTab;
     private SectionModel? _trackedSection;
     private string _savedSectionSnapshot = string.Empty;
+    private SectionStyleModel _savedDesign = new();
+    private SectionStyleModel _designDraft = new();
     private bool _showArrangeGuard;
+    private bool _showCloseGuard;
+    private bool _actionsOpen;
+    private bool _savingDesign;
+
     private string EffectivePageId => !string.IsNullOrWhiteSpace(PageId) ? PageId : Section.PageId;
+    private string TabLabelKey => _tab switch { "content" => "Content", "blocks" => "Blocks", _ => "Design" };
+    private bool HasUnsavedDesignChanges => !DesignEquals(_savedDesign, _designDraft);
+    private bool HasUnsavedSectionChanges => HasUnsavedDesignChanges ||
+        !string.Equals(_savedSectionSnapshot, CaptureSectionSnapshot(), StringComparison.Ordinal);
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override async Task OnInitializedAsync()
     {
         await AdminLanguageState.LoadSettingsAsync();
-        _languages = AdminLanguageState.SupportedLanguages.ToList();
+        _languages = AdminLanguageState.SupportedLanguages.Any()
+            ? AdminLanguageState.SupportedLanguages.ToList()
+            : ["en"];
     }
 
     protected override void OnParametersSet()
@@ -256,20 +271,69 @@
         {
             _trackedSection = Section;
             _savedSectionSnapshot = CaptureSectionSnapshot();
+            _savedDesign = CloneStyle(Section.Style);
+            _designDraft = CloneStyle(_savedDesign);
             _showArrangeGuard = false;
+            _showCloseGuard = false;
+            _actionsOpen = false;
+            _ = OnDirtyChanged.InvokeAsync(false);
         }
 
         if (_loadedSectionId == Section.Id && _loadedInitialTab == InitialTab) return;
         _loadedSectionId = Section.Id;
         _loadedInitialTab = InitialTab;
-        _tab = InitialTab is "content" or "blocks" ? InitialTab : "style";
+        _tab = NormalizeTab(InitialTab);
     }
 
-    private bool HasUnsavedSectionChanges =>
-        !string.Equals(_savedSectionSnapshot, CaptureSectionSnapshot(), StringComparison.Ordinal);
+    private void SelectTab(string tab)
+    {
+        _tab = NormalizeTab(tab);
+        _actionsOpen = false;
+    }
 
-    private string CaptureSectionSnapshot() =>
-        JsonSerializer.Serialize(Section, Section.GetType());
+    private void ToggleActions() => _actionsOpen = !_actionsOpen;
+
+    private async Task DesignChanged()
+    {
+        await OnDesignPreviewChanged.InvokeAsync(CloneStyle(_designDraft));
+        await OnDirtyChanged.InvokeAsync(HasUnsavedSectionChanges);
+    }
+
+    private async Task RestoreLastSaved()
+    {
+        _designDraft = CloneStyle(_savedDesign);
+        await DesignChanged();
+    }
+
+    private async Task LoadDefaultDesign()
+    {
+        _designDraft = DefaultDesign(_designDraft);
+        await DesignChanged();
+    }
+
+    private async Task SaveDesign()
+    {
+        if (_savingDesign || !HasUnsavedDesignChanges) return;
+        _savingDesign = true;
+        try
+        {
+            var response = await SectionService.UpdateStyleAsync(EffectivePageId, Section.Id, ToDto(_designDraft));
+            Http.Notify(response, T("NotificationSectionSaved"), T("NotificationSaveFailed"));
+            if (!response.Success) return;
+
+            var saved = response.Data?.Style is null ? CloneStyle(_designDraft) : CloneStyle(response.Data.Style);
+            Section.Style = CloneStyle(saved);
+            _savedDesign = CloneStyle(saved);
+            _designDraft = CloneStyle(saved);
+            _savedSectionSnapshot = CaptureSectionSnapshot();
+            await OnDirtyChanged.InvokeAsync(false);
+            await OnSectionSaved.InvokeAsync();
+        }
+        finally
+        {
+            _savingDesign = false;
+        }
+    }
 
     private async Task RequestArrangeBlocks()
     {
@@ -286,11 +350,13 @@
     private async Task HandleSectionSaved()
     {
         _savedSectionSnapshot = CaptureSectionSnapshot();
+        await OnDirtyChanged.InvokeAsync(false);
         await OnSectionSaved.InvokeAsync();
     }
 
     private async Task OpenPresetDialog()
     {
+        _actionsOpen = false;
         if (HasUnsavedSectionChanges)
         {
             Http.Notify(T("SaveSectionBeforePreset"), 409);
@@ -299,17 +365,125 @@
         await OnSaveAsPresetRequested.InvokeAsync(Section.Id);
     }
 
-    private void KeepEditingSection() => _showArrangeGuard = false;
+    private async Task RequestClose()
+    {
+        _actionsOpen = false;
+        if (HasUnsavedSectionChanges)
+        {
+            _showCloseGuard = true;
+            return;
+        }
+        await OnClose.InvokeAsync();
+    }
+
+    private void KeepEditingSection()
+    {
+        _showArrangeGuard = false;
+        _showCloseGuard = false;
+    }
 
     private async Task DiscardAndArrange()
     {
         _showArrangeGuard = false;
+        await OnDesignPreviewChanged.InvokeAsync(CloneStyle(_savedDesign));
+        await OnDirtyChanged.InvokeAsync(false);
         await OnDiscardAndArrangeRequested.InvokeAsync(Section.Id);
     }
 
-    private Task OnArrangeGuardVisibilityChanged(bool visible)
+    private async Task DiscardAndClose()
     {
-        _showArrangeGuard = visible;
-        return Task.CompletedTask;
+        _showCloseGuard = false;
+        await OnDesignPreviewChanged.InvokeAsync(CloneStyle(_savedDesign));
+        await OnDirtyChanged.InvokeAsync(false);
+        if (OnDiscardRequested.HasDelegate)
+            await OnDiscardRequested.InvokeAsync(Section.Id);
+        else
+            await OnClose.InvokeAsync();
     }
+
+    private Task OnArrangeGuardVisibilityChanged(bool visible) { _showArrangeGuard = visible; return Task.CompletedTask; }
+    private Task OnCloseGuardVisibilityChanged(bool visible) { _showCloseGuard = visible; return Task.CompletedTask; }
+    private string CaptureSectionSnapshot() => JsonSerializer.Serialize(Section, Section.GetType());
+    private static bool DesignEquals(SectionStyleModel left, SectionStyleModel right) =>
+        string.Equals(JsonSerializer.Serialize(left), JsonSerializer.Serialize(right), StringComparison.Ordinal);
+
+    private static string NormalizeTab(string? tab) => tab switch
+    {
+        "content" => "content",
+        "blocks" => "blocks",
+        "style" => "design",
+        _ => "design"
+    };
+
+    private static SectionStyleModel DefaultDesign(SectionStyleModel current) => new()
+    {
+        BackgroundType = "theme",
+        BackgroundColor = "#ffffff",
+        BackgroundImageUrl = null,
+        BackgroundVideoUrl = null,
+        BackgroundImageFit = "cover",
+        BackgroundImagePosition = "center",
+        GradientFrom = "#001a33",
+        GradientTo = "#e5c076",
+        GradientDirection = "to bottom",
+        OverlayColor = "#000000",
+        OverlayOpacity = 0,
+        Height = "auto",
+        CustomMinHeightPx = 640,
+        Padding = "medium",
+        ContentWidth = "normal",
+        TextColor = "dark",
+        MobileLayout = "stack",
+        BlockLayoutMode = current.BlockLayoutMode,
+        BlockGridColumns = current.BlockGridColumns,
+        BlockGap = current.BlockGap
+    };
+
+    private static SectionStyleModel CloneStyle(SectionStyleModel? source) => new()
+    {
+        BackgroundType = source?.BackgroundType ?? "color",
+        BackgroundColor = source?.BackgroundColor ?? "#ffffff",
+        BackgroundImageUrl = source?.BackgroundImageUrl,
+        BackgroundVideoUrl = source?.BackgroundVideoUrl,
+        BackgroundImageFit = source?.BackgroundImageFit ?? "cover",
+        BackgroundImagePosition = source?.BackgroundImagePosition ?? "center",
+        GradientFrom = source?.GradientFrom ?? "#001a33",
+        GradientTo = source?.GradientTo ?? "#e5c076",
+        GradientDirection = source?.GradientDirection ?? "to bottom",
+        OverlayColor = source?.OverlayColor,
+        OverlayOpacity = source?.OverlayOpacity ?? 0.4,
+        Height = source?.Height ?? "auto",
+        CustomMinHeightPx = source?.CustomMinHeightPx ?? 640,
+        Padding = source?.Padding ?? "medium",
+        ContentWidth = source?.ContentWidth ?? "normal",
+        TextColor = source?.TextColor ?? "dark",
+        MobileLayout = source?.MobileLayout ?? "stack",
+        BlockLayoutMode = source?.BlockLayoutMode ?? "stack",
+        BlockGridColumns = Math.Clamp(source?.BlockGridColumns ?? 12, 1, 12),
+        BlockGap = source?.BlockGap ?? "medium"
+    };
+
+    private static SectionStyleDto ToDto(SectionStyleModel style) => new()
+    {
+        BackgroundType = style.BackgroundType,
+        BackgroundColor = style.BackgroundColor,
+        BackgroundImageUrl = style.BackgroundImageUrl,
+        BackgroundVideoUrl = style.BackgroundVideoUrl,
+        BackgroundImageFit = style.BackgroundImageFit,
+        BackgroundImagePosition = style.BackgroundImagePosition,
+        GradientFrom = style.GradientFrom,
+        GradientTo = style.GradientTo,
+        GradientDirection = style.GradientDirection,
+        OverlayColor = style.OverlayColor,
+        OverlayOpacity = style.OverlayOpacity,
+        Height = style.Height,
+        CustomMinHeightPx = style.CustomMinHeightPx,
+        Padding = style.Padding,
+        ContentWidth = style.ContentWidth,
+        TextColor = style.TextColor,
+        MobileLayout = style.MobileLayout,
+        BlockLayoutMode = style.BlockLayoutMode,
+        BlockGridColumns = style.BlockGridColumns,
+        BlockGap = style.BlockGap
+    };
 }

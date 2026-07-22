@@ -62,16 +62,19 @@
         // writes browser storage; only the legacy bearer-token container is removed.
         try { localStorage.removeItem("admin_session"); } catch { }
 
+        let adminSignOutSubmitted = false;
+
         window.adminAuth = {
             submitSignOut: function (reason, revokeCurrent) {
                 const form = document.getElementById("admin-signout-form");
-                if (!form) return;
+                if (!form || adminSignOutSubmitted) return;
 
                 const reasonInput = document.getElementById("admin-signout-reason");
                 const revokeInput = document.getElementById("admin-signout-revoke");
                 if (reasonInput) reasonInput.value = reason || "session-expired";
                 if (revokeInput) revokeInput.value = revokeCurrent ? "true" : "false";
 
+                adminSignOutSubmitted = true;
                 if (typeof form.requestSubmit === "function") form.requestSubmit();
                 else form.submit();
             }

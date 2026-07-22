@@ -1,0 +1,122 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="block-item-list block-map-pin-list" @ref="_root">
+    @foreach (var pin in Pins.OrderBy(pin => pin.Order))
+    {
+        <div class="block-item-list__row block-map-pin" data-block-item-id="@pin.Id" @key="pin.Id">
+            <button type="button" class="block-item-list__drag" title="@T("DragToReorder")" aria-label="@T("DragToReorder")">
+                <i class="fas fa-grip-vertical"></i>
+            </button>
+            <div class="block-map-pin__body">
+                <div class="block-media-settings">
+                    <label class="form-group">
+                        <span class="form-label">@T("Latitude")</span>
+                        <input class="form-control" type="number" min="-90" max="90" step="0.0001" @bind="pin.Lat" />
+                    </label>
+                    <label class="form-group">
+                        <span class="form-label">@T("Longitude")</span>
+                        <input class="form-control" type="number" min="-180" max="180" step="0.0001" @bind="pin.Lng" />
+                    </label>
+                </div>
+                <label class="form-group">
+                    <span class="form-label">@T("Label")</span>
+                    <DxTextBox @bind-Text="pin.Label" CssClass="w-100" NullText="Head Office" />
+                </label>
+                <label class="form-group">
+                    <span class="form-label">@T("LinkUrl")</span>
+                    <DxTextBox @bind-Text="pin.Href" CssClass="w-100" NullText="/contact or https://maps.example.com" />
+                </label>
+            </div>
+            <label class="block-item-list__visible" title="@T(pin.Visible ? "Hide" : "Show")">
+                <input type="checkbox" @bind="pin.Visible" />
+                <i class="fas @(pin.Visible ? "fa-eye" : "fa-eye-slash")"></i>
+            </label>
+            <button type="button" class="btn-admin btn-danger" @onclick="() => Remove(pin)" title="@T("Delete")">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    }
+</div>
+
+<button type="button" class="btn-admin btn-outline" @onclick="Add">
+    <i class="fas fa-plus"></i> @T("AddPin")
+</button>
+
+@code {
+    [Parameter, EditorRequired] public List<MapPinModel> Pins { get; set; } = new();
+    [Parameter] public double DefaultLatitude { get; set; }
+    [Parameter] public double DefaultLongitude { get; set; }
+    [Parameter] public string Language { get; set; } = "en";
+
+    private ElementReference _root;
+    private DotNetObjectReference<MapPinListEditor>? _reference;
+    private bool _initialized;
+    private string T(string key) => AdminUiLocalizer.T(key, Language);
+
+    protected override void OnParametersSet()
+    {
+        for (var index = 0; index < Pins.Count; index++)
+        {
+            Pins[index].Id = string.IsNullOrWhiteSpace(Pins[index].Id) ? $"pin-{Guid.NewGuid():N}" : Pins[index].Id;
+            Pins[index].Order = index;
+        }
+        _initialized = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_initialized) return;
+        _reference ??= DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("blockEditor.initItemSortable", _root, _reference);
+        _initialized = true;
+    }
+
+    private void Add()
+    {
+        Pins.Add(new MapPinModel
+        {
+            Id = $"pin-{Guid.NewGuid():N}",
+            Lat = DefaultLatitude,
+            Lng = DefaultLongitude,
+            Visible = true,
+            Order = Pins.Count
+        });
+        _initialized = false;
+    }
+
+    private void Remove(MapPinModel pin)
+    {
+        Pins.Remove(pin);
+        NormalizeOrder();
+        _initialized = false;
+    }
+
+    [JSInvokable]
+    public Task OnItemsReordered(List<string> ids)
+    {
+        var byId = Pins.ToDictionary(pin => pin.Id, StringComparer.Ordinal);
+        if (ids.Count != Pins.Count || ids.Any(id => !byId.ContainsKey(id))) return Task.CompletedTask;
+        Pins.Clear();
+        Pins.AddRange(ids.Select(id => byId[id]));
+        NormalizeOrder();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void NormalizeOrder()
+    {
+        for (var index = 0; index < Pins.Count; index++) Pins[index].Order = index;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("blockEditor.destroyItemSortable", _root); } catch { }
+        _reference?.Dispose();
+    }
+}
+
+<style>
+    .block-map-pin-list { margin-bottom:.65rem; }
+    .block-map-pin-list .block-map-pin { grid-template-columns:34px minmax(0,1fr) 34px 38px; }
+    .block-map-pin__body { min-width:0; }
+</style>

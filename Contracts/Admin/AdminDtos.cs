@@ -844,6 +844,8 @@ public class ColumnSlotResponseDto
         public double Lat { get; set; }
         public double Lng { get; set; }
         public string? Href { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
     }
 
     // -- Block Create DTOs -------------------------------------
@@ -904,6 +906,7 @@ public class ColumnSlotResponseDto
         public BlockAssetReferenceDto? Asset { get; set; }
         public string? FileUrl { get; set; }
         public string Filename { get; set; } = string.Empty;
+        public Dictionary<string, string> DisplayName { get; set; } = new();
         public string FileType { get; set; } = string.Empty;
         public string OpenBehavior { get; set; } = "open";
     }
@@ -938,14 +941,18 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
         public BlockAssetReferenceDto? Asset { get; set; }
+        public Dictionary<string, string> ImageAltText { get; set; } = new();
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
         public string? FormDefinitionId { get; set; }
+        public string ButtonStyle { get; set; } = "outline";
     }
 
     public class ButtonBlockCreateDto : BlockCreateDto
     {
+        public string Icon { get; set; } = string.Empty;
+        public string IconPosition { get; set; } = "left";
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -972,6 +979,7 @@ public class ColumnSlotResponseDto
     public class StepBlockCreateDto : BlockCreateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public bool AutoNumber { get; set; }
         public Dictionary<string, string> StepLabel { get; set; } = new();
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
@@ -982,6 +990,10 @@ public class ColumnSlotResponseDto
         public string Icon { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public bool ActionEnabled { get; set; }
+        public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class ContainerBlockCreateDto : BlockCreateDto
@@ -1055,6 +1067,7 @@ public class ColumnSlotResponseDto
         public BlockAssetReferenceDto? Asset { get; set; }
         public string? FileUrl { get; set; }
         public string Filename { get; set; } = string.Empty;
+        public Dictionary<string, string> DisplayName { get; set; } = new();
         public string FileType { get; set; } = string.Empty;
         public string OpenBehavior { get; set; } = "open";
     }
@@ -1080,14 +1093,18 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
         public BlockAssetReferenceDto? Asset { get; set; }
+        public Dictionary<string, string> ImageAltText { get; set; } = new();
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
         public string? FormDefinitionId { get; set; }
+        public string ButtonStyle { get; set; } = "outline";
     }
 
     public class ButtonBlockUpdateDto : BlockUpdateDto
     {
+        public string Icon { get; set; } = string.Empty;
+        public string IconPosition { get; set; } = "left";
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -1114,6 +1131,7 @@ public class ColumnSlotResponseDto
     public class StepBlockUpdateDto : BlockUpdateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public bool AutoNumber { get; set; }
         public Dictionary<string, string> StepLabel { get; set; } = new();
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
@@ -1124,6 +1142,10 @@ public class ColumnSlotResponseDto
         public string Icon { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public bool ActionEnabled { get; set; }
+        public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class ContainerBlockUpdateDto : BlockUpdateDto
@@ -1264,12 +1286,15 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string>? Label { get; set; }
         public Dictionary<string, string>? ButtonLabel { get; set; }
         public Dictionary<string, string>? StepLabel { get; set; }
+        public bool AutoNumber { get; set; }
         public string? Icon { get; set; }
+        public string IconPosition { get; set; } = "left";
         public string? Value { get; set; }
         public string? Prefix { get; set; }
         public string? Suffix { get; set; }
         public string? Href { get; set; }
         public string? Action { get; set; }
+        public bool ActionEnabled { get; set; }
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public string? PresetKey { get; set; }
@@ -1304,6 +1329,7 @@ public class ColumnSlotResponseDto
         // File
         public string? FileUrl { get; set; }
         public string? Filename { get; set; }
+        public Dictionary<string, string>? DisplayName { get; set; }
         public string? FileType { get; set; }
         public string OpenBehavior { get; set; } = "open";
 

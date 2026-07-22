@@ -1,0 +1,41 @@
+<div class="icon-picker-field">
+    <span class="icon-picker-field__preview" aria-hidden="true"><i class="@(string.IsNullOrWhiteSpace(Value) ? "fas fa-icons" : Value)"></i></span>
+    <input class="form-control"
+           list="@ListId"
+           value="@Value"
+           placeholder="fas fa-star"
+           aria-label="@Label"
+           @oninput="Change" />
+    <datalist id="@ListId">
+        @foreach (var option in Options)
+        {
+            <option value="@option.Value">@option.Label</option>
+        }
+    </datalist>
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Icon";
+
+    private readonly string ListId = $"icon-options-{Guid.NewGuid():N}";
+    private static readonly IReadOnlyList<IconOption> Options =
+    [
+        new("fas fa-star", "Star"), new("fas fa-check", "Check"), new("fas fa-check-circle", "Check circle"),
+        new("fas fa-arrow-right", "Arrow right"), new("fas fa-download", "Download"), new("fas fa-link", "Link"),
+        new("fas fa-envelope", "Email"), new("fas fa-phone", "Phone"), new("fas fa-location-dot", "Location"),
+        new("fas fa-globe", "Globe"), new("fas fa-truck", "Truck"), new("fas fa-warehouse", "Warehouse"),
+        new("fas fa-chart-line", "Chart"), new("fas fa-leaf", "Leaf"), new("fas fa-shield-alt", "Shield"),
+        new("fas fa-lightbulb", "Idea"), new("fas fa-users", "People"), new("fas fa-calendar", "Calendar"),
+        new("fas fa-file", "File"), new("fas fa-image", "Image"), new("fas fa-play-circle", "Video")
+    ];
+
+    private Task Change(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString()?.Trim() ?? string.Empty);
+    private sealed record IconOption(string Value, string Label);
+}
+
+<style>
+    .icon-picker-field { display:grid; grid-template-columns:42px minmax(0,1fr); gap:.5rem; align-items:center; }
+    .icon-picker-field__preview { width:42px; height:38px; display:grid; place-items:center; border:1px solid var(--border); border-radius:7px; background:var(--bg); color:var(--primary); }
+</style>

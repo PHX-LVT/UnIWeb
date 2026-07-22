@@ -1,0 +1,61 @@
+<section class="section-design-group section-block-arrangement">
+    <button type="button" class="section-design-group__toggle" aria-expanded="@_open" @onclick="Toggle">
+        <span><i class="fas fa-object-group" aria-hidden="true"></i>@T("SectionArrangement")</span>
+        <i class="fas @(_open ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+    </button>
+    @if (_open)
+    {
+        <div class="section-design-group__body">
+            <p class="section-block-arrangement__hint section-design-field--wide">@T("SectionArrangementHint")</p>
+            <SegmentField Label="@T("BlockLayoutMode")" Value="@LayoutMode" Options="@LayoutOptions" ValueChanged="SetLayoutMode" />
+            @if (LayoutMode == "grid")
+            {
+                <label class="section-design-field section-design-field--wide">
+                    <span class="section-design-field__label">@T("BlockGridColumns")</span>
+                    <div class="section-design-number">
+                        <input type="number" min="1" max="12" value="@Columns" @onchange="SetColumns" />
+                    </div>
+                </label>
+            }
+            <SegmentField Label="@T("BlockGap")" Value="@Gap" Options="@GapOptions" ValueChanged="SetGap" />
+        </div>
+    }
+</section>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter, EditorRequired] public SectionStyleModel Draft { get; set; } = new();
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _open = true;
+    private string LayoutMode => Draft.BlockLayoutMode is "grid" or "split" ? Draft.BlockLayoutMode : "stack";
+    private int Columns => Math.Clamp(Draft.BlockGridColumns ?? 12, 1, 12);
+    private string Gap => Draft.BlockGap is "none" or "small" or "large" ? Draft.BlockGap : "medium";
+    private IReadOnlyList<SectionDesignTab.DesignOption> LayoutOptions =>
+    [new("stack", "Stack"), new("grid", "Grid"), new("split", "Split")];
+    private IReadOnlyList<SectionDesignTab.DesignOption> GapOptions =>
+    [new("none", "None"), new("small", "Small"), new("medium", "Medium"), new("large", "Large")];
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private void Toggle() => _open = !_open;
+
+    private async Task SetLayoutMode(string value)
+    {
+        Draft.BlockLayoutMode = value is "grid" or "split" ? value : "stack";
+        await Changed.InvokeAsync();
+    }
+
+    private async Task SetGap(string value)
+    {
+        Draft.BlockGap = value is "none" or "small" or "large" ? value : "medium";
+        await Changed.InvokeAsync();
+    }
+
+    private async Task SetColumns(ChangeEventArgs args)
+    {
+        Draft.BlockGridColumns = int.TryParse(args.Value?.ToString(), out var value)
+            ? Math.Clamp(value, 1, 12)
+            : 12;
+        await Changed.InvokeAsync();
+    }
+}

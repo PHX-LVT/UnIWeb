@@ -8,6 +8,14 @@
         public int ExpiryHour { get; set; } = 4;
     }
 
+    public class RememberedDeviceSettings
+    {
+        public bool Enabled { get; set; } = true;
+        public int LifetimeDays { get; set; } = 30;
+        public int MaximumDevicesPerAccount { get; set; } = 5;
+        public int TokenBytes { get; set; } = 32;
+    }
+
     public class MongoDbSettings
     {
         public string ConnectionString { get; set; } = string.Empty;

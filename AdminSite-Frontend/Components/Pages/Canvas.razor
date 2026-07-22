@@ -150,31 +150,6 @@
                           Command="RunAuthoringCommand"
                           BreadcrumbSelected="SelectBreadcrumb" />
 
-    @if (_showArrangeBlockWizard && _blockCreationRequest is not null)
-    {
-        <div class="ez-modal-overlay ez-arrange-create-modal-overlay" @onclick="CloseArrangeBlockWizard">
-            <div class="ez-modal ez-arrange-create-modal"
-                 role="dialog"
-                 aria-modal="true"
-                 aria-labelledby="ez-arrange-create-modal-title"
-                 @onclick:stopPropagation="true">
-                <div class="ez-arrange-create-panel">
-                    <div class="ez-arrange-create-panel__target">
-                        <i class="fas fa-crosshairs"></i>
-                        <span id="ez-arrange-create-modal-title">@T("CreateBlockIn"): <strong>@_blockCreationRequest.TargetLabel</strong></span>
-                    </div>
-                    <BlockCreationWizard Open="true"
-                                         Busy="_creatingArrangeBlock"
-                                         AdminLanguage="@AdminLanguage"
-                                         AllowedTypes="@_blockCreationRequest.AllowedTypes"
-                                         ConstraintLabel="@_blockCreationRequest.ConstraintLabel"
-                                         Confirmed="CreateArrangeBlock"
-                                         Cancelled="CloseArrangeBlockWizard" />
-                </div>
-            </div>
-        </div>
-    }
-
     <div class="ez-canvas__viewport @(IsInteractivePreview ? "ez-canvas__viewport--interactive-preview" : "")">
 
         <div class="ez-canvas__preview-shell @(CanArrange ? "ez-canvas__preview-shell--arrange" : "") @(IsInteractivePreview ? "ez-canvas__preview-shell--interactive-preview" : "")"
@@ -385,13 +360,13 @@
 
 <DxWindow Visible="@(CanModify && _selectedSection is not null)"
           VisibleChanged="@((bool visible) => { if (!visible) ClosePanel(); })"
-          Width="650px"
+          Width="560px"
           Height="calc(100vh - 72px)"
           MaxWidth="90vw"
           CssClass="ez-section-editor-window"
           BodyCssClass="ez-section-editor-window__body"
           AllowResize="false"
-          CloseOnEscape="true"
+          CloseOnEscape="false"
           ShowCloseButton="false"
           HorizontalAlignment="HorizontalAlignment.Right"
           VerticalAlignment="VerticalAlignment.Center">
@@ -414,9 +389,63 @@
                            OnAddBlockRequested="OpenBlockCreationModal"
                            OnArrangeBlocksRequested="EnterArrangeBlocks"
                            OnDiscardAndArrangeRequested="DiscardSectionChangesAndEnterArrangeBlocks"
+                           OnDiscardRequested="DiscardSectionChangesAndClose"
+                           OnDesignPreviewChanged="PreviewSectionDesign"
+                           OnDirtyChanged="HandleSectionEditorDirtyChanged"
                            OnSaveAsPresetRequested="OpenSectionPresetDialog" />
             </div>
         }
+    </BodyTemplate>
+</DxWindow>
+
+@if (_showArrangeBlockWizard && _blockCreationRequest is not null)
+{
+    <div class="ez-modal-overlay ez-arrange-create-modal-overlay" @onclick="CloseArrangeBlockWizard">
+        <div class="ez-modal ez-arrange-create-modal"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="ez-arrange-create-modal-title"
+             @onclick:stopPropagation="true">
+            <div class="ez-arrange-create-panel">
+                <div class="ez-arrange-create-panel__target">
+                    <i class="fas fa-crosshairs"></i>
+                    <span id="ez-arrange-create-modal-title">@T("CreateBlockIn"): <strong>@_blockCreationRequest.TargetLabel</strong></span>
+                </div>
+                <BlockCreationWizard Open="true"
+                                     Busy="_creatingArrangeBlock"
+                                     AdminLanguage="@AdminLanguage"
+                                     AllowedTypes="@_blockCreationRequest.AllowedTypes"
+                                     ConstraintLabel="@_blockCreationRequest.ConstraintLabel"
+                                     Confirmed="CreateArrangeBlock"
+                                     Cancelled="CloseArrangeBlockWizard" />
+            </div>
+        </div>
+    </div>
+}
+
+<DxWindow Visible="_showSectionSelectionGuard"
+          VisibleChanged="OnSectionSelectionGuardVisibilityChanged"
+          Width="440px"
+          MaxWidth="calc(100vw - 32px)"
+          ShowCloseButton="false"
+          CloseOnEscape="true"
+          AllowResize="false"
+          HorizontalAlignment="HorizontalAlignment.Center"
+          VerticalAlignment="VerticalAlignment.Center">
+    <BodyTemplate>
+        <div class="block-arrange-guard" role="alertdialog" aria-labelledby="section-selection-guard-title">
+            <header id="section-selection-guard-title">
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+                <strong>@T("UnsavedSectionChanges")</strong>
+            </header>
+            <p>@T("UnsavedSectionSelectionHint")</p>
+            <footer>
+                <button type="button" class="btn-admin btn-ghost" @onclick="KeepCurrentSection">@T("KeepEditing")</button>
+                <button type="button" class="btn-admin btn-danger" @onclick="DiscardAndSelectPendingSection">
+                    <i class="fas fa-trash-alt" aria-hidden="true"></i>@T("DiscardAndContinue")
+                </button>
+            </footer>
+        </div>
     </BodyTemplate>
 </DxWindow>
 
@@ -600,7 +629,7 @@
     private bool _arrangeBlocksActive;
     private bool _restoreSectionEditorOnEdit;
     private string? _arrangeReturnSectionId;
-    private string _editPanelInitialTab = "style";
+    private string _editPanelInitialTab = "design";
     private string? _editPanelSelectedBlockId;
     private string? _pendingArrangeSelectionId;
     private string? _activeArrangeSectionId;
@@ -619,6 +648,10 @@
     private bool _overlayInitialized;
     private bool _sortableInitialized;
     private bool _arrangeEditorInitialized;
+    private bool _sectionEditorSizingInitialized;
+    private bool _sectionEditorDirty;
+    private bool _showSectionSelectionGuard;
+    private SectionModel? _pendingSectionSelection;
     private string? _currentPageId;
     private string? _currentPreviewUrl;
     private string? _currentLang;
@@ -903,6 +936,19 @@
             await LoadArrangeBlocksAsync();
         }
 
+        if (_selectedSection is not null && !_sectionEditorSizingInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initSectionEditorPanelSizing");
+                _sectionEditorSizingInitialized = true;
+            }
+            catch
+            {
+                // The editor remains usable at its governed default width.
+            }
+        }
+
         if (!_overlayInitialized && _dotNetRef is not null)
         {
             try
@@ -951,7 +997,7 @@
             _arrangeBlocksActive = false;
             _restoreSectionEditorOnEdit = false;
             _arrangeReturnSectionId = null;
-            _editPanelInitialTab = "style";
+            _editPanelInitialTab = "design";
             _editPanelSelectedBlockId = null;
             _pendingArrangeSelectionId = null;
             _activeArrangeZoneId = null;
@@ -1025,6 +1071,7 @@
         try
         {
             await JS.InvokeVoidAsync("disposeCanvasOverlay");
+            await JS.InvokeVoidAsync("destroySectionEditorPanelSizing");
         }
         catch (JSDisconnectedException)
         {
@@ -2350,14 +2397,31 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private void SelectSection(SectionModel section)
+    private async Task SelectSection(SectionModel section)
     {
         if (!CanModify)
             return;
 
-        _editPanelInitialTab = "style";
+        if (_selectedSection is not null &&
+            !string.Equals(_selectedSection.Id, section.Id, StringComparison.Ordinal) &&
+            _sectionEditorDirty)
+        {
+            _pendingSectionSelection = section;
+            _showSectionSelectionGuard = true;
+            return;
+        }
+
+        SelectSectionWithoutGuard(section);
+        await Task.CompletedTask;
+    }
+
+    private void SelectSectionWithoutGuard(SectionModel section)
+    {
+        _editPanelInitialTab = "design";
         _editPanelSelectedBlockId = null;
         _selectedSection = section;
+        _sectionEditorDirty = false;
+        _sectionEditorSizingInitialized = false;
     }
 
     private static bool IsArrangeCompatible(SectionModel section) =>
@@ -2375,9 +2439,14 @@
 
     private void ClosePanel()
     {
+        _ = JS.InvokeVoidAsync("destroySectionEditorPanelSizing");
         _selectedSection = null;
-        _editPanelInitialTab = "style";
+        _editPanelInitialTab = "design";
         _editPanelSelectedBlockId = null;
+        _sectionEditorDirty = false;
+        _sectionEditorSizingInitialized = false;
+        _pendingSectionSelection = null;
+        _showSectionSelectionGuard = false;
     }
 
     private Task OpenSectionPresetDialog(string sectionId)
@@ -2560,6 +2629,67 @@
         }
 
         await ReloadPreviewSafelyAsync();
+    }
+
+    private void HandleSectionEditorDirtyChanged(bool dirty) => _sectionEditorDirty = dirty;
+
+    private async Task PreviewSectionDesign(SectionStyleModel style)
+    {
+        if (_selectedSection is null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("patchPreviewSectionStyle", _selectedSection.Id, style);
+        }
+        catch
+        {
+            // A preview refresh or iframe navigation can briefly make the target unavailable.
+        }
+    }
+
+    private async Task DiscardSectionChangesAndClose(string sectionId)
+    {
+        await ReloadSectionFromServer(sectionId);
+        ClosePanel();
+        await ReloadPreviewSafelyAsync();
+    }
+
+    private void KeepCurrentSection()
+    {
+        _showSectionSelectionGuard = false;
+        _pendingSectionSelection = null;
+    }
+
+    private async Task DiscardAndSelectPendingSection()
+    {
+        var pending = _pendingSectionSelection;
+        var currentId = _selectedSection?.Id;
+        _showSectionSelectionGuard = false;
+        _pendingSectionSelection = null;
+
+        if (!string.IsNullOrWhiteSpace(currentId))
+            await ReloadSectionFromServer(currentId);
+        await ReloadPreviewSafelyAsync();
+
+        if (pending is not null)
+        {
+            var refreshedPending = Sections.FirstOrDefault(section => section.Id == pending.Id) ?? pending;
+            SelectSectionWithoutGuard(refreshedPending);
+        }
+    }
+
+    private Task OnSectionSelectionGuardVisibilityChanged(bool visible)
+    {
+        _showSectionSelectionGuard = visible;
+        if (!visible) _pendingSectionSelection = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task ReloadSectionFromServer(string sectionId)
+    {
+        var response = await SectionService.GetByIdAsync(Page.Id, sectionId);
+        if (!response.Success || response.Data is null) return;
+        var index = Sections.FindIndex(section => section.Id == sectionId);
+        if (index >= 0) Sections[index] = response.Data;
     }
 
     private async Task HandleBlocksChanged()

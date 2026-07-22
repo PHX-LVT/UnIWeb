@@ -66,6 +66,10 @@ namespace AdminSite.Services
             _http.PostAsync<object>($"{Base(pageId, sectionId)}/authoring/delete-graphs",
                 new BlockDuplicateRequestDto { BlockIds = blockIds.ToList() });
 
+        public Task<ApiResponse<BlockModel>> MoveAsync(
+            string pageId, string sectionId, BlockMoveRequestDto dto) =>
+            _http.PostAsync<BlockModel>($"{Base(pageId, sectionId)}/authoring/move", dto);
+
         public Task<ApiResponse<BlockModel>> UpdateAuthoringLockAsync(
             string pageId, string sectionId, string blockId, BlockAuthoringLockUpdateDto dto) =>
             _http.PutAsync<BlockModel>($"{Base(pageId, sectionId)}/{blockId}/authoring-lock", dto);

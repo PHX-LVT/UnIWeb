@@ -75,23 +75,117 @@ else
             </div>
         }
     </section>
+
+    <div class="page-header" style="margin-top:1.5rem">
+        <div>
+            <h2 class="page-title" style="font-size:1.25rem"><i class="fas fa-key"></i> @T("RememberedDevices")</h2>
+            <p class="log-management__subtitle">@T("RememberedDevicesDescription")</p>
+        </div>
+        @if (Auth.IsAdminAdmin && _selectedDevices.Count > 0)
+        {
+            <button class="btn-admin btn-danger" disabled="@_revokingDevices" @onclick="RevokeSelectedDevicesAsync">
+                <i class="fas fa-ban"></i> @T("RevokeSelectedDevices") (@_selectedDevices.Count)
+            </button>
+        }
+    </div>
+
+    <section class="admin-card log-management__surface">
+        @if (_loadingDevices)
+        {
+            <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
+        }
+        else if (_devices.Count == 0)
+        {
+            <div class="log-management__empty">@T("NoRememberedDevices")</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="admin-data-table log-management__table">
+                    <thead>
+                        <tr>
+                            @if (Auth.IsAdminAdmin) { <th></th> }
+                            <th>@T("Account")</th>
+                            <th>@T("Registered")</th>
+                            <th>@T("LastUsed")</th>
+                            <th>@T("Expires")</th>
+                            <th>@T("Device")</th>
+                            <th>@T("IpAddress")</th>
+                            <th>@T("Status")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _devices)
+                        {
+                            var active = !item.IsRevoked && item.ExpiresAt > DateTime.UtcNow;
+                            var current = string.Equals(item.Id, Auth.CurrentUser?.RememberedDeviceId, StringComparison.Ordinal);
+                            <tr>
+                                @if (Auth.IsAdminAdmin)
+                                {
+                                    <td><input type="checkbox" disabled="@(!active)" checked="@_selectedDevices.Contains(item.Id)" @onchange="args => ToggleDevice(item.Id, args.Value)" /></td>
+                                }
+                                <td>
+                                    @item.Email
+                                    @if (current) { <span class="log-status log-status--succeeded" style="margin-left:.35rem">@T("CurrentDevice")</span> }
+                                </td>
+                                <td>@FormatDate(item.CreatedAt)</td>
+                                <td>@FormatDate(item.LastUsedAt)</td>
+                                <td>@FormatDate(item.ExpiresAt)</td>
+                                <td>@DisplayDevice(item)</td>
+                                <td><code>@item.LastUsedIp</code></td>
+                                <td><span class="log-status log-status--@(active ? "succeeded" : "failed")">@(item.IsRevoked ? T("Revoked") : item.ExpiresAt <= DateTime.UtcNow ? T("Expired") : T("Active"))</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="log-management__pager">
+                <button class="btn-admin btn-ghost" disabled="@(_devicePage <= 1 || _loadingDevices)" @onclick="() => SetDevicePageAsync(_devicePage - 1)">@T("Previous")</button>
+                <span>@string.Format(T("PageOf"), _devicePage, _deviceTotalPages)</span>
+                <button class="btn-admin btn-ghost" disabled="@(_devicePage >= _deviceTotalPages || _loadingDevices)" @onclick="() => SetDevicePageAsync(_devicePage + 1)">@T("Next")</button>
+            </div>
+        }
+    </section>
 }
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
     private readonly List<AdminSessionResponse> _items = new();
     private readonly HashSet<string> _selected = new(StringComparer.Ordinal);
+    private readonly List<AdminRememberedDeviceResponse> _devices = new();
+    private readonly HashSet<string> _selectedDevices = new(StringComparer.Ordinal);
     private int _page = 1;
     private int _totalPages = 1;
     private bool _loading = true;
     private bool _deleting;
+    private int _devicePage = 1;
+    private int _deviceTotalPages = 1;
+    private bool _loadingDevices = true;
+    private bool _revokingDevices;
 
     protected override async Task OnInitializedAsync()
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
-        if (Auth.CanManageUsers) await LoadAsync();
+        if (Auth.CanManageUsers)
+            await Task.WhenAll(LoadAsync(), LoadDevicesAsync());
         _loading = false;
+    }
+
+    private async Task LoadDevicesAsync()
+    {
+        _loadingDevices = true;
+        var response = await Users.GetRememberedDevicesAsync(_devicePage, 25);
+        if (response.Success && response.Data is not null)
+        {
+            _devices.Clear();
+            _devices.AddRange(response.Data.Items);
+            _devicePage = response.Data.Page;
+            _deviceTotalPages = response.Data.TotalPages;
+            _selectedDevices.RemoveWhere(id => _devices.All(item => item.Id != id));
+        }
+        else Http.Notify(response.Message, response.StatusCode);
+        _loadingDevices = false;
     }
 
     private async Task LoadAsync()
@@ -112,6 +206,8 @@ else
 
     private async Task SetPageAsync(int page) { _page = Math.Clamp(page, 1, _totalPages); _selected.Clear(); await LoadAsync(); }
     private void Toggle(string id, object? value) { if (value is true) _selected.Add(id); else _selected.Remove(id); }
+    private async Task SetDevicePageAsync(int page) { _devicePage = Math.Clamp(page, 1, _deviceTotalPages); _selectedDevices.Clear(); await LoadDevicesAsync(); }
+    private void ToggleDevice(string id, object? value) { if (value is true) _selectedDevices.Add(id); else _selectedDevices.Remove(id); }
 
     private async Task DeleteSelectedAsync()
     {
@@ -123,7 +219,18 @@ else
         _deleting = false;
     }
 
+    private async Task RevokeSelectedDevicesAsync()
+    {
+        if (!Auth.IsAdminAdmin || _selectedDevices.Count == 0) return;
+        _revokingDevices = true;
+        var response = await Users.RevokeRememberedDevicesAsync(_selectedDevices);
+        Http.Notify(response.Message, response.StatusCode);
+        if (response.Success) { _selectedDevices.Clear(); await LoadDevicesAsync(); }
+        _revokingDevices = false;
+    }
+
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private static string FormatDate(DateTime value) => value.ToLocalTime().ToString("dd MMM yyyy HH:mm");
     private static string DisplayDevice(AdminSessionResponse item) => $"{item.BrowserName} / {item.OperatingSystem}";
+    private static string DisplayDevice(AdminRememberedDeviceResponse item) => $"{item.BrowserName} / {item.OperatingSystem}";
 }

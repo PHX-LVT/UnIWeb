@@ -1,0 +1,430 @@
+@using System.Globalization
+@inject IHttpService Http
+
+<div class="section-design" data-section-design>
+    <header class="section-design__intro">
+        <div>
+            <strong>@T("Design")</strong>
+            <span>@T("SectionDesignHint")</span>
+        </div>
+        <span class="section-design__state @((Dirty) ? "is-dirty" : "is-saved")">
+            <i class="fas @(Dirty ? "fa-circle" : "fa-check-circle")" aria-hidden="true"></i>
+            @(Dirty ? T("UnsavedChanges") : T("NotificationSaved"))
+        </span>
+    </header>
+
+    <section class="section-design-group">
+        <button type="button"
+                class="section-design-group__toggle"
+                aria-expanded="@_appearanceOpen"
+                @onclick="ToggleAppearance">
+            <span><i class="fas fa-palette" aria-hidden="true"></i>@T("Appearance")</span>
+            <i class="fas @(_appearanceOpen ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+        </button>
+        @if (_appearanceOpen)
+        {
+            <div class="section-design-group__body">
+                <div class="section-design-field section-design-field--wide">
+                    <span class="section-design-field__label">@T("Background")</span>
+                    <div class="section-design-segments section-design-segments--wrap" role="group" aria-label="@T("Background")">
+                        @foreach (var option in BackgroundOptions)
+                        {
+                            <button type="button"
+                                    class="section-design-segment @(BackgroundType == option.Value ? "active" : null)"
+                                    aria-pressed="@(BackgroundType == option.Value)"
+                                    @onclick="() => SetBackgroundType(option.Value)">
+                                <i class="fas @option.Icon" aria-hidden="true"></i>
+                                <span>@T(option.LabelKey)</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @if (BackgroundType == "color")
+                {
+                    <ColorField Label="@T("BackgroundColor")"
+                                Value="@BackgroundColor"
+                                ValueChanged="SetBackgroundColor" />
+                }
+                else if (BackgroundType == "gradient")
+                {
+                    <ColorField Label="@T("From")" Value="@GradientFrom" ValueChanged="SetGradientFrom" />
+                    <ColorField Label="@T("To")" Value="@GradientTo" ValueChanged="SetGradientTo" />
+                    <label class="section-design-field section-design-field--wide">
+                        <span class="section-design-field__label">@T("Direction")</span>
+                        <select class="section-design-select" value="@GradientDirection" @onchange="SetGradientDirection">
+                            <option value="to bottom">@T("DirectionDown")</option>
+                            <option value="to right">@T("DirectionRight")</option>
+                            <option value="to bottom right">@T("DirectionDownRight")</option>
+                            <option value="to bottom left">@T("DirectionDownLeft")</option>
+                        </select>
+                    </label>
+                }
+                else if (BackgroundType == "image")
+                {
+                    <div class="section-design-field section-design-field--wide">
+                        <span class="section-design-field__label">@T("BackgroundImage")</span>
+                        @if (!string.IsNullOrWhiteSpace(Draft.BackgroundImageUrl))
+                        {
+                            <div class="section-design-media-preview section-design-media-preview--image">
+                                <img src="@Draft.BackgroundImageUrl" alt="" />
+                                <button type="button" class="ez-icon-btn" title="@T("Remove")" aria-label="@T("Remove")" @onclick="RemoveImage">
+                                    <i class="fas fa-times" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        }
+                        <div class="section-design-media-actions">
+                            <InputFile id="@ImageUploadId" OnChange="OnImageSelected" accept="image/*" hidden />
+                            <label class="btn-admin btn-ghost" for="@ImageUploadId">
+                                <i class="fas fa-upload" aria-hidden="true"></i>@T("UploadNew")
+                            </label>
+                            <button type="button" class="btn-admin btn-ghost" @onclick='() => OpenResourcePicker("image")'>
+                                <i class="fas fa-photo-film" aria-hidden="true"></i>@T("ChooseFromResourceLibrary")
+                            </button>
+                        </div>
+                    </div>
+                }
+                else if (BackgroundType == "video")
+                {
+                    <div class="section-design-field section-design-field--wide">
+                        <span class="section-design-field__label">@T("BackgroundVideo")</span>
+                        <span class="section-design-field__hint">@T("SectionBackgroundVideoHint")</span>
+                        @if (!string.IsNullOrWhiteSpace(Draft.BackgroundVideoUrl))
+                        {
+                            <div class="section-design-media-preview section-design-media-preview--video">
+                                <video src="@Draft.BackgroundVideoUrl" muted loop playsinline controls></video>
+                                <button type="button" class="ez-icon-btn" title="@T("Remove")" aria-label="@T("Remove")" @onclick="RemoveVideo">
+                                    <i class="fas fa-times" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        }
+                        <div class="section-design-media-actions">
+                            <InputFile id="@VideoUploadId" OnChange="OnVideoSelected" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden />
+                            <label class="btn-admin btn-ghost" for="@VideoUploadId">
+                                <i class="fas fa-upload" aria-hidden="true"></i>@T("UploadNew")
+                            </label>
+                            <button type="button" class="btn-admin btn-ghost" @onclick='() => OpenResourcePicker("video")'>
+                                <i class="fas fa-photo-film" aria-hidden="true"></i>@T("ChooseFromResourceLibrary")
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                @if (BackgroundType is "image" or "video")
+                {
+                    <ColorField Label="@T("OverlayColor")" Value="@OverlayColor" ValueChanged="SetOverlayColor" />
+                    <label class="section-design-field">
+                        <span class="section-design-field__label">@T("OverlayOpacity") <strong>@OverlayPercent</strong></span>
+                        <input class="section-design-range"
+                               type="range"
+                               min="0"
+                               max="1"
+                               step="0.05"
+                               value="@OverlayOpacity.ToString(CultureInfo.InvariantCulture)"
+                               @oninput="SetOverlayOpacity" />
+                    </label>
+                }
+
+                <div class="section-design-field section-design-field--wide">
+                    <span class="section-design-field__label">@T("TextColor")</span>
+                    <div class="section-design-segments" role="group" aria-label="@T("TextColor")">
+                        <button type="button" class="section-design-segment @(TextColor == "dark" ? "active" : null)" aria-pressed="@(TextColor == "dark")" @onclick='() => SetTextColor("dark")'>
+                            <i class="fas fa-font" aria-hidden="true"></i>@T("DarkText")
+                        </button>
+                        <button type="button" class="section-design-segment @(TextColor == "light" ? "active" : null)" aria-pressed="@(TextColor == "light")" @onclick='() => SetTextColor("light")'>
+                            <i class="fas fa-sun" aria-hidden="true"></i>@T("LightText")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </section>
+
+    <section class="section-design-group">
+        <button type="button" class="section-design-group__toggle" aria-expanded="@_layoutOpen" @onclick="ToggleLayout">
+            <span><i class="fas fa-ruler-combined" aria-hidden="true"></i>@T("Layout")</span>
+            <i class="fas @(_layoutOpen ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+        </button>
+        @if (_layoutOpen)
+        {
+            <div class="section-design-group__body">
+                <SegmentField Label="@T("ContentWidth")"
+                              Value="@ContentWidth"
+                              Options="@WidthOptions"
+                              ValueChanged="SetContentWidth" />
+                <SegmentField Label="@T("Padding")"
+                              Value="@Padding"
+                              Options="@PaddingOptions"
+                              ValueChanged="SetPadding" />
+                <SegmentField Label="@T("Height")"
+                              Value="@Height"
+                              Options="@HeightOptions"
+                              ValueChanged="SetHeight" />
+                @if (Height == "custom")
+                {
+                    <label class="section-design-field section-design-field--wide">
+                        <span class="section-design-field__label">@T("CustomMinHeightPx")</span>
+                        <div class="section-design-number">
+                            <input type="number" min="120" max="3000" value="@CustomMinHeight" @onchange="SetCustomHeight" />
+                            <span>px</span>
+                        </div>
+                    </label>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="section-design-group">
+        <button type="button" class="section-design-group__toggle" aria-expanded="@_responsiveOpen" @onclick="ToggleResponsive">
+            <span><i class="fas fa-mobile-alt" aria-hidden="true"></i>@T("Responsive")</span>
+            <i class="fas @(_responsiveOpen ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+        </button>
+        @if (_responsiveOpen)
+        {
+            <div class="section-design-group__body">
+                <SegmentField Label="@T("MobileLayout")"
+                              Value="@MobileLayout"
+                              Options="@MobileOptions"
+                              ValueChanged="SetMobileLayout" />
+                @if (MobileLayout == "hide")
+                {
+                    <div class="section-design-warning section-design-field--wide" role="status">
+                        <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                        <span>@T("HideSectionMobileWarning")</span>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="section-design-group">
+        <button type="button" class="section-design-group__toggle" aria-expanded="@_advancedOpen" @onclick="ToggleAdvanced">
+            <span><i class="fas fa-sliders" aria-hidden="true"></i>@T("Advanced")</span>
+            <i class="fas @(_advancedOpen ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+        </button>
+        @if (_advancedOpen)
+        {
+            <div class="section-design-group__body">
+                @if (BackgroundType == "image")
+                {
+                    <SegmentField Label="@T("BackgroundImageFit")"
+                                  Value="@ImageFit"
+                                  Options="@ImageFitOptions"
+                                  ValueChanged="SetImageFit" />
+                    <label class="section-design-field section-design-field--wide">
+                        <span class="section-design-field__label">@T("BackgroundImagePosition")</span>
+                        <select class="section-design-select" value="@ImagePosition" @onchange="SetImagePosition">
+                            <option value="center">@T("Center")</option>
+                            <option value="top">@T("Top")</option>
+                            <option value="bottom">@T("Bottom")</option>
+                            <option value="left">@T("Left")</option>
+                            <option value="right">@T("Right")</option>
+                        </select>
+                    </label>
+                }
+                else
+                {
+                    <div class="section-design-empty section-design-field--wide">@T("SectionAdvancedContextHint")</div>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+<ResourcePickerModal Open="_resourcePickerOpen"
+                     Kind="@_resourcePickerKind"
+                     ResourceSelected="SelectBackgroundResource"
+                     Closed="CloseResourcePicker" />
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter, EditorRequired] public SectionStyleModel Draft { get; set; } = new();
+    [Parameter] public string SectionId { get; set; } = string.Empty;
+    [Parameter] public bool Dirty { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _appearanceOpen = true;
+    private bool _layoutOpen = true;
+    private bool _responsiveOpen;
+    private bool _advancedOpen;
+    private bool _resourcePickerOpen;
+    private string _resourcePickerKind = "image";
+    private const long MaxBackgroundImageBytes = 5L * 1024 * 1024;
+    private const long MaxBackgroundVideoBytes = 250L * 1024 * 1024;
+
+    private static readonly DesignOption[] BackgroundOptions =
+    [
+        new("theme", "Theme", "fa-wand-magic-sparkles"),
+        new("none", "None", "fa-ban"),
+        new("color", "Color", "fa-fill-drip"),
+        new("image", "Image", "fa-image"),
+        new("gradient", "Gradient", "fa-droplet"),
+        new("video", "Video", "fa-video")
+    ];
+
+    private IReadOnlyList<DesignOption> WidthOptions =>
+    [new("narrow", "Narrow"), new("normal", "Normal"), new("full", "Full")];
+    private IReadOnlyList<DesignOption> PaddingOptions =>
+    [new("small", "Small"), new("medium", "Medium"), new("large", "Large")];
+    private IReadOnlyList<DesignOption> HeightOptions =>
+    [new("auto", "Auto"), new("half", "HalfScreen"), new("full", "FullScreen"), new("custom", "Custom")];
+    private IReadOnlyList<DesignOption> MobileOptions =>
+    [new("stack", "Stack"), new("scroll", "HorizontalScroll"), new("hide", "HideSection")];
+    private IReadOnlyList<DesignOption> ImageFitOptions =>
+    [new("cover", "Cover"), new("contain", "Contain")];
+
+    private string ImageUploadId => $"section-design-image-{SectionId}";
+    private string VideoUploadId => $"section-design-video-{SectionId}";
+    private string BackgroundType => NormalizeBackgroundType(Draft.BackgroundType);
+    private string BackgroundColor => NormalizeColor(Draft.BackgroundColor, "#ffffff");
+    private string GradientFrom => NormalizeColor(Draft.GradientFrom, "#001a33");
+    private string GradientTo => NormalizeColor(Draft.GradientTo, "#e5c076");
+    private string GradientDirection => NormalizeGradientDirection(Draft.GradientDirection);
+    private string OverlayColor => NormalizeColor(Draft.OverlayColor, "#000000");
+    private double OverlayOpacity => Math.Clamp(Draft.OverlayOpacity ?? 0.4, 0, 1);
+    private string OverlayPercent => OverlayOpacity.ToString("P0", CultureInfo.CurrentCulture);
+    private string TextColor => Draft.TextColor == "light" ? "light" : "dark";
+    private string ContentWidth => Draft.ContentWidth is "narrow" or "full" ? Draft.ContentWidth : "normal";
+    private string Padding => Draft.Padding is "small" or "large" ? Draft.Padding : "medium";
+    private string Height => Draft.Height is "half" or "full" or "custom" ? Draft.Height : "auto";
+    private int CustomMinHeight => Math.Clamp(Draft.CustomMinHeightPx ?? 640, 120, 3000);
+    private string MobileLayout => Draft.MobileLayout is "scroll" or "hide" ? Draft.MobileLayout : "stack";
+    private string ImageFit => Draft.BackgroundImageFit == "contain" ? "contain" : "cover";
+    private string ImagePosition => Draft.BackgroundImagePosition is "top" or "bottom" or "left" or "right" ? Draft.BackgroundImagePosition : "center";
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private void ToggleAppearance() => _appearanceOpen = !_appearanceOpen;
+    private void ToggleLayout() => _layoutOpen = !_layoutOpen;
+    private void ToggleResponsive() => _responsiveOpen = !_responsiveOpen;
+    private void ToggleAdvanced() => _advancedOpen = !_advancedOpen;
+
+    private async Task SetBackgroundType(string value) { Draft.BackgroundType = NormalizeBackgroundType(value); await NotifyChanged(); }
+    private async Task SetBackgroundColor(string value) { Draft.BackgroundColor = NormalizeColor(value, BackgroundColor); await NotifyChanged(); }
+    private async Task SetGradientFrom(string value) { Draft.GradientFrom = NormalizeColor(value, GradientFrom); await NotifyChanged(); }
+    private async Task SetGradientTo(string value) { Draft.GradientTo = NormalizeColor(value, GradientTo); await NotifyChanged(); }
+    private async Task SetOverlayColor(string value) { Draft.OverlayColor = NormalizeColor(value, OverlayColor); await NotifyChanged(); }
+    private async Task SetTextColor(string value) { Draft.TextColor = value == "light" ? "light" : "dark"; await NotifyChanged(); }
+    private async Task SetContentWidth(string value) { Draft.ContentWidth = value is "narrow" or "full" ? value : "normal"; await NotifyChanged(); }
+    private async Task SetPadding(string value) { Draft.Padding = value is "small" or "large" ? value : "medium"; await NotifyChanged(); }
+    private async Task SetHeight(string value) { Draft.Height = value is "half" or "full" or "custom" ? value : "auto"; await NotifyChanged(); }
+    private async Task SetMobileLayout(string value) { Draft.MobileLayout = value is "scroll" or "hide" ? value : "stack"; await NotifyChanged(); }
+    private async Task SetImageFit(string value) { Draft.BackgroundImageFit = value == "contain" ? "contain" : "cover"; await NotifyChanged(); }
+
+    private async Task SetGradientDirection(ChangeEventArgs args)
+    {
+        Draft.GradientDirection = NormalizeGradientDirection(args.Value?.ToString());
+        await NotifyChanged();
+    }
+
+    private async Task SetImagePosition(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        Draft.BackgroundImagePosition = value is "top" or "bottom" or "left" or "right" ? value : "center";
+        await NotifyChanged();
+    }
+
+    private async Task SetOverlayOpacity(ChangeEventArgs args)
+    {
+        Draft.OverlayOpacity = double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? Math.Clamp(value, 0, 1)
+            : 0.4;
+        await NotifyChanged();
+    }
+
+    private async Task SetCustomHeight(ChangeEventArgs args)
+    {
+        Draft.CustomMinHeightPx = int.TryParse(args.Value?.ToString(), out var value)
+            ? Math.Clamp(value, 120, 3000)
+            : 640;
+        await NotifyChanged();
+    }
+
+    private async Task RemoveImage() { Draft.BackgroundImageUrl = null; await NotifyChanged(); }
+    private async Task RemoveVideo() { Draft.BackgroundVideoUrl = null; await NotifyChanged(); }
+
+    private async Task OnImageSelected(InputFileChangeEventArgs args)
+    {
+        if (args.File.Size > MaxBackgroundImageBytes)
+        {
+            Http.Notify(T("NotificationBackgroundImageUploadFailed"), 413);
+            return;
+        }
+
+        var response = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", args.File, maxBytes: MaxBackgroundImageBytes);
+        if (!response.Success || response.Data is null)
+        {
+            Http.Notify(response.Message ?? T("NotificationBackgroundImageUploadFailed"), response.StatusCode);
+            return;
+        }
+
+        Draft.BackgroundImageUrl = response.Data.Url;
+        Http.Notify(T("NotificationBackgroundImageUploaded"), response.StatusCode);
+        await NotifyChanged();
+    }
+
+    private async Task OnVideoSelected(InputFileChangeEventArgs args)
+    {
+        if (args.File.Size > MaxBackgroundVideoBytes)
+        {
+            Http.Notify(T("NotificationBackgroundVideoUploadFailed"), 413);
+            return;
+        }
+
+        var response = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", args.File, maxBytes: MaxBackgroundVideoBytes);
+        if (!response.Success || response.Data is null)
+        {
+            Http.Notify(response.Message ?? T("NotificationBackgroundVideoUploadFailed"), response.StatusCode);
+            return;
+        }
+
+        Draft.BackgroundVideoUrl = response.Data.Url;
+        Http.Notify(T("NotificationBackgroundVideoUploaded"), response.StatusCode);
+        await NotifyChanged();
+    }
+
+    private void OpenResourcePicker(string kind)
+    {
+        _resourcePickerKind = kind == "video" ? "video" : "image";
+        _resourcePickerOpen = true;
+    }
+
+    private void CloseResourcePicker() => _resourcePickerOpen = false;
+
+    private async Task SelectBackgroundResource(ManagedResourceModel resource)
+    {
+        if (_resourcePickerKind == "video")
+            Draft.BackgroundVideoUrl = resource.Url;
+        else
+            Draft.BackgroundImageUrl = resource.Url;
+        _resourcePickerOpen = false;
+        await NotifyChanged();
+    }
+
+    private Task NotifyChanged() => Changed.InvokeAsync();
+
+    private static string NormalizeBackgroundType(string? value) => value switch
+    {
+        "none" or "theme" or "color" or "image" or "gradient" or "video" => value,
+        _ => "color"
+    };
+
+    private static string NormalizeGradientDirection(string? value) => value switch
+    {
+        "top" => "to bottom",
+        "left" => "to right",
+        "diagonal" => "to bottom right",
+        "to right" or "to bottom right" or "to bottom left" => value,
+        _ => "to bottom"
+    };
+
+    private static string NormalizeColor(string? value, string fallback)
+    {
+        var candidate = value?.Trim();
+        return candidate is { Length: 7 } && candidate[0] == '#' && candidate.Skip(1).All(Uri.IsHexDigit)
+            ? candidate.ToLowerInvariant()
+            : fallback;
+    }
+
+    public sealed record DesignOption(string Value, string LabelKey, string Icon = "");
+}

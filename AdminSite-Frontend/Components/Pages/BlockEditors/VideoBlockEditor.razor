@@ -23,7 +23,11 @@
         </div>
         @if (!string.IsNullOrWhiteSpace(_asset.Url))
         {
-            <div class="form-hint">@(_asset.FileName ?? T("UploadedVideo"))</div>
+            <div class="block-media-selection">
+                <i class="fas fa-file-video"></i>
+                <div><strong>@(_asset.FileName ?? T("UploadedVideo"))</strong></div>
+                <button type="button" class="btn-admin btn-ghost" @onclick="ClearUpload"><i class="fas fa-times"></i> @T("Remove")</button>
+            </div>
         }
     </div>
 }
@@ -95,13 +99,16 @@ else
     private bool _loop;
     private bool _saving;
     private bool _resourcePickerOpen;
+    private string? _loadedBlockId;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string? PreviewUrl => _sourceType == "upload" ? _asset.Url : VideoUrlHelper.ToEmbedUrl(_youtubeUrl);
 
     protected override void OnParametersSet()
     {
+        if (_loadedBlockId == Block.Id) return;
+        _loadedBlockId = Block.Id;
         _asset = CopyAsset(Block.Asset, Block.EmbedUrl);
-        _sourceType = Block.SourceType == "upload" || !VideoUrlHelper.IsYouTubeVideoUrl(Block.EmbedUrl) ? "upload" : "youtube";
+        _sourceType = ResolveSourceType(Block.SourceType, Block.Asset, Block.EmbedUrl);
         _youtubeUrl = _sourceType == "youtube" ? Block.EmbedUrl : null;
         _title = new(Block.Title ?? new());
         _showControls = Block.ShowControls;
@@ -151,6 +158,8 @@ else
         _sourceType = VideoUrlHelper.IsYouTubeVideoUrl(resource.Url) ? "youtube" : "upload";
         _youtubeUrl = _sourceType == "youtube" ? resource.Url : null;
     }
+
+    private void ClearUpload() => _asset = new BlockAssetReferenceModel { SchemaVersion = 1, ResourceSource = "DirectUpload" };
 
     private void EnsureMutedAutoplay() { if (_autoplay) _muted = true; }
     private string SourceButtonClass(string value) => _sourceType == value ? "btn-admin btn-primary" : "btn-admin btn-ghost";
@@ -203,4 +212,12 @@ else
         SchemaVersion = 1, Url = value.Url, ResourceId = value.ResourceId, ResourceSource = value.ResourceSource,
         StorageKey = value.StorageKey, FileName = value.FileName, ContentType = value.ContentType, SizeBytes = value.SizeBytes
     };
+
+    private static string ResolveSourceType(string? sourceType, BlockAssetReferenceModel? asset, string? url)
+    {
+        if (string.Equals(sourceType, "upload", StringComparison.OrdinalIgnoreCase)) return "upload";
+        if (string.Equals(sourceType, "youtube", StringComparison.OrdinalIgnoreCase)) return "youtube";
+        if (!string.IsNullOrWhiteSpace(asset?.StorageKey) || !string.IsNullOrWhiteSpace(asset?.ResourceId)) return "upload";
+        return VideoUrlHelper.IsYouTubeVideoUrl(url) || string.IsNullOrWhiteSpace(url) ? "youtube" : "upload";
+    }
 }

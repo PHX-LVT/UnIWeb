@@ -19,6 +19,7 @@ namespace AdminSite.Models
         public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
         public List<string> Permissions { get; set; } = new();
         public string TokenId { get; set; } = string.Empty;
+        public string? RememberedDeviceId { get; set; }
     }
 
  
@@ -486,12 +487,15 @@ namespace AdminSite.Models
         public Dictionary<string, string>? Label { get; set; }
         public Dictionary<string, string>? ButtonLabel { get; set; }
         public Dictionary<string, string>? StepLabel { get; set; }
+        public bool AutoNumber { get; set; }
         public string? Icon { get; set; }
+        public string IconPosition { get; set; } = "left";
         public string? Value { get; set; }
         public string? Prefix { get; set; }
         public string? Suffix { get; set; }
         public string? Href { get; set; }
         public string? Action { get; set; }
+        public bool ActionEnabled { get; set; }
         public string? FormDefinitionId { get; set; }
         public string? Style { get; set; }
         public string? PresetKey { get; set; }
@@ -533,6 +537,7 @@ namespace AdminSite.Models
         // File
         public string? FileUrl { get; set; }
         public string? FileName { get; set; }
+        public Dictionary<string, string>? DisplayName { get; set; }
         [JsonIgnore]
         public string? Filename
         {
@@ -572,6 +577,7 @@ namespace AdminSite.Models
         public string? Label { get; set; }
         public string? Notes { get; set; }
         public string? Href { get; set; }
+        public bool Visible { get; set; } = true;
         public int Order { get; set; }
     }
 

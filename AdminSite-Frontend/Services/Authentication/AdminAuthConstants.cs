@@ -9,6 +9,7 @@ public static class AdminAuthConstants
 {
     public const string Scheme = "AdminCookie";
     public const string CookieName = "__Host-AdminSession";
+    public const string RememberedDeviceCookieName = "__Host-AdminSiteRememberedDevice";
     public const string ApiClientName = "AdminApi";
 
     public const string AdminIdClaim = "adminId";
@@ -19,8 +20,12 @@ public static class AdminAuthConstants
     public const string RoleIdClaim = "adminRoleId";
     public const string RoleNameClaim = "adminRoleName";
     public const string AdminAdminClaim = "isAdminAdmin";
+    public const string RememberedDeviceIdClaim = "adminRememberedDeviceId";
 
-    public static ClaimsPrincipal CreatePrincipal(LoginResponse login, string tokenId)
+    public static ClaimsPrincipal CreatePrincipal(
+        LoginResponse login,
+        string tokenId,
+        string? rememberedDeviceId = null)
     {
         var claims = new List<Claim>
         {
@@ -39,6 +44,8 @@ public static class AdminAuthConstants
 
         claims.AddRange(AdminPermissionKeys.ExpandDependencies(login.Permissions)
             .Select(permission => new Claim(PermissionClaim, permission)));
+        if (!string.IsNullOrWhiteSpace(rememberedDeviceId))
+            claims.Add(new Claim(RememberedDeviceIdClaim, rememberedDeviceId));
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme));
     }
@@ -77,7 +84,8 @@ public static class AdminAuthConstants
             Permissions = AdminPermissionKeys.ExpandDependencies(principal.FindAll(PermissionClaim)
                 .Select(claim => claim.Value)
                 .Where(value => !string.IsNullOrWhiteSpace(value))),
-            TokenId = tokenId
+            TokenId = tokenId,
+            RememberedDeviceId = principal.FindFirstValue(RememberedDeviceIdClaim)
         };
     }
 

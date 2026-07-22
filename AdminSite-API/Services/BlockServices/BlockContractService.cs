@@ -26,7 +26,7 @@ public static class BlockContractService
     private static readonly string[] ContinuousEffects = ["none", "rotate-slow"];
     private static readonly string[] ContainerModes = ["stack", "row", "grid", "split", "freeform", "orbit", "semicircle"];
     private static readonly string[] ContainerPurposes = ["collection", "composition"];
-    private static readonly string[] BlockTypes = ["text", "image", "video", "file", "map", "form", "card", "button", "metric", "bullet-list", "step", "icon", "container"];
+    private static readonly string[] BlockTypes = BlockCapabilityCatalog.Types.ToArray();
     private static readonly string[] AlignItemsValues = ["stretch", "start", "center", "end"];
     private static readonly string[] JustifyContentValues = ["start", "center", "end", "between", "around", "evenly"];
     private static readonly string[] OrbitDirections = ["clockwise", "counter-clockwise"];
@@ -82,6 +82,12 @@ public static class BlockContractService
             case MapBlockUpdateDto map:
                 ValidateMap(map.CenterLat, map.CenterLng, map.DefaultZoom, map.Pins, errors);
                 break;
+            case ButtonBlockCreateDto button when button.IconPosition is not ("left" or "right"):
+                errors.Add("Button icon position must be left or right.");
+                break;
+            case ButtonBlockUpdateDto button when button.IconPosition is not ("left" or "right"):
+                errors.Add("Button icon position must be left or right.");
+                break;
         }
     }
 
@@ -115,6 +121,10 @@ public static class BlockContractService
             errors.Add("Map zoom must be between 1 and 18.");
         if (pins.Count > 100)
             errors.Add("A Map Block supports at most 100 pins.");
+        if (pins.Where(pin => !string.IsNullOrWhiteSpace(pin.Id))
+            .GroupBy(pin => pin.Id, StringComparer.Ordinal)
+            .Any(group => group.Count() > 1))
+            errors.Add("Every map pin must have a unique identity.");
         foreach (var pin in pins)
         {
             if (!double.IsFinite(pin.Lat) || pin.Lat is < -90 or > 90 ||

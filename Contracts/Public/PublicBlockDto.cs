@@ -70,6 +70,7 @@ namespace Contracts.Public
         public PublicBlockAssetReferenceDto Asset { get; set; } = new();
         public string? FileUrl { get; set; }
         public string? Filename { get; set; }
+        public Dictionary<string, string>? DisplayName { get; set; }
         public string? FileType { get; set; }
         public string OpenBehavior { get; set; } = "open";
     }
@@ -106,14 +107,18 @@ namespace Contracts.Public
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
         public PublicBlockAssetReferenceDto Asset { get; set; } = new();
+        public Dictionary<string, string>? ImageAltText { get; set; }
         public Dictionary<string, string>? ButtonLabel { get; set; }
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
         public string? FormDefinitionId { get; set; }
+        public string ButtonStyle { get; set; } = "outline";
     }
 
     public class PublicButtonBlockDto : PublicBlockDto
     {
+        public string? Icon { get; set; }
+        public string IconPosition { get; set; } = "left";
         public Dictionary<string, string>? Label { get; set; }
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -140,6 +145,8 @@ namespace Contracts.Public
     public class PublicStepBlockDto : PublicBlockDto
     {
         public string? Icon { get; set; }
+        public bool AutoNumber { get; set; }
+        public int? SequenceNumber { get; set; }
         public Dictionary<string, string>? StepLabel { get; set; }
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
@@ -150,6 +157,10 @@ namespace Contracts.Public
         public string? Icon { get; set; }
         public Dictionary<string, string>? Label { get; set; }
         public Dictionary<string, string>? Description { get; set; }
+        public bool ActionEnabled { get; set; }
+        public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     public class PublicContainerBlockDto : PublicBlockDto

@@ -48,6 +48,7 @@ public static class BlockUpdateDtoMapper
                 Asset = ToAssetDto(block.Asset),
                 FileUrl = block.FileUrl,
                 Filename = block.FileName ?? string.Empty,
+                DisplayName = block.DisplayName ?? new(),
                 FileType = block.FileType ?? string.Empty,
                 OpenBehavior = block.OpenBehavior,
                 Visible = block.Visible,
@@ -64,7 +65,9 @@ public static class BlockUpdateDtoMapper
                     Label = p.Label ?? string.Empty,
                     Lat = p.Lat,
                     Lng = p.Lng,
-                    Href = p.Href
+                    Href = p.Href,
+                    Visible = p.Visible,
+                    Order = p.Order
                 }).ToList() ?? new(),
                 Visible = block.Visible,
                 Layout = layout
@@ -83,15 +86,19 @@ public static class BlockUpdateDtoMapper
                 Description = block.Description ?? new(),
                 ImageUrl = block.ImageUrl,
                 Asset = ToAssetDto(block.Asset),
+                ImageAltText = block.AltText ?? new(),
                 ButtonLabel = block.ButtonLabel ?? new(),
                 Href = block.Href,
                 Action = block.Action ?? "linkToPage",
                 FormDefinitionId = block.FormDefinitionId,
+                ButtonStyle = block.Style ?? "outline",
                 Visible = block.Visible,
                 Layout = layout
             },
             "button" => new ButtonBlockUpdateDto
             {
+                Icon = block.Icon ?? string.Empty,
+                IconPosition = block.IconPosition,
                 Label = block.Label ?? new(),
                 Href = block.Href,
                 Action = block.Action ?? "linkToPage",
@@ -128,6 +135,7 @@ public static class BlockUpdateDtoMapper
             "step" => new StepBlockUpdateDto
             {
                 Icon = block.Icon ?? string.Empty,
+                AutoNumber = block.AutoNumber,
                 StepLabel = block.StepLabel ?? new(),
                 Title = block.Title ?? new(),
                 Description = block.Description ?? new(),
@@ -139,6 +147,10 @@ public static class BlockUpdateDtoMapper
                 Icon = block.Icon ?? string.Empty,
                 Label = block.Label ?? new(),
                 Description = block.Description ?? new(),
+                ActionEnabled = block.ActionEnabled,
+                Href = block.Href,
+                Action = block.Action ?? "linkToPage",
+                FormDefinitionId = block.FormDefinitionId,
                 Visible = block.Visible,
                 Layout = layout
             },
@@ -185,7 +197,7 @@ public static class BlockUpdateDtoMapper
         PresetSourceId = value?.PresetSourceId
     };
 
-    private static BlockAppearanceDto ToAppearanceDto(
+    public static BlockAppearanceDto ToAppearanceDto(
         BlockAppearanceModel? appearance,
         BlockLayoutModel? legacyLayout) => new()
     {

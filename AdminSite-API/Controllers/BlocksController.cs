@@ -278,6 +278,20 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok("Block graphs deleted."));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+        [HttpPost("authoring/move")]
+        public async Task<IActionResult> Move(
+            string pageId,
+            string sectionId,
+            [FromBody] BlockMoveRequestDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var (block, error) = await _authoring.MoveAsync(pageId, sectionId, dto);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, block!), "Block moved.")
+                .WithNotification("NotificationOrderSaved"));
+        }
+
         [HttpPut("{blockId}/authoring-lock")]
         public async Task<IActionResult> UpdateAuthoringLock(
             string pageId,
@@ -399,6 +413,7 @@ namespace FullProject.Controllers
                     dto.Filename = f.Filename;
                     dto.FileType = f.FileType;
                     dto.FileUrl = f.FileUrl;
+                    dto.DisplayName = f.DisplayName;
                     dto.OpenBehavior = f.OpenBehavior;
                     break;
 
@@ -413,7 +428,9 @@ namespace FullProject.Controllers
                         Label = p.Label,
                         Lat = p.Lat,
                         Lng = p.Lng,
-                        Href = p.Href
+                        Href = p.Href,
+                        Visible = p.Visible,
+                        Order = p.Order
                     }).ToList();
                     break;
 
@@ -438,13 +455,17 @@ namespace FullProject.Controllers
                     dto.Description = card.Description;
                     dto.ImageUrl = card.ImageUrl;
                     dto.Asset = BlockAssetMetadataService.ToAdmin(card.Asset);
+                    dto.AltText = card.ImageAltText;
                     dto.ButtonLabel = card.ButtonLabel;
                     dto.Href = card.Href;
                     dto.Action = card.Action;
                     dto.FormDefinitionId = card.FormDefinitionId;
+                    dto.Style = card.ButtonStyle;
                     break;
 
                 case ButtonBlock button:
+                    dto.Icon = button.Icon;
+                    dto.IconPosition = button.IconPosition;
                     dto.Label = button.Label;
                     dto.Href = button.Href;
                     dto.Action = button.Action;
@@ -475,6 +496,7 @@ namespace FullProject.Controllers
 
                 case StepBlock step:
                     dto.Icon = step.Icon;
+                    dto.AutoNumber = step.AutoNumber;
                     dto.StepLabel = step.StepLabel;
                     dto.Title = step.Title;
                     dto.Description = step.Description;
@@ -484,6 +506,10 @@ namespace FullProject.Controllers
                     dto.Icon = icon.Icon;
                     dto.Label = icon.Label;
                     dto.Description = icon.Description;
+                    dto.ActionEnabled = icon.ActionEnabled;
+                    dto.Href = icon.Href;
+                    dto.Action = icon.Action;
+                    dto.FormDefinitionId = icon.FormDefinitionId;
                     break;
                 case ContainerBlock container:
                     dto.PresetKey = ContainerPresetCatalog.EffectiveKey(container.PresetKey);

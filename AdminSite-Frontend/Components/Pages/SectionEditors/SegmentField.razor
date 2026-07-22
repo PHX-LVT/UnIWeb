@@ -1,0 +1,28 @@
+<div class="section-design-field section-design-field--wide">
+    <span class="section-design-field__label">@Label</span>
+    <div class="section-design-segments section-design-segments--wrap" role="group" aria-label="@Label">
+        @foreach (var option in Options)
+        {
+            <button type="button"
+                    class="section-design-segment @(Value == option.Value ? "active" : null)"
+                    aria-pressed="@(Value == option.Value)"
+                    @onclick="() => ValueChanged.InvokeAsync(option.Value)">
+                @if (!string.IsNullOrWhiteSpace(option.Icon))
+                {
+                    <i class="fas @option.Icon" aria-hidden="true"></i>
+                }
+                <span>@T(option.LabelKey)</span>
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<SectionDesignTab.DesignOption> Options { get; set; } = [];
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+}

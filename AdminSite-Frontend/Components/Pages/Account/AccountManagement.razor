@@ -3,6 +3,7 @@
 @inject AdminAuthService Auth
 @inject IHttpService Http
 @inject AdminSessionInvalidationService Invalidations
+@inject IJSRuntime JS
 
 <div class="page-header">
     <h1 class="page-title"><i class="fas fa-user-circle"></i> @T("AccountManagement")</h1>
@@ -39,6 +40,42 @@
             </button>
             <p class="text-muted" style="margin:0">@T("ChangePasswordSignsOutHint")</p>
         </div>
+
+        <hr />
+
+        <div class="admin-card-title">@T("RememberedDevices")</div>
+        <p class="text-muted" style="margin:.25rem 0 .75rem">@T("RememberedDevicesDescription")</p>
+        @if (_loadingDevices)
+        {
+            <p class="text-muted">@T("Loading")</p>
+        }
+        else if (!ActiveRememberedDevices.Any())
+        {
+            <p class="text-muted">@T("NoRememberedDevices")</p>
+        }
+        else
+        {
+            <div style="display:grid;gap:.6rem">
+                @foreach (var device in ActiveRememberedDevices)
+                {
+                    var current = string.Equals(device.Id, Auth.CurrentUser?.RememberedDeviceId, StringComparison.Ordinal);
+                    <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:center;padding:.7rem;border:1px solid var(--border);border-radius:8px">
+                        <div>
+                            <strong>@DisplayDevice(device)</strong>
+                            @if (current) { <span class="content-status-pill is-published" style="margin-left:.35rem">@T("CurrentDevice")</span> }
+                            <div class="text-muted" style="font-size:.8rem;margin-top:.2rem">@T("LastUsed"): @FormatDate(device.LastUsedAt) · @T("Expires"): @FormatDate(device.ExpiresAt)</div>
+                        </div>
+                        <button type="button" class="btn-admin btn-danger" disabled="@_revokingDevice" @onclick="() => ForgetDeviceAsync(device.Id)">
+                            <i class="fas fa-ban"></i> @T("ForgetDevice")
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+        <button type="button" class="btn-admin btn-ghost" style="margin-top:.8rem" disabled="@_signingOutAll" @onclick="SignOutAllDevicesAsync">
+            <i class="fas fa-right-from-bracket"></i> @T("SignOutAllDevices")
+        </button>
+        <p class="text-muted" style="margin:.4rem 0 0">@T("SignOutAllDevicesHint")</p>
     </div>
 
     <div class="admin-card">
@@ -169,9 +206,13 @@
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private readonly List<AdminLoginActivityResponse> _activity = new();
+    private readonly List<AdminRememberedDeviceResponse> _devices = new();
     private bool _loading = true;
     private bool _saving;
     private bool _showPermissions;
+    private bool _loadingDevices = true;
+    private bool _revokingDevice;
+    private bool _signingOutAll;
     private string _currentPassword = string.Empty;
     private string _newPassword = string.Empty;
 
@@ -179,7 +220,40 @@
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
-        await LoadActivityAsync();
+        await Task.WhenAll(LoadActivityAsync(), LoadDevicesAsync());
+    }
+
+    private async Task LoadDevicesAsync()
+    {
+        var res = await Users.GetMyRememberedDevicesAsync();
+        _devices.Clear();
+        if (res.Success && res.Data is not null)
+            _devices.AddRange(res.Data);
+        else
+            Http.Notify(res.Message, res.StatusCode);
+        _loadingDevices = false;
+    }
+
+    private async Task ForgetDeviceAsync(string id)
+    {
+        _revokingDevice = true;
+        var res = await Users.RevokeMyRememberedDevicesAsync([id]);
+        Http.Notify(res.Message, res.StatusCode);
+        if (res.Success) await LoadDevicesAsync();
+        _revokingDevice = false;
+    }
+
+    private async Task SignOutAllDevicesAsync()
+    {
+        _signingOutAll = true;
+        var res = await Users.SignOutAllMyDevicesAsync();
+        Http.Notify(res.Message, res.StatusCode);
+        if (res.Success)
+        {
+            await JS.InvokeVoidAsync("adminAuth.submitSignOut", "signed-out", true);
+            return;
+        }
+        _signingOutAll = false;
     }
 
     private async Task LoadActivityAsync()
@@ -211,6 +285,9 @@
 
     private List<string> EffectivePermissions =>
         AdminPermissionKeys.All.Where(Auth.HasPermission).ToList();
+
+    private IEnumerable<AdminRememberedDeviceResponse> ActiveRememberedDevices =>
+        _devices.Where(item => !item.IsRevoked && item.ExpiresAt > DateTime.UtcNow);
 
     private void ClosePermissions() => _showPermissions = false;
 
@@ -292,6 +369,13 @@
         value?.ToLocalTime().ToString("dd MMM yyyy HH:mm") ?? "-";
 
     private static string DisplayDevice(AdminLoginActivityResponse item)
+    {
+        var browser = string.IsNullOrWhiteSpace(item.BrowserName) ? "Browser" : item.BrowserName;
+        var os = string.IsNullOrWhiteSpace(item.OperatingSystem) ? "Unknown OS" : item.OperatingSystem;
+        return $"{browser} / {os}";
+    }
+
+    private static string DisplayDevice(AdminRememberedDeviceResponse item)
     {
         var browser = string.IsNullOrWhiteSpace(item.BrowserName) ? "Browser" : item.BrowserName;
         var os = string.IsNullOrWhiteSpace(item.OperatingSystem) ? "Unknown OS" : item.OperatingSystem;

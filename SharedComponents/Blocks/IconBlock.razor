@@ -1,15 +1,32 @@
 @using Contracts.Public
 @using SharedComponents.Helpers
 
-<div class="sc-block sc-design-block sc-icon-block">
-    <div class="sc-icon-block__icon">
-        <i class="@(string.IsNullOrWhiteSpace(Block.Icon) ? "fas fa-star" : Block.Icon)"></i>
+@if (HasAction)
+{
+    <ActionButton Action="@Block.Action"
+                  FormDefinitionId="@Block.FormDefinitionId"
+                  Href="@Block.Href"
+                  CssClass="sc-block sc-design-block sc-icon-block sc-icon-block__action">
+        @Content
+    </ActionButton>
+}
+else
+{
+    <div class="sc-block sc-design-block sc-icon-block">
+        @Content
     </div>
-    <h3>@StyleHelper.Lang(Block.Label, Lang)</h3>
-    <p>@StyleHelper.Lang(Block.Description, Lang)</p>
-</div>
+}
 
 @code {
     [Parameter, EditorRequired] public PublicIconBlockDto Block { get; set; } = default!;
     [Parameter] public string Lang { get; set; } = "en";
+    private bool HasAction => Block.ActionEnabled &&
+        (!string.IsNullOrWhiteSpace(Block.Href) || !string.IsNullOrWhiteSpace(Block.FormDefinitionId));
+    private RenderFragment Content => @<>
+        <span class="sc-icon-block__icon">
+            <i class="@(string.IsNullOrWhiteSpace(Block.Icon) ? "fas fa-star" : Block.Icon)"></i>
+        </span>
+        <span class="sc-icon-block__label">@StyleHelper.Lang(Block.Label, Lang)</span>
+        <span class="sc-icon-block__description">@StyleHelper.Lang(Block.Description, Lang)</span>
+    </>;
 }

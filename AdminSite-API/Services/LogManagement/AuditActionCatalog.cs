@@ -65,6 +65,8 @@ public static class AuditActionCatalog
             ["AdminRoles.GetUpdateImpact"] = new("role-management", "role.impact-calculated", "role", ShouldAudit: false),
             ["AdminUsers.DeleteLoginActivity"] = new("system", "legacy-login-activity.deletion-rejected", "legacy-login-activity", true),
             ["AdminUsers.DeleteAuditLogs"] = new("system", "legacy-audit-log.deletion-rejected", "legacy-audit-log", true),
+            ["AdminUsers.RevokeRememberedDevices"] = new("authentication", "remembered-device.revoked", "remembered-device", true),
+            ["AdminUsers.RevokeMyRememberedDevices"] = new("authentication", "remembered-device.revoked", "remembered-device", true),
 
             ["Pages.RestoreRevision"] = new("page-builder", "page.revision-restored", "page", true),
             ["ChildPages.UpdateCard"] = new("page-builder", "child-page.card-updated", "child-page"),
@@ -168,6 +170,8 @@ public static class AuditActionCatalog
             "role-updated" => "role.updated",
             "role-deleted" => "role.deleted",
             "sessions-deleted" => "session-record.deleted",
+            "remembered-devices-revoked" => "remembered-device.revoked",
+            "all-access-revoked" => "session.all-access-revoked",
             "login-activity-deleted" => "legacy-login-activity.deleted",
             "audit-logs-deleted" => "legacy-audit-log.deleted",
             _ => $"legacy.{ToCode(normalized)}"

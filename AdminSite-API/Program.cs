@@ -32,6 +32,14 @@ builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDb"));
 builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection("Jwt"));
+builder.Services.AddOptions<RememberedDeviceSettings>()
+    .Bind(builder.Configuration.GetSection("RememberedDevice"))
+    .Validate(settings =>
+        settings.LifetimeDays is >= 1 and <= 365 &&
+        settings.MaximumDevicesPerAccount is >= 1 and <= 20 &&
+        settings.TokenBytes is >= 32 and <= 64,
+        "RememberedDevice lifetime, device limit, or token length is invalid.")
+    .ValidateOnStart();
 builder.Services.Configure<AdminSeedSettings>(
     builder.Configuration.GetSection("Seed"));
 builder.Services.Configure<CorsSettings>(
@@ -79,6 +87,7 @@ builder.Services.AddSingleton<FullProject.Data.MongoDbContext>();
 builder.Services.AddSingleton<MongoIndexService>();
 
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<RememberedDeviceService>();
 builder.Services.AddScoped<AdminRoleService>();
 builder.Services.AddScoped<BrandingService>();
 builder.Services.AddScoped<ThemeService>();
@@ -161,6 +170,18 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("admin-remembered-device", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"admin-remembered-device:{context.Connection.RemoteIpAddress}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,

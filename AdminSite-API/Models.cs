@@ -223,6 +223,31 @@ namespace FullProject.Models
     }
 
     [BsonIgnoreExtraElements]
+    public class AdminRememberedDeviceRecord
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string AdminId { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string SecretHash { get; set; } = string.Empty;
+        public string? PreviousSecretHash { get; set; }
+        public int TokenVersion { get; set; } = 1;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime LastUsedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiresAt { get; set; } = DateTime.UtcNow;
+        public string LastUsedIp { get; set; } = string.Empty;
+        public string UserAgent { get; set; } = string.Empty;
+        public string BrowserName { get; set; } = "Unknown";
+        public string OperatingSystem { get; set; } = "Unknown";
+        public bool IsRevoked { get; set; }
+        public DateTime? RevokedAt { get; set; }
+        public string? RevokedById { get; set; }
+        [BsonRepresentation(BsonType.String)]
+        public AdminRememberedDeviceRevokeReason? RevokeReason { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
     public class AdminLoginActivityRecord
     {
         [BsonId]
@@ -793,6 +818,8 @@ namespace FullProject.Models
         public double Lat { get; set; }
         public double Lng { get; set; }
         public string? Href { get; set; }
+        public bool Visible { get; set; } = true;
+        public int Order { get; set; }
     }
 
     [SwaggerSubType(typeof(TextBlock))]
@@ -933,6 +960,7 @@ namespace FullProject.Models
         [BsonElement("FileUrl"), BsonIgnoreIfNull, JsonIgnore]
         public string? LegacyFileUrl { get => null; set { if (!string.IsNullOrWhiteSpace(value)) Asset.Url = value; } }
         public string Filename { get; set; } = string.Empty;
+        public Dictionary<string, string> DisplayName { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string FileType { get => Asset.ContentType ?? string.Empty; set => Asset.ContentType = value; }
         [BsonElement("FileType"), BsonIgnoreIfNull, JsonIgnore]
@@ -982,6 +1010,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public BlockAssetReference Asset { get; set; } = new();
+        public Dictionary<string, string> ImageAltText { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string? ImageUrl { get => Asset.Url; set => Asset.Url = value; }
         [BsonElement("ImageUrl"), BsonIgnoreIfNull, JsonIgnore]
@@ -990,11 +1019,14 @@ namespace FullProject.Models
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
         public string? FormDefinitionId { get; set; }
+        public string ButtonStyle { get; set; } = "outline";
     }
 
     [BsonDiscriminator("button")]
     public class ButtonBlock : Block
     {
+        public string Icon { get; set; } = string.Empty;
+        public string IconPosition { get; set; } = "left";
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -1024,6 +1056,7 @@ namespace FullProject.Models
     public class StepBlock : Block
     {
         public string Icon { get; set; } = string.Empty;
+        public bool AutoNumber { get; set; }
         public Dictionary<string, string> StepLabel { get; set; } = new();
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
@@ -1035,6 +1068,10 @@ namespace FullProject.Models
         public string Icon { get; set; } = string.Empty;
         public Dictionary<string, string> Label { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
+        public bool ActionEnabled { get; set; }
+        public string? Href { get; set; }
+        public string Action { get; set; } = "linkToPage";
+        public string? FormDefinitionId { get; set; }
     }
 
     [BsonDiscriminator("container")]

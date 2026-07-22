@@ -261,6 +261,177 @@ public sealed class BlockAuthoringService
         child.Authoring.PresetSourceId = parent.PresetKey;
     }
 
+    public async Task<(Block? Block, string? Error)> MoveAsync(
+        string pageId,
+        string sectionId,
+        BlockMoveRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.BlockId))
+            return (null, "Choose a Block to move.");
+
+        var scope = await LoadScopeAsync(pageId, sectionId);
+        if (scope is null) return (null, "Page or Section not found.");
+
+        var block = scope.Value.Blocks.FirstOrDefault(item => item.Id == request.BlockId);
+        if (block is null) return (null, "Block not found.");
+        if (block.Authoring.FullLocked || block.Authoring.GeometryLocked)
+            return (null, "Unlock the Block geometry before moving it.");
+
+        var targetParentId = string.IsNullOrWhiteSpace(request.TargetParentBlockId)
+            ? null
+            : request.TargetParentBlockId.Trim();
+        ContainerBlock? target = null;
+        if (targetParentId is not null)
+        {
+            target = scope.Value.Blocks.OfType<ContainerBlock>()
+                .FirstOrDefault(item => item.Id == targetParentId);
+            if (target is null) return (null, "The target must be a Container in the same Section.");
+            if (block is ContainerBlock)
+                return (null, "Containers cannot own another Container.");
+            if (target.Authoring.FullLocked || target.Authoring.GeometryLocked)
+                return (null, "Unlock the target Container before moving Blocks into it.");
+        }
+
+        var oldParentId = string.IsNullOrWhiteSpace(block.ParentBlockId) ? null : block.ParentBlockId;
+        var targetChildren = scope.Value.Blocks
+            .Where(item => item.Id != block.Id && string.Equals(item.ParentBlockId, targetParentId, StringComparison.Ordinal))
+            .OrderBy(item => item.Order)
+            .ToList();
+
+        string? targetSlot = null;
+        if (target is not null)
+        {
+            var blockType = BlockType(block);
+            if (!ContainerCapacityPolicy.CanOwn(blockType))
+                return (null, "This Block type cannot be placed in a Container.");
+            if (targetChildren.Count >= ContainerCapacityPolicy.MaxChildren(
+                    target.PresetKey,
+                    target.ContainerLayout.Mode,
+                    target.ContainerLayout.Columns))
+                return (null, "The target Container is full.");
+
+            if (ContainerPresetCatalog.TryGetGoverned(target.PresetKey, out var preset))
+            {
+                if (!preset.AllowedBlockTypes.Contains(blockType, StringComparer.Ordinal))
+                    return (null, $"The {preset.DisplayName} preset does not allow {blockType} Blocks.");
+
+                var requestedSlot = preset.Slots.FirstOrDefault(slot =>
+                    string.Equals(slot.Key, request.TargetSlotName, StringComparison.Ordinal));
+                if (!string.IsNullOrWhiteSpace(request.TargetSlotName) && requestedSlot is null)
+                    return (null, "Choose a valid Container slot.");
+                if (requestedSlot is not null &&
+                    !requestedSlot.AllowedBlockTypes.Contains(blockType, StringComparer.Ordinal))
+                    return (null, $"The {requestedSlot.DisplayName} slot does not allow {blockType} Blocks.");
+                if (requestedSlot is not null && targetChildren.Any(child =>
+                        string.Equals(child.Authoring?.PresetSlotName, requestedSlot.Key, StringComparison.Ordinal)))
+                    return (null, $"The {requestedSlot.DisplayName} slot is already occupied.");
+
+                targetSlot = requestedSlot?.Key ?? ContainerCapacityPolicy.NextAvailableSlot(
+                    target.PresetKey,
+                    targetChildren.Select(child => child.Authoring?.PresetSlotName),
+                    blockType)?.Key;
+                if (preset.Slots.Count > 0 && targetSlot is null)
+                    return (null, $"The {preset.DisplayName} Container has no available slot.");
+            }
+
+            if (target.ContainerLayout.Purpose == "collection")
+            {
+                var existingTypes = targetChildren.Select(BlockType).Distinct(StringComparer.Ordinal).ToList();
+                var lockedType = existingTypes.FirstOrDefault() ?? target.ContainerLayout.AllowedChildType;
+                if (!string.IsNullOrWhiteSpace(lockedType) &&
+                    !string.Equals(lockedType, blockType, StringComparison.Ordinal))
+                    return (null, $"This Collection accepts only {lockedType} Blocks.");
+            }
+        }
+
+        var targetIndex = Math.Clamp(request.TargetIndex ?? targetChildren.Count, 0, targetChildren.Count);
+        targetChildren.Insert(targetIndex, block);
+        var oldSiblings = scope.Value.Blocks
+            .Where(item => item.Id != block.Id && string.Equals(item.ParentBlockId, oldParentId, StringComparison.Ordinal))
+            .OrderBy(item => item.Order)
+            .ToList();
+
+        using var session = await _context.Client.StartSessionAsync();
+        session.StartTransaction();
+        try
+        {
+            var movedPolicy = block.Authoring ?? new BlockAuthoringPolicy();
+            movedPolicy.SchemaVersion = Math.Max(movedPolicy.SchemaVersion, 1);
+            movedPolicy.PresetSlotName = targetSlot;
+            movedPolicy.PresetSourceId = target?.PresetKey;
+            var rootZone = scope.Value.Section is CanvasSection ? "canvas" : "default";
+            var positionMode = target is null
+                ? scope.Value.Section is CanvasSection ? "freeform" : "flow"
+                : ContainerCapacityPolicy.NormalizeMode(target.ContainerLayout.Mode) == "freeform" ? "freeform" : "flow";
+
+            await _context.BlocksDraft.UpdateOneAsync(
+                session,
+                item => item.Id == block.Id,
+                Builders<Block>.Update
+                    .Set(item => item.ParentBlockId, targetParentId)
+                    .Set(item => item.BlockZone, target is null ? rootZone : "default")
+                    .Set(item => item.ColumnSlotId, null)
+                    .Set(item => item.PositionMode, positionMode)
+                    .Set(item => item.Authoring, movedPolicy)
+                    .Set(item => item.UpdatedAt, DateTime.UtcNow)
+                    .Inc(item => item.Version, 1));
+
+            await ReorderPeersAsync(session, oldSiblings);
+            await ReorderPeersAsync(session, targetChildren);
+            await SynchronizeCollectionLockAsync(session, oldParentId, oldSiblings);
+            await SynchronizeCollectionLockAsync(session, targetParentId, targetChildren);
+            await session.CommitTransactionAsync();
+        }
+        catch (Exception exception)
+        {
+            await session.AbortTransactionAsync();
+            return (null, $"Block move failed: {exception.Message}");
+        }
+
+        return (await _blocks.GetByIdAsync(pageId, sectionId, block.Id), null);
+    }
+
+    private async Task ReorderPeersAsync(IClientSessionHandle session, IReadOnlyList<Block> peers)
+    {
+        if (peers.Count == 0) return;
+        var now = DateTime.UtcNow;
+        var writes = peers.Select((peer, index) =>
+            new UpdateOneModel<Block>(
+                Builders<Block>.Filter.Eq(item => item.Id, peer.Id),
+                Builders<Block>.Update
+                    .Set(item => item.Order, index)
+                    .Set(item => item.Layout.ZIndex, index + 1)
+                    .Set(item => item.UpdatedAt, now)))
+            .Cast<WriteModel<Block>>()
+            .ToList();
+        await _context.BlocksDraft.BulkWriteAsync(session, writes);
+    }
+
+    private async Task SynchronizeCollectionLockAsync(
+        IClientSessionHandle session,
+        string? containerId,
+        IReadOnlyCollection<Block> children)
+    {
+        if (string.IsNullOrWhiteSpace(containerId)) return;
+        var container = await _context.BlocksDraft
+            .OfType<ContainerBlock>()
+            .Find(session, item => item.Id == containerId)
+            .FirstOrDefaultAsync();
+        if (container is null || container.ContainerLayout.Purpose != "collection") return;
+
+        var childTypes = children.Select(BlockType).Distinct(StringComparer.Ordinal).ToList();
+        if (childTypes.Count > 1)
+            throw new InvalidOperationException("A Collection Container cannot contain mixed Block types.");
+        var lockedType = childTypes.SingleOrDefault();
+        await _context.BlocksDraft.UpdateOneAsync(
+            session,
+            item => item.Id == containerId,
+            Builders<Block>.Update
+                .Set("ContainerLayout.AllowedChildType", lockedType)
+                .Set(item => item.UpdatedAt, DateTime.UtcNow)
+                .Inc(item => item.Version, 1));
+    }
+
     public async Task<string?> DeleteGraphsAsync(
         string pageId,
         string sectionId,
@@ -283,19 +454,12 @@ public sealed class BlockAuthoringService
         }
         var selected = scope.Value.Blocks.Where(block => graphIds.Contains(block.Id)).ToList();
         if (selected.Any(block => block.Authoring.FullLocked || block.Authoring.ContentLocked)) return "Content-locked Blocks cannot be deleted.";
-        foreach (var root in roots)
-        {
-            if (string.IsNullOrWhiteSpace(root.ParentBlockId) || graphIds.Contains(root.ParentBlockId))
-                continue;
-            var parent = scope.Value.Blocks.OfType<ContainerBlock>()
-                .FirstOrDefault(container => container.Id == root.ParentBlockId);
-            if (parent is not null &&
-                ContainerCapacityPolicy.IsRequiredSlot(parent.PresetKey, root.Authoring.PresetSlotName))
-            {
-                var slotName = ContainerCapacityPolicy.SlotDisplayName(parent.PresetKey, root.Authoring.PresetSlotName);
-                return $"This Block fills the required Container slot '{slotName}' and cannot be deleted directly. Delete the Container instead.";
-            }
-        }
+        var affectedParentIds = selected
+            .Select(block => block.ParentBlockId)
+            .Where(parentId => !string.IsNullOrWhiteSpace(parentId) && !graphIds.Contains(parentId!))
+            .Select(parentId => parentId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
         foreach (var block in selected)
         {
             if (!string.IsNullOrWhiteSpace(block.ParentBlockId) && graphIds.Contains(block.ParentBlockId))
@@ -307,6 +471,22 @@ public sealed class BlockAuthoringService
         var deleteResult = await _context.BlocksDraft.DeleteManyAsync(block => graphIds.Contains(block.Id));
         if (deleteResult.DeletedCount != selected.Count)
             return "The complete Block graph could not be deleted. No asset cleanup was performed.";
+        foreach (var parentId in affectedParentIds)
+        {
+            var remaining = scope.Value.Blocks
+                .Where(block => !graphIds.Contains(block.Id) && block.ParentBlockId == parentId)
+                .ToList();
+            var parent = scope.Value.Blocks.OfType<ContainerBlock>().FirstOrDefault(block => block.Id == parentId);
+            if (parent?.ContainerLayout.Purpose == "collection" && remaining.Count == 0)
+            {
+                await _context.BlocksDraft.UpdateOneAsync(
+                    block => block.Id == parentId,
+                    Builders<Block>.Update
+                        .Set("ContainerLayout.AllowedChildType", (string?)null)
+                        .Set(block => block.UpdatedAt, DateTime.UtcNow)
+                        .Inc(block => block.Version, 1));
+            }
+        }
         await _assetCleanup.DeleteUnusedAsync(assetUrls);
         return null;
     }

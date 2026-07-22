@@ -4,11 +4,11 @@
 @using Contracts.Admin
 @using Microsoft.AspNetCore.Components.Forms
 
-@if (Block.Type is "card" or "metric" or "step" or "icon")
+@if (Block.Type is "card" or "button" or "metric" or "step" or "icon")
 {
     <div class="form-group">
         <label class="form-label">@T("IconClass")</label>
-        <DxTextBox @bind-Text="_icon" CssClass="w-100" NullText="fas fa-star" />
+        <IconPickerField @bind-Value="_icon" Label="@T("IconClass")" />
     </div>
 }
 
@@ -33,6 +33,10 @@
         <button type="button" class="btn-admin btn-ghost" @onclick="() => _resourcePickerOpen = true">
             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
         </button>
+        <div class="form-group" style="margin-top:.6rem">
+            <label class="form-label">@T("AltText")</label>
+            <LangField @bind-Value="_imageAltText" Languages="Languages" />
+        </div>
     </div>
 
     <ResourcePickerModal Open="_resourcePickerOpen" Kind="image"
@@ -58,9 +62,20 @@
 
 @if (Block.Type == "step")
 {
+    <label class="block-layout-panel__check">
+        <input type="checkbox" @bind="_autoNumber" />
+        <span>@T("AutoNumberFromBlockOrder")</span>
+    </label>
     <div class="form-group">
         <label class="form-label">@T("StepLabel")</label>
-        <LangField @bind-Value="_stepLabel" Languages="Languages" NullText="01" />
+        @if (_autoNumber)
+        {
+            <div class="form-hint">@T("AutoNumberPreview"): @($"{Block.Order + 1:00}")</div>
+        }
+        else
+        {
+            <LangField @bind-Value="_stepLabel" Languages="Languages" NullText="01" />
+        }
     </div>
 }
 
@@ -108,27 +123,50 @@
                             DownloadActionValue="downloadFile"
                             AdminLanguage="AdminLanguage" />
     </div>
+    <div class="form-group">
+        <label class="form-label">@T("ButtonStyle")</label>
+        <select class="form-control" @bind="_style">
+            <option value="filled">@T("Filled")</option>
+            <option value="outline">@T("Outline")</option>
+            <option value="ghost">@T("Ghost")</option>
+        </select>
+    </div>
+}
+
+@if (Block.Type == "button" && !string.IsNullOrWhiteSpace(_icon))
+{
+    <div class="form-group">
+        <label class="form-label">@T("IconPosition")</label>
+        <select class="form-control" @bind="_iconPosition">
+            <option value="left">@T("Left")</option>
+            <option value="right">@T("Right")</option>
+        </select>
+    </div>
+}
+
+@if (Block.Type == "icon")
+{
+    <label class="block-layout-panel__check">
+        <input type="checkbox" @bind="_iconActionEnabled" />
+        <span>@T("MakeIconInteractive")</span>
+    </label>
+    @if (_iconActionEnabled)
+    {
+        <ButtonActionFields @bind-Action="_action"
+                            @bind-Href="_href"
+                            @bind-FormDefinitionId="_formDefinitionId"
+                            FormDefinitions="_formDefinitions"
+                            ExternalActionValue="externalUrl"
+                            DownloadActionValue="downloadFile"
+                            AdminLanguage="AdminLanguage" />
+    }
 }
 
 @if (Block.Type == "bullet-list")
 {
     <div class="form-group">
         <label class="form-label">@T("Items")</label>
-        @foreach (var (item, i) in _items.Select((item, index) => (item, index)))
-        {
-            <div class="design-list-item">
-                <DxTextBox @bind-Text="item.Icon" NullText="fas fa-check" />
-                <LangField Value="@(item.Text ?? new())"
-                           ValueChanged="@(v => item.Text = v)"
-                           Languages="Languages" />
-                <button type="button" class="btn-admin btn-danger" @onclick="() => RemoveItem(i)">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        }
-        <button type="button" class="btn-admin btn-outline" @onclick="AddItem">
-            <i class="fas fa-plus"></i> @T("AddItem")
-        </button>
+        <BlockItemListEditor Items="_items" Languages="Languages" Language="AdminLanguage" />
     </div>
 }
 
@@ -157,23 +195,28 @@
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private string _icon = string.Empty;
+    private string _iconPosition = "left";
     private string? _imageUrl;
     private BlockAssetReferenceModel _cardAsset = new();
     private bool _resourcePickerOpen;
     private Dictionary<string, string> _title = new();
     private Dictionary<string, string> _label = new();
     private Dictionary<string, string> _stepLabel = new();
+    private bool _autoNumber;
     private Dictionary<string, string> _description = new();
     private Dictionary<string, string> _buttonLabel = new();
+    private Dictionary<string, string> _imageAltText = new();
     private string? _href;
     private string _action = "linkToPage";
     private string? _formDefinitionId;
     private string _style = "filled";
+    private bool _iconActionEnabled;
     private string? _value;
     private string? _prefix;
     private string? _suffix;
     private List<BulletListItemModel> _items = new();
     private bool _saving;
+    private string? _loadedBlockId;
     private string _layoutMode = "stack";
     private int _columns = 2;
     private string _gap = "medium";
@@ -209,17 +252,23 @@
 
     protected override void OnParametersSet()
     {
+        if (_loadedBlockId == Block.Id) return;
+        _loadedBlockId = Block.Id;
         _icon = Block.Icon ?? string.Empty;
+        _iconPosition = Block.IconPosition == "right" ? "right" : "left";
         _cardAsset = CopyAsset(Block.Asset, Block.ImageUrl);
         _imageUrl = _cardAsset.Url;
         _title = new(Block.Title ?? new());
         _label = new(Block.Label ?? new());
         _stepLabel = new(Block.StepLabel ?? new());
+        _autoNumber = Block.AutoNumber;
         _description = new(Block.Description ?? new());
         _buttonLabel = new(Block.ButtonLabel ?? new());
+        _imageAltText = new(Block.AltText ?? new());
         _href = Block.Href;
         _action = NormalizeButtonAction(Block.Action);
         _formDefinitionId = Block.FormDefinitionId;
+        _iconActionEnabled = Block.Type == "icon" && Block.ActionEnabled;
         _style = NormalizeButtonStyle(Block.Style);
         _value = Block.Value;
         _prefix = Block.Prefix;
@@ -473,14 +522,18 @@
             Asset = AssetDto(_cardAsset),
             ImageUrl = _imageUrl,
             ButtonLabel = _buttonLabel,
+            ImageAltText = _imageAltText,
             Href = _href,
             Action = _action,
             FormDefinitionId = _formDefinitionId,
+            ButtonStyle = NormalizeButtonStyle(_style),
             Visible = Block.Visible,
             Layout = ToLayoutDto()
         },
         "button" => new ButtonBlockUpdateDto
         {
+            Icon = _icon,
+            IconPosition = _iconPosition,
             Label = _label,
             Href = _href,
             Action = _action,
@@ -517,6 +570,7 @@
         "step" => new StepBlockUpdateDto
         {
             Icon = _icon,
+            AutoNumber = _autoNumber,
             StepLabel = _stepLabel,
             Title = _title,
             Description = _description,
@@ -528,6 +582,10 @@
             Icon = _icon,
             Label = _label,
             Description = _description,
+            ActionEnabled = _iconActionEnabled,
+            Href = _iconActionEnabled ? _href : null,
+            Action = _iconActionEnabled ? _action : "linkToPage",
+            FormDefinitionId = _iconActionEnabled ? _formDefinitionId : null,
             Visible = Block.Visible,
             Layout = ToLayoutDto()
         },

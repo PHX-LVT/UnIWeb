@@ -17,6 +17,20 @@ public enum AdminSessionRevokeReason
     AccountDeleted
 }
 
+public enum AdminRememberedDeviceRevokeReason
+{
+    Logout,
+    Expired,
+    UserDisabled,
+    PasswordChanged,
+    AdminRevoked,
+    RoleChanged,
+    AccountDeleted,
+    TokenReuse,
+    DeviceLimit,
+    UserRequested
+}
+
 public enum AdminAuditArea
 {
     Auth,
@@ -217,6 +231,8 @@ public class LoginRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public bool RememberDevice { get; set; }
+    public string? ExistingRememberedDeviceCredential { get; set; }
 }
 
 public class LoginResponse
@@ -230,6 +246,24 @@ public class LoginResponse
     public bool IsAdminAdmin { get; set; }
     public AdminUserStatus Status { get; set; } = AdminUserStatus.Active;
     public List<string> Permissions { get; set; } = new();
+    public RememberedDeviceCredentialResponse? RememberedDevice { get; set; }
+}
+
+public class RememberedDeviceExchangeRequest
+{
+    public string Credential { get; set; } = string.Empty;
+}
+
+public class AdminLogoutRequest
+{
+    public string? RememberedDeviceCredential { get; set; }
+}
+
+public class RememberedDeviceCredentialResponse
+{
+    public string DeviceId { get; set; } = string.Empty;
+    public string Credential { get; set; } = string.Empty;
+    public DateTime ExpiresAt { get; set; }
 }
 
 public class PasswordUpdateRequest
@@ -360,6 +394,22 @@ public class AdminSessionResponse
     public bool IsRevoked { get; set; }
     public DateTime? RevokedAt { get; set; }
     public AdminSessionRevokeReason? RevokeReason { get; set; }
+}
+
+public class AdminRememberedDeviceResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string AdminId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastUsedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public string LastUsedIp { get; set; } = string.Empty;
+    public string BrowserName { get; set; } = string.Empty;
+    public string OperatingSystem { get; set; } = string.Empty;
+    public bool IsRevoked { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public AdminRememberedDeviceRevokeReason? RevokeReason { get; set; }
 }
 
 public class AdminLoginActivityResponse
