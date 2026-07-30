@@ -213,15 +213,6 @@ namespace FullProject.Services
                 ipAddress,
                 userAgent,
                 issued.TokenId);
-            await RecordLoginActivityAsync(
-                user,
-                user.Email,
-                "remembered-device-rotated",
-                true,
-                "Remembered-device credential rotated.",
-                ipAddress,
-                userAgent,
-                issued.TokenId);
             return (issued.Login, RememberedDeviceExchangeStatus.Succeeded);
         }
 

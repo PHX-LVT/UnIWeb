@@ -2,13 +2,15 @@
 @inject IHttpService Http
 @inject AdminFormSubmissionService FormService
 @using Contracts.Admin
+@using Contracts.Icons
 @using Microsoft.AspNetCore.Components.Forms
 
 @if (Block.Type is "card" or "button" or "metric" or "step" or "icon")
 {
     <div class="form-group">
-        <label class="form-label">@T("IconClass")</label>
-        <IconPickerField @bind-Value="_icon" Label="@T("IconClass")" />
+        <label class="form-label">@T("Icon")</label>
+        <IconPickerField @bind-Value="_icon" @bind-Visual="_iconVisual" Label="@T("Icon")"
+                         Context="@(Block.Type == "button" ? IconContext.Button : IconContext.GeneralContent)" />
     </div>
 }
 
@@ -133,7 +135,7 @@
     </div>
 }
 
-@if (Block.Type == "button" && !string.IsNullOrWhiteSpace(_icon))
+@if (Block.Type == "button" && (!string.IsNullOrWhiteSpace(_icon) || _iconVisual is not null))
 {
     <div class="form-group">
         <label class="form-label">@T("IconPosition")</label>
@@ -195,6 +197,7 @@
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private string _icon = string.Empty;
+    private IconReferenceModel? _iconVisual;
     private string _iconPosition = "left";
     private string? _imageUrl;
     private BlockAssetReferenceModel _cardAsset = new();
@@ -217,27 +220,6 @@
     private List<BulletListItemModel> _items = new();
     private bool _saving;
     private string? _loadedBlockId;
-    private string _layoutMode = "stack";
-    private int _columns = 2;
-    private string _gap = "medium";
-    private string _alignItems = "stretch";
-    private string _justifyContent = "start";
-    private bool _wrap = true;
-    private int _orbitRadius = 180;
-    private int _orbitStartAngle = -90;
-    private int _orbitEndAngle = 270;
-    private string _orbitDirection = "clockwise";
-    private int _compactRadius = 120;
-    private int _compactChildWidth = 120;
-    private int _semicircleRadius = 180;
-    private int _semicircleStartAngle = 180;
-    private int _semicircleEndAngle = 360;
-    private string _containerMobileMode = "stack";
-    private bool _containerGeometryLocked;
-    private string _containerPurpose = "composition";
-    private string? _allowedChildType;
-    private bool _shareAppearance;
-    private BlockAppearanceModel _sharedAppearance = new() { SchemaVersion = 2, BackgroundColor = "#ffffff", TextColor = "#0f172a" };
     private BlockAppearanceModel _appearance = new();
     private BlockResponsiveOverrideModel? _tabletResponsive;
     private BlockResponsiveOverrideModel? _mobileResponsive;
@@ -255,6 +237,7 @@
         if (_loadedBlockId == Block.Id) return;
         _loadedBlockId = Block.Id;
         _icon = Block.Icon ?? string.Empty;
+        _iconVisual = CopyIcon(Block.IconVisual);
         _iconPosition = Block.IconPosition == "right" ? "right" : "left";
         _cardAsset = CopyAsset(Block.Asset);
         _imageUrl = _cardAsset.Url;
@@ -273,29 +256,6 @@
         _value = Block.Value;
         _prefix = Block.Prefix;
         _suffix = Block.Suffix;
-        _layoutMode = NormalizeContainerLayout(Block.LayoutMode);
-        _columns = Math.Clamp(Block.Columns ?? 2, 1, 6);
-        _gap = NormalizeGap(Block.Gap);
-        _alignItems = NormalizeAlignItems(Block.ContainerLayout.AlignItems);
-        _justifyContent = NormalizeJustifyContent(Block.ContainerLayout.JustifyContent);
-        _wrap = Block.ContainerLayout.Wrap;
-        _orbitRadius = Math.Clamp(Block.OrbitRadius ?? 180, 80, 480);
-        _orbitStartAngle = Math.Clamp(Block.OrbitStartAngle ?? -90, -360, 360);
-        _orbitEndAngle = Math.Clamp(Block.ContainerLayout.OrbitEndAngle, -360, 360);
-        _orbitDirection = NormalizeOrbitDirection(Block.ContainerLayout.OrbitDirection);
-        _compactRadius = Math.Clamp(Block.ContainerLayout.CompactRadius, 60, 220);
-        _compactChildWidth = Math.Clamp(Block.ContainerLayout.CompactChildWidth, 72, 180);
-        _semicircleRadius = Math.Clamp(Block.SemicircleRadius ?? 180, 80, 480);
-        _semicircleStartAngle = Math.Clamp(Block.SemicircleStartAngle ?? 180, -360, 360);
-        _semicircleEndAngle = Math.Clamp(Block.SemicircleEndAngle ?? 360, -360, 360);
-        _containerMobileMode = NormalizeResponsiveMode(Block.ContainerLayout.MobileMode, "stack");
-        _containerGeometryLocked = Block.ContainerLayout.GeometryLocked;
-        _containerPurpose = NormalizeContainerPurpose(Block.ContainerLayout.Purpose);
-        _allowedChildType = Block.ContainerLayout.AllowedChildType;
-        _shareAppearance = Block.ContainerLayout.ShareAppearance;
-        _sharedAppearance = CopyAppearance(Block.ContainerLayout.SharedAppearance);
-        _sharedAppearance.BackgroundColor ??= "#ffffff";
-        _sharedAppearance.TextColor ??= "#0f172a";
         _appearance = CopyAppearance(Block.Appearance);
         _tabletResponsive = CopyResponsive(Block.Responsive.Tablet);
         _mobileResponsive = CopyResponsive(Block.Responsive.Mobile);
@@ -303,6 +263,7 @@
         {
             Id = i.Id,
             Icon = i.Icon,
+            IconVisual = CopyIcon(i.IconVisual),
             Text = new(i.Text ?? new()),
             Visible = i.Visible,
             Order = i.Order
@@ -393,35 +354,6 @@
         };
         dto.Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring);
 
-        if (dto is ContainerBlockUpdateDto containerDto)
-        {
-            containerDto.ContainerLayout = new ContainerLayoutSettingsDto
-            {
-                SchemaVersion = 2,
-                Purpose = NormalizeContainerPurpose(_containerPurpose),
-                AllowedChildType = NormalizeContainerPurpose(_containerPurpose) == "collection" ? _allowedChildType : null,
-                Mode = NormalizeContainerLayout(_layoutMode),
-                Columns = Math.Clamp(_columns, 1, 6),
-                Gap = NormalizeGap(_gap),
-                AlignItems = NormalizeAlignItems(_alignItems),
-                JustifyContent = NormalizeJustifyContent(_justifyContent),
-                Wrap = _wrap,
-                OrbitRadius = Math.Clamp(_orbitRadius, 80, 480),
-                OrbitStartAngle = Math.Clamp(_orbitStartAngle, -360, 360),
-                OrbitEndAngle = Math.Clamp(_orbitEndAngle, -360, 360),
-                OrbitDirection = NormalizeOrbitDirection(_orbitDirection),
-                SemicircleRadius = Math.Clamp(_semicircleRadius, 80, 480),
-                SemicircleStartAngle = Math.Clamp(_semicircleStartAngle, -360, 360),
-                SemicircleEndAngle = Math.Clamp(_semicircleEndAngle, -360, 360),
-                MobileMode = NormalizeResponsiveMode(_containerMobileMode, "stack"),
-                CompactRadius = Math.Clamp(_compactRadius, 60, 220),
-                CompactChildWidth = Math.Clamp(_compactChildWidth, 72, 180),
-                GeometryLocked = _containerGeometryLocked,
-                ShareAppearance = _shareAppearance,
-                SharedAppearance = _shareAppearance ? ToAppearanceDto(_sharedAppearance) : null
-            };
-        }
-
         return dto;
     }
 
@@ -453,12 +385,11 @@
         InheritFromContainer = value.InheritFromContainer
     };
 
-    private static string NormalizeContainerPurpose(string? value) => value == "collection" ? "collection" : "composition";
     private static string BlockTypeLabelKey(string? type) => type switch
     {
         "image" => "Image", "video" => "Video", "file" => "File", "map" => "Map", "form" => "Form",
         "card" => "Card", "button" => "Button", "metric" => "Metric", "bullet-list" => "BulletList",
-        "step" => "Step", "icon" => "Icon", "container" => "Container", _ => "Text"
+        "step" => "Step", "icon" => "Icon", "container" => "Formation", _ => "Text"
     };
 
     private void SelectResourceImage(ManagedResourceModel resource)
@@ -517,6 +448,7 @@
         "card" => new CardBlockUpdateDto
         {
             Icon = _icon,
+            IconVisual = IconDto(_iconVisual),
             Title = _title,
             Description = _description,
             Asset = AssetDto(_cardAsset),
@@ -532,6 +464,7 @@
         "button" => new ButtonBlockUpdateDto
         {
             Icon = _icon,
+            IconVisual = IconDto(_iconVisual),
             IconPosition = _iconPosition,
             Label = _label,
             Href = _href,
@@ -544,6 +477,7 @@
         "metric" => new MetricBlockUpdateDto
         {
             Icon = _icon,
+            IconVisual = IconDto(_iconVisual),
             Label = _label,
             Value = _value ?? string.Empty,
             Prefix = _prefix,
@@ -559,6 +493,7 @@
             {
                 Id = item.Id,
                 Icon = item.Icon,
+                IconVisual = IconDto(item.IconVisual),
                 Text = item.Text ?? new(),
                 Visible = item.Visible,
                 Order = i
@@ -569,6 +504,7 @@
         "step" => new StepBlockUpdateDto
         {
             Icon = _icon,
+            IconVisual = IconDto(_iconVisual),
             AutoNumber = _autoNumber,
             StepLabel = _stepLabel,
             Title = _title,
@@ -579,6 +515,7 @@
         "icon" => new IconBlockUpdateDto
         {
             Icon = _icon,
+            IconVisual = IconDto(_iconVisual),
             Label = _label,
             Description = _description,
             ActionEnabled = _iconActionEnabled,
@@ -588,13 +525,37 @@
             Visible = Block.Visible,
             Layout = ToLayoutDto()
         },
-        "container" => new ContainerBlockUpdateDto
-        {
-            Title = _title,
-            Visible = Block.Visible,
-            Layout = ToLayoutDto()
-        },
         _ => new IconBlockUpdateDto { Visible = Block.Visible, Layout = ToLayoutDto() }
+    };
+
+    private static IconReferenceModel? CopyIcon(IconReferenceModel? value) => value is null ? null : new()
+    {
+        SchemaVersion = value.SchemaVersion,
+        Source = value.Source,
+        ClassName = value.ClassName,
+        ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource,
+        Url = value.Url,
+        StorageKey = value.StorageKey,
+        FileName = value.FileName,
+        ContentType = value.ContentType,
+        SizeBytes = value.SizeBytes,
+        AltText = new(value.AltText)
+    };
+
+    private static IconReferenceDto? IconDto(IconReferenceModel? value) => value is null ? null : new()
+    {
+        SchemaVersion = value.SchemaVersion,
+        Source = value.Source,
+        ClassName = value.ClassName,
+        ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource,
+        Url = value.Url,
+        StorageKey = value.StorageKey,
+        FileName = value.FileName,
+        ContentType = value.ContentType,
+        SizeBytes = value.SizeBytes,
+        AltText = new(value.AltText)
     };
 
     private static BlockResponsiveOverrideDto? ToResponsiveDto(BlockResponsiveOverrideModel? value) =>
@@ -649,46 +610,6 @@
         "ghost" => "ghost",
         _ => "filled"
     };
-
-    private static string NormalizeContainerLayout(string? value) => value switch
-    {
-        "row" => "row",
-        "grid" => "grid",
-        "split" => "split",
-        "orbit" => "orbit",
-        "semicircle" => "semicircle",
-        "freeform" => "freeform",
-        _ => "stack"
-    };
-
-    private static string NormalizeGap(string? value) => value switch
-    {
-        "none" => "none",
-        "small" => "small",
-        "large" => "large",
-        _ => "medium"
-    };
-
-    private static string NormalizeAlignItems(string? value) => value switch
-    {
-        "start" => "start",
-        "center" => "center",
-        "end" => "end",
-        _ => "stretch"
-    };
-
-    private static string NormalizeJustifyContent(string? value) => value switch
-    {
-        "center" => "center",
-        "end" => "end",
-        "between" => "between",
-        "around" => "around",
-        "evenly" => "evenly",
-        _ => "start"
-    };
-
-    private static string NormalizeOrbitDirection(string? value) =>
-        value == "counter-clockwise" ? "counter-clockwise" : "clockwise";
 
     private static BlockAppearanceModel CopyAppearance(BlockAppearanceModel? source) => new()
     {

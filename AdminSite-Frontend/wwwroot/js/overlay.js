@@ -30,7 +30,7 @@
                 height: rect.height
             });
 
-            const zones = el.querySelectorAll('.sc-block-zone[data-block-zone]');
+            const zones = el.querySelectorAll('.sc-block-zone[data-authoring-zone="true"][data-block-zone]');
             zones.forEach(function (zone) {
                 const zoneRect = zone.getBoundingClientRect();
                 zonePositions.push({

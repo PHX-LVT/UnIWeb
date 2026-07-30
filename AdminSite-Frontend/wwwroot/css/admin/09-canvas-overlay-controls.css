@@ -232,6 +232,49 @@ body.ez-arranging-block {
     text-transform: uppercase;
 }
 
+.ez-arrange-zone-workspace {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid rgba(15, 52, 96, .22);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .94);
+    box-shadow: 0 4px 12px rgba(15, 52, 96, .14);
+    color: #001a33;
+    cursor: default;
+}
+
+.ez-arrange-zone-workspace__button {
+    display: inline-flex;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid rgba(15, 52, 96, .2);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--primary);
+    cursor: pointer;
+}
+
+.ez-arrange-zone-workspace__button:hover,
+.ez-arrange-zone-workspace__button:focus-visible {
+    border-color: var(--primary);
+    background: rgba(49, 86, 163, .08);
+}
+
+.ez-arrange-zone-workspace__value {
+    min-width: 48px;
+    font-size: .68rem;
+    font-weight: 750;
+    text-align: center;
+}
+
 .ez-arrange-guide {
     position: absolute;
     display: none;

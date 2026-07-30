@@ -7,9 +7,9 @@
         @foreach (var item in Block.Items?.Where(i => i.Visible).OrderBy(i => i.Order) ?? Enumerable.Empty<PublicBulletListItemDto>())
         {
             <li>
-                @if (!string.IsNullOrWhiteSpace(item.Icon))
+                @if (item.IconVisual is not null || !string.IsNullOrWhiteSpace(item.Icon))
                 {
-                    <i class="@item.Icon"></i>
+                    <ContentIcon Icon="item.IconVisual" LegacyClass="item.Icon" Lang="Lang" />
                 }
                 <span>@StyleHelper.Lang(item.Text, Lang)</span>
             </li>

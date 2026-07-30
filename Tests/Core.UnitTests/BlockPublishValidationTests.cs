@@ -43,6 +43,58 @@ public class BlockPublishValidationTests
     }
 
     [Fact]
+    public void Formation_WithPlaceholderSlots_CannotPublish()
+    {
+        var formation = Container(ContainerPresetCatalog.CircleFourKey, "formation", "formation");
+        var children = ContainerPresetCatalog.ForFormation(formation.PresetKey).Slots
+            .Select((slot, index) => FormationChild(formation, slot.Key, index, isPlaceholder: index == 3))
+            .ToList();
+
+        var errors = BlockPublishValidationService.Validate(new Block[] { formation }.Concat(children));
+
+        Assert.Contains(errors, error => error.Contains("incomplete", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Formation_WithEveryGovernedSlotCompleted_CanPublish()
+    {
+        var formation = Container(ContainerPresetCatalog.TriangleKey, "formation", "formation");
+        var children = ContainerPresetCatalog.ForFormation(formation.PresetKey).Slots
+            .Select((slot, index) => FormationChild(formation, slot.Key, index, isPlaceholder: false))
+            .ToList();
+
+        Assert.Empty(BlockPublishValidationService.Validate(new Block[] { formation }.Concat(children)));
+    }
+
+    [Fact]
+    public void Formation_BlankSlotRemainsIncompleteEvenWhenPlaceholderFlagWasCleared()
+    {
+        var formation = Container(ContainerPresetCatalog.TriangleKey, "formation", "formation");
+        var children = ContainerPresetCatalog.ForFormation(formation.PresetKey).Slots
+            .Select((slot, index) => FormationChild(formation, slot.Key, index, isPlaceholder: false))
+            .ToList();
+        children[1].Content.Clear();
+
+        var errors = BlockPublishValidationService.Validate(new Block[] { formation }.Concat(children));
+
+        Assert.Contains(errors, error => error.Contains("incomplete", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Formation_WithDuplicateSlotOwnership_CannotPublish()
+    {
+        var formation = Container(ContainerPresetCatalog.TriangleKey, "formation", "formation");
+        var preset = ContainerPresetCatalog.ForFormation(formation.PresetKey);
+        var children = preset.Slots
+            .Select((slot, index) => FormationChild(formation, index == 2 ? preset.Slots[1].Key : slot.Key, index, false))
+            .ToList();
+
+        var errors = BlockPublishValidationService.Validate(new Block[] { formation }.Concat(children));
+
+        Assert.Contains(errors, error => error.Contains("more than one Block", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void VisibleButtonWithLabel_RequiresDestination()
     {
         var button = new ButtonBlock
@@ -118,5 +170,24 @@ public class BlockPublishValidationTests
         ParentBlockId = parentId,
         Content = new() { ["en"] = content },
         Authoring = new() { PresetSlotName = slot }
+    };
+
+    private static TextBlock FormationChild(
+        ContainerBlock formation,
+        string slot,
+        int order,
+        bool isPlaceholder) => new()
+    {
+        Id = $"formation-child-{order}",
+        ParentBlockId = formation.Id,
+        Order = order,
+        Content = isPlaceholder ? new() : new() { ["en"] = $"Content {order + 1}" },
+        Authoring = new()
+        {
+            GeometryLocked = true,
+            IsPlaceholder = isPlaceholder,
+            PresetSlotName = slot,
+            PresetSourceId = formation.PresetKey
+        }
     };
 }

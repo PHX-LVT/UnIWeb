@@ -1,0 +1,70 @@
+@using Contracts.Admin
+
+@if (_preset is not null && StrokeStyle != "none")
+{
+    <svg class="sc-formation-connectors @CssClass" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        @if (_preset.FormationKind == "circle")
+        {
+            <ellipse cx="50" cy="50" rx="@RadiusX" ry="@RadiusY" class="@StrokeClass" style="@StrokeColorStyle" />
+        }
+        else if (_preset.FormationKind == "semicircle")
+        {
+            <path d="@SemicirclePath"
+                  class="@StrokeClass" style="@StrokeColorStyle" />
+        }
+        else if (_preset.FormationKind == "stacked")
+        {
+            @foreach (var point in PointList)
+            {
+                <rect x="@(point.X - 10)" y="@(point.Y - 8)" width="20" height="16" rx="2"
+                      class="@StrokeClass" style="@StrokeColorStyle" />
+            }
+        }
+        else
+        {
+            <polyline points="@PolylinePoints" class="@StrokeClass" style="@StrokeColorStyle" />
+        }
+    </svg>
+}
+
+@code {
+    [Parameter, EditorRequired] public string PresetKey { get; set; } = string.Empty;
+    [Parameter] public string Spacing { get; set; } = "standard";
+    [Parameter] public string ColorMode { get; set; } = "theme-accent";
+    [Parameter] public string? Color { get; set; }
+    [Parameter] public string StrokeStyle { get; set; } = "solid";
+    [Parameter] public bool Mobile { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private ContainerPresetDefinition? _preset;
+    private IReadOnlyList<(double X, double Y)> PointList { get; set; } = Array.Empty<(double, double)>();
+
+    protected override void OnParametersSet()
+    {
+        _preset = ContainerPresetCatalog.TryGetFormation(PresetKey, out var preset) ? preset : null;
+        if (_preset is null)
+        {
+            PointList = Array.Empty<(double, double)>();
+            return;
+        }
+
+        var geometry = FormationGeometryResolver.Resolve(_preset.Key, "medium", null, "standard", Spacing, Mobile);
+        PointList = geometry.Slots.Select(slot => (slot.XPercent, slot.YPercent)).ToArray();
+    }
+
+    private string PolylinePoints => string.Join(" ", PointList.Select(point => $"{F(point.X)},{F(point.Y)}"));
+    private string SemicirclePath => PointList.Count == 0
+        ? string.Empty
+        : Mobile
+            ? $"M {F(PointList[0].X)} {F(PointList[0].Y)} Q 94 50 {F(PointList[^1].X)} {F(PointList[^1].Y)}"
+            : $"M {F(PointList[0].X)} {F(PointList[0].Y)} Q 50 -4 {F(PointList[^1].X)} {F(PointList[^1].Y)}";
+    private double RadiusX => PointList.Count == 0 ? 36 : PointList.Max(point => Math.Abs(point.X - 50));
+    private double RadiusY => PointList.Count == 0 ? 36 : PointList.Max(point => Math.Abs(point.Y - 50));
+    private string StrokeClass => $"sc-formation-connectors--{(StrokeStyle is "dashed" or "dotted" ? StrokeStyle : "solid")}";
+    private string StrokeColorStyle => ColorMode == "color" && !string.IsNullOrWhiteSpace(Color)
+        ? $"--sc-formation-connector-color: {Color}"
+        : ColorMode == "theme-primary"
+            ? "--sc-formation-connector-color: var(--theme-color-primary)"
+            : "--sc-formation-connector-color: var(--theme-color-accent)";
+    private static string F(double value) => value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+}

@@ -11,28 +11,73 @@
     <div class="sc-section-overlay"
          style="@StyleHelper.GetOverlayStyle(Section.Style)"></div>
 
-    <div style="position: relative; z-index: 1" class="sc-columns sc-columns--@Section.ColumnRatio sc-columns--gap-medium
-        @(Section.StackOnMobile == true ? "sc-columns--stack" : "")">
-        @foreach (var slot in Section.ColumnSlots?.OrderBy(s => s.Order) ?? Enumerable.Empty<PublicColumnSlotDto>())
-        {
-            var slotBlocks = slot.Blocks.OrderBy(block => block.Order).ToList();
-            <div class="sc-column sc-block-zone sc-block-zone--column @(slot.Blocks.Any(IsFreeform) ? "sc-column--has-freeform" : "")"
-                 data-block-zone="@slot.Id"
-                 data-block-zone-kind="column">
-                <SectionBlocks Blocks="@slotBlocks"
-                               Style="@BuildSlotStyle(slotBlocks)"
-                               SectionId="@Section.Id"
-                               BlockZone="default"
-                               DataZoneId="@slot.Id"
-                               BlockFrameZoneId="@slot.Id"
-                               IncludeDefaultZone="true"
-                               MobileCompositionMode="stack"
-                               Lang="@Lang"
-                               ShowInvisible="@ShowInvisible"
-                               OnSubmit="@OnSubmit" />
+    @if (IsSplit)
+    {
+        <div class="sc-split-section @(Section.StackOnMobile == true ? "sc-split-section--stack" : "")">
+            <div class="sc-split-section__content">
+                @if (!string.IsNullOrWhiteSpace(Eyebrow))
+                {
+                    <p class="sc-split-section__eyebrow">@Eyebrow</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(Heading))
+                {
+                    <h2 class="sc-split-section__heading">@Heading</h2>
+                }
+                @if (!string.IsNullOrWhiteSpace(Subheading))
+                {
+                    <p class="sc-split-section__subheading">@Subheading</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(Content))
+                {
+                    <div class="sc-split-section__body">@Content</div>
+                }
             </div>
-        }
-    </div>
+
+            <div class="sc-split-section__blocks sc-block-zone--column @(RightSlotBlocks.Any(IsFreeform) ? "sc-column--has-freeform" : "")">
+                @if (RightSlot is not null)
+                {
+                    <SectionBlocks Blocks="@RightSlotBlocks"
+                                   Style="@BuildSlotStyle(RightSlotBlocks)"
+                                   SectionId="@Section.Id"
+                                   BlockZone="default"
+                                   DataZoneId="@RightSlot.Id"
+                                   DataZoneKind="column"
+                                   ReportAsAuthoringZone="true"
+                                   BlockFrameZoneId="@RightSlot.Id"
+                                   IncludeDefaultZone="true"
+                                   MobileCompositionMode="stack"
+                                   Lang="@Lang"
+                                   ShowInvisible="@ShowInvisible"
+                                   OnSubmit="@OnSubmit" />
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div style="position: relative; z-index: 1" class="sc-columns sc-columns--@Section.ColumnRatio sc-columns--gap-@LegacyGap
+            @(Section.StackOnMobile == true ? "sc-columns--stack" : "")">
+            @foreach (var slot in Section.ColumnSlots?.OrderBy(s => s.Order) ?? Enumerable.Empty<PublicColumnSlotDto>())
+            {
+                var slotBlocks = slot.Blocks.OrderBy(block => block.Order).ToList();
+                <div class="sc-column sc-block-zone--column @(slot.Blocks.Any(IsFreeform) ? "sc-column--has-freeform" : "")">
+                    <SectionBlocks Blocks="@slotBlocks"
+                                   Style="@BuildSlotStyle(slotBlocks)"
+                                   SectionId="@Section.Id"
+                                   BlockZone="default"
+                                   DataZoneId="@slot.Id"
+                                   DataZoneKind="column"
+                                   ReportAsAuthoringZone="true"
+                                   BlockFrameZoneId="@slot.Id"
+                                   IncludeDefaultZone="true"
+                                   MobileCompositionMode="stack"
+                                   Lang="@Lang"
+                                   ShowInvisible="@ShowInvisible"
+                                   OnSubmit="@OnSubmit" />
+                </div>
+            }
+        </div>
+    }
 </section>
 
 @code {
@@ -40,6 +85,15 @@
     [Parameter] public string Lang { get; set; } = "en";
     [Parameter] public bool ShowInvisible { get; set; }
     [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
+
+    private bool IsSplit => string.Equals(Section.LayoutMode, "split", StringComparison.OrdinalIgnoreCase);
+    private string Eyebrow => StyleHelper.Lang(Section.Eyebrow, Lang).Trim();
+    private string Heading => StyleHelper.Lang(Section.Heading, Lang).Trim();
+    private string Subheading => StyleHelper.Lang(Section.Subheading, Lang).Trim();
+    private string Content => StyleHelper.Lang(Section.Content, Lang).Trim();
+    private PublicColumnSlotDto? RightSlot => Section.ColumnSlots?.OrderBy(slot => slot.Order).FirstOrDefault();
+    private List<PublicBlockDto> RightSlotBlocks => RightSlot?.Blocks.OrderBy(block => block.Order).ToList() ?? new();
+    private string LegacyGap => Section.Gap is "none" or "small" or "medium" or "large" ? Section.Gap : "medium";
 
     private static bool IsFreeform(PublicBlockDto block) =>
         string.Equals(block.PositionMode, "freeform", StringComparison.OrdinalIgnoreCase);

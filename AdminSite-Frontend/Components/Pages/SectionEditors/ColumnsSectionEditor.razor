@@ -1,31 +1,61 @@
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 
-<div class="alert alert-info">
-    <i class="fas fa-info-circle"></i>
-    @T("ColumnsBlocksHint")
-</div>
+@if (IsSplit)
+{
+    <div class="alert alert-info">
+        <i class="fas fa-columns"></i>
+        @T("SplitSectionContentHint")
+    </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
     <div class="form-group">
-        <label class="form-label">@T("ColumnCount")</label>
-        <DxComboBox Data="_counts" @bind-Value="_columnCount" CssClass="w-100" />
+        <label class="form-label">@T("Eyebrow")</label>
+        <LangField @bind-Value="_eyebrow" Languages="Languages" />
     </div>
-    <div class="form-group">
-        <label class="form-label">@T("ColumnRatio")</label>
-        <DxComboBox Data="_ratios" @bind-Value="_columnRatio" CssClass="w-100" />
-    </div>
-    <div class="form-group">
-        <label class="form-label">@T("Gap")</label>
-        <DxComboBox Data="_gaps" @bind-Value="_gap" CssClass="w-100" />
-    </div>
-</div>
 
-<div class="form-group">
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_stackOnMobile" /> @T("StackOnMobile")
-    </label>
-</div>
+    <div class="form-group">
+        <label class="form-label">@T("Heading")</label>
+        <LangField @bind-Value="_heading" Languages="Languages" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("Subheading")</label>
+        <LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" />
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">@T("Content")</label>
+        <LangField @bind-Value="_content" Languages="Languages" Multiline="true" />
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        @T("LegacyColumnsHint")
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="form-group">
+            <label class="form-label">@T("ColumnCount")</label>
+            <DxComboBox Data="_counts" @bind-Value="_columnCount" CssClass="w-100" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("ColumnRatio")</label>
+            <DxComboBox Data="_ratios" @bind-Value="_columnRatio" CssClass="w-100" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">@T("Gap")</label>
+            <DxComboBox Data="_gaps" @bind-Value="_gap" CssClass="w-100" />
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <DxCheckBox @bind-Checked="_stackOnMobile" /> @T("StackOnMobile")
+        </label>
+    </div>
+}
 
 <div style="display:flex;justify-content:flex-end;margin-top:.75rem">
     <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
@@ -34,21 +64,26 @@
 </div>
 
 @code {
-    [Parameter] public SectionModel  Section { get; set; } = new();
-    [Parameter] public string        PageId  { get; set; } = string.Empty;
-    [Parameter] public List<string>  Languages { get; set; } = new() { "en" };
+    [Parameter] public SectionModel Section { get; set; } = new();
+    [Parameter] public string PageId { get; set; } = string.Empty;
+    [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
 
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
-    private int    _columnCount  = 2;
-    private string _columnRatio  = "equal";
-    private string _gap          = "medium";
-    private bool   _stackOnMobile = true;
-    private bool   _saving;
+    private Dictionary<string, string> _eyebrow = new();
+    private Dictionary<string, string> _heading = new();
+    private Dictionary<string, string> _subheading = new();
+    private Dictionary<string, string> _content = new();
+    private int _columnCount = 2;
+    private string _columnRatio = "equal";
+    private string _gap = "medium";
+    private bool _stackOnMobile = true;
+    private bool _saving;
     private string? _loadedSectionId;
 
-    private List<int>    _counts = new() { 2, 3 };
+    private bool IsSplit => string.Equals(Section.LayoutMode, "split", StringComparison.OrdinalIgnoreCase);
+    private List<int> _counts = new() { 2, 3 };
     private List<string> _ratios = new() { "equal", "60-40", "40-60", "70-30", "30-70", "thirds", "quarters" };
     private List<string> _gaps = new() { "none", "small", "medium", "large" };
 
@@ -59,9 +94,13 @@
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
 
-        _columnCount   = Section.ColumnCount   ?? 2;
-        _columnRatio   = Section.ColumnRatio   ?? "equal";
-        _gap           = Section.Gap           ?? "medium";
+        _eyebrow = new(Section.Eyebrow ?? new());
+        _heading = new(Section.Heading ?? new());
+        _subheading = new(Section.Subheading ?? new());
+        _content = new(Section.SplitContent ?? new());
+        _columnCount = Section.ColumnCount ?? 2;
+        _columnRatio = Section.ColumnRatio ?? "equal";
+        _gap = Section.Gap ?? "medium";
         _stackOnMobile = Section.StackOnMobile ?? true;
     }
 
@@ -70,14 +109,25 @@
         _saving = true;
         try
         {
-            var res = await SectionService.UpdateAsync(PageId, Section.Id, new ColumnsSectionUpdateDto
-            {
-                ColumnCount = _columnCount,
-                ColumnRatio = _columnRatio,
-                Gap = _gap,
-                StackOnMobile = _stackOnMobile,
-                Visible = Section.Visible
-            });
+            var dto = IsSplit
+                ? new ColumnsSectionUpdateDto
+                {
+                    Eyebrow = _eyebrow,
+                    Heading = _heading,
+                    Subheading = _subheading,
+                    Content = _content,
+                    Visible = Section.Visible
+                }
+                : new ColumnsSectionUpdateDto
+                {
+                    ColumnCount = _columnCount,
+                    ColumnRatio = _columnRatio,
+                    Gap = _gap,
+                    StackOnMobile = _stackOnMobile,
+                    Visible = Section.Visible
+                };
+
+            var res = await SectionService.UpdateAsync(PageId, Section.Id, dto);
             Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }

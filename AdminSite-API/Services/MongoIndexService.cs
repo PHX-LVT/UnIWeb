@@ -192,6 +192,13 @@ namespace FullProject.Services
                     .Ascending(r => r.Active)
                     .Descending(r => r.UpdatedAt),
                 IndexOptions("ix_managed_resources_kind_album_active_updated"));
+            await EnsureIndexAsync(resources,
+                Builders<ManagedResource>.IndexKeys
+                    .Ascending(r => r.Purpose)
+                    .Ascending(r => r.Active)
+                    .Ascending(r => r.DeletionState)
+                    .Descending(r => r.UpdatedAt),
+                IndexOptions("ix_managed_resources_purpose_active_deletion_updated"));
 
             var albums = _database.GetCollection<ResourceAlbum>("resource_albums");
             await EnsureIndexAsync(albums,

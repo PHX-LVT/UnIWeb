@@ -186,7 +186,7 @@
         ]),
         new("BlockGroupStructure",
         [
-            new("container", "Container", "fa-layer-group", "BlockDescriptionContainer")
+            new("container", "Formation", "fa-shapes", "BlockDescriptionFormation")
         ])
     ];
 
@@ -352,10 +352,11 @@
     private static RenderFragment StarterPreview(string type, BlockStarterVariantDefinition? variant = null) => builder =>
     {
         var sequence = 0;
-        void Element(string name, string? css = null, string? icon = null)
+        void Element(string name, string? css = null, string? icon = null, string? style = null)
         {
             builder.OpenElement(sequence++, name);
             if (css is not null) builder.AddAttribute(sequence++, "class", css);
+            if (style is not null) builder.AddAttribute(sequence++, "style", style);
             if (icon is not null)
             {
                 builder.OpenElement(sequence++, "i");
@@ -385,10 +386,18 @@
             case "form": Element("span"); Element("span"); Element("strong", "preview-submit"); break;
             case "container":
                 var key = variant?.ContainerPresetKey;
-                var cells = key == ContainerPresetCatalog.SplitKey ? 2 :
-                    key == ContainerPresetCatalog.SemicircleKey ? 6 :
-                    key == ContainerPresetCatalog.OrbitKey ? 8 : 4;
-                for (var i = 0; i < cells; i++) Element("div", "preview-container-cell");
+                if (ContainerPresetCatalog.TryGetFormation(key, out var formationPreset))
+                {
+                    var geometry = FormationGeometryResolver.Resolve(
+                        formationPreset.Key, "medium", null, "standard", "standard");
+                    foreach (var slot in geometry.Slots)
+                    {
+                        Element(
+                            "div",
+                            "preview-container-cell",
+                            style: $"left:{slot.XPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%;top:{slot.YPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%");
+                    }
+                }
                 break;
         }
     };
@@ -473,20 +482,7 @@
     .block-starter-preview--button-ghost .preview-button { background:transparent; }
     .block-starter-preview .preview-submit { width:56%; height:16px; margin:auto; background:#3156a3; opacity:.65; }
     .block-starter-preview--form { width:90%; margin-inline:auto; }
-    .block-starter-preview--container-stack { grid-template-columns:1fr; }
-    .block-starter-preview--container-row { grid-template-columns:repeat(3,1fr); align-items:center; }
-    .block-starter-preview--container-grid { grid-template-columns:1fr 1fr; }
-    .block-starter-preview--container-split { grid-template-columns:1fr 1fr; align-items:stretch; }
-    .block-starter-preview--container-orbit,
-    .block-starter-preview--container-semicircle { position:relative; display:block; border:1px dashed #8299c7; }
-    .block-starter-preview .preview-container-cell { min-height:17px; border-radius:4px; background:#dfe8f7; }
-    .block-starter-preview--container-orbit .preview-container-cell,
-    .block-starter-preview--container-semicircle .preview-container-cell { position:absolute; width:30%; height:20px; }
-    .block-starter-preview--container-orbit .preview-container-cell:nth-child(1) { left:35%; top:8px; }
-    .block-starter-preview--container-orbit .preview-container-cell:nth-child(2) { right:8px; bottom:10px; }
-    .block-starter-preview--container-orbit .preview-container-cell:nth-child(3) { left:8px; bottom:10px; }
-    .block-starter-preview--container-semicircle .preview-container-cell:nth-child(1) { left:8px; bottom:10px; }
-    .block-starter-preview--container-semicircle .preview-container-cell:nth-child(2) { left:35%; top:9px; }
-    .block-starter-preview--container-semicircle .preview-container-cell:nth-child(3) { right:8px; bottom:10px; }
+    [class*="block-starter-preview--formation-"] { position:relative; display:block; min-height:104px; border:1px dashed #8299c7; background:radial-gradient(circle at center,rgba(49,86,163,.08),transparent 56%); }
+    [class*="block-starter-preview--formation-"] .preview-container-cell { position:absolute; width:25px; height:16px; min-height:0; border:1px solid #b8c8e8; border-radius:4px; background:#dfe8f7; transform:translate(-50%,-50%); box-shadow:0 2px 4px rgba(15,23,42,.08); }
     @@media (max-width:520px) { .block-create-wizard__type-grid, .block-create-wizard__variant-grid { grid-template-columns:1fr; } }
 </style>

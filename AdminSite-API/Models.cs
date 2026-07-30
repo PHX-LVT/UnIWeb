@@ -131,6 +131,7 @@ namespace FullProject.Models
         public string Id { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public string Href { get; set; } = string.Empty;
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -492,6 +493,7 @@ namespace FullProject.Models
         [BsonElement("Id")]
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
@@ -563,6 +565,9 @@ namespace FullProject.Models
         [BsonElement("Id")]
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
+        public string? BadgeText { get; set; }
+        public bool Highlighted { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
@@ -611,6 +616,13 @@ namespace FullProject.Models
     [BsonDiscriminator("columns")]
     public class ColumnsSection : Section
     {
+        // Existing records predate this marker and intentionally stay on the
+        // original multi-slot renderer. New records use the split structure.
+        public string LayoutMode { get; set; } = "legacy";        // legacy | split
+        public Dictionary<string, string> Eyebrow { get; set; } = new();
+        public Dictionary<string, string> Heading { get; set; } = new();
+        public Dictionary<string, string> Subheading { get; set; } = new();
+        public Dictionary<string, string> Content { get; set; } = new();
         public int ColumnCount { get; set; } = 2;
         public string ColumnRatio { get; set; } = "equal";         // equal | 1-2 | 2-1 | 1-3 | 3-1
         public string Gap { get; set; } = "medium";                // none | small | medium | large
@@ -945,6 +957,7 @@ namespace FullProject.Models
         [BsonElement("Id")]
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public Dictionary<string, string> Text { get; set; } = new();
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
@@ -954,6 +967,7 @@ namespace FullProject.Models
     public class CardBlock : Block
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public BlockAssetReference Asset { get; set; } = new();
@@ -971,6 +985,7 @@ namespace FullProject.Models
     public class ButtonBlock : Block
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public string IconPosition { get; set; } = "left";
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
@@ -983,6 +998,7 @@ namespace FullProject.Models
     public class MetricBlock : Block
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public Dictionary<string, string> Label { get; set; } = new();
         public string Value { get; set; } = string.Empty;
         public string? Prefix { get; set; }
@@ -1001,6 +1017,7 @@ namespace FullProject.Models
     public class StepBlock : Block
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public bool AutoNumber { get; set; }
         public Dictionary<string, string> StepLabel { get; set; } = new();
         public Dictionary<string, string> Title { get; set; } = new();
@@ -1011,6 +1028,7 @@ namespace FullProject.Models
     public class IconBlock : Block
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReference? IconVisual { get; set; }
         public Dictionary<string, string> Label { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public bool ActionEnabled { get; set; }
@@ -1330,6 +1348,7 @@ namespace FullProject.Models
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
         public string Kind { get; set; } = "file"; // image | file | video
+        public string? Purpose { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
@@ -1339,6 +1358,10 @@ namespace FullProject.Models
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
         public string Source { get; set; } = "managed-upload";
+        public string? OriginalSourceUrl { get; set; }
+        public string? LicenseName { get; set; }
+        public string? Attribution { get; set; }
+        public string? DeletionState { get; set; }
         public List<string> Tags { get; set; } = new();
         [BsonRepresentation(BsonType.ObjectId)]
         public string? AlbumId { get; set; }

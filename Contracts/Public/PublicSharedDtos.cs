@@ -74,6 +74,7 @@ namespace Contracts.Public
     {
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public Contracts.Icons.PublicIconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
@@ -116,6 +117,9 @@ namespace Contracts.Public
     {
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public Contracts.Icons.PublicIconReferenceDto? IconVisual { get; set; }
+        public string? BadgeText { get; set; }
+        public bool Highlighted { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }

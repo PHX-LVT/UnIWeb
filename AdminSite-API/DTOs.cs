@@ -1,5 +1,6 @@
 using FullProject.Models;
 using System.Text.Json.Serialization;
+using Contracts.Icons;
 
 namespace FullProject.DTOs
 {
@@ -199,6 +200,7 @@ namespace FullProject.DTOs
     {
         public string Label { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public string Href { get; set; } = string.Empty;
     }
 
@@ -206,6 +208,7 @@ namespace FullProject.DTOs
     {
         public string? Label { get; set; }
         public string? Icon { get; set; }
+        public IconReferenceDto? IconVisual { get; set; }
         public string? Href { get; set; }
     }
 
@@ -214,6 +217,7 @@ namespace FullProject.DTOs
         public string Id { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public string Href { get; set; } = string.Empty;
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -609,6 +613,7 @@ namespace FullProject.DTOs
     public class ManagedResourceCreateDto
     {
         public string Kind { get; set; } = "file";
+        public string? Purpose { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
@@ -618,6 +623,9 @@ namespace FullProject.DTOs
         public string? ContentType { get; set; }
         public long? SizeBytes { get; set; }
         public string? Source { get; set; }
+        public string? OriginalSourceUrl { get; set; }
+        public string? LicenseName { get; set; }
+        public string? Attribution { get; set; }
         public List<string> Tags { get; set; } = new();
         public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
@@ -626,6 +634,7 @@ namespace FullProject.DTOs
     public class ManagedResourceUpdateDto
     {
         public string? Kind { get; set; }
+        public string? Purpose { get; set; }
         public Dictionary<string, string>? Name { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? Url { get; set; }
@@ -635,6 +644,9 @@ namespace FullProject.DTOs
         public string? ContentType { get; set; }
         public long? SizeBytes { get; set; }
         public string? Source { get; set; }
+        public string? OriginalSourceUrl { get; set; }
+        public string? LicenseName { get; set; }
+        public string? Attribution { get; set; }
         public List<string>? Tags { get; set; }
         public string? AlbumId { get; set; }
         public bool? Active { get; set; }
@@ -644,6 +656,7 @@ namespace FullProject.DTOs
     {
         public string Id { get; set; } = string.Empty;
         public string Kind { get; set; } = "file";
+        public string? Purpose { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
@@ -653,6 +666,10 @@ namespace FullProject.DTOs
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
         public string Source { get; set; } = "managed-upload";
+        public string? OriginalSourceUrl { get; set; }
+        public string? LicenseName { get; set; }
+        public string? Attribution { get; set; }
+        public string? DeletionState { get; set; }
         public List<string> Tags { get; set; } = new();
         public string? AlbumId { get; set; }
         public bool Active { get; set; }

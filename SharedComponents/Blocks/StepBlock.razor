@@ -3,9 +3,9 @@
 
 <div class="sc-block sc-design-block sc-step-block">
     <div class="sc-step-block__marker">
-        @if (!string.IsNullOrWhiteSpace(Block.Icon))
+        @if (Block.IconVisual is not null || !string.IsNullOrWhiteSpace(Block.Icon))
         {
-            <i class="@Block.Icon"></i>
+            <ContentIcon Icon="Block.IconVisual" LegacyClass="Block.Icon" Lang="Lang" />
         }
         else
         {

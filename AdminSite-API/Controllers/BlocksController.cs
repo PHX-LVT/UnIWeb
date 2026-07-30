@@ -1,6 +1,7 @@
 using FullProject.DTOs;
 using FullProject.Models;
 using FullProject.Services.BlockServices;
+using FullProject.Services.IconServices;
 using FullProject.Services;
 using FullProject.Security;
 using FullProject.Utils;
@@ -22,17 +23,20 @@ namespace FullProject.Controllers
         private readonly SectionService _sectionService;
         private readonly BlockAssetMetadataService _assetMetadata;
         private readonly BlockAuthoringService _authoring;
+        private readonly FormationAuthoringService _formations;
 
         public BlocksController(
             BlockService service,
             SectionService sectionService,
             BlockAssetMetadataService assetMetadata,
-            BlockAuthoringService authoring)
+            BlockAuthoringService authoring,
+            FormationAuthoringService formations)
         {
             _service = service;
             _sectionService = sectionService;
             _assetMetadata = assetMetadata;
             _authoring = authoring;
+            _formations = formations;
         }
 
         // GET api/admin/pages/:pageId/sections/:sectionId/blocks
@@ -292,6 +296,76 @@ namespace FullProject.Controllers
                 .WithNotification("NotificationOrderSaved"));
         }
 
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+        [HttpPut("{formationId}/formation/slots/{slotName}")]
+        public async Task<IActionResult> ReplaceFormationSlot(
+            string pageId,
+            string sectionId,
+            string formationId,
+            string slotName,
+            [FromBody] BlockCreateDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var assetError = await _assetMetadata.CanonicalizeAsync(dto);
+            if (assetError is not null) return BadRequest(ApiResult.BadRequest(assetError));
+            var referenceError = await _service.ValidateFunctionalReferencesAsync(dto, false);
+            if (referenceError is not null) return BadRequest(ApiResult.BadRequest(referenceError));
+            var validationErrors = BlockContractService.Validate(dto);
+            if (validationErrors.Count > 0)
+                return BadRequest(ApiResult.BadRequest(string.Join(" ", validationErrors)));
+
+            var (block, error) = await _formations.ReplaceSlotAsync(
+                pageId, sectionId, formationId, slotName, dto);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, block!), "Formation slot replaced.")
+                .WithNotification("NotificationBlockUpdated"));
+        }
+
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+        [HttpPost("{formationId}/formation/swap")]
+        public async Task<IActionResult> SwapFormationSlots(
+            string pageId,
+            string sectionId,
+            string formationId,
+            [FromBody] FormationSlotSwapRequestDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var error = await _formations.SwapSlotsAsync(pageId, sectionId, formationId, dto);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok("Formation slots swapped.")
+                .WithNotification("NotificationOrderSaved"));
+        }
+
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+        [HttpPost("{formationId}/formation/convert")]
+        public async Task<IActionResult> ConvertFormation(
+            string pageId,
+            string sectionId,
+            string formationId,
+            [FromBody] FormationConvertRequestDto dto)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var (formation, error) = await _formations.ConvertAsync(pageId, sectionId, formationId, dto);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, formation!), "Formation changed.")
+                .WithNotification("NotificationBlockUpdated"));
+        }
+
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+        [HttpPost("{containerId}/formation/migrate-legacy")]
+        public async Task<IActionResult> MigrateLegacyContainer(
+            string pageId,
+            string sectionId,
+            string containerId)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var (activeBlockId, error) = await _formations.MigrateLegacyAsync(
+                pageId, sectionId, containerId);
+            if (error is not null) return BadRequest(ApiResult.BadRequest(error));
+            return Ok(ApiResult.Ok(new { ActiveBlockId = activeBlockId }, "Legacy Container migrated.")
+                .WithNotification("NotificationBlockUpdated"));
+        }
+
         [HttpPut("{blockId}/authoring-lock")]
         public async Task<IActionResult> UpdateAuthoringLock(
             string pageId,
@@ -374,6 +448,7 @@ namespace FullProject.Controllers
                     ContentLocked = b.Authoring?.ContentLocked ?? false,
                     GeometryLocked = b.Authoring?.GeometryLocked ?? false,
                     FullLocked = b.Authoring?.FullLocked ?? false,
+                    IsPlaceholder = b.Authoring?.IsPlaceholder ?? false,
                     PresetSlotName = b.Authoring?.PresetSlotName,
                     PresetSourceId = b.Authoring?.PresetSourceId
                 },
@@ -451,6 +526,7 @@ namespace FullProject.Controllers
 
                 case CardBlock card:
                     dto.Icon = card.Icon;
+                    dto.IconVisual = IconReferenceService.ToAdmin(card.IconVisual);
                     dto.Title = card.Title;
                     dto.Description = card.Description;
                     dto.ImageUrl = card.ImageUrl;
@@ -465,6 +541,7 @@ namespace FullProject.Controllers
 
                 case ButtonBlock button:
                     dto.Icon = button.Icon;
+                    dto.IconVisual = IconReferenceService.ToAdmin(button.IconVisual);
                     dto.IconPosition = button.IconPosition;
                     dto.Label = button.Label;
                     dto.Href = button.Href;
@@ -475,6 +552,7 @@ namespace FullProject.Controllers
 
                 case MetricBlock metric:
                     dto.Icon = metric.Icon;
+                    dto.IconVisual = IconReferenceService.ToAdmin(metric.IconVisual);
                     dto.Label = metric.Label;
                     dto.Value = metric.Value;
                     dto.Prefix = metric.Prefix;
@@ -488,6 +566,7 @@ namespace FullProject.Controllers
                     {
                         Id = i.Id,
                         Icon = i.Icon,
+                        IconVisual = IconReferenceService.ToAdmin(i.IconVisual),
                         Text = i.Text,
                         Visible = i.Visible,
                         Order = i.Order
@@ -496,6 +575,7 @@ namespace FullProject.Controllers
 
                 case StepBlock step:
                     dto.Icon = step.Icon;
+                    dto.IconVisual = IconReferenceService.ToAdmin(step.IconVisual);
                     dto.AutoNumber = step.AutoNumber;
                     dto.StepLabel = step.StepLabel;
                     dto.Title = step.Title;
@@ -504,6 +584,7 @@ namespace FullProject.Controllers
 
                 case IconBlock icon:
                     dto.Icon = icon.Icon;
+                    dto.IconVisual = IconReferenceService.ToAdmin(icon.IconVisual);
                     dto.Label = icon.Label;
                     dto.Description = icon.Description;
                     dto.ActionEnabled = icon.ActionEnabled;

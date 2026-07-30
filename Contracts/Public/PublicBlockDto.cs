@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Contracts.Admin;
 using Contracts.Forms;
+using Contracts.Icons;
 
 namespace Contracts.Public
 {
@@ -30,6 +31,7 @@ namespace Contracts.Public
         public string? ZoneId { get; set; }
         public string PositionMode { get; set; } = "flow";
         public string? ParentBlockId { get; set; }
+        public string? PresetSlotName { get; set; }
         public PublicBlockLayoutDto Layout { get; set; } = new();
         public PublicBlockAppearanceDto Appearance { get; set; } = new();
         public PublicBlockResponsiveSettingsDto Responsive { get; set; } = new();
@@ -103,6 +105,7 @@ namespace Contracts.Public
     public class PublicCardBlockDto : PublicBlockDto
     {
         public string? Icon { get; set; }
+        public PublicIconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
@@ -118,6 +121,7 @@ namespace Contracts.Public
     public class PublicButtonBlockDto : PublicBlockDto
     {
         public string? Icon { get; set; }
+        public PublicIconReferenceDto? IconVisual { get; set; }
         public string IconPosition { get; set; } = "left";
         public Dictionary<string, string>? Label { get; set; }
         public string? Href { get; set; }
@@ -129,6 +133,7 @@ namespace Contracts.Public
     public class PublicMetricBlockDto : PublicBlockDto
     {
         public string? Icon { get; set; }
+        public PublicIconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string>? Label { get; set; }
         public string? Value { get; set; }
         public string? Prefix { get; set; }
@@ -145,6 +150,7 @@ namespace Contracts.Public
     public class PublicStepBlockDto : PublicBlockDto
     {
         public string? Icon { get; set; }
+        public PublicIconReferenceDto? IconVisual { get; set; }
         public bool AutoNumber { get; set; }
         public int? SequenceNumber { get; set; }
         public Dictionary<string, string>? StepLabel { get; set; }
@@ -155,6 +161,7 @@ namespace Contracts.Public
     public class PublicIconBlockDto : PublicBlockDto
     {
         public string? Icon { get; set; }
+        public PublicIconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string>? Label { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public bool ActionEnabled { get; set; }
@@ -165,7 +172,7 @@ namespace Contracts.Public
 
     public class PublicContainerBlockDto : PublicBlockDto
     {
-        public string PresetKey { get; set; } = ContainerPresetCatalog.StackKey;
+        public string PresetKey { get; set; } = ContainerPresetCatalog.CircleSixKey;
         public Dictionary<string, string>? Title { get; set; }
         public PublicContainerLayoutSettingsDto ContainerLayout { get; set; } = new();
         public List<PublicBlockDto>? Children { get; set; }
@@ -175,6 +182,7 @@ namespace Contracts.Public
     {
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public PublicIconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string>? Text { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; }

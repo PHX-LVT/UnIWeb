@@ -2,6 +2,7 @@
 
 using System.Text.Json.Serialization;
 using System.Text.Json;
+using Contracts.Icons;
 
 namespace Contracts.Admin
 {
@@ -134,7 +135,9 @@ namespace Contracts.Admin
 
     public class ListItemDto
     {
+        public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
@@ -147,6 +150,7 @@ namespace Contracts.Admin
     {
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
@@ -207,7 +211,11 @@ namespace Contracts.Admin
 
     public class TestimonialItemDto
     {
+        public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
+        public string? BadgeText { get; set; }
+        public bool Highlighted { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
@@ -222,7 +230,6 @@ namespace Contracts.Admin
 
     public class TestimonialItemResponseDto : TestimonialItemDto
     {
-        public string Id { get; set; } = string.Empty;
     }
 
     // -- Section Create DTOs -----------------------------------
@@ -285,6 +292,11 @@ namespace Contracts.Admin
 
     public class ColumnsSectionCreateDto : SectionCreateDto
     {
+        public string LayoutMode { get; set; } = "split";
+        public Dictionary<string, string> Eyebrow { get; set; } = new();
+        public Dictionary<string, string> Heading { get; set; } = new();
+        public Dictionary<string, string> Subheading { get; set; } = new();
+        public Dictionary<string, string> Content { get; set; } = new();
         public int ColumnCount { get; set; } = 2;
         public string ColumnRatio { get; set; } = "equal";
         public string Gap { get; set; } = "medium";
@@ -440,6 +452,10 @@ namespace Contracts.Admin
 
     public class ColumnsSectionUpdateDto : SectionUpdateDto
     {
+        public Dictionary<string, string>? Eyebrow { get; set; }
+        public Dictionary<string, string>? Heading { get; set; }
+        public Dictionary<string, string>? Subheading { get; set; }
+        public Dictionary<string, string>? Content { get; set; }
         public int? ColumnCount { get; set; }
         public string? ColumnRatio { get; set; }
         public string? Gap { get; set; }
@@ -669,6 +685,8 @@ namespace Contracts.Admin
         public Dictionary<string, string>? HtmlContent { get; set; }
 
         // Columns
+        public string? LayoutMode { get; set; }
+        public Dictionary<string, string>? Content { get; set; }
         public int? ColumnCount { get; set; }
         public string? ColumnRatio { get; set; }
         public bool? StackOnMobile { get; set; }
@@ -925,6 +943,7 @@ public class ColumnSlotResponseDto
     {
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Text { get; set; } = new();
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
@@ -933,6 +952,7 @@ public class ColumnSlotResponseDto
     public class CardBlockCreateDto : BlockCreateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public BlockAssetReferenceDto? Asset { get; set; }
@@ -947,6 +967,7 @@ public class ColumnSlotResponseDto
     public class ButtonBlockCreateDto : BlockCreateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public string IconPosition { get; set; } = "left";
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
@@ -958,6 +979,7 @@ public class ColumnSlotResponseDto
     public class MetricBlockCreateDto : BlockCreateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Label { get; set; } = new();
         public string Value { get; set; } = string.Empty;
         public string? Prefix { get; set; }
@@ -974,6 +996,7 @@ public class ColumnSlotResponseDto
     public class StepBlockCreateDto : BlockCreateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public bool AutoNumber { get; set; }
         public Dictionary<string, string> StepLabel { get; set; } = new();
         public Dictionary<string, string> Title { get; set; } = new();
@@ -983,6 +1006,7 @@ public class ColumnSlotResponseDto
     public class IconBlockCreateDto : BlockCreateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Label { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public bool ActionEnabled { get; set; }
@@ -1072,6 +1096,7 @@ public class ColumnSlotResponseDto
     public class CardBlockUpdateDto : BlockUpdateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public BlockAssetReferenceDto? Asset { get; set; }
@@ -1086,6 +1111,7 @@ public class ColumnSlotResponseDto
     public class ButtonBlockUpdateDto : BlockUpdateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public string IconPosition { get; set; } = "left";
         public Dictionary<string, string> Label { get; set; } = new();
         public string? Href { get; set; }
@@ -1097,6 +1123,7 @@ public class ColumnSlotResponseDto
     public class MetricBlockUpdateDto : BlockUpdateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Label { get; set; } = new();
         public string Value { get; set; } = string.Empty;
         public string? Prefix { get; set; }
@@ -1113,6 +1140,7 @@ public class ColumnSlotResponseDto
     public class StepBlockUpdateDto : BlockUpdateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public bool AutoNumber { get; set; }
         public Dictionary<string, string> StepLabel { get; set; } = new();
         public Dictionary<string, string> Title { get; set; } = new();
@@ -1122,6 +1150,7 @@ public class ColumnSlotResponseDto
     public class IconBlockUpdateDto : BlockUpdateDto
     {
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceDto? IconVisual { get; set; }
         public Dictionary<string, string> Label { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public bool ActionEnabled { get; set; }
@@ -1262,6 +1291,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string>? StepLabel { get; set; }
         public bool AutoNumber { get; set; }
         public string? Icon { get; set; }
+        public IconReferenceDto? IconVisual { get; set; }
         public string IconPosition { get; set; } = "left";
         public string? Value { get; set; }
         public string? Prefix { get; set; }

@@ -38,8 +38,8 @@
             <button class="btn-admin btn-danger" @onclick="() => RemoveItem(i)"><i class="fas fa-trash"></i></button>
         </div>
         <div class="form-group">
-            <label class="form-label">@T("IconClass")</label>
-            <DxTextBox @bind-Text="item.Icon" CssClass="w-100" NullText="fa-warehouse" />
+            <label class="form-label">@T("Icon")</label>
+            <IconPickerField @bind-Value="item.Icon" @bind-Visual="item.IconVisual" Label="@T("Icon")" />
         </div>
         <div class="form-group">
             <label class="form-label">@T("Title")</label>
@@ -48,6 +48,15 @@
         <div class="form-group">
             <label class="form-label">@T("Description")</label>
             <LangField Value="@(item.Description ?? new())" ValueChanged="v => item.Description = v" Languages="Languages" Multiline="true" />
+        </div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:end">
+            <div class="form-group">
+                <label class="form-label">@T("BadgeText")</label>
+                <DxTextBox @bind-Text="item.BadgeText" CssClass="w-100" />
+            </div>
+            <label style="display:flex;gap:.5rem;align-items:center;font-size:.85rem;padding-bottom:.7rem">
+                <input type="checkbox" @bind="item.Highlighted" /> @T("Highlighted")
+            </label>
         </div>
         <label style="display:flex;gap:.5rem;align-items:center;font-size:.85rem">
             <input type="checkbox" @bind="item.Visible" /> @T("Visible")
@@ -96,6 +105,9 @@
         {
             Id = x.Id,
             Icon = x.Icon,
+            IconVisual = CopyIcon(x.IconVisual),
+            BadgeText = x.BadgeText,
+            Highlighted = x.Highlighted,
             Title = new(x.Title ?? new()),
             Description = new(x.Description ?? new()),
             ImageUrl = x.ImageUrl,
@@ -147,11 +159,30 @@
 
     private static TestimonialItemDto MapItem(TestimonialItemModel item) => new()
     {
+        Id = item.Id,
         Icon = item.Icon ?? string.Empty,
+        IconVisual = BlockUpdateDtoMapper.ToIconDto(item.IconVisual),
+        BadgeText = item.BadgeText,
+        Highlighted = item.Highlighted,
         Title = item.Title ?? new(),
         Description = item.Description ?? new(),
         ImageUrl = item.ImageUrl,
         Visible = item.Visible,
         Order = item.Order
+    };
+
+    private static IconReferenceModel? CopyIcon(IconReferenceModel? value) => value is null ? null : new()
+    {
+        SchemaVersion = value.SchemaVersion,
+        Source = value.Source,
+        ClassName = value.ClassName,
+        ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource,
+        Url = value.Url,
+        StorageKey = value.StorageKey,
+        FileName = value.FileName,
+        ContentType = value.ContentType,
+        SizeBytes = value.SizeBytes,
+        AltText = new(value.AltText)
     };
 }

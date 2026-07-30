@@ -1,5 +1,7 @@
 using System.Text.Json.Serialization;
 
+using Contracts.Icons;
+
 namespace Contracts.Global
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -85,8 +87,15 @@ namespace Contracts.Global
         public string Id { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public PublicIconReferenceDto? IconVisual { get; set; }
         public string Href { get; set; } = string.Empty;
         public int Order { get; set; }
+    }
+
+    public class PublicSocialButtonGroup
+    {
+        public bool GroupVisible { get; set; }
+        public List<PublicSocialButton> Buttons { get; set; } = new();
     }
 }
 

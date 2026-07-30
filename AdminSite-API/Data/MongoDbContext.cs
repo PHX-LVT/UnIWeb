@@ -51,6 +51,7 @@ namespace FullProject.Data
         public IMongoCollection<VisitorMetricCounter> VisitorMetrics => _database.GetCollection<VisitorMetricCounter>("visitor_metrics");
         public IMongoCollection<SiteSettings> Settings => _database.GetCollection<SiteSettings>("settings");
         public IMongoCollection<Branding> Branding => _database.GetCollection<Branding>("branding");
+        public IMongoCollection<SocialButtonGroup> SocialButtons => _database.GetCollection<SocialButtonGroup>("social");
 
     }
 }

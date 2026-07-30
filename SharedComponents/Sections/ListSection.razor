@@ -36,10 +36,10 @@
                                  alt="@StyleHelper.Lang(item.Title, Lang)" />
                         </div>
                     }
-                    else if (Section.ShowIcon == true && !string.IsNullOrEmpty(item.Icon))
+                    else if (Section.ShowIcon == true && (item.IconVisual is not null || !string.IsNullOrEmpty(item.Icon)))
                     {
                         <div class="sc-list__card-icon">
-                            <i class="@item.Icon"></i>
+                            <ContentIcon Icon="item.IconVisual" LegacyClass="item.Icon" Lang="Lang" />
                         </div>
                     }
                     <div class="sc-list__card-body">

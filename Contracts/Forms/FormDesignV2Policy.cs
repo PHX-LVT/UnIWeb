@@ -28,15 +28,6 @@ public static class FormDesignV2Policy
     public const int CtaMaximumWidthPx = 1200;
 
     private const string RowIdentityNamespace = "form-design-v2-row";
-    private static readonly HashSet<string> InformationIconKeys = new(StringComparer.Ordinal)
-    {
-        "fas fa-circle-info",
-        "fas fa-phone",
-        "fas fa-envelope",
-        "fas fa-location-dot",
-        "fas fa-clock",
-        "fas fa-link"
-    };
 
     public static FormDesignV2SettingsDto CreateDefault(
         string? definitionId,
@@ -213,7 +204,7 @@ public static class FormDesignV2Policy
     };
 
     public static bool IsGovernedInformationIcon(string? icon) =>
-        !string.IsNullOrWhiteSpace(icon) && InformationIconKeys.Contains(icon.Trim());
+        Contracts.Icons.IconCatalog.IsAllowed(icon, Contracts.Icons.IconContext.FormInformation);
 
     public static bool AreEquivalent(FormDesignV2SettingsDto? left, FormDesignV2SettingsDto? right)
     {

@@ -67,7 +67,7 @@ namespace AdminSite.Services
             _http.PostAsync<object>("api/admin/content/permanent-delete", new { Ids = ids.ToList() });
 
 
-        public Task<ApiResponse<List<ManagedResourceModel>>> GetResourcesAsync(string? kind = null, string? search = null, bool includeInactive = true, string? albumId = null)
+        public Task<ApiResponse<List<ManagedResourceModel>>> GetResourcesAsync(string? kind = null, string? search = null, bool includeInactive = true, string? albumId = null, string? purpose = null, string? usage = null)
         {
             var query = new List<string>();
             if (!string.IsNullOrWhiteSpace(kind))
@@ -76,6 +76,10 @@ namespace AdminSite.Services
                 query.Add($"search={Uri.EscapeDataString(search)}");
             if (!string.IsNullOrWhiteSpace(albumId))
                 query.Add($"albumId={Uri.EscapeDataString(albumId)}");
+            if (!string.IsNullOrWhiteSpace(purpose))
+                query.Add($"purpose={Uri.EscapeDataString(purpose)}");
+            if (!string.IsNullOrWhiteSpace(usage))
+                query.Add($"usage={Uri.EscapeDataString(usage)}");
             query.Add($"includeInactive={includeInactive.ToString().ToLowerInvariant()}");
             var suffix = query.Count == 0 ? string.Empty : "?" + string.Join("&", query);
             return _http.GetAsync<List<ManagedResourceModel>>($"api/admin/resources{suffix}");
@@ -123,6 +127,27 @@ namespace AdminSite.Services
                 maxBytes: 250 * 1024 * 1024,
                 formFields: BuildUploadFields(kind, albumId));
 
+        public Task<ApiResponse<ManagedResourceModel>> UploadCustomIconAsync(
+            Microsoft.AspNetCore.Components.Forms.IBrowserFile file,
+            string? originalSourceUrl = null,
+            string? licenseName = null,
+            string? attribution = null)
+        {
+            var fields = new Dictionary<string, string>
+            {
+                ["Kind"] = "image",
+                ["Purpose"] = "custom-icon"
+            };
+            AddOptional(fields, "OriginalSourceUrl", originalSourceUrl);
+            AddOptional(fields, "LicenseName", licenseName);
+            AddOptional(fields, "Attribution", attribution);
+            return _http.PostFileAsync<ManagedResourceModel>(
+                "api/admin/resources/upload",
+                file,
+                maxBytes: 2 * 1024 * 1024,
+                formFields: fields);
+        }
+
         public Task<ApiResponse<ManagedResourceUploadBatchModel>> UploadResourcesAsync(
             IReadOnlyList<Microsoft.AspNetCore.Components.Forms.IBrowserFile> files,
             string kind,
@@ -152,6 +177,11 @@ namespace AdminSite.Services
             if (!string.IsNullOrWhiteSpace(albumId))
                 fields["AlbumId"] = albumId;
             return fields;
+        }
+
+        private static void AddOptional(IDictionary<string, string> fields, string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) fields[key] = value.Trim();
         }
 
         public Task<ApiResponse<List<ContentAuditLogModel>>> GetLogsAsync(string stableId) =>

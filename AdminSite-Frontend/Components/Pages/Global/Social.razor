@@ -1,6 +1,7 @@
 @page "/global/social"
 @inject SocialService SocialService
 @inject IHttpService Http
+@using Contracts.Icons
 
 <GlobalWorkspaceHeader />
 
@@ -42,8 +43,14 @@ else if (_group is not null)
             {
                 <div style="display:flex;align-items:center;gap:1rem;
                     padding:.75rem 0;border-bottom:1px solid var(--border)">
-                    <i class="@btn.Icon" style="width:24px;text-align:center;
-                    color:var(--primary-light)"></i>
+                    @if (string.Equals(btn.IconVisual?.Source, IconSources.Custom, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(btn.IconVisual?.Url))
+                    {
+                        <img src="@btn.IconVisual!.Url" alt="" style="width:24px;height:24px;object-fit:contain" />
+                    }
+                    else
+                    {
+                        <i class="@(btn.IconVisual?.ClassName ?? btn.Icon)" style="width:24px;text-align:center;color:var(--primary-light)"></i>
+                    }
                     <div style="flex:1">
                         <div style="font-weight:500">@btn.Label</div>
                         <div class="text-muted" style="font-size:.8rem">@btn.Href</div>
@@ -86,9 +93,9 @@ else if (_group is not null)
                     <DxTextBox @bind-Text="_form.Href" CssClass="w-100" />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">@T("BootstrapIconClass")</label>
-                    <DxTextBox @bind-Text="_form.Icon" CssClass="w-100"
-                               NullText="fab fa-facebook" />
+                    <label class="form-label">@T("Icon")</label>
+                    <IconPickerField @bind-Value="_form.Icon" @bind-Visual="_form.IconVisual"
+                                     Label="@T("Icon")" Context="IconContext.SocialBrand" />
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
                     <DxCheckBox @bind-Checked="_form.Visible" /> @T("Visible")
@@ -132,6 +139,7 @@ else if (_group is not null)
             Label = btn.Label,
             Href = btn.Href,
             Icon = btn.Icon,
+            IconVisual = CopyIcon(btn.IconVisual),
             Visible = btn.Visible
         };
         _showModal = true;
@@ -175,4 +183,19 @@ else if (_group is not null)
     }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    private static IconReferenceModel? CopyIcon(IconReferenceModel? value) => value is null ? null : new()
+    {
+        SchemaVersion = value.SchemaVersion,
+        Source = value.Source,
+        ClassName = value.ClassName,
+        ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource,
+        Url = value.Url,
+        StorageKey = value.StorageKey,
+        FileName = value.FileName,
+        ContentType = value.ContentType,
+        SizeBytes = value.SizeBytes,
+        AltText = new(value.AltText)
+    };
 }

@@ -19,13 +19,13 @@ public static class BlockContractService
     private static readonly string[] AspectRatioValues = ["auto", "square", "landscape", "widescreen", "portrait"];
     private static readonly string[] MediaFitValues = ["cover", "contain"];
     private static readonly string[] MediaPositionValues = ["center", "top", "bottom", "left", "right"];
-    private static readonly string[] ResponsiveModes = ["inherit", "stack", "compact-preserve", "horizontal-scroll", "scroll", "preserve", "custom", "hide"];
+    private static readonly string[] ResponsiveModes = ["inherit", "stack", "compact-preserve", "horizontal-scroll", "scroll", "preserve", "custom", "hide", "formation"];
     private static readonly string[] AnimationEffects = ["none", "fade", "rise", "fall", "slide", "slide-left", "slide-right", "scale"];
     private static readonly string[] AnimationTriggers = ["enter-viewport", "load"];
     private static readonly string[] Easings = ["linear", "ease", "ease-in", "ease-out", "ease-in-out"];
     private static readonly string[] ContinuousEffects = ["none", "rotate-slow"];
-    private static readonly string[] ContainerModes = ["stack", "row", "grid", "split", "freeform", "orbit", "semicircle"];
-    private static readonly string[] ContainerPurposes = ["collection", "composition"];
+    private static readonly string[] ContainerModes = ["stack", "row", "grid", "split", "freeform", "orbit", "semicircle", "formation"];
+    private static readonly string[] ContainerPurposes = ["collection", "composition", "formation"];
     private static readonly string[] BlockTypes = BlockCapabilityCatalog.Types.ToArray();
     private static readonly string[] AlignItemsValues = ["stretch", "start", "center", "end"];
     private static readonly string[] JustifyContentValues = ["start", "center", "end", "between", "around", "evenly"];
@@ -267,7 +267,13 @@ public static class BlockContractService
             MobileMode = Choice(incoming?.MobileMode, ResponsiveModes, current.MobileMode, "stack"),
             CompactRadius = Math.Clamp(incoming?.CompactRadius ?? current.CompactRadius, 60, 220),
             CompactChildWidth = Math.Clamp(incoming?.CompactChildWidth ?? current.CompactChildWidth, 72, 180),
-            GeometryLocked = incoming?.GeometryLocked ?? current.GeometryLocked,
+            SizeMode = Choice(incoming?.SizeMode, ["small", "medium", "large", "custom"], current.SizeMode, "medium"),
+            CustomWidthPx = ClampNullableInt(incoming?.CustomWidthPx ?? current.CustomWidthPx, 240, 2000),
+            ItemSize = Choice(incoming?.ItemSize, ["compact", "standard", "large"], current.ItemSize, "standard"),
+            FormationSpacing = Choice(incoming?.FormationSpacing, ["compact", "standard", "wide"], current.FormationSpacing, "standard"),
+            ConnectorColorMode = Choice(incoming?.ConnectorColorMode, ["theme-primary", "theme-accent", "color"], current.ConnectorColorMode, "theme-accent"),
+            ConnectorColor = NormalizeColor(incoming?.ConnectorColor, current.ConnectorColor),
+            ConnectorStyle = Choice(incoming?.ConnectorStyle, ["solid", "dashed", "dotted", "none"], current.ConnectorStyle, "solid"),
             ShareAppearance = incoming?.ShareAppearance ?? current.ShareAppearance,
             SharedAppearance = sharedAppearance,
             Diagram = ContainerDiagramContractService.Merge(current.Diagram, incoming?.Diagram)
@@ -356,7 +362,13 @@ public static class BlockContractService
             MobileMode = value.MobileMode,
             CompactRadius = value.CompactRadius,
             CompactChildWidth = value.CompactChildWidth,
-            GeometryLocked = value.GeometryLocked,
+            SizeMode = value.SizeMode,
+            CustomWidthPx = value.CustomWidthPx,
+            ItemSize = value.ItemSize,
+            FormationSpacing = value.FormationSpacing,
+            ConnectorColorMode = value.ConnectorColorMode,
+            ConnectorColor = value.ConnectorColor,
+            ConnectorStyle = value.ConnectorStyle,
             ShareAppearance = value.ShareAppearance,
             SharedAppearance = value.SharedAppearance is null ? null : ToAdminAppearance(value.SharedAppearance),
             Diagram = ContainerDiagramContractService.ToAdmin(value.Diagram)
@@ -445,7 +457,13 @@ public static class BlockContractService
             MobileMode = value.MobileMode,
             CompactRadius = value.CompactRadius,
             CompactChildWidth = value.CompactChildWidth,
-            GeometryLocked = value.GeometryLocked,
+            SizeMode = value.SizeMode,
+            CustomWidthPx = value.CustomWidthPx,
+            ItemSize = value.ItemSize,
+            FormationSpacing = value.FormationSpacing,
+            ConnectorColorMode = value.ConnectorColorMode,
+            ConnectorColor = value.ConnectorColor,
+            ConnectorStyle = value.ConnectorStyle,
             ShareAppearance = value.ShareAppearance,
             SharedAppearance = value.SharedAppearance is null ? null : ToPublicAppearance(value.SharedAppearance),
             Diagram = ContainerDiagramContractService.ToPublic(value.Diagram)
@@ -707,7 +725,11 @@ public static class BlockContractService
         if (container is not null)
         {
             if (!string.IsNullOrWhiteSpace(container.Purpose) && !ContainerPurposes.Contains(container.Purpose))
-                errors.Add("Container purpose must be collection or composition.");
+                errors.Add("Container purpose must be collection, composition, or formation.");
+            if (!string.IsNullOrWhiteSpace(container.Mode) && !ContainerModes.Contains(container.Mode))
+                errors.Add("Container layout mode is not supported.");
+            if (!string.IsNullOrWhiteSpace(container.MobileMode) && !ResponsiveModes.Contains(container.MobileMode))
+                errors.Add("Container mobile mode is not supported.");
             if (!string.IsNullOrWhiteSpace(container.AllowedChildType) && !BlockTypes.Contains(container.AllowedChildType))
                 errors.Add("Container child type is not supported.");
             if (container.Purpose == "composition" && !string.IsNullOrWhiteSpace(container.AllowedChildType))
@@ -718,6 +740,25 @@ public static class BlockContractService
                 errors.Add("Compact radius must be between 60 and 220 pixels.");
             if (container.CompactChildWidth is < 72 or > 180)
                 errors.Add("Compact child width must be between 72 and 180 pixels.");
+            if (!string.IsNullOrWhiteSpace(container.SizeMode) &&
+                container.SizeMode is not ("small" or "medium" or "large" or "custom"))
+                errors.Add("Formation size mode is not supported.");
+            if (container.CustomWidthPx is < 240 or > 2000)
+                errors.Add("Formation custom width must be between 240 and 2000 pixels.");
+            if (!string.IsNullOrWhiteSpace(container.ItemSize) &&
+                container.ItemSize is not ("compact" or "standard" or "large"))
+                errors.Add("Formation Block size is not supported.");
+            if (!string.IsNullOrWhiteSpace(container.FormationSpacing) &&
+                container.FormationSpacing is not ("compact" or "standard" or "wide"))
+                errors.Add("Formation spacing is not supported.");
+            if (!string.IsNullOrWhiteSpace(container.ConnectorColorMode) &&
+                container.ConnectorColorMode is not ("theme-primary" or "theme-accent" or "color"))
+                errors.Add("Formation connector color mode is not supported.");
+            if (!string.IsNullOrWhiteSpace(container.ConnectorStyle) &&
+                container.ConnectorStyle is not ("solid" or "dashed" or "dotted" or "none"))
+                errors.Add("Formation connector style is not supported.");
+            if (container.ConnectorColorMode == "color")
+                ValidateColor(container.ConnectorColor, "Formation connector color", errors);
             if (container.SharedAppearance is not null)
                 errors.AddRange(ValidateContract(container.SharedAppearance, null, null, null, null, false));
             errors.AddRange(ContainerDiagramContractService.Validate(container.Diagram));

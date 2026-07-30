@@ -194,7 +194,7 @@
                             var section = Sections.FirstOrDefault(s => s.Id == pos.Id);
                             if (section is null) continue;
 
-                            <div class="ez-section-overlay @(!section.Visible ? "ez-section-overlay--hidden" : "")"
+                            <div class="ez-section-overlay @(!section.Visible ? "ez-section-overlay--hidden" : "") @(string.Equals(_selectedSectionId, section.Id, StringComparison.Ordinal) ? "ez-section-overlay--selected" : "")"
                                  data-section-id="@(section.Id)"
                                  style="position: absolute;
                                         top: @(pos.Top)px;
@@ -228,16 +228,17 @@
 
                                     <div style="position: absolute; inset: 0;
                                                 pointer-events: auto; cursor: pointer; z-index: 1;"
+                                         data-section-select-id="@(section.Id)"
                                          @onclick="() => SelectSection(section)">
                                     </div>
                                 }
-                                else if (CanArrange && IsArrangeCompatible(section))
+                                else if (CanArrange && IsArrangeCompatible(section) && !IsArrangeScopeSection(section.Id))
                                 {
-                                    <div class="ez-arrange-section @(IsArrangeScopeSection(section.Id) ? "ez-arrange-section--active" : "ez-arrange-section--target")"
+                                    <div class="ez-arrange-section ez-arrange-section--target"
                                          style="position: absolute; inset: 6px; pointer-events: auto; cursor: pointer; z-index: 1;"
                                          @onclick="() => TargetArrangeSection(section.Id)"
                                          @onclick:stopPropagation="true">
-                                        <span class="ez-arrange-section__label">@GetArrangeSectionLabel(section)</span>
+                                        <span class="ez-arrange-section__label">@ArrangeSectionDisplayName(section)</span>
                                     </div>
                                 }
                             </div>
@@ -248,7 +249,8 @@
                             @foreach (var zone in _zonePositions)
                             {
                                 var zoneSection = Sections.FirstOrDefault(s => s.Id == zone.SectionId);
-                                if (zoneSection is null || !IsArrangeCompatible(zoneSection)) continue;
+                                if (zoneSection is null || !IsArrangeCompatible(zoneSection) ||
+                                    !IsArrangeScopeSection(zone.SectionId)) continue;
 
                                 <div class="ez-arrange-zone-overlay @(IsArrangeTargetZone(zone) ? "ez-arrange-zone-overlay--active" : null)"
                                      data-section-id="@zone.SectionId"
@@ -267,6 +269,29 @@
                                     <span class="ez-arrange-zone-overlay__label">
                                         @(zone.Kind == "column" ? T("ColumnZone") : T("CanvasZone"))
                                     </span>
+                                    @if (string.Equals(zone.Kind, "column", StringComparison.OrdinalIgnoreCase) &&
+                                         IsArrangeScopeSection(zone.SectionId))
+                                    {
+                                        <div class="ez-arrange-zone-workspace" @onclick:stopPropagation="true">
+                                            <button type="button"
+                                                    class="ez-arrange-zone-workspace__button"
+                                                    title="@T("ShrinkWorkspace")"
+                                                    aria-label="@T("ShrinkWorkspace")"
+                                                    @onclick="() => ResizeArrangeZoneWorkspaceAsync(zone, -ArrangeColumnWorkspaceStepPx)">
+                                                <i class="fas fa-minus"></i>
+                                            </button>
+                                            <span class="ez-arrange-zone-workspace__value">
+                                                @ArrangeZoneWorkspaceHeight(zone)px
+                                            </span>
+                                            <button type="button"
+                                                    class="ez-arrange-zone-workspace__button"
+                                                    title="@T("ExpandWorkspace")"
+                                                    aria-label="@T("ExpandWorkspace")"
+                                                    @onclick="() => ResizeArrangeZoneWorkspaceAsync(zone, ArrangeColumnWorkspaceStepPx)">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                    }
                                 </div>
                             }
 
@@ -358,29 +383,21 @@
     </div>
 </div>
 
-<DxWindow Visible="@(CanModify && _selectedSection is not null)"
-          VisibleChanged="@((bool visible) => { if (!visible) ClosePanel(); })"
-          Width="560px"
-          Height="calc(100vh - 72px)"
-          MaxWidth="90vw"
-          CssClass="ez-section-editor-window"
-          BodyCssClass="ez-section-editor-window__body"
-          AllowResize="false"
-          CloseOnEscape="false"
-          ShowCloseButton="false"
-          HorizontalAlignment="HorizontalAlignment.Right"
-          VerticalAlignment="VerticalAlignment.Center">
-    <BodyTemplate>
-        @if (_selectedSection is not null)
-        {
+@if (CanModify && SelectedSection is { } selectedSection)
+{
+    <aside class="ez-section-editor-window"
+           role="complementary"
+           aria-label="@T("SectionEditorTabs")"
+           data-selected-section-id="@selectedSection.Id">
+        <div class="ez-section-editor-window__body">
             <div class="ez-edit-window-shell">
-                <EditPanel @key="_selectedSection.Id"
-                           Section="_selectedSection"
+                <EditPanel @ref="_editPanel"
+                           Section="selectedSection"
                            PageId="@Page.Id"
                            InitialTab="@_editPanelInitialTab"
                            InitialBlockId="@_editPanelSelectedBlockId"
                            BlockEditorRefreshVersion="@_blockEditorRefreshVersion"
-                           CanArrangeBlocks="@IsArrangeCompatible(_selectedSection)"
+                           CanArrangeBlocks="@IsArrangeCompatible(selectedSection)"
                            OnClose="ClosePanel"
                            OnSectionSaved="HandleSectionSaved"
                            OnSectionsChanged="OnSectionsChanged"
@@ -394,9 +411,9 @@
                            OnDirtyChanged="HandleSectionEditorDirtyChanged"
                            OnSaveAsPresetRequested="OpenSectionPresetDialog" />
             </div>
-        }
-    </BodyTemplate>
-</DxWindow>
+        </div>
+    </aside>
+}
 
 @if (_showArrangeBlockWizard && _blockCreationRequest is not null)
 {
@@ -428,7 +445,7 @@
           Width="440px"
           MaxWidth="calc(100vw - 32px)"
           ShowCloseButton="false"
-          CloseOnEscape="true"
+          CloseOnEscape="@(!_sectionSwitchBusy)"
           AllowResize="false"
           HorizontalAlignment="HorizontalAlignment.Center"
           VerticalAlignment="VerticalAlignment.Center">
@@ -440,9 +457,9 @@
             </header>
             <p>@T("UnsavedSectionSelectionHint")</p>
             <footer>
-                <button type="button" class="btn-admin btn-ghost" @onclick="KeepCurrentSection">@T("KeepEditing")</button>
-                <button type="button" class="btn-admin btn-danger" @onclick="DiscardAndSelectPendingSection">
-                    <i class="fas fa-trash-alt" aria-hidden="true"></i>@T("DiscardAndContinue")
+                <button type="button" class="btn-admin btn-ghost" disabled="@_sectionSwitchBusy" @onclick="KeepCurrentSection">@T("KeepEditing")</button>
+                <button type="button" class="btn-admin btn-danger" disabled="@_sectionSwitchBusy" @onclick="DiscardAndSelectPendingSection">
+                    <i class="fas @(_sectionSwitchBusy ? "fa-spinner fa-spin" : "fa-trash-alt")" aria-hidden="true"></i>@T("DiscardAndContinue")
                 </button>
             </footer>
         </div>
@@ -568,12 +585,20 @@
                             case "bullet-list":
                             case "step":
                             case "icon":
-                            case "container":
                                 <DesignBlockEditor Block="editBlock"
                                                    PageId="@Page.Id"
                                                    SectionId="@editBlock.SectionId"
                                                    Languages="_languages"
                                                    OnSaved="HandleArrangeContentSaved" />
+                                break;
+                            case "container":
+                                <ContainerBlockEditor Block="editBlock"
+                                                      PageId="@Page.Id"
+                                                      SectionId="@editBlock.SectionId"
+                                                      Languages="_languages"
+                                                      Children="ArrangeFormationChildren"
+                                                      SlotSelected="OpenArrangeContentEditor"
+                                                      OnSaved="HandleArrangeContentSaved" />
                                 break;
                             default:
                                 <p class="text-muted">@T("UnknownBlockType")</p>
@@ -604,13 +629,15 @@
     [Parameter] public bool ArrangeMode { get; set; }
     [Parameter] public bool CanEdit { get; set; } = true;
 
-    private SectionModel? _selectedSection;
+    private string? _selectedSectionId;
     private bool _publishing = false;
     private bool _resetting = false;
     private const double DesktopCanvasScale = 0.8;
     private const double DevicePreviewScale = 0.7;
     private const int ArrangeSectionMaxHeightPx = 3000;
     private const int ArrangeFormSectionPaddingPx = 40;
+    private const int ArrangeColumnWorkspaceDefaultHeightPx = 720;
+    private const int ArrangeColumnWorkspaceStepPx = 120;
     private double _iframeHeight = 2000;
     private List<SectionPosition> _sectionPositions = new();
     private List<BlockPosition> _blockPositions = new();
@@ -619,6 +646,8 @@
     private readonly HashSet<string> _selectedBlockIds = new(StringComparer.Ordinal);
     private readonly Stack<CanvasHistoryEntry> _undoHistory = new();
     private readonly Stack<CanvasHistoryEntry> _redoHistory = new();
+    private readonly Dictionary<string, int> _arrangeZoneWorkspaceHeights = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _appliedArrangeZoneWorkspaceHeights = new(StringComparer.Ordinal);
     private string? _arrangeBlocksLoadedForPage;
     private bool _loadingArrangeBlocks;
     private bool _runningAuthoringCommand;
@@ -649,9 +678,12 @@
     private bool _sortableInitialized;
     private bool _arrangeEditorInitialized;
     private bool _sectionEditorSizingInitialized;
+    private EditPanel? _editPanel;
     private bool _sectionEditorDirty;
     private bool _showSectionSelectionGuard;
-    private SectionModel? _pendingSectionSelection;
+    private string? _pendingSectionSelectionId;
+    private long _sectionSelectionVersion;
+    private bool _sectionSwitchBusy;
     private string? _currentPageId;
     private string? _currentPreviewUrl;
     private string? _currentLang;
@@ -667,6 +699,9 @@
     private bool CanModify => CanEdit && EditMode && !ArrangeWorkspaceActive;
     private bool CanArrange => CanEdit && EditMode && ArrangeWorkspaceActive;
     private bool ArrangeAuthoringBusy => _runningAuthoringCommand || _creatingArrangeBlock;
+    private SectionModel? SelectedSection => string.IsNullOrWhiteSpace(_selectedSectionId)
+        ? null
+        : Sections.FirstOrDefault(section => string.Equals(section.Id, _selectedSectionId, StringComparison.Ordinal));
     private IReadOnlyList<BlockPosition> SelectedPositions => _blockPositions
         .Where(position => _selectedBlockIds.Contains(position.Id))
         .ToList();
@@ -722,6 +757,12 @@
     }
     private IReadOnlyList<CanvasArrangeToolbar.CanvasBlockSelectorItem> BlockSelectorItems => BuildBlockSelectorItems();
     private BlockModel? ArrangeEditBlock => ArrangeBlock(_arrangeContentEditBlockId);
+    private IReadOnlyList<BlockModel> ArrangeFormationChildren => ArrangeEditBlock?.Type == "container"
+        ? _arrangeBlocks.Values
+            .Where(block => string.Equals(block.ParentBlockId, ArrangeEditBlock.Id, StringComparison.Ordinal))
+            .OrderBy(block => block.Order)
+            .ToList()
+        : Array.Empty<BlockModel>();
     private CanvasArrangeToolbar.CanvasBlockVisualState? SelectedVisualState
     {
         get
@@ -756,7 +797,9 @@
         }
     }
     private bool IsInteractivePreview => !CanModify && !CanArrange;
-    private string PreviewMode => CanArrange ? "arrange" : CanModify ? "editor" : "preview";
+    // Edit and Arrange share the same authoring document. Switching between
+    // their parent overlays must not recreate the iframe or lose scroll.
+    private string PreviewMode => CanModify || CanArrange ? "editor" : "preview";
     private string AddChildTitle => CanAddChildPage
         ? "Create a child page under this parent page."
         : "Child pages cannot have child pages. Select the parent page to add another child page.";
@@ -773,18 +816,28 @@
         _ => 1440
     };
 
+    private int PreviewViewportHeight => EffectiveViewport switch
+    {
+        "tablet" => 768,
+        "mobile" => 812,
+        _ => 900
+    };
+
     private double CanvasScale => EffectiveViewport == "desktop"
         ? DesktopCanvasScale
         : DevicePreviewScale;
 
-    private double ScaledIframeHeight => _iframeHeight * CanvasScale;
+    private double EffectiveIframeHeight => IsInteractivePreview
+        ? PreviewViewportHeight
+        : _iframeHeight;
+    private double ScaledIframeHeight => EffectiveIframeHeight * CanvasScale;
     private string PreviewShellStyle =>
         $"width: {CssNumber(PreviewViewportWidth * CanvasScale)}px; min-width: 0; height: {CssNumber(ScaledIframeHeight)}px; margin: 0 auto;";
     private string PreviewScaleStyle =>
-        $"width: {PreviewViewportWidth}px; height: {CssNumber(_iframeHeight)}px; transform: scale({CssNumber(CanvasScale)}); transform-origin: top left;";
+        $"width: {PreviewViewportWidth}px; height: {CssNumber(EffectiveIframeHeight)}px; transform: scale({CssNumber(CanvasScale)}); transform-origin: top left;";
     private string PreviewIframeStyle =>
-        $"width: {PreviewViewportWidth}px; height: {CssNumber(_iframeHeight)}px; border: none; display: block; pointer-events: {(CanArrange ? "none" : "auto")};";
-    private const string PreviewIframeScrolling = "no";
+        $"width: {PreviewViewportWidth}px; height: {CssNumber(EffectiveIframeHeight)}px; border: none; display: block; pointer-events: {(CanArrange ? "none" : "auto")};";
+    private string PreviewIframeScrolling => IsInteractivePreview ? "auto" : "no";
     private static string CssNumber(double value) =>
         value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
     private IEnumerable<PageChoice> PageChoices
@@ -937,7 +990,7 @@
             await LoadArrangeBlocksAsync();
         }
 
-        if (_selectedSection is not null && !_sectionEditorSizingInitialized)
+        if (SelectedSection is not null && !_sectionEditorSizingInitialized)
         {
             try
             {
@@ -948,6 +1001,18 @@
             {
                 // The editor remains usable at its governed default width.
             }
+        }
+        else if (SelectedSection is null && _sectionEditorSizingInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("destroySectionEditorPanelSizing");
+            }
+            catch (JSException)
+            {
+                // The editor DOM can disappear before its resize listeners are released.
+            }
+            _sectionEditorSizingInitialized = false;
         }
 
         if (!_overlayInitialized && _dotNetRef is not null)
@@ -988,10 +1053,23 @@
                 Http.Notify(T("NotificationBlockArrangingInitFailed"), 500);
             }
         }
+
+        if (CanArrange)
+        {
+            await SyncArrangeColumnWorkspacesAsync();
+        }
     }
 
     protected override void OnParametersSet()
     {
+        if (!string.IsNullOrWhiteSpace(_selectedSectionId) && SelectedSection is null)
+        {
+            _selectedSectionId = null;
+            _sectionEditorDirty = false;
+            _pendingSectionSelectionId = null;
+            _showSectionSelectionGuard = false;
+        }
+
         var pageChanged = _currentPageId is not null && _currentPageId != Page.Id;
         if (pageChanged)
         {
@@ -1031,7 +1109,10 @@
             !langChanged && !modeChanged && !arrangeChanged)
         {
             if (sectionToRestore is not null)
-                _selectedSection = sectionToRestore;
+            {
+                _selectedSectionId = sectionToRestore.Id;
+                _sectionSelectionVersion++;
+            }
             return;
         }
 
@@ -1049,7 +1130,8 @@
         _blockPositions = new();
         _zonePositions = new();
         _iframeHeight = 2000;
-        _selectedSection = sectionToRestore;
+        _selectedSectionId = sectionToRestore?.Id;
+        _sectionSelectionVersion++;
         _selectedBlockIds.Clear();
         _activeArrangeSectionId = null;
         _activeArrangeZoneId = null;
@@ -1077,6 +1159,9 @@
         catch (JSDisconnectedException)
         {
         }
+        catch (JSException)
+        {
+        }
 
         _dotNetRef?.Dispose();
     }
@@ -1090,6 +1175,15 @@
         List<BlockPosition>? blockPositions,
         List<ZonePosition>? zonePositions)
     {
+        // Interactive Preview is a bounded browser viewport. Its document must
+        // scroll inside the iframe so sticky, fixed and observer-driven content
+        // behaves like the public site. Edit and Arrange still need the complete
+        // document height for their coordinate overlays.
+        if (IsInteractivePreview)
+        {
+            return;
+        }
+
         var nextHeight = Math.Max(documentHeight, 400);
         blockPositions ??= new();
         zonePositions ??= new();
@@ -1318,7 +1412,7 @@
         "bullet-list" => "BulletList",
         "step" => "Step",
         "icon" => "Icon",
-        "container" => "Container",
+        "container" => "Formation",
         _ => "Text"
     };
 
@@ -1376,6 +1470,8 @@
             container.ContainerLayout?.Mode,
             container.ContainerLayout?.Columns);
         var capacityLabel = $"{used}/{capacity}";
+        if (ContainerPresetCatalog.IsFormation(container.PresetKey))
+            return $"{T("Formation")} · {capacityLabel}";
         if (NormalizeContainerPurpose(container.ContainerLayout?.Purpose) != "collection")
             return $"{T("Composition")} · {capacityLabel}";
         var allowed = container?.ContainerLayout?.AllowedChildType;
@@ -1420,11 +1516,14 @@
         StateHasChanged();
     }
 
-    private void TargetArrangeSection(string sectionId)
+    private async Task TargetArrangeSection(string sectionId)
     {
         if (!CanArrange) return;
         var section = Sections.FirstOrDefault(item => item.Id == sectionId && IsArrangeCompatible(item));
         if (section is null) return;
+
+        if (!string.Equals(_activeArrangeSectionId, section.Id, StringComparison.Ordinal))
+            await ClearArrangeColumnWorkspacesAsync();
 
         _activeArrangeSectionId = section.Id;
         _arrangeReturnSectionId = section.Id;
@@ -1439,11 +1538,14 @@
         _blockCreationRequest = null;
     }
 
-    private void TargetArrangeZone(ZonePosition zone)
+    private async Task TargetArrangeZone(ZonePosition zone)
     {
         if (!CanArrange) return;
         var section = Sections.FirstOrDefault(item => item.Id == zone.SectionId && IsArrangeCompatible(item));
         if (section is null) return;
+
+        if (!string.Equals(_activeArrangeSectionId, section.Id, StringComparison.Ordinal))
+            await ClearArrangeColumnWorkspacesAsync();
 
         _activeArrangeSectionId = section.Id;
         _arrangeReturnSectionId = section.Id;
@@ -1462,6 +1564,82 @@
         CanArrange &&
         string.Equals(zone.SectionId, _activeArrangeSectionId, StringComparison.Ordinal) &&
         string.Equals(zone.Id, _activeArrangeZoneId, StringComparison.Ordinal);
+
+    private static string ArrangeZoneWorkspaceKey(string sectionId, string zoneId) =>
+        $"{sectionId}|{zoneId}";
+
+    private int ArrangeZoneWorkspaceHeight(ZonePosition zone)
+    {
+        var key = ArrangeZoneWorkspaceKey(zone.SectionId, zone.Id);
+        return _arrangeZoneWorkspaceHeights.TryGetValue(key, out var height)
+            ? height
+            : Math.Max(ArrangeColumnWorkspaceDefaultHeightPx, (int)Math.Ceiling(zone.Height));
+    }
+
+    private async Task ResizeArrangeZoneWorkspaceAsync(ZonePosition zone, int delta)
+    {
+        if (!CanArrange || !string.Equals(zone.Kind, "column", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var key = ArrangeZoneWorkspaceKey(zone.SectionId, zone.Id);
+        var next = Math.Clamp(
+            ArrangeZoneWorkspaceHeight(zone) + delta,
+            ArrangeColumnWorkspaceDefaultHeightPx,
+            ArrangeSectionMaxHeightPx);
+        _arrangeZoneWorkspaceHeights[key] = next;
+        _appliedArrangeZoneWorkspaceHeights.Remove(key);
+        await SyncArrangeColumnWorkspacesAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SyncArrangeColumnWorkspacesAsync()
+    {
+        if (!CanArrange || string.IsNullOrWhiteSpace(_activeArrangeSectionId))
+            return;
+
+        var section = Sections.FirstOrDefault(item => item.Id == _activeArrangeSectionId);
+        if (!string.Equals(section?.Type, "columns", StringComparison.OrdinalIgnoreCase))
+            return;
+        var sectionId = section!.Id;
+
+        foreach (var zone in _zonePositions.Where(item =>
+                     string.Equals(item.SectionId, sectionId, StringComparison.Ordinal) &&
+                     string.Equals(item.Kind, "column", StringComparison.OrdinalIgnoreCase)))
+        {
+            var key = ArrangeZoneWorkspaceKey(zone.SectionId, zone.Id);
+            var desired = ArrangeZoneWorkspaceHeight(zone);
+            _arrangeZoneWorkspaceHeights[key] = desired;
+            if (_appliedArrangeZoneWorkspaceHeights.TryGetValue(key, out var applied) && applied == desired)
+                continue;
+
+            try
+            {
+                var appliedToPreview = await JS.InvokeAsync<bool>(
+                    "setArrangeColumnWorkspace", zone.SectionId, zone.Id, desired);
+                if (appliedToPreview)
+                    _appliedArrangeZoneWorkspaceHeights[key] = desired;
+            }
+            catch (JSException)
+            {
+                // A stale browser asset must not terminate the Blazor circuit.
+                return;
+            }
+        }
+    }
+
+    private async Task ClearArrangeColumnWorkspacesAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("clearArrangeColumnWorkspaces");
+        }
+        catch (JSException)
+        {
+        }
+
+        _arrangeZoneWorkspaceHeights.Clear();
+        _appliedArrangeZoneWorkspaceHeights.Clear();
+    }
 
     [JSInvokable]
     public void ClearArrangeSelection()
@@ -1671,7 +1849,7 @@
             {
                 _editPanelInitialTab = "blocks";
                 _blockEditorRefreshVersion++;
-                await HandleBlocksChanged();
+                await HandleBlocksChanged(request.SectionId);
             }
             created = true;
         }
@@ -2293,7 +2471,8 @@
         _pendingArrangeExit = false;
         _pendingArrangeSelectionId = _editPanelSelectedBlockId;
         _editPanelInitialTab = "blocks";
-        _selectedSection = null;
+        _selectedSectionId = null;
+        _sectionSelectionVersion++;
         _restoreSectionEditorOnEdit = false;
         ResetArrangeWorkspaceState(clearActiveSection: false);
         await RefreshWorkspaceModeAsync();
@@ -2309,7 +2488,7 @@
         var index = Sections.FindIndex(section => section.Id == sectionId);
         if (index >= 0)
             Sections[index] = response.Data;
-        _selectedSection = response.Data;
+        _selectedSectionId = response.Data.Id;
         await EnterArrangeBlocks(sectionId);
     }
 
@@ -2334,11 +2513,13 @@
             return;
 
         var sectionId = _activeArrangeSectionId ?? _arrangeReturnSectionId;
+        await ClearArrangeColumnWorkspacesAsync();
         _editPanelSelectedBlockId = _selectedBlockIds.FirstOrDefault() ?? _editPanelSelectedBlockId;
         _arrangeBlocksActive = false;
         _restoreSectionEditorOnEdit = false;
         _editPanelInitialTab = "blocks";
-        _selectedSection = Sections.FirstOrDefault(item => item.Id == sectionId);
+        _selectedSectionId = Sections.Any(item => item.Id == sectionId) ? sectionId : null;
+        _sectionSelectionVersion++;
         _arrangeReturnSectionId = null;
         _pendingArrangeExit = false;
         ResetArrangeWorkspaceState(clearActiveSection: true);
@@ -2365,10 +2546,8 @@
 
     private void ResetArrangeWorkspaceState(bool clearActiveSection)
     {
-        _sectionPositions = new();
-        _blockPositions = new();
-        _zonePositions = new();
-        _iframeHeight = 2000;
+        // Keep the measured preview geometry. Clearing it shrinks the scaled
+        // iframe before its next report and clamps the canvas viewport to top.
         _selectedBlockIds.Clear();
         _showArrangeBlockWizard = false;
         _blockCreationRequest = null;
@@ -2376,7 +2555,7 @@
         _arrangeBlocksLoadedForPage = null;
         _undoHistory.Clear();
         _redoHistory.Clear();
-        _overlayInitialized = false;
+        _appliedArrangeZoneWorkspaceHeights.Clear();
         _sortableInitialized = false;
         _arrangeEditorInitialized = false;
         if (clearActiveSection)
@@ -2390,7 +2569,6 @@
 
     private async Task RefreshWorkspaceModeAsync()
     {
-        _previewVersion++;
         _currentPageId = Page.Id;
         _currentPreviewUrl = PreviewUrl;
         _currentLang = AdminLanguage;
@@ -2401,14 +2579,16 @@
 
     private async Task SelectSection(SectionModel section)
     {
-        if (!CanModify)
+        if (!CanModify || _sectionSwitchBusy)
             return;
 
-        if (_selectedSection is not null &&
-            !string.Equals(_selectedSection.Id, section.Id, StringComparison.Ordinal) &&
-            _sectionEditorDirty)
+        if (string.Equals(_selectedSectionId, section.Id, StringComparison.Ordinal))
+            return;
+
+        if (!string.IsNullOrWhiteSpace(_selectedSectionId) &&
+            (_sectionEditorDirty || _editPanel?.HasUnsavedChanges == true))
         {
-            _pendingSectionSelection = section;
+            _pendingSectionSelectionId = section.Id;
             _showSectionSelectionGuard = true;
             return;
         }
@@ -2419,11 +2599,12 @@
 
     private void SelectSectionWithoutGuard(SectionModel section)
     {
-        _editPanelInitialTab = "design";
         _editPanelSelectedBlockId = null;
-        _selectedSection = section;
+        _selectedSectionId = section.Id;
+        _sectionSelectionVersion++;
         _sectionEditorDirty = false;
-        _sectionEditorSizingInitialized = false;
+        _pendingSectionSelectionId = null;
+        _showSectionSelectionGuard = false;
     }
 
     private static bool IsArrangeCompatible(SectionModel section) =>
@@ -2436,24 +2617,24 @@
 
     private string GetArrangeSectionLabel(SectionModel section) =>
         string.Equals(section.Type, "columns", StringComparison.OrdinalIgnoreCase)
-            ? T("ColumnsBlockZones")
-            : T("CanvasBlockZone");
+            ? T("Columns")
+            : T("Canvas");
 
-    private void ClosePanel()
+    private Task ClosePanel()
     {
-        _ = JS.InvokeVoidAsync("destroySectionEditorPanelSizing");
-        _selectedSection = null;
+        _selectedSectionId = null;
+        _sectionSelectionVersion++;
         _editPanelInitialTab = "design";
         _editPanelSelectedBlockId = null;
         _sectionEditorDirty = false;
-        _sectionEditorSizingInitialized = false;
-        _pendingSectionSelection = null;
+        _pendingSectionSelectionId = null;
         _showSectionSelectionGuard = false;
+        return Task.CompletedTask;
     }
 
     private Task OpenSectionPresetDialog(string sectionId)
     {
-        _presetSection = Sections.FirstOrDefault(section => section.Id == sectionId) ?? _selectedSection;
+        _presetSection = Sections.FirstOrDefault(section => section.Id == sectionId) ?? SelectedSection;
         return Task.CompletedTask;
     }
 
@@ -2608,39 +2789,33 @@
     private void HandleEditorActiveBlockChanged(string? blockId) =>
         _editPanelSelectedBlockId = blockId;
 
-    private async Task HandleSectionSaved()
+    private async Task HandleSectionSaved(string sectionId)
     {
-        if (_selectedSection is not null)
+        var res = await SectionService.GetByIdAsync(Page.Id, sectionId);
+        if (res.Success && res.Data is not null)
         {
-            var selectedId = _selectedSection.Id;
-            var res = await SectionService.GetByIdAsync(Page.Id, selectedId);
-            if (res.Success && res.Data is not null)
+            var index = Sections.FindIndex(section => section.Id == sectionId);
+            if (index >= 0)
             {
-                _selectedSection = res.Data;
-
-                var index = Sections.FindIndex(s => s.Id == selectedId);
-                if (index >= 0)
-                {
-                    Sections[index] = res.Data;
-                }
-            }
-            else
-            {
-                _selectedSection = null;
+                Sections[index] = res.Data;
             }
         }
 
         await ReloadPreviewSafelyAsync();
     }
 
-    private void HandleSectionEditorDirtyChanged(bool dirty) => _sectionEditorDirty = dirty;
-
-    private async Task PreviewSectionDesign(SectionStyleModel style)
+    private void HandleSectionEditorDirtyChanged(EditPanel.SectionDirtyChange change)
     {
-        if (_selectedSection is null) return;
+        if (string.Equals(_selectedSectionId, change.SectionId, StringComparison.Ordinal))
+            _sectionEditorDirty = change.Dirty;
+    }
+
+    private async Task PreviewSectionDesign(EditPanel.SectionDesignPreviewChange change)
+    {
+        if (string.IsNullOrWhiteSpace(change.SectionId)) return;
         try
         {
-            await JS.InvokeVoidAsync("patchPreviewSectionStyle", _selectedSection.Id, style);
+            await JS.InvokeVoidAsync("patchPreviewSectionStyle", change.SectionId, change.Style);
         }
         catch
         {
@@ -2651,38 +2826,51 @@
     private async Task DiscardSectionChangesAndClose(string sectionId)
     {
         await ReloadSectionFromServer(sectionId);
-        ClosePanel();
+        await ClosePanel();
         await ReloadPreviewSafelyAsync();
     }
 
     private void KeepCurrentSection()
     {
+        if (_sectionSwitchBusy) return;
         _showSectionSelectionGuard = false;
-        _pendingSectionSelection = null;
+        _pendingSectionSelectionId = null;
     }
 
     private async Task DiscardAndSelectPendingSection()
     {
-        var pending = _pendingSectionSelection;
-        var currentId = _selectedSection?.Id;
-        _showSectionSelectionGuard = false;
-        _pendingSectionSelection = null;
-
-        if (!string.IsNullOrWhiteSpace(currentId))
-            await ReloadSectionFromServer(currentId);
-        await ReloadPreviewSafelyAsync();
-
-        if (pending is not null)
+        if (_sectionSwitchBusy) return;
+        var pendingId = _pendingSectionSelectionId;
+        var currentId = _selectedSectionId;
+        var operationVersion = ++_sectionSelectionVersion;
+        _sectionSwitchBusy = true;
+        try
         {
-            var refreshedPending = Sections.FirstOrDefault(section => section.Id == pending.Id) ?? pending;
-            SelectSectionWithoutGuard(refreshedPending);
+            if (!string.IsNullOrWhiteSpace(currentId))
+                await ReloadSectionFromServer(currentId);
+            await ReloadPreviewSafelyAsync();
+
+            if (_sectionSelectionVersion == operationVersion && !string.IsNullOrWhiteSpace(pendingId))
+            {
+                var pending = Sections.FirstOrDefault(section => section.Id == pendingId);
+                if (pending is not null)
+                    SelectSectionWithoutGuard(pending);
+            }
+        }
+        finally
+        {
+            _sectionSwitchBusy = false;
+            _showSectionSelectionGuard = false;
+            _pendingSectionSelectionId = null;
         }
     }
 
     private Task OnSectionSelectionGuardVisibilityChanged(bool visible)
     {
+        if (!visible && _sectionSwitchBusy)
+            return Task.CompletedTask;
         _showSectionSelectionGuard = visible;
-        if (!visible) _pendingSectionSelection = null;
+        if (!visible) _pendingSectionSelectionId = null;
         return Task.CompletedTask;
     }
 
@@ -2694,10 +2882,9 @@
         if (index >= 0) Sections[index] = response.Data;
     }
 
-    private async Task HandleBlocksChanged()
+    private async Task HandleBlocksChanged(string sectionId)
     {
-        if (_selectedSection is not null)
-            await RefreshSectionModelAsync(_selectedSection.Id);
+        await RefreshSectionModelAsync(sectionId);
         await ReloadPreviewSafelyAsync();
     }
 
@@ -2710,8 +2897,6 @@
         var index = Sections.FindIndex(section => section.Id == sectionId);
         if (index >= 0)
             Sections[index] = response.Data;
-        if (_selectedSection?.Id == sectionId)
-            _selectedSection = response.Data;
     }
 
     private async Task ToggleVisibility(SectionModel section)
@@ -2737,7 +2922,8 @@
             return;
         }
 
-        ClosePanel();
+        if (string.Equals(_selectedSectionId, section.Id, StringComparison.Ordinal))
+            await ClosePanel();
         await OnSectionsChanged.InvokeAsync();
         await ReloadPreviewSafelyAsync();
     }
@@ -2798,13 +2984,12 @@
     private async Task ReloadPreviewSafelyAsync()
     {
         _previewVersion++;
-        _sectionPositions = new();
-        _blockPositions = new();
-        _zonePositions = new();
-        _iframeHeight = 2000;
+        // Preserve the old shell height and overlays until the replacement
+        // document reports its geometry. This prevents scroll collapse.
         _overlayInitialized = false;
         _sortableInitialized = false;
         _arrangeEditorInitialized = false;
+        _appliedArrangeZoneWorkspaceHeights.Clear();
         await InvokeAsync(StateHasChanged);
     }
 

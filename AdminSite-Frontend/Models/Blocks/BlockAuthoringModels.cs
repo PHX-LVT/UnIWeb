@@ -6,6 +6,7 @@ public sealed class BlockAuthoringPolicyModel
     public bool ContentLocked { get; set; }
     public bool GeometryLocked { get; set; }
     public bool FullLocked { get; set; }
+    public bool IsPlaceholder { get; set; }
     public string? PresetSlotName { get; set; }
     public string? PresetSourceId { get; set; }
 }

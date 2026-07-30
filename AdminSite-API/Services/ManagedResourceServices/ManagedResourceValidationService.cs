@@ -22,6 +22,7 @@ namespace FullProject.Services
             var resource = new ManagedResource
             {
                 Kind = NormalizeKind(dto.Kind) ?? "file",
+                Purpose = NormalizePurpose(dto.Purpose),
                 Name = NormalizeLang(dto.Name),
                 Description = NormalizeLang(dto.Description),
                 Url = CleanUrl(dto.Url) ?? string.Empty,
@@ -31,6 +32,9 @@ namespace FullProject.Services
                 ContentType = dto.ContentType?.Trim() ?? string.Empty,
                 SizeBytes = Math.Max(0, dto.SizeBytes ?? 0),
                 Source = NormalizeSource(dto.Source),
+                OriginalSourceUrl = CleanUrl(dto.OriginalSourceUrl, required: false),
+                LicenseName = CleanOptional(dto.LicenseName, 120),
+                Attribution = CleanOptional(dto.Attribution, 500),
                 Tags = NormalizeTags(dto.Tags),
                 AlbumId = CleanOptionalObjectId(dto.AlbumId),
                 Active = dto.Active,
@@ -51,6 +55,7 @@ namespace FullProject.Services
         public List<string> ApplyUpdate(ManagedResource resource, ManagedResourceUpdateDto dto, string actorId)
         {
             var originalKind = resource.Kind;
+            var originalPurpose = resource.Purpose;
             var originalUrl = resource.Url;
             var originalStorageKey = resource.StorageKey;
             var originalFileName = resource.FileName;
@@ -59,6 +64,7 @@ namespace FullProject.Services
             var originalSource = resource.Source;
 
             if (dto.Kind is not null) resource.Kind = NormalizeKind(dto.Kind) ?? resource.Kind;
+            if (dto.Purpose is not null) resource.Purpose = NormalizePurpose(dto.Purpose);
             if (dto.Name is not null) resource.Name = NormalizeLang(dto.Name);
             if (dto.Description is not null) resource.Description = NormalizeLang(dto.Description);
             if (dto.Url is not null) resource.Url = CleanUrl(dto.Url) ?? string.Empty;
@@ -68,6 +74,9 @@ namespace FullProject.Services
             if (dto.ContentType is not null) resource.ContentType = dto.ContentType.Trim();
             if (dto.SizeBytes is not null) resource.SizeBytes = Math.Max(0, dto.SizeBytes.Value);
             if (dto.Source is not null) resource.Source = NormalizeSource(dto.Source);
+            if (dto.OriginalSourceUrl is not null) resource.OriginalSourceUrl = CleanUrl(dto.OriginalSourceUrl, required: false);
+            if (dto.LicenseName is not null) resource.LicenseName = CleanOptional(dto.LicenseName, 120);
+            if (dto.Attribution is not null) resource.Attribution = CleanOptional(dto.Attribution, 500);
             if (dto.Tags is not null) resource.Tags = NormalizeTags(dto.Tags);
             if (dto.AlbumId is not null) resource.AlbumId = CleanOptionalObjectId(dto.AlbumId);
             if (dto.Active is not null) resource.Active = dto.Active.Value;
@@ -97,6 +106,8 @@ namespace FullProject.Services
             {
                 errors.Add("Resource file fields cannot be changed directly. Use Replace File to update the stored asset.");
             }
+            if (dto.Purpose is not null && !string.Equals(originalPurpose, resource.Purpose, StringComparison.OrdinalIgnoreCase))
+                errors.Add("Resource purpose cannot be changed after upload.");
 
             return errors;
         }
@@ -131,12 +142,13 @@ namespace FullProject.Services
             return Validate(resource);
         }
 
-        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes, string? albumId = null)
+        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes, string? albumId = null, string? purpose = null)
         {
             var cleanName = string.IsNullOrWhiteSpace(fileName) ? "Managed resource" : Path.GetFileNameWithoutExtension(fileName);
             return new ManagedResourceCreateDto
             {
                 Kind = kind,
+                Purpose = NormalizePurpose(purpose),
                 Name = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["en"] = cleanName },
                 Description = new(),
                 Url = url,
@@ -170,7 +182,9 @@ namespace FullProject.Services
                    resource.Description.Values.Any(Contains) ||
                    Contains(resource.FileName) ||
                    Contains(resource.Url) ||
-                   Contains(resource.Kind);
+                   Contains(resource.Kind) ||
+                   Contains(resource.Purpose) ||
+                   resource.Tags.Any(Contains);
         }
 
         public async Task AddAlbumAssignmentErrorsAsync(ManagedResource resource, List<string> errors)
@@ -208,7 +222,7 @@ namespace FullProject.Services
             var ext = Path.GetExtension(fileName).ToLowerInvariant();
             return ext switch
             {
-                ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" => "image",
+                ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" or ".svg" => "image",
                 ".mp4" or ".webm" or ".mov" => "video",
                 _ => "file"
             };
@@ -218,6 +232,15 @@ namespace FullProject.Services
         {
             var errors = new List<string>();
             if (NormalizeKind(resource.Kind) is null) errors.Add("Resource kind must be image, file, or video.");
+            if (resource.Purpose == "custom-icon")
+            {
+                if (resource.Kind != "image") errors.Add("Custom Icons must be image resources.");
+                if (!string.Equals(resource.Source, "managed-upload", StringComparison.OrdinalIgnoreCase))
+                    errors.Add("Custom Icons must be uploaded files.");
+                if (string.IsNullOrWhiteSpace(resource.StorageKey)) errors.Add("Custom Icons require a storage key.");
+                if (resource.ContentType is not ("image/png" or "image/jpeg" or "image/webp" or "image/svg+xml"))
+                    errors.Add("Custom Icons must be PNG, WebP, JPEG, or sanitized SVG files.");
+            }
             if (string.IsNullOrWhiteSpace(resource.Name.GetValueOrDefault("en"))) errors.Add("Resource name is required.");
             if (string.IsNullOrWhiteSpace(resource.Url)) errors.Add("Resource URL is required.");
             if (!string.IsNullOrWhiteSpace(resource.Url) && CleanUrl(resource.Url) is null) errors.Add("Resource URL must be a valid http or https URL.");
@@ -271,6 +294,12 @@ namespace FullProject.Services
             return normalized is "external-url" or "managed-upload" ? normalized : "external-url";
         }
 
+        private static string? NormalizePurpose(string? value)
+        {
+            var normalized = value?.Trim().ToLowerInvariant();
+            return normalized == "custom-icon" ? normalized : null;
+        }
+
         private static Dictionary<string, string> NormalizeLang(Dictionary<string, string>? source)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -308,6 +337,13 @@ namespace FullProject.Services
 
         private static string? CleanStorageKey(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        private static string? CleanOptional(string? value, int maxLength)
+        {
+            var clean = value?.Trim();
+            if (string.IsNullOrWhiteSpace(clean)) return null;
+            return clean.Length <= maxLength ? clean : clean[..maxLength];
+        }
 
         private static string? CleanOptionalObjectId(string? value)
         {

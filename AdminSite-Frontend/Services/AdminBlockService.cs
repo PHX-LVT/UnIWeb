@@ -70,6 +70,34 @@ namespace AdminSite.Services
             string pageId, string sectionId, BlockMoveRequestDto dto) =>
             _http.PostAsync<BlockModel>($"{Base(pageId, sectionId)}/authoring/move", dto);
 
+        public Task<ApiResponse<BlockModel>> ReplaceFormationSlotAsync(
+            string pageId,
+            string sectionId,
+            string formationId,
+            string slotName,
+            BlockCreateDto dto) =>
+            _http.PutAsync<BlockModel>($"{Base(pageId, sectionId)}/{formationId}/formation/slots/{Uri.EscapeDataString(slotName)}", dto);
+
+        public Task<ApiResponse<object>> SwapFormationSlotsAsync(
+            string pageId,
+            string sectionId,
+            string formationId,
+            FormationSlotSwapRequestDto dto) =>
+            _http.PostAsync<object>($"{Base(pageId, sectionId)}/{formationId}/formation/swap", dto);
+
+        public Task<ApiResponse<BlockModel>> ConvertFormationAsync(
+            string pageId,
+            string sectionId,
+            string formationId,
+            FormationConvertRequestDto dto) =>
+            _http.PostAsync<BlockModel>($"{Base(pageId, sectionId)}/{formationId}/formation/convert", dto);
+
+        public Task<ApiResponse<object>> MigrateLegacyContainerAsync(
+            string pageId,
+            string sectionId,
+            string containerId) =>
+            _http.PostAsync<object>($"{Base(pageId, sectionId)}/{containerId}/formation/migrate-legacy", new { });
+
         public Task<ApiResponse<BlockModel>> UpdateAuthoringLockAsync(
             string pageId, string sectionId, string blockId, BlockAuthoringLockUpdateDto dto) =>
             _http.PutAsync<BlockModel>($"{Base(pageId, sectionId)}/{blockId}/authoring-lock", dto);

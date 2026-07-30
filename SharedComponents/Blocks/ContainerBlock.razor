@@ -1,4 +1,5 @@
 @using Contracts.Public
+@using Contracts.Admin
 @using SharedComponents.Helpers
 
 <div class="@GetContainerClass()">
@@ -27,8 +28,16 @@
                    ContainerWrap="@EffectiveWrap"
                    CompactRadius="@EffectiveCompactRadius"
                    CompactChildWidth="@EffectiveCompactChildWidth"
-                   Diagram="@Block.ContainerLayout.Diagram"
+                   Diagram="@(IsFormation ? null : Block.ContainerLayout.Diagram)"
                    DiagramId="@Block.Id"
+                   FormationPresetKey="@(IsFormation ? Block.PresetKey : null)"
+                   FormationSizeMode="@Block.ContainerLayout.SizeMode"
+                   FormationCustomWidthPx="@Block.ContainerLayout.CustomWidthPx"
+                   FormationItemSize="@Block.ContainerLayout.ItemSize"
+                   FormationSpacing="@Block.ContainerLayout.FormationSpacing"
+                   FormationConnectorColorMode="@Block.ContainerLayout.ConnectorColorMode"
+                   FormationConnectorColor="@Block.ContainerLayout.ConnectorColor"
+                   FormationConnectorStyle="@Block.ContainerLayout.ConnectorStyle"
                    ChildStaggerMs="@Math.Clamp(Block.Animation.StaggerMs, 0, 2000)"
                    InheritedAppearance="@(Block.ContainerLayout.ShareAppearance ? Block.ContainerLayout.SharedAppearance : null)"
                    CenterContent="@PatternCenterContent"
@@ -45,6 +54,15 @@
     [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private string TitleText => StyleHelper.Lang(Block.Title, Lang);
+    private bool IsFormation => ContainerPresetCatalog.IsFormation(Block.PresetKey);
+    private FormationGeometry? FormationGeometry => IsFormation
+        ? FormationGeometryResolver.Resolve(
+            Block.PresetKey,
+            Block.ContainerLayout.SizeMode,
+            Block.ContainerLayout.CustomWidthPx,
+            Block.ContainerLayout.ItemSize,
+            Block.ContainerLayout.FormationSpacing)
+        : null;
     private bool IsPatternLayout => EffectiveLayoutMode is "orbit" or "semicircle";
     private RenderFragment? PatternCenterContent =>
         IsPatternLayout && !string.IsNullOrWhiteSpace(TitleText)
@@ -57,15 +75,19 @@
         BlockGridColumns = EffectiveColumns,
         BlockGap = EffectiveGap,
         MobileLayout = EffectiveMobileMode,
-        CustomMinHeightPx = EffectiveLayoutMode == "freeform"
+        CustomMinHeightPx = EffectiveLayoutMode == "formation"
+            ? FormationGeometry?.HeightPx
+            : EffectiveLayoutMode == "freeform"
             ? Math.Clamp((int)Math.Round((Block.Layout.HeightPx ?? 0) > 0 ? Block.Layout.HeightPx!.Value : 288), 120, 3000)
             : null
     };
 
-    private string EffectivePurpose => Block.ContainerLayout.Purpose == "collection"
+    private string EffectivePurpose => IsFormation
+        ? "formation"
+        : Block.ContainerLayout.Purpose == "collection"
         ? "collection"
         : "composition";
-    private string EffectiveLayoutMode => NormalizeLayout(Block.ContainerLayout.Mode);
+    private string EffectiveLayoutMode => IsFormation ? "formation" : NormalizeLayout(Block.ContainerLayout.Mode);
     private string EffectiveGap => NormalizeGap(Block.ContainerLayout.Gap);
     private string EffectiveMobileMode => ResolveAutomaticMobileMode(Block.ContainerLayout.MobileMode);
     private int EffectiveColumns => EffectiveLayoutMode == "split"
@@ -106,6 +128,7 @@
         "orbit" => "orbit",
         "semicircle" => "semicircle",
         "freeform" => "freeform",
+        "formation" => "formation",
         _ => "stack"
     };
 
@@ -127,12 +150,14 @@
         "custom" => "custom",
         "hide" => "hide",
         "inherit" => "inherit",
+        "formation" => "formation",
         _ => fallback
     };
 
     private string ResolveAutomaticMobileMode(string? value)
     {
         var requested = NormalizeResponsiveMode(value, "auto");
+        if (IsFormation) return "formation";
         if (EffectivePurpose == "collection")
             return "stack";
 

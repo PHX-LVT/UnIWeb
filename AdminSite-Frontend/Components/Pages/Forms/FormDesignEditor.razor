@@ -241,12 +241,12 @@
                             <div class="form-design-control-grid">
                                 <label class="form-filter">
                                     <span>@T("Icon")</span>
-                                    <select class="form-control" value="@item.Icon" disabled="@Disabled" @onchange="e => SetInformationIcon(item, e.Value)">
-                                        @foreach (var icon in InformationIcons)
-                                        {
-                                            <option value="@icon.Value">@T(icon.LabelKey)</option>
-                                        }
-                                    </select>
+                                    <IconPickerField Value="@item.Icon"
+                                                     ValueChanged="value => SetInformationIcon(item, value)"
+                                                     Label="@T("Icon")"
+                                                     Context="Contracts.Icons.IconContext.FormInformation"
+                                                     AllowCustom="false"
+                                                     Disabled="@Disabled" />
                                 </label>
                                 <label class="form-filter">
                                     <span>@T("Text")</span>
@@ -1138,8 +1138,10 @@
 
     private Task SetInformationIcon(FormInformationItemDto item, object? value)
     {
-        var icon = value?.ToString() ?? string.Empty;
-        if (InformationIcons.Any(candidate => candidate.Value == icon)) item.Icon = icon;
+        var icon = Contracts.Icons.IconCatalog.Normalize(
+            value?.ToString(),
+            Contracts.Icons.IconContext.FormInformation);
+        if (!string.IsNullOrWhiteSpace(icon)) item.Icon = icon;
         return ApplyChange();
     }
 

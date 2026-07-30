@@ -22,11 +22,25 @@ else
     [Parameter] public string Lang { get; set; } = "en";
     private bool HasAction => Block.ActionEnabled &&
         (!string.IsNullOrWhiteSpace(Block.Href) || !string.IsNullOrWhiteSpace(Block.FormDefinitionId));
-    private RenderFragment Content => @<>
-        <span class="sc-icon-block__icon">
-            <i class="@(string.IsNullOrWhiteSpace(Block.Icon) ? "fas fa-star" : Block.Icon)"></i>
-        </span>
-        <span class="sc-icon-block__label">@StyleHelper.Lang(Block.Label, Lang)</span>
-        <span class="sc-icon-block__description">@StyleHelper.Lang(Block.Description, Lang)</span>
-    </>;
+    private RenderFragment Content => builder =>
+    {
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", "sc-icon-block__icon");
+        builder.OpenComponent<ContentIcon>(2);
+        builder.AddAttribute(3, nameof(ContentIcon.Icon), Block.IconVisual);
+        builder.AddAttribute(4, nameof(ContentIcon.LegacyClass), string.IsNullOrWhiteSpace(Block.Icon) ? "fa-solid fa-star" : Block.Icon);
+        builder.AddAttribute(5, nameof(ContentIcon.Lang), Lang);
+        builder.CloseComponent();
+        builder.CloseElement();
+
+        builder.OpenElement(6, "span");
+        builder.AddAttribute(7, "class", "sc-icon-block__label");
+        builder.AddContent(8, StyleHelper.Lang(Block.Label, Lang));
+        builder.CloseElement();
+
+        builder.OpenElement(9, "span");
+        builder.AddAttribute(10, "class", "sc-icon-block__description");
+        builder.AddContent(11, StyleHelper.Lang(Block.Description, Lang));
+        builder.CloseElement();
+    };
 }

@@ -9,10 +9,12 @@ namespace FullProject.Services
     public class ManagedResourceUsageService
     {
         private readonly MongoDbContext _context;
+        private readonly IMongoCollection<SocialButtonGroup> _social;
 
         public ManagedResourceUsageService(MongoDbContext context)
         {
             _context = context;
+            _social = context.SocialButtons;
         }
 
         public async Task<Dictionary<string, int>> GetUsageCountsAsync(IEnumerable<ManagedResource> resources)
@@ -42,6 +44,7 @@ namespace FullProject.Services
             references.AddRange(await GetSectionPresetUsageAsync(resource));
             references.AddRange(await GetBrandingUsageAsync(resource));
             references.AddRange(await GetFormDefinitionUsageAsync(resource));
+            references.AddRange(await GetSocialUsageAsync(resource));
 
             return new ManagedResourceUsageDto
             {
@@ -144,7 +147,11 @@ namespace FullProject.Services
             string source)
         {
             if (string.IsNullOrWhiteSpace(resource.Url)) return new();
-            var sections = await collection.Find(ManagedResourceReferenceHelper.SectionUrlFilter(resource.Url)).ToListAsync();
+            var filter = Builders<Section>.Filter.Or(
+                ManagedResourceReferenceHelper.SectionUrlFilter(resource.Url),
+                Builders<Section>.Filter.Eq("Items.IconVisual.ResourceId", resource.Id),
+                Builders<Section>.Filter.Eq("Items.IconVisual.Url", resource.Url));
+            var sections = await collection.Find(filter).ToListAsync();
             var references = new List<ManagedResourceUsageReferenceDto>();
 
             foreach (var section in sections)
@@ -163,6 +170,9 @@ namespace FullProject.Services
                         references.AddRange(list.Items
                             .Where(item => ManagedResourceReferenceHelper.SameUrl(item.ImageUrl, resource.Url))
                             .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "List item image", FirstText(item.Title), section.UpdatedAt)));
+                        references.AddRange(list.Items
+                            .Where(item => MatchesIcon(item.IconVisual, resource))
+                            .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "List item icon", FirstText(item.Title), section.UpdatedAt)));
                         break;
                     case CarouselSection carousel:
                         references.AddRange(carousel.Items
@@ -173,6 +183,9 @@ namespace FullProject.Services
                         references.AddRange(testimonial.Items
                             .Where(item => ManagedResourceReferenceHelper.SameUrl(item.ImageUrl, resource.Url))
                             .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Testimonial image", FirstText(item.Title), section.UpdatedAt)));
+                        references.AddRange(testimonial.Items
+                            .Where(item => MatchesIcon(item.IconVisual, resource))
+                            .Select(item => UsageRef(resource, source, section.Id, section.StableId, SectionTitle(section), "Testimonial icon", FirstText(item.Title), section.UpdatedAt)));
                         break;
                     case ShowcaseSection showcase:
                         references.AddRange(showcase.ItemOverrides
@@ -191,7 +204,13 @@ namespace FullProject.Services
             string source)
         {
             if (string.IsNullOrWhiteSpace(resource.Url)) return new();
-            var blocks = await collection.Find(ManagedResourceReferenceHelper.BlockUrlFilter(ManagedResourceReferenceHelper.ResourceUrlVariants(resource.Url))).ToListAsync();
+            var filter = Builders<Block>.Filter.Or(
+                ManagedResourceReferenceHelper.BlockUrlFilter(ManagedResourceReferenceHelper.ResourceUrlVariants(resource.Url)),
+                Builders<Block>.Filter.Eq("IconVisual.ResourceId", resource.Id),
+                Builders<Block>.Filter.Eq("IconVisual.Url", resource.Url),
+                Builders<Block>.Filter.Eq("Items.IconVisual.ResourceId", resource.Id),
+                Builders<Block>.Filter.Eq("Items.IconVisual.Url", resource.Url));
+            var blocks = await collection.Find(filter).ToListAsync();
             var references = new List<ManagedResourceUsageReferenceDto>();
 
             foreach (var block in blocks)
@@ -210,6 +229,16 @@ namespace FullProject.Services
                     case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.Asset.Url, resource.Url):
                         references.Add(UsageRef(resource, source, block.Id, block.StableId, FirstText(card.Title), "Card block image", string.Empty, block.UpdatedAt));
                         break;
+                }
+
+                if (BlockIcon(block) is { } icon && MatchesIcon(icon, resource))
+                    references.Add(UsageRef(resource, source, block.Id, block.StableId, BlockTitle(block), "Block icon", string.Empty, block.UpdatedAt));
+
+                if (block is BulletListBlock bullet)
+                {
+                    references.AddRange(bullet.Items
+                        .Where(item => MatchesIcon(item.IconVisual, resource))
+                        .Select(item => UsageRef(resource, source, block.Id, block.StableId, BlockTitle(block), "Bullet item icon", FirstText(item.Text), block.UpdatedAt)));
                 }
             }
 
@@ -247,7 +276,48 @@ namespace FullProject.Services
                 Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url));
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url),
+                Builders<SectionPreset>.Filter.Eq("Section.Items.IconVisual.Url", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.IconVisual.Url", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.Items.IconVisual.Url", url));
+
+        private async Task<List<ManagedResourceUsageReferenceDto>> GetSocialUsageAsync(ManagedResource resource)
+        {
+            var filter = Builders<SocialButtonGroup>.Filter.Or(
+                Builders<SocialButtonGroup>.Filter.Eq("Buttons.IconVisual.ResourceId", resource.Id),
+                Builders<SocialButtonGroup>.Filter.Eq("Buttons.IconVisual.Url", resource.Url));
+            var groups = await _social.Find(filter).ToListAsync();
+            return groups
+                .SelectMany(group => group.Buttons
+                    .Where(button => MatchesIcon(button.IconVisual, resource))
+                    .Select(button => UsageRef(resource, "Social Buttons", button.Id, button.Id, button.Label, "Social icon", button.Href, null)))
+                .ToList();
+        }
+
+        private static bool MatchesIcon(IconReference? icon, ManagedResource resource) =>
+            icon is not null &&
+            ((!string.IsNullOrWhiteSpace(icon.ResourceId) && string.Equals(icon.ResourceId, resource.Id, StringComparison.Ordinal)) ||
+             ManagedResourceReferenceHelper.SameUrl(icon.Url, resource.Url));
+
+        private static IconReference? BlockIcon(Block block) => block switch
+        {
+            CardBlock value => value.IconVisual,
+            ButtonBlock value => value.IconVisual,
+            MetricBlock value => value.IconVisual,
+            StepBlock value => value.IconVisual,
+            IconBlock value => value.IconVisual,
+            _ => null
+        };
+
+        private static string BlockTitle(Block block) => block switch
+        {
+            CardBlock value => FirstText(value.Title),
+            ButtonBlock value => FirstText(value.Label),
+            MetricBlock value => FirstText(value.Label),
+            StepBlock value => FirstText(value.Title),
+            IconBlock value => FirstText(value.Label),
+            _ => block.GetType().Name
+        };
 
         private static IEnumerable<ManagedResourceUsageReferenceDto> BuildContentReferences(
             ContentItem item,

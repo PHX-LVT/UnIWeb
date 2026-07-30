@@ -1,6 +1,7 @@
 using Contracts.Global;
 using Contracts.Public;
 using FullProject.DTOs;
+using FullProject.Services.IconServices;
 
 namespace FullProject.Services.PublicService
 {
@@ -88,22 +89,22 @@ namespace FullProject.Services.PublicService
             };
         }
 
-        public async Task<SocialButtonGroupResponseDto> GetSocialAsync()
+        public async Task<PublicSocialButtonGroup> GetSocialAsync()
         {
             var group = await _socialService.GetGroupAsync();
-            return new SocialButtonGroupResponseDto
+            return new PublicSocialButtonGroup
             {
                 GroupVisible = group.GroupVisible,
                 Buttons = group.Buttons
                     .Where(b => b.Visible)
                     .OrderBy(b => b.Order)
-                    .Select(b => new SocialButtonResponseDto
+                    .Select(b => new PublicSocialButton
                     {
                         Id = b.Id,
                         Label = b.Label,
                         Icon = b.Icon,
+                        IconVisual = IconReferenceService.ToPublic(b.IconVisual, b.Icon),
                         Href = b.Href,
-                        Visible = b.Visible,
                         Order = b.Order
                     }).ToList()
             };

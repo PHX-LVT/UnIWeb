@@ -30,6 +30,7 @@ public sealed record RememberedDeviceExchange(
 
 public sealed class RememberedDeviceService
 {
+    private static readonly TimeSpan LegacyRotationOverlap = TimeSpan.FromMinutes(1);
     private readonly IMongoCollection<AdminRememberedDeviceRecord> _devices;
     private readonly RememberedDeviceSettings _settings;
 
@@ -125,30 +126,31 @@ public sealed class RememberedDeviceService
         }
 
         var presentedHash = HashSecret(secret);
-        if (HashesEqual(presentedHash, record.PreviousSecretHash))
-        {
-            await RevokeForReuseAsync(record, now, cancellationToken);
-            return new RememberedDeviceExchange(RememberedDeviceExchangeStatus.ReuseDetected, record);
-        }
-        if (!HashesEqual(presentedHash, record.SecretHash))
+        var matchesCurrent = HashesEqual(presentedHash, record.SecretHash);
+        var matchesRecentPrevious =
+            HashesEqual(presentedHash, record.PreviousSecretHash) &&
+            now - record.LastUsedAt <= LegacyRotationOverlap;
+        if (!matchesCurrent && !matchesRecentPrevious)
             return new RememberedDeviceExchange(RememberedDeviceExchangeStatus.Invalid, record);
 
-        var replacementSecret = GenerateSecret();
-        var replacementHash = HashSecret(replacementSecret);
         var filter = Builders<AdminRememberedDeviceRecord>.Filter.And(
             Builders<AdminRememberedDeviceRecord>.Filter.Eq(device => device.Id, record.Id),
-            Builders<AdminRememberedDeviceRecord>.Filter.Eq(device => device.SecretHash, presentedHash),
             Builders<AdminRememberedDeviceRecord>.Filter.Eq(device => device.IsRevoked, false),
             Builders<AdminRememberedDeviceRecord>.Filter.Gt(device => device.ExpiresAt, now));
+        filter &= matchesCurrent
+            ? Builders<AdminRememberedDeviceRecord>.Filter.Eq(device => device.SecretHash, presentedHash)
+            : Builders<AdminRememberedDeviceRecord>.Filter.Or(
+                Builders<AdminRememberedDeviceRecord>.Filter.Eq(device => device.PreviousSecretHash, presentedHash),
+                Builders<AdminRememberedDeviceRecord>.Filter.Eq(device => device.SecretHash, presentedHash));
         var update = Builders<AdminRememberedDeviceRecord>.Update
-            .Set(device => device.PreviousSecretHash, presentedHash)
-            .Set(device => device.SecretHash, replacementHash)
+            .Set(device => device.SecretHash, presentedHash)
+            .Unset(device => device.PreviousSecretHash)
             .Set(device => device.LastUsedAt, now)
             .Set(device => device.LastUsedIp, ipAddress)
             .Set(device => device.UserAgent, Limit(userAgent, 500))
             .Set(device => device.BrowserName, ParseBrowser(userAgent))
             .Set(device => device.OperatingSystem, ParseOperatingSystem(userAgent));
-        var rotated = await _devices.FindOneAndUpdateAsync(
+        var refreshed = await _devices.FindOneAndUpdateAsync(
             filter,
             update,
             new FindOneAndUpdateOptions<AdminRememberedDeviceRecord>
@@ -157,22 +159,17 @@ public sealed class RememberedDeviceService
             },
             cancellationToken);
 
-        if (rotated is null)
+        if (refreshed is null)
         {
             var latest = await _devices.Find(device => device.Id == record.Id)
                 .FirstOrDefaultAsync(cancellationToken);
-            if (latest is not null && HashesEqual(presentedHash, latest.PreviousSecretHash))
-            {
-                await RevokeForReuseAsync(latest, now, cancellationToken);
-                return new RememberedDeviceExchange(RememberedDeviceExchangeStatus.ReuseDetected, latest);
-            }
             return new RememberedDeviceExchange(RememberedDeviceExchangeStatus.Invalid, latest ?? record);
         }
 
         return new RememberedDeviceExchange(
             RememberedDeviceExchangeStatus.Succeeded,
-            rotated,
-            FormatCredential(rotated.Id, replacementSecret));
+            refreshed,
+            FormatCredential(refreshed.Id, secret));
     }
 
     public async Task<bool> RevokeCredentialAsync(
@@ -274,15 +271,6 @@ public sealed class RememberedDeviceService
             cancellationToken: cancellationToken);
         return result.ModifiedCount;
     }
-
-    private async Task RevokeForReuseAsync(
-        AdminRememberedDeviceRecord record,
-        DateTime now,
-        CancellationToken cancellationToken) =>
-        await _devices.UpdateOneAsync(
-            device => device.Id == record.Id && !device.IsRevoked,
-            RevokeUpdate(record.AdminId, AdminRememberedDeviceRevokeReason.TokenReuse, now),
-            cancellationToken: cancellationToken);
 
     private static UpdateDefinition<AdminRememberedDeviceRecord> RevokeUpdate(
         string actorId,

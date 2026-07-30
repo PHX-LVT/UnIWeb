@@ -57,7 +57,8 @@
                 <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
             </div>
 
-            <SectionContentTab Section="Section"
+            <SectionContentTab @key="Section.Id"
+                               Section="Section"
                                PageId="@EffectivePageId"
                                Languages="_languages"
                                OnSaved="HandleSectionSaved" />
@@ -84,7 +85,8 @@
                 <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
             </div>
 
-            <BlockEditor PageId="@EffectivePageId"
+            <BlockEditor @key="Section.Id"
+                         PageId="@EffectivePageId"
                          SectionId="@Section.Id"
                          SectionType="@Section.Type"
                          SectionBlockLayoutMode="@_designDraft.BlockLayoutMode"
@@ -94,7 +96,7 @@
                          Languages="_languages"
                          AddRequested="OnAddBlockRequested"
                          ActiveBlockChanged="OnActiveBlockChanged"
-                         OnChanged="OnBlocksChanged" />
+                         OnChanged="HandleBlocksChanged" />
         }
     </main>
 
@@ -207,16 +209,16 @@
     [Parameter, EditorRequired] public SectionModel Section { get; set; } = default!;
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public EventCallback OnClose { get; set; }
-    [Parameter] public EventCallback OnSectionSaved { get; set; }
+    [Parameter] public EventCallback<string> OnSectionSaved { get; set; }
     [Parameter] public EventCallback OnSectionsChanged { get; set; }
-    [Parameter] public EventCallback OnBlocksChanged { get; set; }
+    [Parameter] public EventCallback<string> OnBlocksChanged { get; set; }
     [Parameter] public EventCallback<string?> OnActiveBlockChanged { get; set; }
     [Parameter] public EventCallback<string> OnArrangeBlocksRequested { get; set; }
     [Parameter] public EventCallback<string> OnDiscardAndArrangeRequested { get; set; }
     [Parameter] public EventCallback<string> OnDiscardRequested { get; set; }
     [Parameter] public EventCallback<string> OnSaveAsPresetRequested { get; set; }
-    [Parameter] public EventCallback<SectionStyleModel> OnDesignPreviewChanged { get; set; }
-    [Parameter] public EventCallback<bool> OnDirtyChanged { get; set; }
+    [Parameter] public EventCallback<SectionDesignPreviewChange> OnDesignPreviewChanged { get; set; }
+    [Parameter] public EventCallback<SectionDirtyChange> OnDirtyChanged { get; set; }
     [Parameter] public bool CanArrangeBlocks { get; set; }
     [Parameter] public string InitialTab { get; set; } = "design";
     [Parameter] public string? InitialBlockId { get; set; }
@@ -240,6 +242,7 @@
     private bool HasUnsavedDesignChanges => !DesignEquals(_savedDesign, _designDraft);
     private bool HasUnsavedSectionChanges => HasUnsavedDesignChanges ||
         !string.Equals(_savedSectionSnapshot, CaptureSectionSnapshot(), StringComparison.Ordinal);
+    public bool HasUnsavedChanges => HasUnsavedSectionChanges;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override async Task OnInitializedAsync()
@@ -252,7 +255,8 @@
 
     protected override void OnParametersSet()
     {
-        if (!ReferenceEquals(_trackedSection, Section))
+        var sectionChanged = !ReferenceEquals(_trackedSection, Section);
+        if (sectionChanged)
         {
             _trackedSection = Section;
             _savedSectionSnapshot = CaptureSectionSnapshot();
@@ -260,13 +264,15 @@
             _designDraft = CloneStyle(_savedDesign);
             _showArrangeGuard = false;
             _showCloseGuard = false;
-            _ = OnDirtyChanged.InvokeAsync(false);
+            _ = NotifyDirtyChangedAsync(Section.Id, false);
         }
 
-        if (_loadedSectionId == Section.Id && _loadedInitialTab == InitialTab) return;
+        var firstLoad = _loadedSectionId is null;
+        var requestedTabChanged = !string.Equals(_loadedInitialTab, InitialTab, StringComparison.Ordinal);
         _loadedSectionId = Section.Id;
         _loadedInitialTab = InitialTab;
-        _tab = NormalizeTab(InitialTab);
+        if (firstLoad || requestedTabChanged)
+            _tab = NormalizeTab(InitialTab);
     }
 
     private void SelectTab(string tab)
@@ -276,8 +282,9 @@
 
     private async Task DesignChanged()
     {
-        await OnDesignPreviewChanged.InvokeAsync(CloneStyle(_designDraft));
-        await OnDirtyChanged.InvokeAsync(HasUnsavedSectionChanges);
+        var sectionId = Section.Id;
+        await OnDesignPreviewChanged.InvokeAsync(new(sectionId, CloneStyle(_designDraft)));
+        await NotifyDirtyChangedAsync(sectionId, HasUnsavedSectionChanges);
     }
 
     private async Task RestoreLastSaved()
@@ -295,20 +302,27 @@
     private async Task SaveDesign()
     {
         if (_savingDesign || !HasUnsavedDesignChanges) return;
+        var section = Section;
+        var sectionId = section.Id;
+        var pageId = EffectivePageId;
+        var draft = CloneStyle(_designDraft);
         _savingDesign = true;
         try
         {
-            var response = await SectionService.UpdateStyleAsync(EffectivePageId, Section.Id, ToDto(_designDraft));
+            var response = await SectionService.UpdateStyleAsync(pageId, sectionId, ToDto(draft));
             Http.Notify(response, T("NotificationSectionSaved"), T("NotificationSaveFailed"));
             if (!response.Success) return;
 
-            var saved = response.Data?.Style is null ? CloneStyle(_designDraft) : CloneStyle(response.Data.Style);
-            Section.Style = CloneStyle(saved);
+            if (!ReferenceEquals(Section, section))
+                return;
+
+            var saved = response.Data?.Style is null ? draft : CloneStyle(response.Data.Style);
+            section.Style = CloneStyle(saved);
             _savedDesign = CloneStyle(saved);
             _designDraft = CloneStyle(saved);
             _savedSectionSnapshot = CaptureSectionSnapshot();
-            await OnDirtyChanged.InvokeAsync(false);
-            await OnSectionSaved.InvokeAsync();
+            await NotifyDirtyChangedAsync(sectionId, false);
+            await OnSectionSaved.InvokeAsync(sectionId);
         }
         finally
         {
@@ -328,12 +342,15 @@
         await OnArrangeBlocksRequested.InvokeAsync(Section.Id);
     }
 
-    private async Task HandleSectionSaved()
+    private async Task HandleSectionSaved(string sectionId)
     {
-        _savedSectionSnapshot = CaptureSectionSnapshot();
-        await OnDirtyChanged.InvokeAsync(false);
-        await OnSectionSaved.InvokeAsync();
+        if (string.Equals(Section.Id, sectionId, StringComparison.Ordinal))
+            _savedSectionSnapshot = CaptureSectionSnapshot();
+        await NotifyDirtyChangedAsync(sectionId, false);
+        await OnSectionSaved.InvokeAsync(sectionId);
     }
+
+    private Task HandleBlocksChanged(string sectionId) => OnBlocksChanged.InvokeAsync(sectionId);
 
     private async Task OpenPresetDialog()
     {
@@ -363,22 +380,27 @@
 
     private async Task DiscardAndArrange()
     {
+        var sectionId = Section.Id;
         _showArrangeGuard = false;
-        await OnDesignPreviewChanged.InvokeAsync(CloneStyle(_savedDesign));
-        await OnDirtyChanged.InvokeAsync(false);
-        await OnDiscardAndArrangeRequested.InvokeAsync(Section.Id);
+        await OnDesignPreviewChanged.InvokeAsync(new(sectionId, CloneStyle(_savedDesign)));
+        await NotifyDirtyChangedAsync(sectionId, false);
+        await OnDiscardAndArrangeRequested.InvokeAsync(sectionId);
     }
 
     private async Task DiscardAndClose()
     {
+        var sectionId = Section.Id;
         _showCloseGuard = false;
-        await OnDesignPreviewChanged.InvokeAsync(CloneStyle(_savedDesign));
-        await OnDirtyChanged.InvokeAsync(false);
+        await OnDesignPreviewChanged.InvokeAsync(new(sectionId, CloneStyle(_savedDesign)));
+        await NotifyDirtyChangedAsync(sectionId, false);
         if (OnDiscardRequested.HasDelegate)
-            await OnDiscardRequested.InvokeAsync(Section.Id);
+            await OnDiscardRequested.InvokeAsync(sectionId);
         else
             await OnClose.InvokeAsync();
     }
+
+    private Task NotifyDirtyChangedAsync(string sectionId, bool dirty) =>
+        OnDirtyChanged.InvokeAsync(new SectionDirtyChange(sectionId, dirty));
 
     private Task OnArrangeGuardVisibilityChanged(bool visible) { _showArrangeGuard = visible; return Task.CompletedTask; }
     private Task OnCloseGuardVisibilityChanged(bool visible) { _showCloseGuard = visible; return Task.CompletedTask; }
@@ -393,6 +415,9 @@
         "style" => "design",
         _ => "design"
     };
+
+    public readonly record struct SectionDirtyChange(string SectionId, bool Dirty);
+    public readonly record struct SectionDesignPreviewChange(string SectionId, SectionStyleModel Style);
 
     private static SectionStyleModel DefaultDesign(SectionStyleModel current) => new()
     {

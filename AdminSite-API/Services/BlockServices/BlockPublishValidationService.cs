@@ -28,10 +28,39 @@ public static class BlockPublishValidationService
 
         foreach (var container in blocks.OfType<ContainerBlock>().Where(block => block.Visible))
         {
-            var children = blocks
+            var allChildren = blocks
+                .Where(block => string.Equals(block.ParentBlockId, container.Id, StringComparison.Ordinal))
+                .OrderBy(block => block.Order)
+                .ToList();
+            var children = allChildren
                 .Where(block => block.Visible && string.Equals(block.ParentBlockId, container.Id, StringComparison.Ordinal))
                 .OrderBy(block => block.Order)
                 .ToList();
+
+            if (ContainerPresetCatalog.TryGetFormation(container.PresetKey, out var formation))
+            {
+                if (allChildren.Count != formation.MaximumChildren)
+                    errors.Add($"{ContainerName(container)} must contain exactly {formation.MaximumChildren} governed slots.");
+
+                foreach (var child in allChildren.Where(child =>
+                             child.Authoring?.IsPlaceholder == true || !HasFormationContent(child)))
+                    errors.Add($"{ContainerName(container)} has an incomplete {ContainerCapacityPolicy.SlotDisplayName(container.PresetKey, child.Authoring?.PresetSlotName)} slot.");
+
+                var duplicateSlot = allChildren
+                    .Where(child => !string.IsNullOrWhiteSpace(child.Authoring?.PresetSlotName))
+                    .GroupBy(child => child.Authoring.PresetSlotName!, StringComparer.Ordinal)
+                    .FirstOrDefault(group => group.Count() > 1);
+                if (duplicateSlot is not null)
+                    errors.Add($"{ContainerName(container)} assigns more than one Block to {duplicateSlot.Key}.");
+
+                foreach (var child in allChildren)
+                {
+                    if (!string.Equals(child.Authoring?.PresetSourceId, formation.Key, StringComparison.Ordinal))
+                        errors.Add($"{ContainerName(container)} contains a Block with invalid Formation ownership.");
+                    if (!formation.AllowedBlockTypes.Contains(BlockType(child), StringComparer.Ordinal))
+                        errors.Add($"{ContainerName(container)} does not allow {BlockType(child)} Blocks.");
+                }
+            }
 
             var missing = ContainerCapacityPolicy.MissingRequiredSlots(
                 container.PresetKey,
@@ -62,7 +91,7 @@ public static class BlockPublishValidationService
 
     private static void ValidateFunctionalBlock(Block block, ICollection<string> errors)
     {
-        if (!block.Visible) return;
+        if (!block.Visible || block.Authoring?.IsPlaceholder == true) return;
 
         switch (block)
         {
@@ -117,10 +146,23 @@ public static class BlockPublishValidationService
     private static bool HasText(IReadOnlyDictionary<string, string>? values) =>
         values?.Values.Any(value => !string.IsNullOrWhiteSpace(value)) == true;
 
+    private static bool HasFormationContent(Block block) => block switch
+    {
+        TextBlock text => HasText(text.Title) || HasText(text.Content),
+        ImageBlock image => !string.IsNullOrWhiteSpace(image.Asset?.Url),
+        CardBlock card => HasText(card.Title) || HasText(card.Description) ||
+            !string.IsNullOrWhiteSpace(card.Icon) || !string.IsNullOrWhiteSpace(card.Asset?.Url),
+        ButtonBlock button => HasText(button.Label),
+        MetricBlock metric => HasText(metric.Label) || !string.IsNullOrWhiteSpace(metric.Value),
+        StepBlock step => HasText(step.Title) || HasText(step.Description) || HasText(step.StepLabel),
+        IconBlock icon => !string.IsNullOrWhiteSpace(icon.Icon) || HasText(icon.Label) || HasText(icon.Description),
+        _ => false
+    };
+
     private static string ContainerName(ContainerBlock container) =>
         container.Title?.GetValueOrDefault("en") is { Length: > 0 } title
-            ? $"Container '{title}'"
-            : "The Container";
+            ? $"Formation '{title}'"
+            : ContainerPresetCatalog.IsFormation(container.PresetKey) ? "The Formation" : "The Container";
 
     private static string DisplayName(Block block) =>
         block.EditorLabel?.GetValueOrDefault("en") is { Length: > 0 } label ? label : block.Id;

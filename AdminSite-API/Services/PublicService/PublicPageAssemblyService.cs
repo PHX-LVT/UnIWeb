@@ -6,6 +6,7 @@ using FullProject.Services.BlockServices;
 using FullProject.Security;
 using FullProject.Services.FormServices;
 using FullProject.Services.SectionServices;
+using FullProject.Services.IconServices;
 using SharedComponents.Helpers;
 using System.Net;
 using System.Text.RegularExpressions;
@@ -115,7 +116,7 @@ namespace FullProject.Services.PublicService
 
             // We filter for visible blocks here to keep the logic clean inside the loops
             var blocksBySection = allBlocks
-                .Where(b => b.Visible)
+                .Where(b => b.Visible && b.Authoring?.IsPlaceholder != true)
                 .GroupBy(b => b.SectionStableId)
                 .ToDictionary(g => g.Key, g => g.OrderBy(b => b.Order).ToList());
 
@@ -232,6 +233,11 @@ namespace FullProject.Services.PublicService
                         section.Visible,
                         section.Order,
                         section.Style,
+                        cs.LayoutMode,
+                        cs.Eyebrow,
+                        cs.Heading,
+                        cs.Subheading,
+                        cs.Content,
                         cs.ColumnCount,
                         cs.ColumnRatio,
                         cs.Gap,
@@ -298,7 +304,18 @@ namespace FullProject.Services.PublicService
                         ListSection list => list.Items
                             .Where(i => i.Visible)
                             .OrderBy(i => i.Order)
-                            .Select(i => new { i.Id, i.Icon, i.Title, i.Description, i.ImageUrl, i.LinkHref, i.Visible, i.Order })
+                            .Select(i => new
+                            {
+                                i.Id,
+                                i.Icon,
+                                IconVisual = IconReferenceService.ToPublic(i.IconVisual, i.Icon),
+                                i.Title,
+                                i.Description,
+                                i.ImageUrl,
+                                i.LinkHref,
+                                i.Visible,
+                                i.Order
+                            })
                             .Cast<object>()
                             .ToList(),
                         StatsSection stats => stats.Items
@@ -329,7 +346,18 @@ namespace FullProject.Services.PublicService
                         TestimonialSection testimonial => testimonial.Items
                             .Where(i => i.Visible)
                             .OrderBy(i => i.Order)
-                            .Select(i => new { i.Id, i.Icon, i.Title, i.Description, i.ImageUrl, i.Order })
+                            .Select(i => new
+                            {
+                                i.Id,
+                                i.Icon,
+                                IconVisual = IconReferenceService.ToPublic(i.IconVisual, i.Icon),
+                                i.BadgeText,
+                                i.Highlighted,
+                                i.Title,
+                                i.Description,
+                                i.ImageUrl,
+                                i.Order
+                            })
                             .Cast<object>()
                             .ToList(),
                         _ => null
@@ -440,6 +468,7 @@ namespace FullProject.Services.PublicService
                         {
                             Id = item.Id,
                             Icon = item.Icon,
+                            IconVisual = IconReferenceService.ToPublic(item.IconVisual, item.Icon),
                             Title = item.Title,
                             Description = item.Description,
                             ImageUrl = item.ImageUrl,
@@ -456,8 +485,14 @@ namespace FullProject.Services.PublicService
                 ColumnsSection columns => new PublicColumnsSectionDto
                 {
                     Type = "columns",
+                    LayoutMode = columns.LayoutMode,
+                    Eyebrow = columns.Eyebrow,
+                    Heading = columns.Heading,
+                    Subheading = columns.Subheading,
+                    Content = columns.Content,
                     ColumnCount = columns.ColumnCount,
                     ColumnRatio = columns.ColumnRatio,
+                    Gap = columns.Gap,
                     StackOnMobile = columns.StackOnMobile,
                     ColumnSlots = columns.Columns
                         .OrderBy(slot => slot.Order)
@@ -567,9 +602,12 @@ namespace FullProject.Services.PublicService
                         {
                             Id = item.Id,
                             Icon = item.Icon,
+                            IconVisual = IconReferenceService.ToPublic(item.IconVisual, item.Icon),
                             Title = item.Title,
                             Description = item.Description,
                             ImageUrl = item.ImageUrl,
+                            BadgeText = item.BadgeText,
+                            Highlighted = item.Highlighted,
                             Order = item.Order
                         })
                         .ToList()
@@ -1469,6 +1507,7 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "card",
                     Icon = card.Icon,
+                    IconVisual = IconReferenceService.ToPublic(card.IconVisual, card.Icon),
                     Title = card.Title,
                     Description = card.Description,
                     ImageUrl = card.ImageUrl,
@@ -1484,6 +1523,7 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "button",
                     Icon = button.Icon,
+                    IconVisual = IconReferenceService.ToPublic(button.IconVisual, button.Icon),
                     IconPosition = button.IconPosition,
                     Label = button.Label,
                     Href = button.Href,
@@ -1495,6 +1535,7 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "metric",
                     Icon = metric.Icon,
+                    IconVisual = IconReferenceService.ToPublic(metric.IconVisual, metric.Icon),
                     Label = metric.Label,
                     Value = metric.Value,
                     Prefix = metric.Prefix,
@@ -1509,6 +1550,7 @@ namespace FullProject.Services.PublicService
                     {
                         Id = i.Id,
                         Icon = i.Icon,
+                        IconVisual = IconReferenceService.ToPublic(i.IconVisual, i.Icon),
                         Text = i.Text,
                         Visible = i.Visible,
                         Order = i.Order
@@ -1518,6 +1560,7 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "step",
                     Icon = step.Icon,
+                    IconVisual = IconReferenceService.ToPublic(step.IconVisual, step.Icon),
                     AutoNumber = step.AutoNumber,
                     StepLabel = step.StepLabel,
                     Title = step.Title,
@@ -1527,6 +1570,7 @@ namespace FullProject.Services.PublicService
                 {
                     Type = "icon",
                     Icon = icon.Icon,
+                    IconVisual = IconReferenceService.ToPublic(icon.IconVisual, icon.Icon),
                     Label = icon.Label,
                     Description = icon.Description,
                     ActionEnabled = icon.ActionEnabled,
@@ -1554,6 +1598,7 @@ namespace FullProject.Services.PublicService
             mapped.ZoneId = block.BlockZone;
             mapped.PositionMode = ResolveBlockPositionMode(block);
             mapped.ParentBlockId = block.ParentBlockId;
+            mapped.PresetSlotName = block.Authoring?.PresetSlotName;
             mapped.Layout = MapBlockLayout(block.Layout);
             mapped.Appearance = BlockContractService.ToPublicAppearance(block);
             mapped.Responsive = BlockContractService.ToPublicResponsive(block.Responsive);

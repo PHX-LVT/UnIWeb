@@ -67,10 +67,10 @@ public static class BlockStarterPresetCatalog
             8,
             container: new ContainerLayoutSettingsDto
             {
-                SchemaVersion = 2,
-                Purpose = "collection",
-                Mode = "stack",
-                Columns = 2,
+                SchemaVersion = 4,
+                Purpose = "formation",
+                Mode = "formation",
+                Columns = 1,
                 Gap = "medium",
                 AlignItems = "stretch",
                 JustifyContent = "start",
@@ -78,7 +78,11 @@ public static class BlockStarterPresetCatalog
                 MobileMode = "stack",
                 CompactRadius = 120,
                 CompactChildWidth = 120,
-                GeometryLocked = false
+                SizeMode = "medium",
+                ItemSize = "standard",
+                FormationSpacing = "standard",
+                ConnectorColorMode = "theme-accent",
+                ConnectorStyle = "solid"
             }),
         _ => Preset(4, 3, 4, padding: "medium")
     };
@@ -188,7 +192,13 @@ public static class BlockStarterPresetCatalog
         target.MobileMode ??= defaults.MobileMode;
         target.CompactRadius ??= defaults.CompactRadius;
         target.CompactChildWidth ??= defaults.CompactChildWidth;
-        target.GeometryLocked ??= defaults.GeometryLocked;
+        target.SizeMode ??= defaults.SizeMode;
+        target.CustomWidthPx ??= defaults.CustomWidthPx;
+        target.ItemSize ??= defaults.ItemSize;
+        target.FormationSpacing ??= defaults.FormationSpacing;
+        target.ConnectorColorMode ??= defaults.ConnectorColorMode;
+        target.ConnectorColor ??= defaults.ConnectorColor;
+        target.ConnectorStyle ??= defaults.ConnectorStyle;
         target.ShareAppearance ??= defaults.ShareAppearance;
         target.SharedAppearance ??= defaults.SharedAppearance;
     }
@@ -197,7 +207,7 @@ public static class BlockStarterPresetCatalog
         ContainerLayoutSettingsDto target,
         ContainerPresetDefinition preset)
     {
-        target.SchemaVersion = 3;
+        target.SchemaVersion = preset.IsFormation ? 4 : 3;
         target.Purpose = preset.Purpose;
         target.Mode = preset.LayoutMode;
         target.Columns = preset.Columns;

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Contracts.Admin;
 using Contracts.Auth;
 using FullProject.Services.SectionServices;
+using FullProject.Services.IconServices;
 
 
 namespace FullProject.Controllers
@@ -54,7 +55,15 @@ namespace FullProject.Controllers
             var page = await _pageService.GetByIdAsync(pageId);
             if (page is null) return NotFound(ApiResult.NotFound("Page not found."));
 
-            var created = await _service.CreateAsync(pageId, dto);
+            Section created;
+            try
+            {
+                created = await _service.CreateAsync(pageId, dto);
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(ApiResult.BadRequest(exception.Message));
+            }
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId = created.Id },
                 ApiResult.Created(MapToDto(pageId, created), "Section created.")
@@ -68,7 +77,15 @@ namespace FullProject.Controllers
             [FromBody] SectionUpdateDto dto)
         {
             if (!CanUsePageBuilder) return Forbid();
-            var updated = await _service.UpdateAsync(pageId, sectionId, dto);
+            Section? updated;
+            try
+            {
+                updated = await _service.UpdateAsync(pageId, sectionId, dto);
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(ApiResult.BadRequest(exception.Message));
+            }
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
 
 
@@ -213,6 +230,7 @@ namespace FullProject.Controllers
                     {
                         Id = i.Id,
                         Icon = i.Icon,
+                        IconVisual = IconReferenceService.ToAdmin(i.IconVisual),
                         Title = i.Title,
                         Description = i.Description,
                         ImageUrl = i.ImageUrl,
@@ -236,6 +254,11 @@ namespace FullProject.Controllers
                     break;
 
                 case ColumnsSection col:
+                    dto.LayoutMode = col.LayoutMode;
+                    dto.Eyebrow = col.Eyebrow;
+                    dto.Heading = col.Heading;
+                    dto.Subheading = col.Subheading;
+                    dto.Content = col.Content;
                     dto.ColumnCount = col.ColumnCount;
                     dto.ColumnRatio = col.ColumnRatio;
                     dto.Gap = col.Gap;
@@ -353,9 +376,12 @@ namespace FullProject.Controllers
                     {
                         Id = i.Id,
                         Icon = i.Icon,
+                        IconVisual = IconReferenceService.ToAdmin(i.IconVisual),
                         Title = i.Title,
                         Description = i.Description,
                         ImageUrl = i.ImageUrl,
+                        BadgeText = i.BadgeText,
+                        Highlighted = i.Highlighted,
                         Visible = i.Visible,
                         Order = i.Order
                     }).ToList();

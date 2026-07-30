@@ -137,6 +137,7 @@ namespace AdminSite.Models
         public string? Label { get; set; }
         public string? Href { get; set; }
         public string? Icon { get; set; }
+        public IconReferenceModel? IconVisual { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
     }
@@ -146,6 +147,7 @@ namespace AdminSite.Models
         public string? Label { get; set; }
         public string? Href { get; set; }
         public string? Icon { get; set; }
+        public IconReferenceModel? IconVisual { get; set; }
         public bool Visible { get; set; } = true;
     }
 
@@ -254,6 +256,9 @@ namespace AdminSite.Models
         [JsonPropertyName("htmlContent")]
         public Dictionary<string, string>? Content { get; set; }
     // Columns
+        public string? LayoutMode { get; set; }
+        [JsonPropertyName("content")]
+        public Dictionary<string, string>? SplitContent { get; set; }
         public int? ColumnCount { get; set; }
         public string? ColumnRatio { get; set; }
         public bool? StackOnMobile { get; set; }
@@ -383,6 +388,7 @@ namespace AdminSite.Models
     {
         public string Id { get; set; } = string.Empty;
         public string? Icon { get; set; }
+        public IconReferenceModel? IconVisual { get; set; }
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
@@ -439,6 +445,9 @@ namespace AdminSite.Models
     {
         public string Id { get; set; } = string.Empty;
         public string? Icon { get; set; }
+        public IconReferenceModel? IconVisual { get; set; }
+        public string? BadgeText { get; set; }
+        public bool Highlighted { get; set; }
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
@@ -489,6 +498,7 @@ namespace AdminSite.Models
         public Dictionary<string, string>? StepLabel { get; set; }
         public bool AutoNumber { get; set; }
         public string? Icon { get; set; }
+        public IconReferenceModel? IconVisual { get; set; }
         public string IconPosition { get; set; } = "left";
         public string? Value { get; set; }
         public string? Prefix { get; set; }
@@ -564,6 +574,7 @@ namespace AdminSite.Models
     {
         public string Id { get; set; } = string.Empty;
         public string Icon { get; set; } = string.Empty;
+        public IconReferenceModel? IconVisual { get; set; }
         public Dictionary<string, string>? Text { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
@@ -1074,6 +1085,7 @@ namespace AdminSite.Models
     {
         public string Id { get; set; } = string.Empty;
         public string Kind { get; set; } = "file";
+        public string? Purpose { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
@@ -1083,6 +1095,10 @@ namespace AdminSite.Models
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
         public string Source { get; set; } = "managed-upload";
+        public string? OriginalSourceUrl { get; set; }
+        public string? LicenseName { get; set; }
+        public string? Attribution { get; set; }
+        public string? DeletionState { get; set; }
         public List<string> Tags { get; set; } = new();
         public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;
@@ -1133,6 +1149,7 @@ namespace AdminSite.Models
     public class ManagedResourceRequest
     {
         public string Kind { get; set; } = "file";
+        public string? Purpose { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
@@ -1142,6 +1159,9 @@ namespace AdminSite.Models
         public string? ContentType { get; set; }
         public long? SizeBytes { get; set; }
         public string? Source { get; set; } = "managed-upload";
+        public string? OriginalSourceUrl { get; set; }
+        public string? LicenseName { get; set; }
+        public string? Attribution { get; set; }
         public List<string>? Tags { get; set; }
         public string? AlbumId { get; set; }
         public bool Active { get; set; } = true;

@@ -58,7 +58,7 @@ else
                                title="@T("DragToReorder")"></i>
                         }
                         <span class="block-type-badge">
-                            @BlockIcon(block.Type) @block.Type
+                            @BlockIcon(block.Type) @T(BlockLabelKey(block.Type))
                         </span>
                         <strong class="block-card-name">@BlockDisplayName(block)</strong>
                         @if (!block.Visible)
@@ -180,14 +180,14 @@ else
                                         @T(_fullBlock.Visible ? "Hide" : "Show")
                                     </button>
                                     <button type="button" class="btn-admin btn-danger"
-                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked)"
+                                            disabled="@(_fullBlock.Authoring.FullLocked || _fullBlock.Authoring.ContentLocked || FocusedBlockIsFormationChild)"
                                             @onclick="() => _confirmDelete = _fullBlock">
                                         <i class="fas fa-trash"></i> @T("Delete")
                                     </button>
                                 </div>
                                 }
 
-                                @if (_fullBlock.Type != "container" &&
+                                @if (_fullBlock.Type != "container" && !FocusedBlockIsFormationChild &&
                                      (!string.IsNullOrWhiteSpace(_fullBlock.ParentBlockId) || MoveTargetOptions.Count > 0))
                                 {
                                     <div class="block-focused-inspector__move" @onclick:stopPropagation="true">
@@ -213,12 +213,12 @@ else
                                     <summary><i class="fas fa-shield-alt"></i> @T("LocksGovernance")</summary>
                                     <div class="block-focused-inspector__lock-grid">
                                         <label><input type="checkbox" @bind="_fullBlock.Authoring.ContentLocked" disabled="@(!Auth.IsAdminAdmin)" /> @T("ContentLocked")</label>
-                                        <label><input type="checkbox" @bind="_fullBlock.Authoring.GeometryLocked" disabled="@(!Auth.IsAdminAdmin)" /> @T("GeometryLocked")</label>
+                                        <label><input type="checkbox" @bind="_fullBlock.Authoring.GeometryLocked" disabled="@(!Auth.IsAdminAdmin || FocusedBlockIsFormationChild)" /> @T("GeometryLocked")</label>
                                     </div>
                                 </details>
                             </div>
 
-                                @if (AddTargetContainer is not null)
+                                @if (AddTargetContainer is not null && !ContainerPresetCatalog.IsFormation(AddTargetContainer.PresetKey))
                             {
                                 <section class="container-owned-manager">
                                     <header>
@@ -337,6 +337,7 @@ else
                                                           SectionId="@SectionId"
                                                           Languages="Languages"
                                                           Children="ContainerChildren"
+                                                          SlotSelected="OpenFormationSlot"
                                                           OnSaved="HandleBlockSaved" />
                                     break;
                                 case "card":
@@ -1062,7 +1063,7 @@ else
     [Parameter] public int          RefreshVersion { get; set; }
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback<string?> ActiveBlockChanged { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback<string> OnChanged { get; set; }
     [Parameter] public EventCallback<BlockCreationRequest> AddRequested { get; set; }
 
     private List<BlockModel> _blocks     = new();
@@ -1088,6 +1089,7 @@ else
     private string?          _loadedSlotId;
     private string?          _loadedInitialBlockId;
     private int              _loadedRefreshVersion = -1;
+    private int              _blockLoadVersion;
     private ElementReference _blockListRef;
     private DotNetObjectReference<BlockEditor>? _dotNetRef;
     private bool _blockSortableInitialized;
@@ -1166,6 +1168,7 @@ else
         SupportsFocusedBlockNameRename &&
         !_fullBlock.Authoring.FullLocked &&
         !_fullBlock.Authoring.ContentLocked;
+    private bool FocusedBlockIsFormationChild => IsFormationChild(_fullBlock);
     private string ActiveBlockLanguage =>
         Languages.Contains(AdminLanguage, StringComparer.OrdinalIgnoreCase)
             ? AdminLanguage
@@ -1428,6 +1431,7 @@ else
 
     public async ValueTask DisposeAsync()
     {
+        _blockLoadVersion++;
         _cts.Cancel();
         _cts.Dispose();
         try
@@ -1474,18 +1478,36 @@ else
         _loadedRefreshVersion = RefreshVersion;
     }
 
-  private async Task ReloadBlocks()
-{
-    _loading = true;
-    _blockSortableInitialized = false;
-    var res = await BlockService.GetAllAsync(PageId, SectionId);
-    _blocks = res.Data ?? new();
+    private async Task ReloadBlocks()
+    {
+        var loadVersion = ++_blockLoadVersion;
+        var pageId = PageId;
+        var sectionId = SectionId;
+        var slotId = SlotId;
+        _loading = true;
+        _blockSortableInitialized = false;
+        try
+        {
+            var res = await BlockService.GetAllAsync(pageId, sectionId);
+            if (loadVersion != _blockLoadVersion ||
+                !string.Equals(pageId, PageId, StringComparison.Ordinal) ||
+                !string.Equals(sectionId, SectionId, StringComparison.Ordinal) ||
+                !string.Equals(slotId, SlotId, StringComparison.Ordinal))
+            {
+                return;
+            }
 
-    if (!string.IsNullOrEmpty(SlotId))
-        _blocks = _blocks.Where(b => b.ColumnSlotId == SlotId).ToList();
-
-    _loading = false;
-}
+            var blocks = res.Data ?? new();
+            if (!string.IsNullOrEmpty(slotId))
+                blocks = blocks.Where(block => block.ColumnSlotId == slotId).ToList();
+            _blocks = blocks;
+        }
+        finally
+        {
+            if (loadVersion == _blockLoadVersion)
+                _loading = false;
+        }
+    }
 
     private string? ResolvePanelBlockId(string? blockId)
     {
@@ -1535,6 +1557,12 @@ else
 
     private async Task RequestAddBlock()
     {
+        if (AddTargetContainer is not null && ContainerPresetCatalog.IsFormation(AddTargetContainer.PresetKey))
+        {
+            Http.Notify(T("FormationMembershipFixed"), 400);
+            return;
+        }
+
         if (!AddTargetHasCapacity)
         {
             Http.Notify(AddTargetTitle, 400);
@@ -1556,6 +1584,7 @@ else
     private IReadOnlyList<BlockModel> MoveTargetOptions => _blocks
         .Where(block => block.Type == "container" && block.Id != _fullBlock?.Id)
         .Where(block => block.Id != _fullBlock?.ParentBlockId)
+        .Where(block => !ContainerPresetCatalog.IsFormation(block.PresetKey))
         .Where(block => TargetChildCount(block) < TargetCapacity(block))
         .Where(CanMoveSelectedBlockTo)
         .OrderBy(BlockDisplayName)
@@ -1574,7 +1603,19 @@ else
 
     private bool CanMoveSelectedBlock =>
         !_movingBlock && _fullBlock is not null && _fullBlock.Type != "container" &&
+        !FocusedBlockIsFormationChild &&
         !_fullBlock.Authoring.FullLocked && !_fullBlock.Authoring.GeometryLocked;
+
+    private bool IsFormationChild(BlockModel? block)
+    {
+        if (block is null || string.IsNullOrWhiteSpace(block.ParentBlockId)) return false;
+        var parent = _blocks.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, block.ParentBlockId, StringComparison.Ordinal) &&
+            string.Equals(candidate.Type, "container", StringComparison.Ordinal));
+        return parent is not null && ContainerPresetCatalog.IsFormation(parent.PresetKey);
+    }
+
+    private Task OpenFormationSlot(string blockId) => OpenBlock(blockId, notify: true);
 
     private int TargetChildCount(BlockModel target) =>
         _blocks.Count(block => block.ParentBlockId == target.Id);
@@ -1752,7 +1793,7 @@ else
     {
         if (OnChanged.HasDelegate)
         {
-            await OnChanged.InvokeAsync();
+            await OnChanged.InvokeAsync(SectionId);
         }
     }
 
@@ -2250,7 +2291,7 @@ else
         "button" => "Button",
         "map" => "Map",
         "form" => "Form",
-        "container" => "Container",
+        "container" => "Formation",
         _ => "Text"
     };
 

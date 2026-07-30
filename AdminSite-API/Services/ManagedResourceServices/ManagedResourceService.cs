@@ -31,7 +31,7 @@ namespace FullProject.Services
             _assetCleanup = assetCleanup;
         }
 
-        public async Task<List<ManagedResource>> GetAllAsync(string? kind = null, string? search = null, bool includeInactive = false, string? albumId = null)
+        public async Task<List<ManagedResource>> GetAllAsync(string? kind = null, string? search = null, bool includeInactive = false, string? albumId = null, string? purpose = null)
         {
             var filter = Builders<ManagedResource>.Filter.Empty;
             var normalizedKind = _validation.NormalizeKind(kind, allowEmpty: true);
@@ -43,6 +43,8 @@ namespace FullProject.Services
                 if (!ObjectId.TryParse(cleanAlbumId, out _)) return [];
                 filter &= Builders<ManagedResource>.Filter.Eq(r => r.AlbumId, cleanAlbumId);
             }
+            if (!string.IsNullOrWhiteSpace(purpose))
+                filter &= Builders<ManagedResource>.Filter.Eq(r => r.Purpose, purpose.Trim().ToLowerInvariant());
             if (!includeInactive)
                 filter &= Builders<ManagedResource>.Filter.Eq(r => r.Active, true);
 
@@ -187,16 +189,34 @@ namespace FullProject.Services
                 return (false, usage, [$"Resource is used in {usage.UsageCount} place{plural}. Remove those references before deleting."]);
             }
 
+            var isCustomIcon = string.Equals(resource.Purpose, "custom-icon", StringComparison.OrdinalIgnoreCase);
+            if (isCustomIcon)
+            {
+                resource.DeletionState = "pending";
+                resource.UpdatedAt = DateTime.UtcNow;
+                await _context.ManagedResources.ReplaceOneAsync(r => r.Id == resource.Id, resource);
+
+                var storageDeleted = await _assetCleanup.DeleteIfUnusedAsync(resource.Url, null, resource.Id);
+                if (!storageDeleted)
+                {
+                    resource.DeletionState = "failed";
+                    resource.UpdatedAt = DateTime.UtcNow;
+                    await _context.ManagedResources.ReplaceOneAsync(r => r.Id == resource.Id, resource);
+                    return (false, usage, ["Custom Icon storage deletion failed. The catalogue record was retained so deletion can be retried safely."]);
+                }
+            }
+
             var result = await _context.ManagedResources.DeleteOneAsync(r => r.Id == resource.Id);
             if (result.DeletedCount <= 0)
                 return (false, usage, ["Resource not found."]);
 
-            await _assetCleanup.DeleteUnusedAsync([resource.Url, resource.ThumbnailUrl]);
+            if (!isCustomIcon)
+                await _assetCleanup.DeleteUnusedAsync([resource.Url, resource.ThumbnailUrl]);
             return (true, usage, []);
         }
 
-        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes, string? albumId = null) =>
-            _validation.BuildUploadCreateDto(url, storageKey, kind, fileName, contentType, sizeBytes, albumId);
+        public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes, string? albumId = null, string? purpose = null) =>
+            _validation.BuildUploadCreateDto(url, storageKey, kind, fileName, contentType, sizeBytes, albumId, purpose);
 
         public string? NormalizeKind(string? value, bool allowEmpty = false) =>
             _validation.NormalizeKind(value, allowEmpty);
@@ -217,6 +237,7 @@ namespace FullProject.Services
             updated += await PropagateBlockReplacementAsync(_context.BlocksPublished, resource, oldUrl);
             updated += await PropagateSectionPresetReplacementAsync(resource, oldUrl);
             updated += await PropagateBrandingReplacementAsync(resource, oldUrl);
+            updated += await PropagateSocialReplacementAsync(resource, oldUrl);
             return updated;
         }
 
@@ -270,7 +291,7 @@ namespace FullProject.Services
         {
             if (string.IsNullOrWhiteSpace(oldUrl)) return 0;
 
-            var sections = await collection.Find(SectionReplacementFilter(oldUrl)).ToListAsync();
+            var sections = await collection.Find(SectionReplacementFilter(resource, oldUrl)).ToListAsync();
             var updated = 0;
             foreach (var section in sections)
             {
@@ -291,7 +312,7 @@ namespace FullProject.Services
         {
             if (string.IsNullOrWhiteSpace(oldUrl)) return 0;
 
-            var blocks = await collection.Find(BlockReplacementFilter(oldUrl)).ToListAsync();
+            var blocks = await collection.Find(BlockReplacementFilter(resource, oldUrl)).ToListAsync();
             var updated = 0;
             foreach (var block in blocks)
             {
@@ -351,6 +372,24 @@ namespace FullProject.Services
                 updated++;
             }
 
+            return updated;
+        }
+
+        private async Task<int> PropagateSocialReplacementAsync(ManagedResource resource, string oldUrl)
+        {
+            var groups = await _context.SocialButtons.Find(Builders<SocialButtonGroup>.Filter.Or(
+                Builders<SocialButtonGroup>.Filter.Eq("Buttons.IconVisual.ResourceId", resource.Id),
+                Builders<SocialButtonGroup>.Filter.Eq("Buttons.IconVisual.Url", oldUrl))).ToListAsync();
+            var updated = 0;
+            foreach (var group in groups)
+            {
+                var changed = false;
+                foreach (var button in group.Buttons)
+                    changed |= ReplaceIconReference(button.IconVisual, resource, oldUrl);
+                if (!changed) continue;
+                await _context.SocialButtons.ReplaceOneAsync(item => item.Id == group.Id, group);
+                updated++;
+            }
             return updated;
         }
 
@@ -452,6 +491,8 @@ namespace FullProject.Services
                         item.ImageUrl = resource.Url;
                         changed = true;
                     }
+                    foreach (var item in list.Items)
+                        changed |= ReplaceIconReference(item.IconVisual, resource, oldUrl);
                     break;
                 case CarouselSection carousel:
                     foreach (var item in carousel.Items.Where(i => ManagedResourceReferenceHelper.SameUrl(i.ImageUrl, oldUrl)))
@@ -466,6 +507,8 @@ namespace FullProject.Services
                         item.ImageUrl = resource.Url;
                         changed = true;
                     }
+                    foreach (var item in testimonial.Items)
+                        changed |= ReplaceIconReference(item.IconVisual, resource, oldUrl);
                     break;
                 case ShowcaseSection showcase:
                     foreach (var item in showcase.ItemOverrides.Where(i => ManagedResourceReferenceHelper.SameUrl(i.CardImageUrl, oldUrl)))
@@ -481,35 +524,52 @@ namespace FullProject.Services
 
         private static bool ReplaceBlockReferences(Block block, ManagedResource resource, string oldUrl)
         {
+            var changed = false;
             switch (block)
             {
                 case ImageBlock image when ManagedResourceReferenceHelper.SameUrl(image.Asset.Url, oldUrl):
                     image.Asset.Url = resource.Url;
-                    return true;
+                    changed = true;
+                    break;
                 case FileBlock file when ManagedResourceReferenceHelper.SameUrl(file.Asset.Url, oldUrl):
                     file.Asset.Url = resource.Url;
                     file.Filename = resource.FileName;
                     file.Asset.ContentType = resource.ContentType;
-                    return true;
+                    changed = true;
+                    break;
                 case VideoBlock video when ManagedResourceReferenceHelper.SameUrl(video.Asset.Url, oldUrl):
                     video.Asset.Url = resource.Url;
-                    return true;
+                    changed = true;
+                    break;
                 case CardBlock card when ManagedResourceReferenceHelper.SameUrl(card.Asset.Url, oldUrl):
                     card.Asset.Url = resource.Url;
-                    return true;
-                default:
-                    return false;
+                    changed = true;
+                    break;
             }
+
+            changed |= ReplaceIconReference(BlockIcon(block), resource, oldUrl);
+            if (block is BulletListBlock bullet)
+                foreach (var item in bullet.Items)
+                    changed |= ReplaceIconReference(item.IconVisual, resource, oldUrl);
+            return changed;
         }
 
         private static FilterDefinition<ContentItem> ContentReplacementFilter(ManagedResource resource, string oldUrl) =>
             ManagedResourceReferenceHelper.ContentFilter(resource, oldUrl);
 
-        private static FilterDefinition<Section> SectionReplacementFilter(string oldUrl) =>
-            ManagedResourceReferenceHelper.SectionUrlFilter(oldUrl);
+        private static FilterDefinition<Section> SectionReplacementFilter(ManagedResource resource, string oldUrl) =>
+            Builders<Section>.Filter.Or(
+                ManagedResourceReferenceHelper.SectionUrlFilter(oldUrl),
+                Builders<Section>.Filter.Eq("Items.IconVisual.ResourceId", resource.Id),
+                Builders<Section>.Filter.Eq("Items.IconVisual.Url", oldUrl));
 
-        private static FilterDefinition<Block> BlockReplacementFilter(string oldUrl) =>
-            ManagedResourceReferenceHelper.BlockUrlFilter([oldUrl]);
+        private static FilterDefinition<Block> BlockReplacementFilter(ManagedResource resource, string oldUrl) =>
+            Builders<Block>.Filter.Or(
+                ManagedResourceReferenceHelper.BlockUrlFilter([oldUrl]),
+                Builders<Block>.Filter.Eq("IconVisual.ResourceId", resource.Id),
+                Builders<Block>.Filter.Eq("IconVisual.Url", oldUrl),
+                Builders<Block>.Filter.Eq("Items.IconVisual.ResourceId", resource.Id),
+                Builders<Block>.Filter.Eq("Items.IconVisual.Url", oldUrl));
 
         private static FilterDefinition<SectionPreset> SectionPresetReplacementFilter(string oldUrl) =>
             Builders<SectionPreset>.Filter.Or(
@@ -518,8 +578,37 @@ namespace FullProject.Services
                 Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundVideoUrl", oldUrl),
                 Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", oldUrl),
                 Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Section.Items.IconVisual.Url", oldUrl),
                 Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", oldUrl),
-                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", oldUrl));
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Blocks.IconVisual.Url", oldUrl),
+                Builders<SectionPreset>.Filter.Eq("Blocks.Items.IconVisual.Url", oldUrl));
+
+        private static IconReference? BlockIcon(Block block) => block switch
+        {
+            CardBlock value => value.IconVisual,
+            ButtonBlock value => value.IconVisual,
+            MetricBlock value => value.IconVisual,
+            StepBlock value => value.IconVisual,
+            IconBlock value => value.IconVisual,
+            _ => null
+        };
+
+        private static bool ReplaceIconReference(IconReference? icon, ManagedResource resource, string oldUrl)
+        {
+            if (icon is null) return false;
+            var matches = string.Equals(icon.ResourceId, resource.Id, StringComparison.Ordinal) ||
+                          ManagedResourceReferenceHelper.SameUrl(icon.Url, oldUrl);
+            if (!matches) return false;
+            icon.ResourceId = resource.Id;
+            icon.ResourceSource = ManagedResourceSource;
+            icon.Url = resource.Url;
+            icon.StorageKey = resource.StorageKey;
+            icon.FileName = resource.FileName;
+            icon.ContentType = resource.ContentType;
+            icon.SizeBytes = resource.SizeBytes;
+            return true;
+        }
 
         private static string ThumbnailReplacementUrl(ManagedResource resource) =>
             string.Equals(resource.Kind, "image", StringComparison.OrdinalIgnoreCase)

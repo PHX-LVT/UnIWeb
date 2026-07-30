@@ -10,9 +10,9 @@
         </div>
     }
     <div class="sc-card-block__body">
-        @if (!string.IsNullOrWhiteSpace(Block.Icon))
+        @if (Block.IconVisual is not null || !string.IsNullOrWhiteSpace(Block.Icon))
         {
-            <i class="@Block.Icon sc-design-icon"></i>
+            <ContentIcon Icon="Block.IconVisual" LegacyClass="Block.Icon" Lang="Lang" CssClass="sc-design-icon" />
         }
         <h3>@StyleHelper.Lang(Block.Title, Lang)</h3>
         <p>@StyleHelper.Lang(Block.Description, Lang)</p>

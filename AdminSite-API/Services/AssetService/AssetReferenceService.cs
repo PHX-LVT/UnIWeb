@@ -7,10 +7,12 @@ namespace FullProject.Services.AssetService
     public class AssetReferenceService
     {
         private readonly MongoDbContext _context;
+        private readonly IMongoCollection<SocialButtonGroup> _social;
 
         public AssetReferenceService(MongoDbContext context)
         {
             _context = context;
+            _social = context.SocialButtons;
         }
 
         public async Task<bool> IsReferencedAsync(string? url, string? excludingManagedResourceId = null)
@@ -28,6 +30,7 @@ namespace FullProject.Services.AssetService
             if (await SectionPresetReferencesAsync(url)) return true;
             if (await ContentReferencesAsync(_context.ContentDraft, url)) return true;
             if (await ContentReferencesAsync(_context.ContentPublished, url)) return true;
+            if (await SocialReferencesAsync(url)) return true;
 
             return false;
         }
@@ -54,6 +57,7 @@ namespace FullProject.Services.AssetService
                 Builders<Section>.Filter.Eq("Style.BackgroundVideoUrl", url),
                 Builders<Section>.Filter.Eq("ImageUrl", url),
                 Builders<Section>.Filter.Eq("Items.ImageUrl", url),
+                Builders<Section>.Filter.Eq("Items.IconVisual.Url", url),
                 Builders<Section>.Filter.Eq("ItemOverrides.CardImageUrl", url));
 
             return await sections.Find(filter).AnyAsync();
@@ -61,7 +65,11 @@ namespace FullProject.Services.AssetService
 
         private static async Task<bool> BlockReferencesAsync(IMongoCollection<Block> blocks, string url)
         {
-            return await blocks.Find(Builders<Block>.Filter.Eq("Asset.Url", url)).AnyAsync();
+            var filter = Builders<Block>.Filter.Or(
+                Builders<Block>.Filter.Eq("Asset.Url", url),
+                Builders<Block>.Filter.Eq("IconVisual.Url", url),
+                Builders<Block>.Filter.Eq("Items.IconVisual.Url", url));
+            return await blocks.Find(filter).AnyAsync();
         }
 
         private async Task<bool> SectionPresetReferencesAsync(string url)
@@ -72,8 +80,11 @@ namespace FullProject.Services.AssetService
                 Builders<SectionPreset>.Filter.Eq("Section.Style.BackgroundVideoUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.ImageUrl", url),
                 Builders<SectionPreset>.Filter.Eq("Section.Items.ImageUrl", url),
+                Builders<SectionPreset>.Filter.Eq("Section.Items.IconVisual.Url", url),
                 Builders<SectionPreset>.Filter.Eq("Section.ItemOverrides.CardImageUrl", url),
-                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url));
+                Builders<SectionPreset>.Filter.Eq("Blocks.Asset.Url", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.IconVisual.Url", url),
+                Builders<SectionPreset>.Filter.Eq("Blocks.Items.IconVisual.Url", url));
 
             return await _context.SectionPresets.Find(filter).AnyAsync();
         }
@@ -91,5 +102,8 @@ namespace FullProject.Services.AssetService
 
             return await content.Find(filter).AnyAsync();
         }
+
+        private async Task<bool> SocialReferencesAsync(string url) =>
+            await _social.Find(Builders<SocialButtonGroup>.Filter.Eq("Buttons.IconVisual.Url", url)).AnyAsync();
     }
 }

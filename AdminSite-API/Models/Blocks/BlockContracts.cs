@@ -95,7 +95,13 @@ public class ContainerLayoutSettings
     public string MobileMode { get; set; } = "stack";
     public int CompactRadius { get; set; } = 120;
     public int CompactChildWidth { get; set; } = 120;
-    public bool GeometryLocked { get; set; }
+    public string SizeMode { get; set; } = "medium";
+    public int? CustomWidthPx { get; set; }
+    public string ItemSize { get; set; } = "standard";
+    public string FormationSpacing { get; set; } = "standard";
+    public string ConnectorColorMode { get; set; } = "theme-accent";
+    public string? ConnectorColor { get; set; }
+    public string ConnectorStyle { get; set; } = "solid";
     public bool ShareAppearance { get; set; }
     public BlockAppearance? SharedAppearance { get; set; }
     public ContainerDiagramSettings Diagram { get; set; } = new();

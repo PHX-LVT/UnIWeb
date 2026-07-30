@@ -589,6 +589,38 @@ window.reloadPreviewIframe = function () {
     if (iframe) iframe.src = iframe.src;
 };
 
+window.setArrangeColumnWorkspace = function (sectionId, zoneId, height) {
+    const iframe = document.getElementById("ez-preview-iframe");
+    const doc = iframe?.contentDocument;
+    if (!doc || !sectionId || !zoneId) return false;
+
+    const section = [...doc.querySelectorAll("[data-section-id]")]
+        .find(item => item.getAttribute("data-section-id") === String(sectionId));
+    const zone = section
+        ? [...section.querySelectorAll('.sc-block-zone[data-authoring-zone="true"][data-block-zone]')]
+            .find(item => item.getAttribute("data-block-zone") === String(zoneId))
+        : null;
+    if (!zone) return false;
+
+    const safeHeight = Math.min(Math.max(Number.parseInt(height, 10) || 720, 720), 3000);
+    zone.dataset.ezArrangeWorkspace = "true";
+    zone.style.minHeight = `${safeHeight}px`;
+    window.requestAnimationFrame(() => window.__ezCanvasRequestPositions?.());
+    return true;
+};
+
+window.clearArrangeColumnWorkspaces = function () {
+    const iframe = document.getElementById("ez-preview-iframe");
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    doc.querySelectorAll('[data-ez-arrange-workspace="true"]').forEach(zone => {
+        zone.style.removeProperty("min-height");
+        delete zone.dataset.ezArrangeWorkspace;
+    });
+    window.requestAnimationFrame(() => window.__ezCanvasRequestPositions?.());
+};
+
 window.blockEditor = window.blockEditor || {};
 window.blockEditor.initItemSortable = (root, dotnet) => {
     if (!root || !dotnet || typeof Sortable === "undefined") return;
@@ -758,23 +790,19 @@ window.initSectionEditorPanelSizing = function () {
     try {
         stored = Number.parseInt(localStorage.getItem(storageKey) || "560", 10);
     } catch { }
-    const initialRight = root.getBoundingClientRect().right;
     const initialWidth = clampWidth(Number.isFinite(stored) ? stored : 560);
     root.style.width = `${initialWidth}px`;
-    root.style.left = `${Math.max(0, initialRight - initialWidth)}px`;
 
     const state = {
         root,
         handle,
         dragging: false,
         startX: 0,
-        startWidth: initialWidth,
-        right: 0
+        startWidth: initialWidth
     };
-    const applyWidth = (width, right = root.getBoundingClientRect().right) => {
+    const applyWidth = width => {
         const clamped = clampWidth(width);
         root.style.width = `${clamped}px`;
-        root.style.left = `${Math.max(0, right - clamped)}px`;
         return clamped;
     };
     const saveWidth = () => {
@@ -788,14 +816,13 @@ window.initSectionEditorPanelSizing = function () {
         state.dragging = true;
         state.startX = event.clientX;
         state.startWidth = rect.width;
-        state.right = rect.right;
         handle.setPointerCapture?.(event.pointerId);
         document.body.classList.add("ez-section-editor-resizing");
         event.preventDefault();
     };
     state.pointerMove = event => {
         if (!state.dragging) return;
-        applyWidth(state.startWidth + state.startX - event.clientX, state.right);
+        applyWidth(state.startWidth + state.startX - event.clientX);
     };
     state.pointerUp = () => {
         if (!state.dragging) return;
@@ -813,15 +840,13 @@ window.initSectionEditorPanelSizing = function () {
             : event.key === "End"
                 ? maximum
                 : rect.width + (event.key === "ArrowLeft" ? step : -step);
-        applyWidth(width, rect.right);
+        applyWidth(width);
         saveWidth();
         event.preventDefault();
     };
     state.resize = () => {
-        const right = root.getBoundingClientRect().right;
         const width = clampWidth(root.getBoundingClientRect().width);
         root.style.width = `${width}px`;
-        root.style.left = `${Math.max(0, right - width)}px`;
     };
     handle.addEventListener("pointerdown", state.pointerDown);
     handle.addEventListener("keydown", state.keyDown);

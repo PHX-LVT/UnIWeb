@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using Contracts.Auth;
 
 namespace Api.IntegrationTests;
 
@@ -61,6 +63,55 @@ public sealed class ApiPipelineTests(MongoApiFixture mongo) : IClassFixture<Mong
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task RememberedDeviceExchange_AllowsConcurrentStartupRequests()
+    {
+        var client = CreateClient();
+        using var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest
+            {
+                Email = "integration.admin@example.test",
+                Password = "IntegrationPassword123!",
+                RememberDevice = true
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var credential = await ReadRememberedDeviceCredentialAsync(loginResponse);
+
+        var firstExchange = client.PostAsJsonAsync(
+            "/api/auth/remembered-device/exchange",
+            new RememberedDeviceExchangeRequest { Credential = credential },
+            TestContext.Current.CancellationToken);
+        var secondExchange = client.PostAsJsonAsync(
+            "/api/auth/remembered-device/exchange",
+            new RememberedDeviceExchangeRequest { Credential = credential },
+            TestContext.Current.CancellationToken);
+
+        var responses = await Task.WhenAll(firstExchange, secondExchange);
+        try
+        {
+            foreach (var response in responses)
+            {
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                Assert.Equal(credential, await ReadRememberedDeviceCredentialAsync(response));
+            }
+        }
+        finally
+        {
+            foreach (var response in responses)
+                response.Dispose();
+        }
+
+        using var laterExchange = await client.PostAsJsonAsync(
+            "/api/auth/remembered-device/exchange",
+            new RememberedDeviceExchangeRequest { Credential = credential },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, laterExchange.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task HealthEndpoints_AreAnonymousAndReportReadiness()
     {
         var live = await CreateClient().GetAsync("/health/live", TestContext.Current.CancellationToken);
@@ -90,6 +141,19 @@ public sealed class ApiPipelineTests(MongoApiFixture mongo) : IClassFixture<Mong
         request.Headers.Add("Origin", origin);
         request.Headers.Add("Access-Control-Request-Method", "POST");
         return request;
+    }
+
+    private static async Task<string> ReadRememberedDeviceCredentialAsync(HttpResponseMessage response)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
+        using var document = await JsonDocument.ParseAsync(
+            stream,
+            cancellationToken: TestContext.Current.CancellationToken);
+        return document.RootElement
+            .GetProperty("data")
+            .GetProperty("rememberedDevice")
+            .GetProperty("credential")
+            .GetString() ?? throw new InvalidOperationException("Remembered-device credential was missing.");
     }
 
     public async ValueTask DisposeAsync()

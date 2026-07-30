@@ -42,9 +42,8 @@
             @if (_showIcon)
             {
                 <div class="form-group">
-                    <label class="form-label">@T("IconClass")</label>
-                    <DxTextBox @bind-Text="item.Icon" CssClass="w-100"
-                               NullText="fas fa-star" />
+                    <label class="form-label">@T("Icon")</label>
+                    <IconPickerField @bind-Value="item.Icon" @bind-Visual="item.IconVisual" Label="@T("Icon")" />
                 </div>
             }
             <div class="form-group">
@@ -139,6 +138,7 @@
         {
             Id = x.Id,
             Icon = x.Icon,
+            IconVisual = CopyIcon(x.IconVisual),
             Visible = x.Visible,
             Order = x.Order,
             Title = new(x.Title ?? new()),
@@ -221,12 +221,29 @@
 
     private static ListItemDto MapItem(ListItemModel item) => new()
     {
+        Id = item.Id,
         Icon = item.Icon ?? string.Empty,
+        IconVisual = BlockUpdateDtoMapper.ToIconDto(item.IconVisual),
         Title = item.Title ?? new(),
         Description = item.Description ?? new(),
         ImageUrl = item.ImageUrl,
         LinkHref = item.LinkHref,
         Visible = item.Visible,
         Order = item.Order
+    };
+
+    private static IconReferenceModel? CopyIcon(IconReferenceModel? value) => value is null ? null : new()
+    {
+        SchemaVersion = value.SchemaVersion,
+        Source = value.Source,
+        ClassName = value.ClassName,
+        ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource,
+        Url = value.Url,
+        StorageKey = value.StorageKey,
+        FileName = value.FileName,
+        ContentType = value.ContentType,
+        SizeBytes = value.SizeBytes,
+        AltText = new(value.AltText)
     };
 }

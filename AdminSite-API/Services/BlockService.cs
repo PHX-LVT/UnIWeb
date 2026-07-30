@@ -8,6 +8,8 @@ using Contracts.Forms;
 using FullProject.Services.AssetService;
 using FullProject.Services.BlockServices;
 using FullProject.Services.FormServices;
+using FullProject.Services.IconServices;
+using Contracts.Icons;
 using SharedComponents.Helpers;
 
 namespace FullProject.Services
@@ -16,12 +18,14 @@ namespace FullProject.Services
     {
         private readonly MongoDbContext _context;
         private readonly AssetCleanupService _assetCleanup;
+        private readonly IconReferenceService _icons;
         private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
 
-        public BlockService(MongoDbContext context, AssetCleanupService assetCleanup)
+        public BlockService(MongoDbContext context, AssetCleanupService assetCleanup, IconReferenceService icons)
         {
             _context = context;
             _assetCleanup = assetCleanup;
+            _icons = icons;
         }
 
         private static Dictionary<string, string> SanitizeDictionary(Dictionary<string, string>? input)
@@ -201,6 +205,8 @@ namespace FullProject.Services
             if (dto is ContainerBlockCreateDto containerCreate)
                 containerPreset = PrepareContainerPresetForCreation(containerCreate);
 
+            await CanonicalizeIconsAsync(dto, null);
+
             Block block = dto switch
             {
                 TextBlockCreateDto t => new TextBlock
@@ -260,6 +266,7 @@ namespace FullProject.Services
                 CardBlockCreateDto card => new CardBlock
                 {
                     Icon = card.Icon,
+                    IconVisual = IconReferenceService.ToModel(card.IconVisual),
                     Title = card.Title,
                     Description = SanitizeDictionary(card.Description),
                     Asset = BlockAssetMetadataService.ToModel(card.Asset),
@@ -273,6 +280,7 @@ namespace FullProject.Services
                 ButtonBlockCreateDto button => new ButtonBlock
                 {
                     Icon = button.Icon,
+                    IconVisual = IconReferenceService.ToModel(button.IconVisual),
                     IconPosition = NormalizeIconPosition(button.IconPosition),
                     Label = button.Label,
                     Href = CleanUrl(button.Href),
@@ -283,6 +291,7 @@ namespace FullProject.Services
                 MetricBlockCreateDto metric => new MetricBlock
                 {
                     Icon = metric.Icon,
+                    IconVisual = IconReferenceService.ToModel(metric.IconVisual),
                     Label = metric.Label,
                     Value = metric.Value,
                     Prefix = metric.Prefix,
@@ -297,6 +306,7 @@ namespace FullProject.Services
                 StepBlockCreateDto step => new StepBlock
                 {
                     Icon = step.Icon,
+                    IconVisual = IconReferenceService.ToModel(step.IconVisual),
                     AutoNumber = step.AutoNumber,
                     StepLabel = step.StepLabel,
                     Title = step.Title,
@@ -305,6 +315,7 @@ namespace FullProject.Services
                 IconBlockCreateDto icon => new IconBlock
                 {
                     Icon = icon.Icon,
+                    IconVisual = IconReferenceService.ToModel(icon.IconVisual),
                     Label = icon.Label,
                     Description = SanitizeDictionary(icon.Description),
                     ActionEnabled = icon.ActionEnabled,
@@ -335,6 +346,8 @@ namespace FullProject.Services
 
             if (parentBlock is ContainerBlock governedParent)
             {
+                if (ContainerPresetCatalog.IsFormation(governedParent.PresetKey))
+                    throw new ArgumentException("Formation membership is fixed. Replace one of its governed slots instead.");
                 var existingChildren = await GetDirectChildrenAsync(governedParent);
                 if (!ContainerCapacityPolicy.CanOwn(BlockType(block)))
                     throw new ArgumentException("Containers cannot own another Container. Add a normal content Block instead.");
@@ -357,6 +370,14 @@ namespace FullProject.Services
             block.Visible = dto.Visible;
             block.EditorLabel = SanitizeDictionary(dto.EditorLabel);
             block.Layout = MapLayout(dto.Layout);
+            if (block is ContainerBlock createdFormation && containerPreset?.IsFormation == true)
+            {
+                block.Layout = MapLayout(BuildFormationParentLayout(
+                    block.Layout,
+                    containerPreset,
+                    createdFormation.ContainerLayout,
+                    FormBlockLayoutPolicy.AvailableContentWidthPx(section.Style?.ContentWidth)));
+            }
             if (block is FormBlock createdForm && !string.IsNullOrWhiteSpace(createdForm.FormDefinitionId))
             {
                 var definition = await _context.FormDefinitions
@@ -401,7 +422,28 @@ namespace FullProject.Services
             block.UpdatedAt = DateTime.UtcNow;
             block.Buttons = dto.Buttons?.Select(MapButton).ToList() ?? new();
 
-            await _context.BlocksDraft.InsertOneAsync(block);
+            if (block is ContainerBlock formation && containerPreset?.IsFormation == true)
+            {
+                using var session = await _context.Client.StartSessionAsync();
+                session.StartTransaction();
+                try
+                {
+                    await _context.BlocksDraft.InsertOneAsync(session, block);
+                    var placeholders = BuildFormationPlaceholders(formation, containerPreset);
+                    if (placeholders.Count > 0)
+                        await _context.BlocksDraft.InsertManyAsync(session, placeholders);
+                    await session.CommitTransactionAsync();
+                }
+                catch
+                {
+                    await session.AbortTransactionAsync();
+                    throw;
+                }
+            }
+            else
+            {
+                await _context.BlocksDraft.InsertOneAsync(block);
+            }
             if (block is FormBlock { DefaultHeightPx: > 0 })
             {
                 await GrowSectionForGovernedFormAsync(section, new BlockLayoutDto
@@ -429,50 +471,30 @@ namespace FullProject.Services
             var targetKey = string.IsNullOrWhiteSpace(requestedPresetKey)
                 ? effectiveKey
                 : requestedPresetKey;
-            if (!ContainerPresetCatalog.TryGetGoverned(targetKey, out var preset))
-                return "Choose a supported Container preset.";
+            if (!ContainerPresetCatalog.TryGetFormation(targetKey, out var preset))
+                return "Choose a supported Formation preset.";
             if (incoming is null) return null;
+
+            if (!string.Equals(effectiveKey, targetKey, StringComparison.Ordinal))
+                return "Use Change Formation to convert this Formation safely.";
 
             var children = (await GetBySectionAsync(pageId, sectionId))
                 .Where(block => block.ParentBlockId == blockId)
                 .ToList();
 
-            if (!ContainerCapacityPolicy.CanConvert(targetKey, children.Select(BlockType), out var conversionError))
-                return conversionError;
+            if (children.Count != preset.MaximumChildren)
+                return $"The {preset.DisplayName} Formation must contain exactly {preset.MaximumChildren} governed slots.";
 
-            incoming.SchemaVersion = 3;
+            incoming.SchemaVersion = 4;
             incoming.Mode = preset.LayoutMode;
             incoming.Purpose = preset.Purpose;
             incoming.Columns = preset.Columns;
             incoming.MobileMode = preset.MobileMode;
-
-            var requestedMode = preset.LayoutMode;
-            var capacity = preset.MaximumChildren;
-            if (children.Count > capacity)
-                return $"The {requestedMode} Container supports at most {capacity} direct Blocks. Remove Blocks before changing this layout.";
-
-            var purpose = preset.Purpose;
-            if (purpose == "composition")
-            {
-                incoming.Purpose = "composition";
-                incoming.AllowedChildType = null;
-                return null;
-            }
-
-            var childTypes = children.Select(BlockType).Distinct(StringComparer.Ordinal).ToList();
-            if (childTypes.Count > 1)
-                return "A Collection Container can contain only one Block type. Remove mixed children before changing its purpose.";
-
-            var lockedType = childTypes.FirstOrDefault() ?? container.ContainerLayout.AllowedChildType;
-            if (children.Count == 0)
-                lockedType = null;
-            if (!string.IsNullOrWhiteSpace(incoming.AllowedChildType) &&
-                !string.IsNullOrWhiteSpace(lockedType) &&
-                !string.Equals(incoming.AllowedChildType, lockedType, StringComparison.Ordinal))
-                return "Collection child type is locked after the first child is added.";
-
-            incoming.Purpose = "collection";
-            incoming.AllowedChildType = lockedType;
+            incoming.AllowedChildType = null;
+            incoming.Diagram = new ContainerDiagramSettingsDto { SchemaVersion = 1, Enabled = false };
+            incoming.CustomWidthPx = incoming.SizeMode == "custom"
+                ? Math.Clamp(incoming.CustomWidthPx ?? preset.DefaultWidthPx, preset.MinimumWidthPx, preset.MaximumWidthPx)
+                : null;
             return null;
         }
 
@@ -578,6 +600,7 @@ namespace FullProject.Services
             ContentLocked = dto?.ContentLocked ?? false,
             GeometryLocked = (dto?.GeometryLocked ?? false) || (dto?.FullLocked ?? false),
             FullLocked = dto?.FullLocked ?? false,
+            IsPlaceholder = false,
             PresetSlotName = null,
             PresetSourceId = null
         };
@@ -591,22 +614,78 @@ namespace FullProject.Services
             var requestedMode = container.ContainerLayout?.Mode;
             var resolvedKey = ContainerPresetCatalog.ResolveCreationKey(container.PresetKey, requestedMode);
             if (resolvedKey is null ||
-                !ContainerPresetCatalog.TryGetGoverned(resolvedKey, out var preset))
+                !ContainerPresetCatalog.TryGetFormation(resolvedKey, out var preset))
             {
                 throw new ArgumentException(
-                    "Choose a supported Container preset.");
+                    "Choose a supported Formation preset.");
             }
 
             container.PresetKey = preset.Key;
             container.ContainerLayout ??= new ContainerLayoutSettingsDto();
-            container.ContainerLayout.SchemaVersion = 3;
+            container.ContainerLayout.SchemaVersion = 4;
             container.ContainerLayout.Purpose = preset.Purpose;
             container.ContainerLayout.Mode = preset.LayoutMode;
             container.ContainerLayout.Columns = preset.Columns;
             container.ContainerLayout.MobileMode = preset.MobileMode;
-            if (preset.Purpose != "collection")
-                container.ContainerLayout.AllowedChildType = null;
+            container.ContainerLayout.AllowedChildType = null;
+            container.ContainerLayout.SizeMode ??= "medium";
+            container.ContainerLayout.ItemSize ??= "standard";
+            container.ContainerLayout.FormationSpacing ??= "standard";
+            container.ContainerLayout.ConnectorColorMode ??= "theme-accent";
+            container.ContainerLayout.ConnectorStyle ??= "solid";
+            container.ContainerLayout.Diagram = new ContainerDiagramSettingsDto { SchemaVersion = 1, Enabled = false };
             return preset;
+        }
+
+        private static List<Block> BuildFormationPlaceholders(
+            ContainerBlock formation,
+            ContainerPresetDefinition preset)
+        {
+            var now = DateTime.UtcNow;
+            return preset.Slots.Select((slot, index) => (Block)new TextBlock
+            {
+                StableId = Guid.NewGuid().ToString(),
+                PageStableId = formation.PageStableId,
+                SectionStableId = formation.SectionStableId,
+                ParentBlockId = formation.Id,
+                BlockZone = "default",
+                PositionMode = "formation",
+                Visible = true,
+                Order = index,
+                EditorLabel = new Dictionary<string, string>
+                {
+                    ["en"] = slot.DisplayName,
+                    ["vi"] = slot.DisplayName,
+                    ["cn"] = slot.DisplayName
+                },
+                Title = new(),
+                Content = new(),
+                Layout = new BlockLayout
+                {
+                    Width = "custom",
+                    ColumnSpan = 1,
+                    ZIndex = index + 1
+                },
+                Appearance = new BlockAppearance
+                {
+                    SchemaVersion = 2,
+                    BackgroundMode = "none",
+                    InheritFromContainer = true
+                },
+                Responsive = new BlockResponsiveSettings { SchemaVersion = 1 },
+                Animation = new BlockAnimationSettings { SchemaVersion = 1 },
+                Authoring = new BlockAuthoringPolicy
+                {
+                    SchemaVersion = 2,
+                    GeometryLocked = true,
+                    IsPlaceholder = true,
+                    PresetSlotName = slot.Key,
+                    PresetSourceId = preset.Key
+                },
+                Version = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            }).ToList();
         }
 
         private static string BlockType(Block block) => block switch
@@ -627,11 +706,47 @@ namespace FullProject.Services
             _ => "text"
         };
 
+        private static bool HasMeaningfulFormationContent(BlockUpdateDto dto) => dto switch
+        {
+            TextBlockUpdateDto text => HasText(text.Title) || HasText(text.Content),
+            ImageBlockUpdateDto image => !string.IsNullOrWhiteSpace(image.Asset?.Url),
+            CardBlockUpdateDto card => HasText(card.Title) || HasText(card.Description) ||
+                !string.IsNullOrWhiteSpace(card.Icon) || !string.IsNullOrWhiteSpace(card.Asset?.Url),
+            ButtonBlockUpdateDto button => HasText(button.Label),
+            MetricBlockUpdateDto metric => HasText(metric.Label) || !string.IsNullOrWhiteSpace(metric.Value),
+            StepBlockUpdateDto step => HasText(step.Title) || HasText(step.Description) || HasText(step.StepLabel),
+            IconBlockUpdateDto icon => !string.IsNullOrWhiteSpace(icon.Icon) || HasText(icon.Label) || HasText(icon.Description),
+            _ => false
+        };
+
+        private static bool HasText(IReadOnlyDictionary<string, string>? values) =>
+            values?.Values.Any(value => !string.IsNullOrWhiteSpace(value)) == true;
+
         public async Task<Block?> UpdateAsync(string pageId, string sectionId,
             string blockId, BlockUpdateDto dto)
         {
             var existing = await GetByIdAsync(pageId, sectionId, blockId);
             if (existing is null) return null;
+
+            await CanonicalizeIconsAsync(dto, existing);
+
+            ContainerBlock? owningFormation = null;
+            if (!string.IsNullOrWhiteSpace(existing.ParentBlockId))
+            {
+                owningFormation = await GetByIdAsync(pageId, sectionId, existing.ParentBlockId) as ContainerBlock;
+                if (owningFormation is not null && !ContainerPresetCatalog.IsFormation(owningFormation.PresetKey))
+                    owningFormation = null;
+            }
+
+            if (owningFormation is not null)
+            {
+                dto.Layout = null;
+                dto.Responsive = null;
+                dto.BlockZone = null;
+                dto.ZoneId = null;
+                dto.PositionMode = null;
+                dto.ParentBlockId = null;
+            }
 
             FormBlockDefaultSize? governedFormSize = null;
             Section? governedFormSection = null;
@@ -679,11 +794,32 @@ namespace FullProject.Services
                         "A Block's Container membership is fixed after creation. Container-owned Blocks cannot be released or moved to another Container.");
             }
 
+            if (existing is ContainerBlock existingFormation &&
+                dto is ContainerBlockUpdateDto formationUpdate &&
+                ContainerPresetCatalog.TryGetFormation(existingFormation.PresetKey, out var formationPreset))
+            {
+                var formationSection = await _context.SectionsDraft
+                    .Find(section => section.Id == sectionId)
+                    .FirstOrDefaultAsync()
+                    ?? throw new ArgumentException("Section not found.");
+                var settings = BlockContractService.MergeContainerLayout(
+                    existingFormation.ContainerLayout,
+                    formationUpdate.ContainerLayout);
+                formationUpdate.Layout = BuildFormationParentLayout(
+                    existing.Layout,
+                    formationPreset,
+                    settings,
+                    FormBlockLayoutPolicy.AvailableContentWidthPx(formationSection.Style?.ContentWidth));
+            }
+
             var baseUpdates = new List<UpdateDefinition<Block>>
             {
                 Builders<Block>.Update.Set(b => b.UpdatedAt, DateTime.UtcNow),
                 Builders<Block>.Update.Inc(b => b.Version, 1)
             };
+
+            if (existing.Authoring?.IsPlaceholder == true && HasMeaningfulFormationContent(dto))
+                baseUpdates.Add(Builders<Block>.Update.Set(b => b.Authoring.IsPlaceholder, false));
 
             if (dto.Visible.HasValue)
                 baseUpdates.Add(Builders<Block>.Update.Set(b => b.Visible, dto.Visible.Value));
@@ -815,6 +951,7 @@ namespace FullProject.Services
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
                                 .Set(b => ((CardBlock)b).Icon, cardDto.Icon)
+                                .Set(b => ((CardBlock)b).IconVisual, IconReferenceService.ToModel(cardDto.IconVisual))
                                 .Set(b => ((CardBlock)b).Title, cardDto.Title)
                                 .Set(b => ((CardBlock)b).Description, SanitizeDictionary(cardDto.Description))
                                 .Set(b => ((CardBlock)b).Asset, BlockAssetMetadataService.ToModel(cardDto.Asset))
@@ -832,6 +969,7 @@ namespace FullProject.Services
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
                                 .Set(b => ((ButtonBlock)b).Icon, buttonDto.Icon)
+                                .Set(b => ((ButtonBlock)b).IconVisual, IconReferenceService.ToModel(buttonDto.IconVisual))
                                 .Set(b => ((ButtonBlock)b).IconPosition, NormalizeIconPosition(buttonDto.IconPosition))
                                 .Set(b => ((ButtonBlock)b).Label, buttonDto.Label)
                                 .Set(b => ((ButtonBlock)b).Href, CleanUrl(buttonDto.Href))
@@ -846,6 +984,7 @@ namespace FullProject.Services
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
                                 .Set(b => ((MetricBlock)b).Icon, metricDto.Icon)
+                                .Set(b => ((MetricBlock)b).IconVisual, IconReferenceService.ToModel(metricDto.IconVisual))
                                 .Set(b => ((MetricBlock)b).Label, metricDto.Label)
                                 .Set(b => ((MetricBlock)b).Value, metricDto.Value)
                                 .Set(b => ((MetricBlock)b).Prefix, metricDto.Prefix)
@@ -866,6 +1005,7 @@ namespace FullProject.Services
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
                                 .Set(b => ((StepBlock)b).Icon, stepDto.Icon)
+                                .Set(b => ((StepBlock)b).IconVisual, IconReferenceService.ToModel(stepDto.IconVisual))
                                 .Set(b => ((StepBlock)b).AutoNumber, stepDto.AutoNumber)
                                 .Set(b => ((StepBlock)b).StepLabel, stepDto.StepLabel)
                                 .Set(b => ((StepBlock)b).Title, stepDto.Title)
@@ -877,6 +1017,7 @@ namespace FullProject.Services
                         Builders<Block>.Update.Combine(baseUpdate,
                             Builders<Block>.Update
                                 .Set(b => ((IconBlock)b).Icon, iconDto.Icon)
+                                .Set(b => ((IconBlock)b).IconVisual, IconReferenceService.ToModel(iconDto.IconVisual))
                                 .Set(b => ((IconBlock)b).Label, iconDto.Label)
                                 .Set(b => ((IconBlock)b).Description, SanitizeDictionary(iconDto.Description))
                                 .Set(b => ((IconBlock)b).ActionEnabled, iconDto.ActionEnabled)
@@ -992,6 +1133,48 @@ namespace FullProject.Services
             if (existing is null) return null;
 
             var nextLayout = MergeLayout(existing.Layout, dto);
+            ContainerLayoutSettings? resizedFormationSettings = null;
+            if (existing is ContainerBlock formation &&
+                ContainerPresetCatalog.TryGetFormation(formation.PresetKey, out var formationPreset))
+            {
+                var formationSection = await _context.SectionsDraft
+                    .Find(section => section.Id == sectionId)
+                    .FirstOrDefaultAsync();
+                var availableWidth = FormBlockLayoutPolicy.AvailableContentWidthPx(formationSection?.Style?.ContentWidth);
+                resizedFormationSettings = BlockContractService.MergeContainerLayout(formation.ContainerLayout, null);
+                var currentGeometry = FormationGeometryResolver.Resolve(
+                    formationPreset.Key,
+                    resizedFormationSettings.SizeMode,
+                    resizedFormationSettings.CustomWidthPx,
+                    resizedFormationSettings.ItemSize,
+                    resizedFormationSettings.FormationSpacing);
+                var requestedWidthPx = Math.Clamp(
+                    (nextLayout.WidthPercent ?? Math.Clamp(nextLayout.W, 1, 12) / 12d * 100d) / 100d * availableWidth,
+                    formationPreset.MinimumWidthPx,
+                    formationPreset.MaximumWidthPx);
+                var requestedHeightPx = nextLayout.HeightPx ?? Math.Clamp(nextLayout.H, 1, 40) * 48d;
+                var widthFromHeight = Math.Clamp(
+                    requestedHeightPx * formationPreset.AspectRatio,
+                    formationPreset.MinimumWidthPx,
+                    formationPreset.MaximumWidthPx);
+                var widthDelta = Math.Abs(requestedWidthPx - currentGeometry.WidthPx);
+                var heightDelta = Math.Abs(widthFromHeight - currentGeometry.WidthPx);
+                var customWidth = widthDelta < 2d && heightDelta < 2d
+                    ? currentGeometry.WidthPx
+                    : widthDelta >= heightDelta
+                        ? (int)Math.Round(requestedWidthPx)
+                        : (int)Math.Round(widthFromHeight);
+                resizedFormationSettings.SizeMode = "custom";
+                resizedFormationSettings.CustomWidthPx = Math.Clamp(
+                    customWidth,
+                    formationPreset.MinimumWidthPx,
+                    formationPreset.MaximumWidthPx);
+                nextLayout = MapLayout(BuildFormationParentLayout(
+                    nextLayout,
+                    formationPreset,
+                    resizedFormationSettings,
+                    availableWidth));
+            }
             FormBlockDefaultSize? recoveredDefaultSize = null;
             int? recoveredDesignSchemaVersion = null;
             Section? formSection = null;
@@ -1032,6 +1215,12 @@ namespace FullProject.Services
                 Builders<Block>.Update.Set(b => b.UpdatedAt, DateTime.UtcNow),
                 Builders<Block>.Update.Inc(b => b.Version, 1)
             };
+            if (resizedFormationSettings is not null)
+            {
+                updates.Add(Builders<Block>.Update.Set(
+                    b => ((ContainerBlock)b).ContainerLayout,
+                    resizedFormationSettings));
+            }
             if (recoveredDefaultSize is { } recovered)
             {
                 updates.Add(Builders<Block>.Update.Set(
@@ -1097,6 +1286,7 @@ namespace FullProject.Services
         {
             Id = string.IsNullOrWhiteSpace(item.Id) ? ObjectId.GenerateNewId().ToString() : item.Id,
             Icon = item.Icon,
+            IconVisual = IconReferenceService.ToModel(item.IconVisual),
             Text = SanitizeDictionary(item.Text),
             Visible = item.Visible,
             Order = item.Order
@@ -1108,6 +1298,69 @@ namespace FullProject.Services
             "ghost" => "ghost",
             _ => "filled"
         };
+
+        private async Task CanonicalizeIconsAsync(object dto, Block? existing)
+        {
+            switch (dto)
+            {
+                case CardBlockCreateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as CardBlock)?.IconVisual);
+                    break;
+                case CardBlockUpdateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as CardBlock)?.IconVisual);
+                    break;
+                case ButtonBlockCreateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.Button, (existing as ButtonBlock)?.IconVisual);
+                    break;
+                case ButtonBlockUpdateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.Button, (existing as ButtonBlock)?.IconVisual);
+                    break;
+                case MetricBlockCreateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as MetricBlock)?.IconVisual);
+                    break;
+                case MetricBlockUpdateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as MetricBlock)?.IconVisual);
+                    break;
+                case StepBlockCreateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as StepBlock)?.IconVisual);
+                    break;
+                case StepBlockUpdateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as StepBlock)?.IconVisual);
+                    break;
+                case IconBlockCreateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as IconBlock)?.IconVisual);
+                    break;
+                case IconBlockUpdateDto value:
+                    (value.Icon, value.IconVisual) = await ResolveIconAsync(value.Icon, value.IconVisual, IconContext.GeneralContent, (existing as IconBlock)?.IconVisual);
+                    break;
+                case BulletListBlockCreateDto value:
+                    await CanonicalizeBulletItemsAsync(value.Items, existing as BulletListBlock);
+                    break;
+                case BulletListBlockUpdateDto value:
+                    await CanonicalizeBulletItemsAsync(value.Items, existing as BulletListBlock);
+                    break;
+            }
+        }
+
+        private async Task CanonicalizeBulletItemsAsync(List<BulletListItemDto> items, BulletListBlock? existing)
+        {
+            foreach (var item in items)
+            {
+                var old = existing?.Items.FirstOrDefault(value => value.Id == item.Id)?.IconVisual;
+                (item.Icon, item.IconVisual) = await ResolveIconAsync(item.Icon, item.IconVisual, IconContext.GeneralContent, old);
+            }
+        }
+
+        private async Task<(string Legacy, IconReferenceDto? Visual)> ResolveIconAsync(
+            string? legacy,
+            IconReferenceDto? requested,
+            IconContext context,
+            IconReference? existing)
+        {
+            var result = await _icons.ResolveAsync(requested, legacy, context, existing);
+            if (!result.Success) throw new ArgumentException(result.Error);
+            return (result.LegacyClass, IconReferenceService.ToAdmin(result.Value));
+        }
 
         private static string NormalizeIconPosition(string? position) =>
             string.Equals(position, "right", StringComparison.OrdinalIgnoreCase) ? "right" : "left";
@@ -1216,6 +1469,53 @@ namespace FullProject.Services
                 TopPx = topPx,
                 WidthPercent = widthPercent,
                 HeightPx = heightPx
+            };
+        }
+
+        private static BlockLayoutDto BuildFormationParentLayout(
+            BlockLayout? current,
+            ContainerPresetDefinition preset,
+            ContainerLayoutSettings settings,
+            int availableWidthPx)
+        {
+            current ??= new BlockLayout();
+            var geometry = FormationGeometryResolver.Resolve(
+                preset.Key,
+                settings.SizeMode,
+                settings.CustomWidthPx,
+                settings.ItemSize,
+                settings.FormationSpacing);
+            var availableWidth = Math.Max(320, availableWidthPx);
+            var widthPercent = Math.Clamp(geometry.WidthPx / (double)availableWidth * 100d, 1d, 100d);
+            var widthUnits = Math.Clamp((int)Math.Ceiling(widthPercent / 100d * 12d), 1, 12);
+            var leftPercent = Math.Clamp(
+                current.LeftPercent ?? (Math.Clamp(current.X, 0, 11) / 12d * 100d),
+                0d,
+                Math.Max(0d, 100d - widthPercent));
+            var topPx = Math.Clamp(
+                current.TopPx ?? (Math.Clamp(current.Y, 0, 60) * 48d),
+                0d,
+                Math.Max(0d, 10000d - geometry.HeightPx));
+
+            return new BlockLayoutDto
+            {
+                Width = "custom",
+                ColumnSpan = widthUnits,
+                Align = current.Align,
+                Justify = current.Justify,
+                Padding = current.Padding,
+                Margin = current.Margin,
+                BackgroundColor = current.BackgroundColor,
+                BorderRadius = current.BorderRadius,
+                ZIndex = current.ZIndex,
+                X = Math.Clamp((int)Math.Round(leftPercent / 100d * 12d), 0, Math.Max(0, 12 - widthUnits)),
+                Y = Math.Clamp((int)Math.Round(topPx / 48d), 0, 60),
+                W = widthUnits,
+                H = Math.Clamp((int)Math.Ceiling(geometry.HeightPx / 48d), 1, 40),
+                LeftPercent = leftPercent,
+                TopPx = topPx,
+                WidthPercent = widthPercent,
+                HeightPx = geometry.HeightPx
             };
         }
 
@@ -1465,7 +1765,11 @@ namespace FullProject.Services
             if (!string.IsNullOrWhiteSpace(value))
                 return NormalizePositionMode(value);
 
-            return section is CanvasSection ? "freeform" : "flow";
+            return section is CanvasSection ||
+                   section is ColumnsSection columns &&
+                   string.Equals(columns.LayoutMode, "split", StringComparison.OrdinalIgnoreCase)
+                ? "freeform"
+                : "flow";
         }
 
         private static string ResolveBlockZone(Section section, string? blockZone, string? zoneId) =>

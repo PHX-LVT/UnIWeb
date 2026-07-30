@@ -1,0 +1,22 @@
+@using Contracts.Icons
+
+@if (IsCustom)
+{
+    <img src="@Icon!.Url" class="@CssClassValue" alt="@AltText" aria-hidden="@(string.IsNullOrWhiteSpace(AltText) ? "true" : null)" />
+}
+else if (!string.IsNullOrWhiteSpace(BuiltInClass))
+{
+    <i class="@($"{BuiltInClass} {CssClassValue}")" aria-hidden="true"></i>
+}
+
+@code {
+    [Parameter] public PublicIconReferenceDto? Icon { get; set; }
+    [Parameter] public string? LegacyClass { get; set; }
+    [Parameter] public string Lang { get; set; } = "en";
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool IsCustom => string.Equals(Icon?.Source, IconSources.Custom, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(Icon?.Url);
+    private string BuiltInClass => IconCatalog.Normalize(Icon?.ClassName ?? LegacyClass);
+    private string CssClassValue => string.IsNullOrWhiteSpace(CssClass) ? "sc-content-icon" : $"sc-content-icon {CssClass}";
+    private string AltText => StyleHelper.Lang(Icon?.AltText, Lang);
+}

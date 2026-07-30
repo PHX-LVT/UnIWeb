@@ -50,6 +50,16 @@ public sealed class BlockAuthoringService
         if (block is null) return "Block not found.";
         if (block.Authoring.FullLocked) return "This Block is fully locked.";
         if (block.Authoring.ContentLocked) return "This Block's content is locked by its preset policy.";
+        if (await IsFormationChildAsync(pageId, sectionId, block))
+        {
+            dto.Layout = null;
+            dto.Responsive = null;
+            dto.BlockZone = block.BlockZone;
+            dto.ZoneId = block.BlockZone;
+            dto.PositionMode = block.PositionMode;
+            dto.ParentBlockId = block.ParentBlockId;
+            return null;
+        }
         if (!block.Authoring.GeometryLocked) return null;
 
         dto.Layout = null;
@@ -74,6 +84,8 @@ public sealed class BlockAuthoringService
         if (scope is null) return "Page or Section not found.";
         var selected = scope.Value.Blocks.Where(block => ids.Contains(block.Id)).ToList();
         if (selected.Count != ids.Count) return "One or more selected Blocks are outside this Section.";
+        if (selected.Any(block => IsFormationChild(block, scope.Value.Blocks)))
+            return "Formation children use governed geometry and cannot be arranged independently.";
         return selected.Any(IsGeometryLocked)
             ? "Unlock the selected Block geometry before arranging it."
             : null;
@@ -115,6 +127,8 @@ public sealed class BlockAuthoringService
 
         var roots = scope.Value.Blocks.Where(block => ids.Contains(block.Id)).ToList();
         if (roots.Count != ids.Count) return (null, "One or more selected Blocks are outside this Section.");
+        if (roots.Any(block => IsFormationChild(block, scope.Value.Blocks)))
+            return (null, "Formation children cannot be duplicated independently. Duplicate the complete Formation instead.");
         if (roots.Any(block => block.Authoring.FullLocked))
             return (null, "Fully locked Blocks cannot be duplicated.");
 
@@ -126,6 +140,8 @@ public sealed class BlockAuthoringService
             var parent = scope.Value.Blocks.OfType<ContainerBlock>()
                 .FirstOrDefault(container => container.Id == parentGroup.Key);
             if (parent is null) continue;
+            if (ContainerPresetCatalog.IsFormation(parent.PresetKey))
+                return (null, "Formation membership is fixed. Duplicate the complete Formation instead.");
             if (parentGroup.Any(root => root is ContainerBlock))
                 return (null, "Containers cannot own another Container. Duplicate the Container at the Section level instead.");
             var currentCount = scope.Value.Blocks.Count(block => block.ParentBlockId == parent.Id);
@@ -264,6 +280,8 @@ public sealed class BlockAuthoringService
 
         var block = scope.Value.Blocks.FirstOrDefault(item => item.Id == request.BlockId);
         if (block is null) return (null, "Block not found.");
+        if (IsFormationChild(block, scope.Value.Blocks))
+            return (null, "Formation children cannot move out of their governed Formation.");
         if (block.Authoring.FullLocked || block.Authoring.GeometryLocked)
             return (null, "Unlock the Block geometry before moving it.");
 
@@ -276,6 +294,8 @@ public sealed class BlockAuthoringService
             target = scope.Value.Blocks.OfType<ContainerBlock>()
                 .FirstOrDefault(item => item.Id == targetParentId);
             if (target is null) return (null, "The target must be a Container in the same Section.");
+            if (ContainerPresetCatalog.IsFormation(target.PresetKey))
+                return (null, "Blocks cannot move into a governed Formation. Replace a Formation slot instead.");
             if (block is ContainerBlock)
                 return (null, "Containers cannot own another Container.");
             if (target.Authoring.FullLocked || target.Authoring.GeometryLocked)
@@ -433,6 +453,8 @@ public sealed class BlockAuthoringService
         if (ids.Count == 0) return "Choose at least one Block.";
         var roots = scope.Value.Blocks.Where(block => ids.Contains(block.Id)).ToList();
         if (roots.Count != ids.Count) return "One or more selected Blocks are outside this Section.";
+        if (roots.Any(block => IsFormationChild(block, scope.Value.Blocks)))
+            return "Formation children cannot be deleted independently. Replace the slot or delete the complete Formation.";
         var graphIds = new HashSet<string>(ids, StringComparer.Ordinal);
         var added = true;
         while (added)
@@ -490,6 +512,7 @@ public sealed class BlockAuthoringService
     {
         var block = await _blocks.GetByIdAsync(pageId, sectionId, blockId);
         if (block is null) return (null, "Block not found.");
+        var formationChild = await IsFormationChildAsync(pageId, sectionId, block);
         var current = block.Authoring ?? new BlockAuthoringPolicy();
         var reducesLock =
             current.ContentLocked && !request.ContentLocked ||
@@ -502,8 +525,9 @@ public sealed class BlockAuthoringService
         {
             SchemaVersion = 1,
             ContentLocked = request.ContentLocked,
-            GeometryLocked = request.GeometryLocked || request.FullLocked,
+            GeometryLocked = formationChild || request.GeometryLocked || request.FullLocked,
             FullLocked = request.FullLocked,
+            IsPlaceholder = current.IsPlaceholder,
             PresetSlotName = current.PresetSlotName,
             PresetSourceId = current.PresetSourceId
         };
@@ -541,5 +565,19 @@ public sealed class BlockAuthoringService
 
     private static bool IsGeometryLocked(Block block) =>
         block.Authoring.FullLocked || block.Authoring.GeometryLocked;
+
+    private async Task<bool> IsFormationChildAsync(string pageId, string sectionId, Block block)
+    {
+        if (string.IsNullOrWhiteSpace(block.ParentBlockId)) return false;
+        var parent = await _blocks.GetByIdAsync(pageId, sectionId, block.ParentBlockId);
+        return parent is ContainerBlock container && ContainerPresetCatalog.IsFormation(container.PresetKey);
+    }
+
+    private static bool IsFormationChild(Block block, IReadOnlyCollection<Block> scope)
+    {
+        if (string.IsNullOrWhiteSpace(block.ParentBlockId)) return false;
+        return scope.OfType<ContainerBlock>().Any(parent =>
+            parent.Id == block.ParentBlockId && ContainerPresetCatalog.IsFormation(parent.PresetKey));
+    }
 
 }

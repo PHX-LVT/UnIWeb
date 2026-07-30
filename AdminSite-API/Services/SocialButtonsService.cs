@@ -2,16 +2,20 @@
 using FullProject.Models;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using FullProject.Services.IconServices;
+using Contracts.Icons;
 
 namespace FullProject.Services
 {
     public class SocialButtonsService
     {
         private readonly IMongoCollection<SocialButtonGroup> _col;
+        private readonly IconReferenceService _icons;
 
-        public SocialButtonsService(IMongoDatabase db)
+        public SocialButtonsService(IMongoDatabase db, IconReferenceService icons)
         {
             _col = db.GetCollection<SocialButtonGroup>("social");
+            _icons = icons;
         }
 
         public async Task<SocialButtonGroup> GetGroupAsync()
@@ -41,11 +45,14 @@ namespace FullProject.Services
         public async Task<SocialButton> CreateAsync(SocialButtonCreateDto dto)
         {
             var group = await GetGroupAsync();
+            var icon = await _icons.ResolveAsync(dto.IconVisual, dto.Icon, IconContext.SocialBrand);
+            if (!icon.Success) throw new ArgumentException(icon.Error);
             var btn = new SocialButton
             {
                 Id = ObjectId.GenerateNewId().ToString(),
                 Label = dto.Label,
-                Icon = dto.Icon,
+                Icon = icon.LegacyClass,
+                IconVisual = icon.Value,
                 Href = dto.Href,
                 Order = group.Buttons.Count
             };
@@ -60,8 +67,15 @@ namespace FullProject.Services
             var btn = group.Buttons.FirstOrDefault(b => b.Id == id);
             if (btn is null) return null;
 
+            var icon = await _icons.ResolveAsync(dto.IconVisual, dto.Icon ?? btn.Icon, IconContext.SocialBrand, btn.IconVisual);
+            if (!icon.Success) throw new ArgumentException(icon.Error);
+
             if (dto.Label != null) btn.Label = dto.Label;
-            if (dto.Icon != null) btn.Icon = dto.Icon;
+            if (dto.Icon != null || dto.IconVisual is not null)
+            {
+                btn.Icon = icon.LegacyClass;
+                btn.IconVisual = icon.Value;
+            }
             if (dto.Href != null) btn.Href = dto.Href;
 
             await _col.ReplaceOneAsync(g => g.Id == group.Id, group);

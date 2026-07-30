@@ -5,14 +5,14 @@
     <ActionButton Action="@Block.Action" FormDefinitionId="@Block.FormDefinitionId" Href="@(string.IsNullOrWhiteSpace(Block.Href) ? "#" : Block.Href)"
                   Target="@Target" Rel="@Rel" Download="@Downloads"
                   CssClass="@($"sc-btn sc-btn--{(string.IsNullOrWhiteSpace(Block.Style) ? "filled" : Block.Style)}")">
-        @if (!string.IsNullOrWhiteSpace(Block.Icon) && Block.IconPosition != "right")
+        @if ((Block.IconVisual is not null || !string.IsNullOrWhiteSpace(Block.Icon)) && Block.IconPosition != "right")
         {
-            <i class="@Block.Icon" aria-hidden="true"></i>
+            <ContentIcon Icon="Block.IconVisual" LegacyClass="Block.Icon" Lang="Lang" />
         }
         @StyleHelper.Lang(Block.Label, Lang)
-        @if (!string.IsNullOrWhiteSpace(Block.Icon) && Block.IconPosition == "right")
+        @if ((Block.IconVisual is not null || !string.IsNullOrWhiteSpace(Block.Icon)) && Block.IconPosition == "right")
         {
-            <i class="@Block.Icon" aria-hidden="true"></i>
+            <ContentIcon Icon="Block.IconVisual" LegacyClass="Block.Icon" Lang="Lang" />
         }
     </ActionButton>
 </div>

@@ -62,8 +62,14 @@ namespace Contracts.Public
 
     public class PublicColumnsSectionDto : PublicSectionDto
     {
+        public string LayoutMode { get; set; } = "legacy";
+        public Dictionary<string, string>? Eyebrow { get; set; }
+        public Dictionary<string, string>? Heading { get; set; }
+        public Dictionary<string, string>? Subheading { get; set; }
+        public Dictionary<string, string>? Content { get; set; }
         public int? ColumnCount { get; set; }
         public string? ColumnRatio { get; set; }
+        public string? Gap { get; set; }
         public bool? StackOnMobile { get; set; }
         public List<PublicColumnSlotDto>? ColumnSlots { get; set; }
     }

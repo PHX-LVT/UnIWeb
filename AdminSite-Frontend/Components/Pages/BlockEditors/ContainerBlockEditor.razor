@@ -3,171 +3,182 @@
 @using AdminSite.Services.Mapper
 @using Contracts.Admin
 
-<div class="container-editor">
-    <header class="container-editor__summary">
-        <span>
-            <small>@T("ContainerPreset")</small>
-            <strong>@SelectedPreset.DisplayName</strong>
-        </span>
-        <b class="@(IsComplete ? "is-complete" : "is-incomplete")">
-            <i class="fas @(IsComplete ? "fa-check-circle" : "fa-exclamation-triangle")"></i>
-            @(IsComplete ? T("Complete") : T("Incomplete"))
-        </b>
-    </header>
-
-    <div class="form-group">
-        <label class="form-label">@T("Title")</label>
-        <LangField @bind-Value="Block.Title" Languages="Languages" />
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">@T("ContainerPreset")</label>
-        <select class="form-control" value="@Block.PresetKey" @onchange="ChangePreset">
-            @foreach (var preset in ContainerPresetCatalog.All)
-            {
-                <option value="@preset.Key">@preset.DisplayName</option>
-            }
-        </select>
-        @if (!string.Equals(_originalPresetKey, Block.PresetKey, StringComparison.Ordinal))
-        {
-            <div class="form-hint container-editor__warning">
-                <i class="fas fa-exchange-alt"></i> @T("ContainerPresetConversionWarning")
-            </div>
-        }
-        @if (ConversionError is not null)
-        {
-            <div class="form-hint container-editor__error"><i class="fas fa-circle-exclamation"></i> @ConversionError</div>
-        }
-    </div>
-
-    <div class="container-editor__facts">
-        <span><small>@T("ContainerPurpose")</small><strong>@SelectedPreset.Purpose</strong></span>
-        <span><small>@T("ContainerCapacity")</small><strong>@Children.Count/@SelectedPreset.MaximumChildren</strong></span>
-        <span><small>@T("MobileLayout")</small><strong>@Block.ContainerLayout.MobileMode</strong></span>
-        @if (!string.IsNullOrWhiteSpace(Block.ContainerLayout.AllowedChildType))
-        {
-            <span><small>@T("AllowedChildType")</small><strong>@Block.ContainerLayout.AllowedChildType</strong></span>
-        }
-    </div>
-
-    @if (SelectedPreset.Slots.Count > 0)
+<div class="formation-editor">
+    @if (!IsFormation)
     {
-        <section class="container-editor__slots">
-            <strong>@T("ContainerSlots")</strong>
-            <div>
-                @foreach (var slot in SelectedPreset.Slots)
-                {
-                    var child = ChildForSlot(slot.Key);
-                    <span class="@(child is null ? "is-empty" : "is-filled") @(slot.Required ? "is-required" : null)">
-                        <i class="fas @(child is null ? "fa-plus" : "fa-cube")"></i>
-                        <small>@slot.DisplayName</small>
-                        <b>@(child is null ? T("Empty") : ChildName(child))</b>
-                    </span>
-                }
-            </div>
-        </section>
-    }
-
-    <details class="container-editor__section" open>
-        <summary>@T("ContainerLayoutSettings")</summary>
-        <div class="container-editor__grid">
-            <label><span>@T("Gap")</span>
-                <select @bind="Block.ContainerLayout.Gap">
-                    <option value="none">@T("None")</option>
-                    <option value="small">@T("Small")</option>
-                    <option value="medium">@T("Medium")</option>
-                    <option value="large">@T("Large")</option>
-                </select>
-            </label>
-            <label><span>@T("AlignItems")</span>
-                <select @bind="Block.ContainerLayout.AlignItems">
-                    <option value="stretch">@T("Stretch")</option>
-                    <option value="start">@T("Start")</option>
-                    <option value="center">@T("Center")</option>
-                    <option value="end">@T("End")</option>
-                </select>
-            </label>
-            <label><span>@T("JustifyContent")</span>
-                <select @bind="Block.ContainerLayout.JustifyContent">
-                    <option value="start">@T("Start")</option>
-                    <option value="center">@T("Center")</option>
-                    <option value="end">@T("End")</option>
-                    <option value="between">@T("SpaceBetween")</option>
-                    <option value="around">@T("SpaceAround")</option>
-                    <option value="evenly">@T("SpaceEvenly")</option>
-                </select>
-            </label>
-            @if (Block.ContainerLayout.Mode == "row")
+        <section class="formation-editor__legacy">
+            <i class="fas fa-triangle-exclamation"></i>
+            <span>
+                <strong>@T("LegacyContainer")</strong>
+                <small>@T("LegacyContainerMigrationRequired")</small>
+            </span>
+            @if (CanMigrateLegacy)
             {
-                <label class="container-editor__check"><input type="checkbox" @bind="Block.ContainerLayout.Wrap" /><span>@T("Wrap")</span></label>
-            }
-            <label><span>@T("MobileLayout")</span>
-                <select @bind="Block.ContainerLayout.MobileMode">
-                    <option value="stack">@T("Stack")</option>
-                    <option value="compact-preserve">@T("CompactPreserve")</option>
-                    <option value="horizontal-scroll">@T("HorizontalScroll")</option>
-                    <option value="custom">@T("Custom")</option>
-                    <option value="hide">@T("Hide")</option>
-                </select>
-            </label>
-        </div>
-    </details>
-
-    @if (Block.ContainerLayout.Mode is "orbit" or "semicircle")
-    {
-        <details class="container-editor__section" open>
-            <summary>@T("PatternSettings")</summary>
-            <div class="container-editor__grid">
-                @if (Block.ContainerLayout.Mode == "orbit")
+                @if (_confirmLegacyFlatten)
                 {
-                    <label><span>@T("Radius")</span><input type="number" min="80" max="480" @bind="Block.ContainerLayout.OrbitRadius" /></label>
-                    <label><span>@T("StartAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.OrbitStartAngle" /></label>
-                    <label><span>@T("EndAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.OrbitEndAngle" /></label>
-                    <label><span>@T("Direction")</span><select @bind="Block.ContainerLayout.OrbitDirection"><option value="clockwise">@T("Clockwise")</option><option value="counter-clockwise">@T("CounterClockwise")</option></select></label>
+                    <div class="formation-editor__legacy-confirm">
+                        <small>@T("FlattenLegacyContainerWarning")</small>
+                        <span>
+                            <button type="button" class="btn-admin btn-danger" disabled="@_converting" @onclick="MigrateLegacy">@T("ConfirmFlatten")</button>
+                            <button type="button" class="btn-admin btn-ghost" disabled="@_converting" @onclick="() => _confirmLegacyFlatten = false">@T("Cancel")</button>
+                        </span>
+                    </div>
                 }
                 else
                 {
-                    <label><span>@T("Radius")</span><input type="number" min="80" max="480" @bind="Block.ContainerLayout.SemicircleRadius" /></label>
-                    <label><span>@T("StartAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.SemicircleStartAngle" /></label>
-                    <label><span>@T("EndAngle")</span><input type="number" min="-360" max="360" @bind="Block.ContainerLayout.SemicircleEndAngle" /></label>
+                    <button type="button" class="btn-admin btn-primary" disabled="@_converting" @onclick="BeginLegacyMigration">
+                        <i class="fas fa-wand-magic-sparkles"></i> @T(LegacyMigrationLabelKey)
+                    </button>
                 }
-                <label><span>@T("CompactRadius")</span><input type="number" min="60" max="220" @bind="Block.ContainerLayout.CompactRadius" /></label>
-                <label><span>@T("CompactChildWidth")</span><input type="number" min="72" max="180" @bind="Block.ContainerLayout.CompactChildWidth" /></label>
-            </div>
-        </details>
+            }
+        </section>
     }
-
-    <details class="container-editor__section">
-        <summary>@T("SharedAppearance")</summary>
-        <label class="container-editor__check"><input type="checkbox" @bind="Block.ContainerLayout.ShareAppearance" @bind:after="EnsureSharedAppearance" /><span>@T("ShareAppearanceWithChildren")</span></label>
-        @if (Block.ContainerLayout.ShareAppearance && Block.ContainerLayout.SharedAppearance is not null)
-        {
-            <div class="container-editor__grid">
-                <label><span>@T("BackgroundColor")</span><input type="color" @bind="Block.ContainerLayout.SharedAppearance.BackgroundColor" /></label>
-                <label><span>@T("TextColor")</span><input type="color" @bind="Block.ContainerLayout.SharedAppearance.TextColor" /></label>
-                <label><span>@T("BorderRadius")</span><select @bind="Block.ContainerLayout.SharedAppearance.BorderRadius"><option value="none">@T("None")</option><option value="small">@T("Small")</option><option value="medium">@T("Medium")</option><option value="large">@T("Large")</option></select></label>
-            </div>
-        }
-    </details>
-
-    @if (Block.ContainerLayout.Mode == "freeform")
+    else
     {
-        <details class="container-editor__section">
-            <summary>@T("DiagramLayer")</summary>
-            <ContainerDiagramEditor Value="Block.ContainerLayout.Diagram" Children="Children" Language="AdminLanguage" />
+        <header class="formation-editor__summary">
+            <span>
+                <small>@T("Formation")</small>
+                <strong>@SelectedPreset.DisplayName</strong>
+            </span>
+            <b class="@(IsComplete ? "is-complete" : "is-incomplete")">
+                <i class="fas @(IsComplete ? "fa-check-circle" : "fa-exclamation-triangle")"></i>
+                @(CompletedSlots)/@SelectedPreset.MaximumChildren
+            </b>
+        </header>
+
+        <div class="form-group">
+            <label class="form-label">@T("Title")</label>
+            <LangField @bind-Value="Block.Title" Languages="Languages" />
+        </div>
+
+        <section class="formation-editor__section">
+            <header><strong>@T("ChangeFormation")</strong><small>@T("ChangeFormationHint")</small></header>
+            <div class="formation-editor__change">
+                <select class="form-control" @bind="_targetPresetKey" @bind:after="ResetRetainedSelection">
+                    @foreach (var preset in ContainerPresetCatalog.All)
+                    {
+                        <option value="@preset.Key">@preset.DisplayName</option>
+                    }
+                </select>
+                <button type="button" class="btn-admin btn-ghost"
+                        disabled="@(_converting || _targetPresetKey == Block.PresetKey)"
+                        @onclick="ConvertFormation">
+                    <i class="fas fa-shapes"></i> @T("Apply")
+                </button>
+            </div>
+            @if (TargetPreset.MaximumChildren < Children.Count)
+            {
+                <div class="formation-editor__retain">
+                    <small>@string.Format(T("FormationChooseRetained"), TargetPreset.MaximumChildren)</small>
+                    @foreach (var child in OrderedChildren)
+                    {
+                        <label>
+                            <input type="checkbox"
+                                   checked="@_retainedChildIds.Contains(child.Id)"
+                                   @onchange="eventArgs => ToggleRetained(child.Id, eventArgs)" />
+                            <span>@ChildName(child)</span>
+                        </label>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="formation-editor__section">
+            <header><strong>@T("FormationSize")</strong><button type="button" class="formation-editor__text-action" @onclick="ResetVisualSettings">@T("Reset")</button></header>
+            <div class="formation-editor__segmented">
+                @foreach (var size in new[] { "small", "medium", "large", "custom" })
+                {
+                    <button type="button" class="@(Block.ContainerLayout.SizeMode == size ? "is-active" : null)" @onclick="() => Block.ContainerLayout.SizeMode = size">@T(Title(size))</button>
+                }
+            </div>
+            @if (Block.ContainerLayout.SizeMode == "custom")
+            {
+                <label class="formation-editor__range">
+                    <span>@T("CustomWidth") <b>@CustomWidth px</b></span>
+                    <input type="range" min="@SelectedPreset.MinimumWidthPx" max="@SelectedPreset.MaximumWidthPx" step="10" @bind="CustomWidth" />
+                </label>
+            }
+
+            <div class="formation-editor__controls">
+                <label><span>@T("BlockSize")</span>
+                    <select @bind="Block.ContainerLayout.ItemSize">
+                        <option value="compact">@T("Compact")</option>
+                        <option value="standard">@T("Standard")</option>
+                        <option value="large">@T("Large")</option>
+                    </select>
+                </label>
+                <label><span>@T("Spacing")</span>
+                    <select @bind="Block.ContainerLayout.FormationSpacing">
+                        <option value="compact">@T("Compact")</option>
+                        <option value="standard">@T("Standard")</option>
+                        <option value="wide">@T("Wide")</option>
+                    </select>
+                </label>
+                <label><span>@T("ConnectorStyle")</span>
+                    <select @bind="Block.ContainerLayout.ConnectorStyle">
+                        <option value="solid">@T("Solid")</option>
+                        <option value="dashed">@T("Dashed")</option>
+                        <option value="dotted">@T("Dotted")</option>
+                        <option value="none">@T("None")</option>
+                    </select>
+                </label>
+                <label><span>@T("ConnectorColor")</span>
+                    <select @bind="Block.ContainerLayout.ConnectorColorMode">
+                        <option value="theme-accent">@T("ThemeAccent")</option>
+                        <option value="theme-primary">@T("ThemePrimary")</option>
+                        <option value="color">@T("Custom")</option>
+                    </select>
+                </label>
+                @if (Block.ContainerLayout.ConnectorColorMode == "color")
+                {
+                    <label><span>@T("CustomColor")</span><input type="color" @bind="Block.ContainerLayout.ConnectorColor" /></label>
+                }
+            </div>
+        </section>
+
+        <section class="formation-editor__section">
+            <header><strong>@T("FormationSlots")</strong><small>@T("FormationSlotsHint")</small></header>
+            <div class="formation-editor__slots">
+                @foreach (var slot in SelectedPreset.Slots)
+                {
+                    var child = ChildForSlot(slot.Key);
+                    <article class="@(child is not null && IsSlotComplete(child) ? "is-complete" : "is-placeholder")"
+                             draggable="true"
+                             @ondragstart="() => _dragSlotName = slot.Key"
+                             @ondragover:preventDefault
+                             @ondrop="() => DropSlot(slot.Key)">
+                        <span class="formation-editor__slot-index">@(SlotIndex(slot.Key) + 1)</span>
+                        <button type="button" class="formation-editor__slot-main" disabled="@(child is null)" @onclick="() => SelectSlot(child)">
+                            <i class="fas @(child is null || !IsSlotComplete(child) ? "fa-plus" : BlockIcon(child.Type))"></i>
+                            <span><strong>@slot.DisplayName</strong><small>@(child is null || !IsSlotComplete(child) ? T("Empty") : ChildName(child))</small></span>
+                        </button>
+                        <div class="formation-editor__slot-actions">
+                            <select value="@ReplacementType(slot.Key)" @onchange="eventArgs => SetReplacementType(slot.Key, eventArgs)">
+                                @foreach (var type in slot.AllowedBlockTypes)
+                                {
+                                    <option value="@type">@T(BlockTypeLabelKey(type))</option>
+                                }
+                            </select>
+                            <button type="button" class="btn-admin btn-ghost" disabled="@(_replacingSlot == slot.Key)" @onclick="() => ReplaceSlot(slot.Key)">
+                                <i class="fas fa-repeat"></i> @T("Replace")
+                            </button>
+                        </div>
+                    </article>
+                }
+            </div>
+        </section>
+
+        <details class="formation-editor__section">
+            <summary>@T("Animation")</summary>
+            <BlockAnimationEditor Value="Block.Animation" BlockId="Block.Id" Language="AdminLanguage" IsContainer="true" AllowContinuous="Block.Appearance.Decorative" />
         </details>
+
+        <div class="ez-editor-actions">
+            <button type="button" class="btn-admin btn-primary" disabled="@_saving" @onclick="Save">
+                <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
+            </button>
+        </div>
     }
-
-    <details class="container-editor__section">
-        <summary>@T("Animation")</summary>
-        <BlockAnimationEditor Value="Block.Animation" BlockId="Block.Id" Language="AdminLanguage" IsContainer="true" AllowContinuous="Block.Appearance.Decorative" />
-    </details>
-
-    <div class="ez-editor-actions">
-        <button type="button" class="btn-admin btn-primary" disabled="@(_saving || ConversionError is not null)" @onclick="Save">
-            <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
-        </button>
-    </div>
 </div>
 
 @code {
@@ -177,71 +188,237 @@
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public IReadOnlyList<BlockModel> Children { get; set; } = Array.Empty<BlockModel>();
     [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback<string> SlotSelected { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
     private bool _saving;
+    private bool _converting;
+    private bool _confirmLegacyFlatten;
     private string? _loadedBlockId;
-    private string? _originalPresetKey;
-    private ContainerPresetDefinition SelectedPreset => ContainerPresetCatalog.ForExisting(Block.PresetKey);
-    private IReadOnlyList<ContainerPresetSlotDefinition> MissingRequiredSlots =>
-        ContainerCapacityPolicy.MissingRequiredSlots(Block.PresetKey, Children.Select(child => child.Authoring?.PresetSlotName));
-    private bool IsComplete => MissingRequiredSlots.Count == 0;
-    private string? ConversionError
-    {
-        get
-        {
-            if (string.Equals(_originalPresetKey, Block.PresetKey, StringComparison.Ordinal)) return null;
-            return ContainerCapacityPolicy.CanConvert(Block.PresetKey, Children.Select(child => child.Type), out var error)
-                ? null
-                : error;
-        }
-    }
+    private string _targetPresetKey = ContainerPresetCatalog.CircleSixKey;
+    private string? _dragSlotName;
+    private string? _replacingSlot;
+    private HashSet<string> _retainedChildIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _replacementTypes = new(StringComparer.Ordinal);
+
+    private bool IsFormation => ContainerPresetCatalog.IsFormation(Block.PresetKey);
+    private bool CanMigrateLegacy => ContainerPresetCatalog.FormationMigrationKey(Block.PresetKey) is not null ||
+        Block.PresetKey is ContainerPresetCatalog.StackKey or ContainerPresetCatalog.RowKey or ContainerPresetCatalog.GridKey;
+    private string LegacyMigrationLabelKey => ContainerPresetCatalog.FormationMigrationKey(Block.PresetKey) is not null
+        ? "MigrateLegacyContainer"
+        : "FlattenLegacyContainer";
+    private ContainerPresetDefinition SelectedPreset => ContainerPresetCatalog.ForFormation(Block.PresetKey);
+    private ContainerPresetDefinition TargetPreset => ContainerPresetCatalog.TryGetFormation(_targetPresetKey, out var target) ? target : SelectedPreset;
+    private IReadOnlyList<BlockModel> OrderedChildren => Children.OrderBy(child => child.Order).ToList();
+    private int CompletedSlots => Children.Count(IsSlotComplete);
+    private bool IsComplete => CompletedSlots == SelectedPreset.MaximumChildren;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private static string Title(string value) => char.ToUpperInvariant(value[0]) + value[1..];
+
+    private int CustomWidth
+    {
+        get => Math.Clamp(Block.ContainerLayout.CustomWidthPx ?? SelectedPreset.DefaultWidthPx, SelectedPreset.MinimumWidthPx, SelectedPreset.MaximumWidthPx);
+        set => Block.ContainerLayout.CustomWidthPx = Math.Clamp(value, SelectedPreset.MinimumWidthPx, SelectedPreset.MaximumWidthPx);
+    }
 
     protected override void OnParametersSet()
     {
         Block.ContainerLayout ??= new();
-        Block.ContainerLayout.Diagram ??= new();
         Block.Animation ??= new();
         Block.Appearance ??= new();
         Block.Title ??= new();
         if (_loadedBlockId == Block.Id) return;
         _loadedBlockId = Block.Id;
-        Block.PresetKey = ContainerPresetCatalog.EffectiveKey(Block.PresetKey);
-        _originalPresetKey = Block.PresetKey;
+        _confirmLegacyFlatten = false;
+        if (IsFormation)
+        {
+            _targetPresetKey = Block.PresetKey!;
+            Block.ContainerLayout.SchemaVersion = Math.Max(Block.ContainerLayout.SchemaVersion, 4);
+            Block.ContainerLayout.SizeMode = Normalize(Block.ContainerLayout.SizeMode, "medium");
+            Block.ContainerLayout.ItemSize = Normalize(Block.ContainerLayout.ItemSize, "standard");
+            Block.ContainerLayout.FormationSpacing = Normalize(Block.ContainerLayout.FormationSpacing, "standard");
+            Block.ContainerLayout.ConnectorColorMode = Normalize(Block.ContainerLayout.ConnectorColorMode, "theme-accent");
+            Block.ContainerLayout.ConnectorStyle = Normalize(Block.ContainerLayout.ConnectorStyle, "solid");
+            ResetRetainedSelection();
+        }
     }
 
-    private void ChangePreset(ChangeEventArgs args)
+    private void ResetVisualSettings()
     {
-        var key = args.Value?.ToString();
-        if (!ContainerPresetCatalog.TryGetGoverned(key, out var preset)) return;
-        Block.PresetKey = preset.Key;
-        Block.ContainerLayout.SchemaVersion = 3;
-        Block.ContainerLayout.Mode = preset.LayoutMode;
-        Block.ContainerLayout.Purpose = preset.Purpose;
-        Block.ContainerLayout.Columns = preset.Columns;
-        Block.ContainerLayout.MobileMode = preset.MobileMode;
-        if (preset.Purpose != "collection") Block.ContainerLayout.AllowedChildType = null;
+        Block.ContainerLayout.SizeMode = "medium";
+        Block.ContainerLayout.CustomWidthPx = null;
+        Block.ContainerLayout.ItemSize = "standard";
+        Block.ContainerLayout.FormationSpacing = "standard";
+        Block.ContainerLayout.ConnectorColorMode = "theme-accent";
+        Block.ContainerLayout.ConnectorColor = null;
+        Block.ContainerLayout.ConnectorStyle = "solid";
     }
 
-    private BlockModel? ChildForSlot(string key) => Children.FirstOrDefault(child =>
-        string.Equals(child.Authoring?.PresetSlotName, key, StringComparison.Ordinal));
+    private BlockModel? ChildForSlot(string key) => Children.FirstOrDefault(child => child.Authoring?.PresetSlotName == key);
     private string ChildName(BlockModel child) =>
         child.EditorLabel?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } localized
             ? localized
-            : child.EditorLabel?.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? child.Type;
+            : child.EditorLabel?.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? T(BlockTypeLabelKey(child.Type));
 
-    private void EnsureSharedAppearance()
+    private static bool IsSlotComplete(BlockModel child)
     {
-        if (!Block.ContainerLayout.ShareAppearance) return;
-        Block.ContainerLayout.SharedAppearance ??= new BlockAppearanceModel
+        if (child.Authoring?.IsPlaceholder == true) return false;
+        return child.Type switch
         {
-            SchemaVersion = 2,
-            BackgroundMode = "color",
-            BackgroundColor = "#ffffff",
-            TextColor = "#0f172a",
-            BorderRadius = "medium"
+            "text" => HasText(child.Title) || HasText(child.Content),
+            "image" => !string.IsNullOrWhiteSpace(child.Asset?.Url),
+            "card" => HasText(child.Title) || HasText(child.Description) ||
+                !string.IsNullOrWhiteSpace(child.Icon) || !string.IsNullOrWhiteSpace(child.Asset?.Url),
+            "button" => HasText(child.Label),
+            "metric" => HasText(child.Label) || !string.IsNullOrWhiteSpace(child.Value),
+            "step" => HasText(child.Title) || HasText(child.Description) || HasText(child.StepLabel),
+            "icon" => !string.IsNullOrWhiteSpace(child.Icon) || HasText(child.Label) || HasText(child.Description),
+            _ => false
         };
+    }
+
+    private static bool HasText(IReadOnlyDictionary<string, string>? values) =>
+        values?.Values.Any(value => !string.IsNullOrWhiteSpace(value)) == true;
+
+    private async Task SelectSlot(BlockModel? child)
+    {
+        if (child is not null) await SlotSelected.InvokeAsync(child.Id);
+    }
+
+    private string ReplacementType(string slotName)
+    {
+        if (_replacementTypes.TryGetValue(slotName, out var type)) return type;
+        var current = ChildForSlot(slotName)?.Type;
+        return SelectedPreset.AllowedBlockTypes.Contains(current ?? string.Empty, StringComparer.Ordinal)
+            ? current!
+            : SelectedPreset.AllowedBlockTypes[0];
+    }
+
+    private void SetReplacementType(string slotName, ChangeEventArgs eventArgs)
+    {
+        var type = eventArgs.Value?.ToString();
+        if (SelectedPreset.AllowedBlockTypes.Contains(type ?? string.Empty, StringComparer.Ordinal))
+            _replacementTypes[slotName] = type!;
+    }
+
+    private async Task ReplaceSlot(string slotName)
+    {
+        var type = ReplacementType(slotName);
+        var variant = BlockStarterVariantCatalog.ForType(type).First();
+        var dto = BlockStarterVariantCatalog.CreateDto(type, variant.Key);
+        _replacingSlot = slotName;
+        try
+        {
+            var response = await BlockService.ReplaceFormationSlotAsync(PageId, SectionId, Block.Id, slotName, dto);
+            Http.Notify(response, T("NotificationBlockUpdated"));
+            if (response.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _replacingSlot = null;
+        }
+    }
+
+    private async Task DropSlot(string targetSlot)
+    {
+        var sourceSlot = _dragSlotName;
+        _dragSlotName = null;
+        if (string.IsNullOrWhiteSpace(sourceSlot) || sourceSlot == targetSlot) return;
+        var response = await BlockService.SwapFormationSlotsAsync(PageId, SectionId, Block.Id, new FormationSlotSwapRequestDto
+        {
+            FirstSlotName = sourceSlot,
+            SecondSlotName = targetSlot
+        });
+        Http.Notify(response, T("NotificationOrderSaved"));
+        if (response.Success) await OnSaved.InvokeAsync();
+    }
+
+    private void ToggleRetained(string childId, ChangeEventArgs eventArgs)
+    {
+        var selected = eventArgs.Value is bool value
+            ? value
+            : bool.TryParse(eventArgs.Value?.ToString(), out var parsed) && parsed;
+        if (selected)
+        {
+            if (_retainedChildIds.Count < TargetPreset.MaximumChildren) _retainedChildIds.Add(childId);
+        }
+        else
+        {
+            _retainedChildIds.Remove(childId);
+        }
+    }
+
+    private void ResetRetainedSelection()
+    {
+        _retainedChildIds = OrderedChildren
+            .OrderBy(child => child.Authoring?.IsPlaceholder == true)
+            .Take(TargetPreset.MaximumChildren)
+            .Select(child => child.Id)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private int SlotIndex(string slotName)
+    {
+        for (var index = 0; index < SelectedPreset.Slots.Count; index++)
+        {
+            if (string.Equals(SelectedPreset.Slots[index].Key, slotName, StringComparison.Ordinal))
+                return index;
+        }
+
+        return 0;
+    }
+
+    private async Task ConvertFormation()
+    {
+        if (_targetPresetKey == Block.PresetKey) return;
+        if (TargetPreset.MaximumChildren < Children.Count && _retainedChildIds.Count != TargetPreset.MaximumChildren)
+        {
+            Http.Notify(string.Format(T("FormationChooseRetained"), TargetPreset.MaximumChildren), 400);
+            return;
+        }
+
+        _converting = true;
+        try
+        {
+            var response = await BlockService.ConvertFormationAsync(PageId, SectionId, Block.Id, new FormationConvertRequestDto
+            {
+                TargetPresetKey = _targetPresetKey,
+                RetainedBlockIds = _retainedChildIds.ToList()
+            });
+            Http.Notify(response, T("NotificationBlockUpdated"));
+            if (response.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _converting = false;
+        }
+    }
+
+    private async Task MigrateLegacy()
+    {
+        if (!CanMigrateLegacy) return;
+        _converting = true;
+        try
+        {
+            var response = await BlockService.MigrateLegacyContainerAsync(PageId, SectionId, Block.Id);
+            Http.Notify(response, T("NotificationBlockUpdated"));
+            if (response.Success) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _converting = false;
+        }
+    }
+
+    private async Task BeginLegacyMigration()
+    {
+        if (ContainerPresetCatalog.FormationMigrationKey(Block.PresetKey) is not null)
+        {
+            await MigrateLegacy();
+            return;
+        }
+
+        _confirmLegacyFlatten = true;
     }
 
     private async Task Save()
@@ -249,42 +426,72 @@
         _saving = true;
         try
         {
-            var dto = BlockUpdateDtoMapper.Build(Block);
-            var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, dto);
+            Block.PresetKey = SelectedPreset.Key;
+            Block.ContainerLayout.SchemaVersion = 4;
+            Block.ContainerLayout.Mode = "formation";
+            Block.ContainerLayout.Purpose = "formation";
+            Block.ContainerLayout.Columns = 1;
+            Block.ContainerLayout.MobileMode = "formation";
+            Block.ContainerLayout.AllowedChildType = null;
+            Block.ContainerLayout.Diagram = new();
+            var response = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, BlockUpdateDtoMapper.Build(Block));
             Http.Notify(response, T("NotificationBlockUpdated"));
-            if (!response.Success || response.Data is null) return;
-            _originalPresetKey = response.Data.PresetKey;
-            await OnSaved.InvokeAsync();
+            if (response.Success) await OnSaved.InvokeAsync();
         }
         finally
         {
             _saving = false;
         }
     }
+
+    private static string Normalize(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value;
+    private static string BlockIcon(string type) => type switch
+    {
+        "image" => "fa-image", "card" => "fa-id-card", "button" => "fa-hand-pointer",
+        "metric" => "fa-chart-line", "step" => "fa-shoe-prints", "icon" => "fa-icons", _ => "fa-font"
+    };
+    private static string BlockTypeLabelKey(string? type) => type switch
+    {
+        "image" => "Image", "card" => "Card", "button" => "Button", "metric" => "Metric",
+        "step" => "Step", "icon" => "Icon", _ => "Text"
+    };
 }
 
 <style>
-    .container-editor { display:grid; gap:.85rem; }
-    .container-editor__summary,.container-editor__facts,.container-editor__slots>div { display:flex; gap:.6rem; flex-wrap:wrap; }
-    .container-editor__summary { justify-content:space-between; align-items:center; padding:.75rem; border:1px solid var(--border); border-radius:10px; background:var(--surface-soft,#f8fafc); }
-    .container-editor__summary span,.container-editor__facts span { display:grid; gap:.12rem; }
-    .container-editor__summary small,.container-editor__facts small { color:var(--text-muted); font-size:.65rem; }
-    .container-editor__summary b { border-radius:999px; padding:.3rem .55rem; font-size:.7rem; }
-    .container-editor__summary b.is-complete { color:#166534; background:#dcfce7; }
-    .container-editor__summary b.is-incomplete { color:#9a3412; background:#ffedd5; }
-    .container-editor__facts span { min-width:115px; padding:.55rem; border:1px solid var(--border); border-radius:8px; }
-    .container-editor__slots { display:grid; gap:.45rem; }
-    .container-editor__slots span { min-width:105px; display:grid; gap:.15rem; padding:.55rem; border:1px dashed var(--border); border-radius:8px; }
-    .container-editor__slots span.is-required { border-color:#f59e0b; }
-    .container-editor__slots span.is-filled { border-style:solid; background:#f8fafc; }
-    .container-editor__section { border:1px solid var(--border); border-radius:9px; padding:.65rem; }
-    .container-editor__section summary { cursor:pointer; font-weight:700; color:var(--text); }
-    .container-editor__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; margin-top:.65rem; }
-    .container-editor__grid label { display:grid; gap:.25rem; font-size:.7rem; color:var(--text-muted); }
-    .container-editor__grid select,.container-editor__grid input { width:100%; border:1px solid var(--border); border-radius:7px; padding:.45rem; background:#fff; }
-    .container-editor__check { display:flex!important; align-items:center; gap:.45rem; margin-top:.65rem; }
-    .container-editor__check input { width:auto; }
-    .container-editor__warning { color:#9a3412; }
-    .container-editor__error { color:#b91c1c; font-weight:600; }
-    @@media(max-width:720px){.container-editor__grid{grid-template-columns:1fr;}}
+    .formation-editor { display:grid; gap:.85rem; }
+    .formation-editor__summary,.formation-editor__legacy { display:flex; justify-content:space-between; align-items:center; gap:.7rem; padding:.75rem; border:1px solid var(--border); border-radius:10px; background:var(--surface-soft,#f8fafc); }
+    .formation-editor__summary span,.formation-editor__legacy span { display:grid; gap:.12rem; }
+    .formation-editor__summary small,.formation-editor__legacy small,.formation-editor__section header small { color:var(--text-muted); font-size:.68rem; }
+    .formation-editor__summary b { border-radius:999px; padding:.3rem .55rem; font-size:.72rem; }
+    .formation-editor__summary b.is-complete { color:#166534; background:#dcfce7; }
+    .formation-editor__summary b.is-incomplete { color:#9a3412; background:#ffedd5; }
+    .formation-editor__legacy { justify-content:flex-start; color:#9a3412; }
+    .formation-editor__legacy > button,.formation-editor__legacy-confirm { margin-left:auto; }
+    .formation-editor__legacy-confirm { display:grid; max-width:260px; gap:.4rem; }
+    .formation-editor__legacy-confirm>span { display:flex; justify-content:flex-end; gap:.35rem; }
+    .formation-editor__section { display:grid; gap:.65rem; border:1px solid var(--border); border-radius:9px; padding:.7rem; }
+    .formation-editor__section>header { display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
+    .formation-editor__section>header>small { margin-left:auto; }
+    .formation-editor__change { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.5rem; }
+    .formation-editor__segmented { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .formation-editor__segmented button { border:0; border-right:1px solid var(--border); padding:.48rem .25rem; background:#fff; font-size:.7rem; }
+    .formation-editor__segmented button:last-child { border-right:0; }
+    .formation-editor__segmented button.is-active { color:#fff; background:var(--primary,#0f3b63); }
+    .formation-editor__controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; }
+    .formation-editor__controls label,.formation-editor__range { display:grid; gap:.25rem; color:var(--text-muted); font-size:.7rem; }
+    .formation-editor__controls select,.formation-editor__controls input { width:100%; border:1px solid var(--border); border-radius:7px; padding:.45rem; background:#fff; }
+    .formation-editor__range span { display:flex; justify-content:space-between; }
+    .formation-editor__slots { display:grid; gap:.5rem; }
+    .formation-editor__slots article { display:grid; grid-template-columns:28px minmax(0,1fr); gap:.45rem; padding:.5rem; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:grab; }
+    .formation-editor__slots article.is-placeholder { border-style:dashed; background:#fafafa; }
+    .formation-editor__slot-index { display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:#eef2f6; font-size:.7rem; font-weight:700; }
+    .formation-editor__slot-main { display:flex; align-items:center; gap:.5rem; min-width:0; padding:0; border:0; background:transparent; text-align:left; }
+    .formation-editor__slot-main span { display:grid; min-width:0; }
+    .formation-editor__slot-main small { overflow:hidden; text-overflow:ellipsis; color:var(--text-muted); }
+    .formation-editor__slot-actions { grid-column:2; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.4rem; }
+    .formation-editor__slot-actions select { min-width:0; border:1px solid var(--border); border-radius:7px; padding:.4rem; background:#fff; }
+    .formation-editor__retain { display:grid; gap:.3rem; padding:.5rem; border-radius:8px; background:#fff7ed; }
+    .formation-editor__retain label { display:flex; gap:.4rem; align-items:center; font-size:.72rem; }
+    .formation-editor__text-action { border:0; background:transparent; color:var(--primary,#0f3b63); font-size:.7rem; }
+    @@media(max-width:720px){.formation-editor__controls{grid-template-columns:1fr;}.formation-editor__segmented{grid-template-columns:repeat(2,1fr);}}
 </style>

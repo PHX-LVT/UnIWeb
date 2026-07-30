@@ -6,6 +6,7 @@ public sealed class BlockAuthoringPolicyDto
     public bool ContentLocked { get; set; }
     public bool GeometryLocked { get; set; }
     public bool FullLocked { get; set; }
+    public bool IsPlaceholder { get; set; }
     public string? PresetSlotName { get; set; }
     public string? PresetSourceId { get; set; }
 }
@@ -44,6 +45,18 @@ public sealed class BlockMoveRequestDto
     public string? TargetParentBlockId { get; set; }
     public string? TargetSlotName { get; set; }
     public int? TargetIndex { get; set; }
+}
+
+public sealed class FormationSlotSwapRequestDto
+{
+    public string FirstSlotName { get; set; } = string.Empty;
+    public string SecondSlotName { get; set; } = string.Empty;
+}
+
+public sealed class FormationConvertRequestDto
+{
+    public string TargetPresetKey { get; set; } = string.Empty;
+    public List<string> RetainedBlockIds { get; set; } = new();
 }
 
 public sealed class CanvasPresetEditableSlotDto

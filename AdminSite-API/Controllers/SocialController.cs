@@ -5,6 +5,7 @@ using FullProject.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Contracts.Auth;
+using FullProject.Services.IconServices;
 
 namespace FullProject.Controllers
 {
@@ -41,7 +42,15 @@ namespace FullProject.Controllers
                 return BadRequest(ApiResult.BadRequest(
                     "Maximum of 4 social buttons allowed."));
 
-            var created = await _service.CreateAsync(dto);
+            SocialButton created;
+            try
+            {
+                created = await _service.CreateAsync(dto);
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(ApiResult.BadRequest(exception.Message));
+            }
             return Ok(ApiResult.Created(MapToDto(created), "Social button created."));
         }
 
@@ -49,7 +58,15 @@ namespace FullProject.Controllers
         [HttpPut("{buttonId}")]
         public async Task<IActionResult> Update(string buttonId, [FromBody] SocialButtonUpdateDto dto)
         {
-            var updated = await _service.UpdateAsync(buttonId, dto);
+            SocialButton? updated;
+            try
+            {
+                updated = await _service.UpdateAsync(buttonId, dto);
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(ApiResult.BadRequest(exception.Message));
+            }
             if (updated is null) return NotFound(ApiResult.NotFound("Social button not found."));
             return Ok(ApiResult.Ok(MapToDto(updated)));
         }
@@ -92,6 +109,7 @@ namespace FullProject.Controllers
             Id = b.Id,
             Label = b.Label,
             Icon = b.Icon,
+            IconVisual = IconReferenceService.ToAdmin(b.IconVisual),
             Href = b.Href,
             Visible = b.Visible,
             Order = b.Order

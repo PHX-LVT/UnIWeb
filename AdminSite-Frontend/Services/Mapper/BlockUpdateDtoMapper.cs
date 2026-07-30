@@ -78,6 +78,7 @@ public static class BlockUpdateDtoMapper
             "card" => new CardBlockUpdateDto
             {
                 Icon = block.Icon ?? string.Empty,
+                IconVisual = ToIconDto(block.IconVisual),
                 Title = block.Title ?? new(),
                 Description = block.Description ?? new(),
                 Asset = ToAssetDto(block.Asset),
@@ -93,6 +94,7 @@ public static class BlockUpdateDtoMapper
             "button" => new ButtonBlockUpdateDto
             {
                 Icon = block.Icon ?? string.Empty,
+                IconVisual = ToIconDto(block.IconVisual),
                 IconPosition = block.IconPosition,
                 Label = block.Label ?? new(),
                 Href = block.Href,
@@ -105,6 +107,7 @@ public static class BlockUpdateDtoMapper
             "metric" => new MetricBlockUpdateDto
             {
                 Icon = block.Icon ?? string.Empty,
+                IconVisual = ToIconDto(block.IconVisual),
                 Label = block.Label ?? new(),
                 Value = block.Value ?? string.Empty,
                 Prefix = block.Prefix,
@@ -120,6 +123,7 @@ public static class BlockUpdateDtoMapper
                 {
                     Id = item.Id,
                     Icon = item.Icon,
+                    IconVisual = ToIconDto(item.IconVisual),
                     Text = item.Text ?? new(),
                     Visible = item.Visible,
                     Order = i
@@ -130,6 +134,7 @@ public static class BlockUpdateDtoMapper
             "step" => new StepBlockUpdateDto
             {
                 Icon = block.Icon ?? string.Empty,
+                IconVisual = ToIconDto(block.IconVisual),
                 AutoNumber = block.AutoNumber,
                 StepLabel = block.StepLabel ?? new(),
                 Title = block.Title ?? new(),
@@ -140,6 +145,7 @@ public static class BlockUpdateDtoMapper
             "icon" => new IconBlockUpdateDto
             {
                 Icon = block.Icon ?? string.Empty,
+                IconVisual = ToIconDto(block.IconVisual),
                 Label = block.Label ?? new(),
                 Description = block.Description ?? new(),
                 ActionEnabled = block.ActionEnabled,
@@ -188,6 +194,7 @@ public static class BlockUpdateDtoMapper
         ContentLocked = value?.ContentLocked ?? false,
         GeometryLocked = value?.GeometryLocked ?? false,
         FullLocked = false,
+        IsPlaceholder = value?.IsPlaceholder ?? false,
         PresetSlotName = value?.PresetSlotName,
         PresetSourceId = value?.PresetSourceId
     };
@@ -233,6 +240,21 @@ public static class BlockUpdateDtoMapper
         SizeBytes = value?.SizeBytes ?? 0
     };
 
+    public static Contracts.Icons.IconReferenceDto? ToIconDto(IconReferenceModel? value) => value is null ? null : new()
+    {
+        SchemaVersion = value.SchemaVersion,
+        Source = value.Source,
+        ClassName = value.ClassName,
+        ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource,
+        Url = value.Url,
+        StorageKey = value.StorageKey,
+        FileName = value.FileName,
+        ContentType = value.ContentType,
+        SizeBytes = value.SizeBytes,
+        AltText = new(value.AltText)
+    };
+
     private static BlockResponsiveSettingsDto ToResponsiveDto(BlockResponsiveSettingsModel? responsive) => new()
     {
         SchemaVersion = 1,
@@ -268,7 +290,7 @@ public static class BlockUpdateDtoMapper
 
     private static ContainerLayoutSettingsDto ToContainerLayoutDto(ContainerLayoutSettingsModel? value) => new()
     {
-        SchemaVersion = 2,
+        SchemaVersion = Math.Max(value?.SchemaVersion ?? 0, 4),
         Purpose = value?.Purpose ?? "composition",
         AllowedChildType = value?.Purpose == "collection" ? value.AllowedChildType : null,
         Mode = value?.Mode ?? "stack",
@@ -287,7 +309,13 @@ public static class BlockUpdateDtoMapper
         MobileMode = value?.MobileMode ?? "stack",
         CompactRadius = Math.Clamp(value?.CompactRadius ?? 120, 60, 220),
         CompactChildWidth = Math.Clamp(value?.CompactChildWidth ?? 120, 72, 180),
-        GeometryLocked = value?.GeometryLocked ?? false,
+        SizeMode = value?.SizeMode ?? "medium",
+        CustomWidthPx = value?.CustomWidthPx,
+        ItemSize = value?.ItemSize ?? "standard",
+        FormationSpacing = value?.FormationSpacing ?? "standard",
+        ConnectorColorMode = value?.ConnectorColorMode ?? "theme-accent",
+        ConnectorColor = value?.ConnectorColor,
+        ConnectorStyle = value?.ConnectorStyle ?? "solid",
         ShareAppearance = value?.ShareAppearance ?? false,
         SharedAppearance = value?.SharedAppearance is null ? null : ToAppearanceDto(value.SharedAppearance),
         Diagram = ToDiagramDto(value?.Diagram)

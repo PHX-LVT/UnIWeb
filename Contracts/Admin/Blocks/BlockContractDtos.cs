@@ -82,7 +82,13 @@ public class ContainerLayoutSettingsDto
     public string? MobileMode { get; set; }
     public int? CompactRadius { get; set; }
     public int? CompactChildWidth { get; set; }
-    public bool? GeometryLocked { get; set; }
+    public string? SizeMode { get; set; }
+    public int? CustomWidthPx { get; set; }
+    public string? ItemSize { get; set; }
+    public string? FormationSpacing { get; set; }
+    public string? ConnectorColorMode { get; set; }
+    public string? ConnectorColor { get; set; }
+    public string? ConnectorStyle { get; set; }
     public bool? ShareAppearance { get; set; }
     public BlockAppearanceDto? SharedAppearance { get; set; }
     public ContainerDiagramSettingsDto? Diagram { get; set; }

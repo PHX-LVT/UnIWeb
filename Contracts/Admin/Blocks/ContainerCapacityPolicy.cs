@@ -98,7 +98,7 @@ public static class ContainerCapacityPolicy
         error = null;
         if (!ContainerPresetCatalog.TryGetGoverned(targetPresetKey, out var target))
         {
-            error = "Choose a supported Container preset.";
+            error = "Choose a supported Formation preset.";
             return false;
         }
 
@@ -128,6 +128,7 @@ public static class ContainerCapacityPolicy
 
     public static string NormalizeMode(string? mode) => mode switch
     {
+        "formation" => "formation",
         "row" => "row",
         "grid" => "grid",
         "split" => "split",

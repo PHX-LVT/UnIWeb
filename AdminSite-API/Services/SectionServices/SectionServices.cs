@@ -6,6 +6,8 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Contracts.Admin;
 using FullProject.Services.AssetService;
+using FullProject.Services.IconServices;
+using Contracts.Icons;
 
 namespace FullProject.Services.SectionServices
 {
@@ -14,13 +16,15 @@ namespace FullProject.Services.SectionServices
         private readonly MongoDbContext _context;
         private readonly BlockService _blockService;
         private readonly AssetCleanupService _assetCleanup;
+        private readonly IconReferenceService _icons;
         private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
 
-        public SectionService(MongoDbContext context, BlockService blockService, AssetCleanupService assetCleanup)
+        public SectionService(MongoDbContext context, BlockService blockService, AssetCleanupService assetCleanup, IconReferenceService icons)
         {
             _context = context;
             _blockService = blockService;
             _assetCleanup = assetCleanup;
+            _icons = icons;
         }
 
         // -----------------------------------------------------------
@@ -55,6 +59,8 @@ namespace FullProject.Services.SectionServices
             var count = await _context.SectionsDraft
                 .CountDocumentsAsync(s => s.PageStableId == page.StableId);
 
+            await CanonicalizeIconsAsync(dto, null);
+
             Section section = dto switch
             {
                 HeroSectionCreateDto h => new HeroSection
@@ -86,6 +92,7 @@ namespace FullProject.Services.SectionServices
                     {
                         Id = ObjectId.GenerateNewId().ToString(),
                         Icon = item.Icon,
+                        IconVisual = IconReferenceService.ToModel(item.IconVisual),
                         Title = item.Title,
                         Description = item.Description,
                         ImageUrl = item.ImageUrl,
@@ -100,18 +107,7 @@ namespace FullProject.Services.SectionServices
                         kv => kv.Key,
                         kv => SanitizeHtml(kv.Value))
                 },
-                ColumnsSectionCreateDto col => new ColumnsSection
-                {
-                    ColumnCount = col.ColumnCount,
-                    ColumnRatio = col.ColumnRatio,
-                    Gap = col.Gap,
-                    StackOnMobile = col.StackOnMobile,
-                    Columns = Enumerable.Range(0, col.ColumnCount).Select(i => new ColumnSlot
-                    {
-                        Id = ObjectId.GenerateNewId().ToString(),
-                        Order = i
-                    }).ToList()
-                },
+                ColumnsSectionCreateDto col => CreateColumnsSection(col),
                 ShowcaseSectionCreateDto ld => new ShowcaseSection
                 {
                     SourcePageId = ld.SourcePageId,
@@ -287,6 +283,8 @@ namespace FullProject.Services.SectionServices
             var existing = await GetByIdAsync(pageId, sectionId);
             if (existing is null) return null;
 
+            await CanonicalizeIconsAsync(dto, existing);
+
             var baseUpdate = new List<UpdateDefinition<Section>>
             {
                 Builders<Section>.Update.Set(s => s.UpdatedAt, DateTime.UtcNow),
@@ -350,8 +348,9 @@ namespace FullProject.Services.SectionServices
                         if (lDto.Items != null) u.Add(Builders<Section>.Update.Set(s => ((ListSection)s).Items,
                             lDto.Items.Select((item, i) => new ListItem
                             {
-                                Id = ObjectId.GenerateNewId().ToString(),
+                                Id = string.IsNullOrWhiteSpace(item.Id) ? ObjectId.GenerateNewId().ToString() : item.Id,
                                 Icon = item.Icon,
+                                IconVisual = IconReferenceService.ToModel(item.IconVisual),
                                 Title = item.Title,
                                 Description = item.Description,
                                 ImageUrl = item.ImageUrl,
@@ -378,7 +377,14 @@ namespace FullProject.Services.SectionServices
                 case (ColumnsSection col, ColumnsSectionUpdateDto colDto):
                     {
                         var u = new List<UpdateDefinition<Section>>(baseUpdate);
-                        if (colDto.ColumnCount != null)
+                        if (IsSplitColumns(col))
+                        {
+                            if (colDto.Eyebrow != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Eyebrow, colDto.Eyebrow));
+                            if (colDto.Heading != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Heading, colDto.Heading));
+                            if (colDto.Subheading != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Subheading, colDto.Subheading));
+                            if (colDto.Content != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Content, colDto.Content));
+                        }
+                        else if (colDto.ColumnCount != null)
                         {
                             var slots = ReconcileColumnSlots(col.Columns, colDto.ColumnCount.Value);
                             var removedSlotIds = col.Columns
@@ -398,9 +404,12 @@ namespace FullProject.Services.SectionServices
                             u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).ColumnCount, slots.Count));
                             u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Columns, slots));
                         }
-                        if (colDto.ColumnRatio != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).ColumnRatio, colDto.ColumnRatio));
-                        if (colDto.Gap != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Gap, colDto.Gap));
-                        if (colDto.StackOnMobile != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).StackOnMobile, colDto.StackOnMobile.Value));
+                        if (!IsSplitColumns(col))
+                        {
+                            if (colDto.ColumnRatio != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).ColumnRatio, colDto.ColumnRatio));
+                            if (colDto.Gap != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Gap, colDto.Gap));
+                            if (colDto.StackOnMobile != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).StackOnMobile, colDto.StackOnMobile.Value));
+                        }
                         await _context.SectionsDraft.UpdateOneAsync(s => s.Id == sectionId, Builders<Section>.Update.Combine(u));
                         break;
                     }
@@ -818,6 +827,33 @@ namespace FullProject.Services.SectionServices
             return slots;
         }
 
+        private static ColumnsSection CreateColumnsSection(ColumnsSectionCreateDto dto)
+        {
+            var split = !string.Equals(dto.LayoutMode, "legacy", StringComparison.OrdinalIgnoreCase);
+            var slotCount = split ? 1 : Math.Clamp(dto.ColumnCount, 1, 4);
+
+            return new ColumnsSection
+            {
+                LayoutMode = split ? "split" : "legacy",
+                Eyebrow = dto.Eyebrow,
+                Heading = dto.Heading,
+                Subheading = dto.Subheading,
+                Content = dto.Content,
+                ColumnCount = split ? 2 : slotCount,
+                ColumnRatio = split ? "equal" : dto.ColumnRatio,
+                Gap = dto.Gap,
+                StackOnMobile = dto.StackOnMobile,
+                Columns = Enumerable.Range(0, slotCount).Select(i => new ColumnSlot
+                {
+                    Id = ObjectId.GenerateNewId().ToString(),
+                    Order = i
+                }).ToList()
+            };
+        }
+
+        private static bool IsSplitColumns(ColumnsSection section) =>
+            string.Equals(section.LayoutMode, "split", StringComparison.OrdinalIgnoreCase);
+
         private static ShowcaseItemOverride MapShowcaseItemOverride(ShowcaseItemOverrideDto item) => new()
         {
             ChildPageId = item.ChildPageId,
@@ -923,14 +959,60 @@ namespace FullProject.Services.SectionServices
 
         private static TestimonialItem MapTestimonialItem(TestimonialItemDto item, int i) => new()
         {
-            Id = ObjectId.GenerateNewId().ToString(),
+            Id = string.IsNullOrWhiteSpace(item.Id) ? ObjectId.GenerateNewId().ToString() : item.Id,
             Icon = item.Icon,
+            IconVisual = IconReferenceService.ToModel(item.IconVisual),
             Title = item.Title ?? new(),
             Description = item.Description ?? new(),
             ImageUrl = item.ImageUrl,
+            BadgeText = item.BadgeText,
+            Highlighted = item.Highlighted,
             Visible = item.Visible,
             Order = i
         };
+
+        private async Task CanonicalizeIconsAsync(object dto, Section? existing)
+        {
+            switch (dto)
+            {
+                case ListSectionCreateDto value:
+                    await CanonicalizeListItemsAsync(value.Items, existing as ListSection);
+                    break;
+                case ListSectionUpdateDto value when value.Items is not null:
+                    await CanonicalizeListItemsAsync(value.Items, existing as ListSection);
+                    break;
+                case TestimonialSectionCreateDto value:
+                    await CanonicalizeTestimonialItemsAsync(value.Items, existing as TestimonialSection);
+                    break;
+                case TestimonialSectionUpdateDto value when value.Items is not null:
+                    await CanonicalizeTestimonialItemsAsync(value.Items, existing as TestimonialSection);
+                    break;
+            }
+        }
+
+        private async Task CanonicalizeListItemsAsync(List<ListItemDto> items, ListSection? existing)
+        {
+            foreach (var item in items)
+            {
+                var old = existing?.Items.FirstOrDefault(value => value.Id == item.Id)?.IconVisual;
+                var result = await _icons.ResolveAsync(item.IconVisual, item.Icon, IconContext.GeneralContent, old);
+                if (!result.Success) throw new ArgumentException(result.Error);
+                item.Icon = result.LegacyClass;
+                item.IconVisual = IconReferenceService.ToAdmin(result.Value);
+            }
+        }
+
+        private async Task CanonicalizeTestimonialItemsAsync(List<TestimonialItemDto> items, TestimonialSection? existing)
+        {
+            foreach (var item in items)
+            {
+                var old = existing?.Items.FirstOrDefault(value => value.Id == item.Id)?.IconVisual;
+                var result = await _icons.ResolveAsync(item.IconVisual, item.Icon, IconContext.GeneralContent, old);
+                if (!result.Success) throw new ArgumentException(result.Error);
+                item.Icon = result.LegacyClass;
+                item.IconVisual = IconReferenceService.ToAdmin(result.Value);
+            }
+        }
     }
 }
 

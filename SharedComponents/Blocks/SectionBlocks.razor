@@ -1,4 +1,5 @@
 @using Contracts.Public
+@using Contracts.Admin
 @using Contracts.Global
 @using Contracts.Forms
 @using SharedComponents.Helpers
@@ -7,10 +8,28 @@
 {
     <div class="@GetContainerClass()"
          data-block-zone="@NormalizeZone(DataZoneId ?? BlockZone)"
+         data-block-zone-kind="@(ReportAsAuthoringZone ? NormalizeZone(DataZoneKind ?? BlockZone) : null)"
+         data-authoring-zone="@(ReportAsAuthoringZone ? "true" : null)"
          style="@GetContainerStyle()">
         @if (Diagram?.Enabled == true)
         {
             <ContainerDiagramLayer Diagram="Diagram" DiagramId="@DiagramId" />
+        }
+        @if (LayoutMode == "formation" && !string.IsNullOrWhiteSpace(FormationPresetKey))
+        {
+            <FormationConnectorLayer PresetKey="@FormationPresetKey"
+                                     Spacing="@FormationSpacing"
+                                     ColorMode="@FormationConnectorColorMode"
+                                     Color="@FormationConnectorColor"
+                                     StrokeStyle="@FormationConnectorStyle"
+                                     CssClass="sc-formation-connectors--desktop" />
+            <FormationConnectorLayer PresetKey="@FormationPresetKey"
+                                     Spacing="@FormationSpacing"
+                                     ColorMode="@FormationConnectorColorMode"
+                                     Color="@FormationConnectorColor"
+                                     StrokeStyle="@FormationConnectorStyle"
+                                     Mobile="true"
+                                     CssClass="sc-formation-connectors--mobile" />
         }
         @if (CenterContent is not null)
         {
@@ -76,6 +95,8 @@
     [Parameter] public string? SectionId { get; set; }
     [Parameter] public string BlockZone { get; set; } = "default";
     [Parameter] public string? DataZoneId { get; set; }
+    [Parameter] public string? DataZoneKind { get; set; }
+    [Parameter] public bool ReportAsAuthoringZone { get; set; }
     [Parameter] public bool IncludeDefaultZone { get; set; }
     [Parameter] public bool ForceFreeform { get; set; }
     [Parameter] public string? MobileCompositionMode { get; set; }
@@ -93,6 +114,14 @@
     [Parameter] public int CompactChildWidth { get; set; } = 120;
     [Parameter] public PublicContainerDiagramSettingsDto? Diagram { get; set; }
     [Parameter] public string DiagramId { get; set; } = string.Empty;
+    [Parameter] public string? FormationPresetKey { get; set; }
+    [Parameter] public string FormationSizeMode { get; set; } = "medium";
+    [Parameter] public int? FormationCustomWidthPx { get; set; }
+    [Parameter] public string FormationItemSize { get; set; } = "standard";
+    [Parameter] public string FormationSpacing { get; set; } = "standard";
+    [Parameter] public string FormationConnectorColorMode { get; set; } = "theme-accent";
+    [Parameter] public string? FormationConnectorColor { get; set; }
+    [Parameter] public string FormationConnectorStyle { get; set; } = "solid";
     [Parameter] public int ChildStaggerMs { get; set; }
     [Parameter] public PublicBlockAppearanceDto? InheritedAppearance { get; set; }
     [Parameter] public RenderFragment? CenterContent { get; set; }
@@ -109,7 +138,8 @@
                 : string.Equals(b.ParentBlockId, ParentBlockId, StringComparison.Ordinal))
             .Where(b => ZoneMatches(b));
 
-    private bool ShouldRenderContainer => ZoneBlocks.Any() || LayoutMode == "freeform";
+    private bool ShouldRenderContainer =>
+        ZoneBlocks.Any() || LayoutMode == "freeform" || (ReportAsAuthoringZone && ShowInvisible);
 
     private bool ZoneMatches(PublicBlockDto block)
     {
@@ -127,8 +157,31 @@
         "orbit" => "orbit",
         "semicircle" => "semicircle",
         "freeform" => "freeform",
+        "formation" => "formation",
         _ => "stack"
     };
+
+    private ContainerPresetDefinition? FormationPreset =>
+        ContainerPresetCatalog.TryGetFormation(FormationPresetKey, out var preset) ? preset : null;
+
+    private FormationGeometry? FormationGeometry => FormationPreset is null
+        ? null
+        : FormationGeometryResolver.Resolve(
+            FormationPreset.Key,
+            FormationSizeMode,
+            FormationCustomWidthPx,
+            FormationItemSize,
+            FormationSpacing);
+
+    private FormationGeometry? MobileFormationGeometry => FormationPreset is null
+        ? null
+        : FormationGeometryResolver.Resolve(
+            FormationPreset.Key,
+            FormationSizeMode,
+            FormationCustomWidthPx,
+            FormationItemSize,
+            FormationSpacing,
+            mobile: true);
 
     private string GetContainerClass()
     {
@@ -141,7 +194,8 @@
         };
 
         var forced = ForceFreeform ? " sc-section-blocks--force-freeform" : string.Empty;
-        return $"sc-section-blocks sc-block-zone sc-section-blocks--{LayoutMode} sc-section-blocks--gap-{gap} sc-section-blocks--mobile-{EffectiveMobileMode}{forced}";
+        var formationKind = FormationPreset is null ? string.Empty : $" sc-section-blocks--formation-{FormationPreset.FormationKind}";
+        return $"sc-section-blocks sc-block-zone sc-section-blocks--{LayoutMode} sc-section-blocks--gap-{gap} sc-section-blocks--mobile-{EffectiveMobileMode}{formationKind}{forced}";
     }
 
     private string GetContainerStyle()
@@ -162,6 +216,37 @@
             var height = Math.Clamp(Style?.CustomMinHeightPx ?? 640, 120, 3000);
             styles.Add($"--sc-freeform-min-height: {height}px");
             styles.Add($"--sc-mobile-freeform-min-height: {Math.Clamp((int)Math.Round(height * 0.65), 180, 900)}px");
+
+            if (EffectiveMobileMode == "custom")
+            {
+                var customMobileHeight = ZoneBlocks
+                    .Where(block => NormalizeResponsiveMode(block.Responsive?.Mobile?.Mode, "inherit") == "custom")
+                    .Select(block =>
+                    {
+                        var layout = block.Layout ?? new PublicBlockLayoutDto();
+                        var top = block.Responsive?.Mobile?.TopPx ?? FreeformTopPx(layout);
+                        var blockHeight = block.Responsive?.Mobile?.HeightPx ?? FreeformHeightPx(layout);
+                        return top + blockHeight;
+                    })
+                    .DefaultIfEmpty(height)
+                    .Max();
+                styles.Add($"--sc-mobile-custom-min-height: {FormatNumber(Math.Clamp(customMobileHeight, 120, 3000))}px");
+            }
+        }
+
+        else if (LayoutMode == "formation" && FormationGeometry is { } formation)
+        {
+            styles.Add($"--sc-formation-width: {formation.WidthPx}px");
+            styles.Add($"--sc-formation-height: {formation.HeightPx}px");
+            styles.Add($"--sc-formation-aspect: {FormatNumber((double)formation.WidthPx / formation.HeightPx)}");
+            styles.Add($"--sc-formation-item-width: {formation.ItemWidthPx}px");
+            styles.Add($"--sc-formation-item-height: {formation.ItemHeightPx}px");
+            if (MobileFormationGeometry is { } mobileFormation)
+            {
+                styles.Add($"--sc-formation-mobile-aspect: {FormatNumber((double)mobileFormation.WidthPx / mobileFormation.HeightPx)}");
+                styles.Add($"--sc-formation-mobile-item-width: {mobileFormation.ItemWidthPx}px");
+                styles.Add($"--sc-formation-mobile-item-height: {mobileFormation.ItemHeightPx}px");
+            }
         }
 
         else if (LayoutMode is "orbit" or "semicircle")
@@ -200,6 +285,10 @@
             $"sc-block-frame--margin-{EffectiveSpacing(appearance.Margin, layout.Margin)}",
             $"sc-block-frame--shape-{NormalizeShape(appearance.Shape)}"
         };
+
+        if (block is PublicContainerBlockDto formationParent &&
+            ContainerPresetCatalog.IsFormation(formationParent.PresetKey))
+            classes.Add("sc-block-frame--formation-parent");
 
         classes.Add($"sc-block-frame--aspect-{NormalizeAspectRatio(appearance.AspectRatio)}");
 
@@ -315,6 +404,28 @@
             $"z-index: {Math.Clamp(layout.ZIndex, 0, 1000)}"
         };
 
+        if (LayoutMode == "formation" && FormationGeometry is { } formation)
+        {
+            var slot = formation.Slots.FirstOrDefault(item =>
+                string.Equals(item.SlotKey, block.PresetSlotName, StringComparison.Ordinal));
+            if (slot is not null)
+            {
+                parts.Add($"--sc-formation-x: {FormatNumber(slot.XPercent)}%");
+                parts.Add($"--sc-formation-y: {FormatNumber(slot.YPercent)}%");
+                parts.Add($"--sc-formation-slot-width: {slot.ItemWidthPx}px");
+                parts.Add($"--sc-formation-slot-height: {slot.ItemHeightPx}px");
+            }
+            var mobileSlot = MobileFormationGeometry?.Slots.FirstOrDefault(item =>
+                string.Equals(item.SlotKey, block.PresetSlotName, StringComparison.Ordinal));
+            if (mobileSlot is not null)
+            {
+                parts.Add($"--sc-formation-mobile-x: {FormatNumber(mobileSlot.XPercent)}%");
+                parts.Add($"--sc-formation-mobile-y: {FormatNumber(mobileSlot.YPercent)}%");
+                parts.Add($"--sc-formation-mobile-slot-width: {mobileSlot.ItemWidthPx}px");
+                parts.Add($"--sc-formation-mobile-slot-height: {mobileSlot.ItemHeightPx}px");
+            }
+        }
+
         if (GetFormDefaultSize(block) is { } formSize && EffectivePositionMode(block) == "freeform")
         {
             var scale = block is PublicFormBlockDto form
@@ -327,6 +438,19 @@
 
         AddResponsiveStyleParts(parts, "tablet", layout, block.Responsive?.Tablet, span);
         AddResponsiveStyleParts(parts, "mobile", layout, block.Responsive?.Mobile, span);
+
+        if (block is PublicContainerBlockDto formationParent &&
+            ContainerPresetCatalog.TryGetFormation(formationParent.PresetKey, out var parentPreset))
+        {
+            var parentMobileGeometry = FormationGeometryResolver.Resolve(
+                parentPreset.Key,
+                formationParent.ContainerLayout.SizeMode,
+                formationParent.ContainerLayout.CustomWidthPx,
+                formationParent.ContainerLayout.ItemSize,
+                formationParent.ContainerLayout.FormationSpacing,
+                mobile: true);
+            parts.Add($"--sc-parent-formation-mobile-aspect: {FormatNumber((double)parentMobileGeometry.WidthPx / parentMobileGeometry.HeightPx)}");
+        }
 
         return string.Join("; ", parts);
     }
@@ -505,7 +629,7 @@
         string.Equals(value, "freeform", StringComparison.OrdinalIgnoreCase) ? "freeform" : "flow";
 
     private string EffectivePositionMode(PublicBlockDto block) =>
-        ForceFreeform ? "freeform" : NormalizePositionMode(block.PositionMode);
+        LayoutMode == "formation" ? "formation" : ForceFreeform ? "freeform" : NormalizePositionMode(block.PositionMode);
 
     private string GetFrameZone(PublicBlockDto block) =>
         NormalizeZone(BlockFrameZoneId ?? block.ZoneId ?? block.BlockZone);
@@ -562,6 +686,7 @@
         "horizontal-scroll" => "horizontal-scroll",
         "custom" => "custom",
         "hide" => "hide",
+        "formation" => "formation",
         "inherit" => "inherit",
         _ => fallback
     };

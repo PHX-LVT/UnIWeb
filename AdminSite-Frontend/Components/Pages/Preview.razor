@@ -13,6 +13,7 @@
 @using Contracts.Forms
 @using Contracts.Admin
 @using Contracts.Public
+@using Contracts.Icons
 @using SharedComponents
 @using SharedComponents.Helpers
 @using SharedComponents.Sections
@@ -29,6 +30,7 @@
             height: 100% !important;
             min-height: 100%;
             overflow: auto !important;
+            overscroll-behavior: contain;
             background: #fff;
         }
 
@@ -296,6 +298,7 @@ else
                 {
                     Id = i.Id,
                     Icon = i.Icon ?? string.Empty,
+                    IconVisual = MapIcon(i.IconVisual, i.Icon),
                     Title = i.Title ?? new(),
                     Description = i.Description ?? new(),
                     ImageUrl = i.ImageUrl,
@@ -435,6 +438,9 @@ else
                 {
                     Id = i.Id,
                     Icon = i.Icon ?? string.Empty,
+                    IconVisual = MapIcon(i.IconVisual, i.Icon),
+                    BadgeText = i.BadgeText,
+                    Highlighted = i.Highlighted,
                     Title = i.Title ?? new(),
                     Description = i.Description ?? new(),
                     ImageUrl = i.ImageUrl,
@@ -477,8 +483,14 @@ else
 
         return new PublicColumnsSectionDto
         {
+            LayoutMode = s.LayoutMode ?? "legacy",
+            Eyebrow = s.Eyebrow,
+            Heading = s.Heading,
+            Subheading = s.Subheading,
+            Content = s.SplitContent,
             ColumnCount = s.ColumnCount,
             ColumnRatio = s.ColumnRatio,
+            Gap = s.Gap,
             StackOnMobile = s.StackOnMobile,
             ColumnSlots = s.ColumnSlots?.Select(slot => new PublicColumnSlotDto
             {
@@ -582,6 +594,7 @@ else
             "card" => new PublicCardBlockDto
             {
                 Icon = b.Icon,
+                IconVisual = MapIcon(b.IconVisual, b.Icon),
                 Title = b.Title,
                 Description = b.Description,
                 ImageUrl = b.ImageUrl,
@@ -593,6 +606,9 @@ else
             },
             "button" => new PublicButtonBlockDto
             {
+                Icon = b.Icon,
+                IconVisual = MapIcon(b.IconVisual, b.Icon),
+                IconPosition = b.IconPosition,
                 Label = b.Label,
                 Href = b.Href,
                 Action = b.Action ?? "linkToPage",
@@ -602,6 +618,7 @@ else
             "metric" => new PublicMetricBlockDto
             {
                 Icon = b.Icon,
+                IconVisual = MapIcon(b.IconVisual, b.Icon),
                 Label = b.Label,
                 Value = b.Value,
                 Prefix = b.Prefix,
@@ -615,6 +632,7 @@ else
                 {
                     Id = i.Id,
                     Icon = i.Icon,
+                    IconVisual = MapIcon(i.IconVisual, i.Icon),
                     Text = i.Text,
                     Visible = i.Visible,
                     Order = i.Order
@@ -623,6 +641,8 @@ else
             "step" => new PublicStepBlockDto
             {
                 Icon = b.Icon,
+                IconVisual = MapIcon(b.IconVisual, b.Icon),
+                AutoNumber = b.AutoNumber,
                 StepLabel = b.StepLabel,
                 Title = b.Title,
                 Description = b.Description
@@ -630,13 +650,14 @@ else
             "icon" => new PublicIconBlockDto
             {
                 Icon = b.Icon,
+                IconVisual = MapIcon(b.IconVisual, b.Icon),
                 Label = b.Label,
                 Description = b.Description
             },
             "container" => new PublicContainerBlockDto
             {
                 PresetKey = string.IsNullOrWhiteSpace(b.PresetKey)
-                    ? ContainerPresetCatalog.StackKey
+                    ? ContainerPresetCatalog.CircleSixKey
                     : b.PresetKey,
                 Title = b.Title,
                 ContainerLayout = MapContainerLayout(b.ContainerLayout)
@@ -656,6 +677,7 @@ else
         dto.ZoneId = b.BlockZone;
         dto.PositionMode = ResolveBlockPositionMode(b);
         dto.ParentBlockId = b.ParentBlockId;
+        dto.PresetSlotName = b.Authoring?.PresetSlotName;
         dto.Layout = MapBlockLayout(b.Layout);
         dto.Appearance = MapBlockAppearance(b.Appearance);
         dto.Responsive = MapBlockResponsive(b.Responsive);
@@ -831,6 +853,29 @@ else
         SizeBytes = Math.Max(value?.SizeBytes ?? 0, 0)
     };
 
+    private static PublicIconReferenceDto? MapIcon(IconReferenceModel? value, string? legacy)
+    {
+        if (value is null)
+        {
+            var normalized = IconCatalog.Normalize(legacy);
+            return string.IsNullOrWhiteSpace(normalized) ? null : new PublicIconReferenceDto
+            {
+                Source = IconSources.BuiltIn,
+                ClassName = normalized
+            };
+        }
+
+        return new PublicIconReferenceDto
+        {
+            Source = value.Source,
+            ClassName = string.Equals(value.Source, IconSources.BuiltIn, StringComparison.OrdinalIgnoreCase)
+                ? IconCatalog.Normalize(value.ClassName ?? legacy)
+                : null,
+            Url = string.Equals(value.Source, IconSources.Custom, StringComparison.OrdinalIgnoreCase) ? value.Url : null,
+            AltText = new(value.AltText)
+        };
+    }
+
     private static PublicContainerLayoutSettingsDto MapContainerLayout(ContainerLayoutSettingsModel? value) => new()
     {
         SchemaVersion = 1,
@@ -850,7 +895,13 @@ else
         MobileMode = value?.MobileMode ?? "stack",
         CompactRadius = Math.Clamp(value?.CompactRadius ?? 120, 60, 220),
         CompactChildWidth = Math.Clamp(value?.CompactChildWidth ?? 120, 72, 180),
-        GeometryLocked = value?.GeometryLocked ?? false,
+        SizeMode = value?.SizeMode ?? "medium",
+        CustomWidthPx = value?.CustomWidthPx,
+        ItemSize = value?.ItemSize ?? "standard",
+        FormationSpacing = value?.FormationSpacing ?? "standard",
+        ConnectorColorMode = value?.ConnectorColorMode ?? "theme-accent",
+        ConnectorColor = value?.ConnectorColor,
+        ConnectorStyle = value?.ConnectorStyle ?? "solid",
         Diagram = MapContainerDiagram(value?.Diagram)
     };
 

@@ -60,4 +60,50 @@ public class BlockContractTests
         Assert.Contains(BlockContractService.Validate(dto), error =>
             error.Contains("icon position", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void FormationContract_AcceptsGovernedModesAndVisualControls()
+    {
+        var dto = new ContainerBlockUpdateDto
+        {
+            PresetKey = ContainerPresetCatalog.CircleSixKey,
+            ContainerLayout = new()
+            {
+                SchemaVersion = 4,
+                Purpose = "formation",
+                Mode = "formation",
+                MobileMode = "formation",
+                SizeMode = "custom",
+                CustomWidthPx = 720,
+                ItemSize = "standard",
+                FormationSpacing = "wide",
+                ConnectorColorMode = "color",
+                ConnectorColor = "#3156a3",
+                ConnectorStyle = "dashed"
+            }
+        };
+
+        Assert.Empty(BlockContractService.Validate(dto));
+    }
+
+    [Fact]
+    public void FormationContract_RejectsUnsupportedVisualControls()
+    {
+        var dto = new ContainerBlockUpdateDto
+        {
+            ContainerLayout = new()
+            {
+                Purpose = "formation",
+                Mode = "formation",
+                MobileMode = "formation",
+                SizeMode = "giant",
+                ConnectorStyle = "animated"
+            }
+        };
+
+        var errors = BlockContractService.Validate(dto);
+
+        Assert.Contains(errors, error => error.Contains("size mode", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(errors, error => error.Contains("connector style", StringComparison.OrdinalIgnoreCase));
+    }
 }

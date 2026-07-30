@@ -97,13 +97,16 @@ public static class BlockStarterVariantCatalog
             ],
             ["container"] =
             [
-                V("stack", "StarterStackCollection", "StarterStackCollectionHint", "container-stack", 8, 6, 8, containerPresetKey: ContainerPresetCatalog.StackKey, containerMode: "stack"),
-                V("row", "StarterRowCollection", "StarterRowCollectionHint", "container-row", 10, 5, 10, containerPresetKey: ContainerPresetCatalog.RowKey, containerMode: "row"),
-                V("grid", "StarterGridCollection", "StarterGridCollectionHint", "container-grid", 10, 7, 10, containerPresetKey: ContainerPresetCatalog.GridKey, containerMode: "grid", containerColumns: 2),
-                V("split", "StarterSplitContainer", "StarterSplitContainerHint", "container-split", 10, 6, 10, containerPresetKey: ContainerPresetCatalog.SplitKey, containerMode: "split"),
-                V("orbit", "StarterOrbitContainer", "StarterOrbitContainerHint", "container-orbit", 10, 8, 10, containerPresetKey: ContainerPresetCatalog.OrbitKey, containerMode: "orbit"),
-                V("semicircle", "StarterSemicircleContainer", "StarterSemicircleContainerHint", "container-semicircle", 10, 7, 10, containerPresetKey: ContainerPresetCatalog.SemicircleKey, containerMode: "semicircle"),
-                V("advanced", "StarterAdvancedComposition", "StarterAdvancedCompositionHint", "container-advanced", 10, 8, 10, containerPresetKey: ContainerPresetCatalog.AdvancedFreeformKey, containerMode: "freeform")
+                V("circle-4", "FormationCircleFour", "FormationCircleFourHint", "formation-circle", 8, 8, 10, containerPresetKey: ContainerPresetCatalog.CircleFourKey, containerMode: "formation"),
+                V("circle-6", "FormationCircleSix", "FormationCircleSixHint", "formation-circle", 10, 10, 10, containerPresetKey: ContainerPresetCatalog.CircleSixKey, containerMode: "formation"),
+                V("circle-8", "FormationCircleEight", "FormationCircleEightHint", "formation-circle", 10, 10, 10, containerPresetKey: ContainerPresetCatalog.CircleEightKey, containerMode: "formation"),
+                V("semicircle-4", "FormationSemicircleFour", "FormationSemicircleFourHint", "formation-semicircle", 10, 6, 10, containerPresetKey: ContainerPresetCatalog.SemicircleFourKey, containerMode: "formation"),
+                V("semicircle-6", "FormationSemicircleSix", "FormationSemicircleSixHint", "formation-semicircle", 12, 7, 12, containerPresetKey: ContainerPresetCatalog.SemicircleSixKey, containerMode: "formation"),
+                V("triangle", "FormationTriangle", "FormationTriangleHint", "formation-triangle", 9, 8, 9, containerPresetKey: ContainerPresetCatalog.TriangleKey, containerMode: "formation"),
+                V("pyramid", "FormationPyramid", "FormationPyramidHint", "formation-pyramid", 10, 8, 10, containerPresetKey: ContainerPresetCatalog.PyramidKey, containerMode: "formation"),
+                V("stacked", "FormationStacked", "FormationStackedHint", "formation-stacked", 8, 7, 8, containerPresetKey: ContainerPresetCatalog.StackedCardsKey, containerMode: "formation"),
+                V("zigzag", "FormationZigzag", "FormationZigzagHint", "formation-zigzag", 12, 6, 12, containerPresetKey: ContainerPresetCatalog.ZigzagKey, containerMode: "formation"),
+                V("process", "FormationProcess", "FormationProcessHint", "formation-process", 12, 5, 12, containerPresetKey: ContainerPresetCatalog.ProcessPathKey, containerMode: "formation")
             ]
         };
 
@@ -211,7 +214,7 @@ public static class BlockStarterVariantCatalog
             PresetKey = preset.Key,
             ContainerLayout = new ContainerLayoutSettingsDto
             {
-                SchemaVersion = 3,
+                SchemaVersion = 4,
                 Purpose = preset.Purpose,
                 AllowedChildType = null,
                 Mode = preset.LayoutMode,
@@ -223,7 +226,11 @@ public static class BlockStarterVariantCatalog
                 MobileMode = preset.MobileMode,
                 CompactRadius = 120,
                 CompactChildWidth = 120,
-                GeometryLocked = false
+                SizeMode = "medium",
+                ItemSize = "standard",
+                FormationSpacing = "standard",
+                ConnectorColorMode = "theme-accent",
+                ConnectorStyle = "solid"
             }
         };
     }

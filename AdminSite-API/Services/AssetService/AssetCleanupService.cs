@@ -94,7 +94,11 @@ namespace FullProject.Services.AssetService
                     yield return hero.ImageUrl;
                     break;
                 case ListSection list:
-                    foreach (var item in list.Items) yield return item.ImageUrl;
+                    foreach (var item in list.Items)
+                    {
+                        yield return item.ImageUrl;
+                        yield return item.IconVisual?.Url;
+                    }
                     break;
                 case ShowcaseSection showcase:
                     foreach (var item in showcase.ItemOverrides) yield return item.CardImageUrl;
@@ -103,7 +107,11 @@ namespace FullProject.Services.AssetService
                     foreach (var item in carousel.Items) yield return item.ImageUrl;
                     break;
                 case TestimonialSection testimonial:
-                    foreach (var item in testimonial.Items) yield return item.ImageUrl;
+                    foreach (var item in testimonial.Items)
+                    {
+                        yield return item.ImageUrl;
+                        yield return item.IconVisual?.Url;
+                    }
                     break;
             }
         }
@@ -125,6 +133,22 @@ namespace FullProject.Services.AssetService
                     break;
                 case CardBlock card:
                     yield return card.Asset.Url;
+                    yield return card.IconVisual?.Url;
+                    break;
+                case ButtonBlock button:
+                    yield return button.IconVisual?.Url;
+                    break;
+                case MetricBlock metric:
+                    yield return metric.IconVisual?.Url;
+                    break;
+                case StepBlock step:
+                    yield return step.IconVisual?.Url;
+                    break;
+                case IconBlock icon:
+                    yield return icon.IconVisual?.Url;
+                    break;
+                case BulletListBlock bullet:
+                    foreach (var item in bullet.Items) yield return item.IconVisual?.Url;
                     break;
             }
         }

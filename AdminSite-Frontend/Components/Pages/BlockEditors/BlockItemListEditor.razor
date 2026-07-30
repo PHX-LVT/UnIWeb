@@ -6,7 +6,7 @@
     {
         <div class="block-item-list__row" data-block-item-id="@item.Id" @key="item.Id">
             <button type="button" class="block-item-list__drag" title="@T("DragToReorder")" aria-label="@T("DragToReorder")"><i class="fas fa-grip-vertical"></i></button>
-            <IconPickerField @bind-Value="item.Icon" Label="@T("IconClass")" />
+            <IconPickerField @bind-Value="item.Icon" @bind-Visual="item.IconVisual" Label="@T("Icon")" />
             <LangField Value="@(item.Text ?? new())" ValueChanged="@(value => item.Text = value)" Languages="Languages" />
             <label class="block-item-list__visible" title="@T(item.Visible ? "Hide" : "Show")"><input type="checkbox" @bind="item.Visible" /><i class="fas @(item.Visible ? "fa-eye" : "fa-eye-slash")"></i></label>
             <button type="button" class="btn-admin btn-danger" title="@T("Delete")" @onclick="() => Remove(item)"><i class="fas fa-trash"></i></button>
