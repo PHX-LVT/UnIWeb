@@ -21,6 +21,14 @@ namespace AdminSite.Services
         public Task<ApiResponse<SectionModel>> CreateAsync(string pageId, object dto) =>
             _http.PostAsync<SectionModel>(Base(pageId), dto);
 
+        public Task<ApiResponse<SectionCatalogDto>> GetCatalogAsync(string pageId) =>
+            _http.GetAsync<SectionCatalogDto>($"{Base(pageId)}/catalog");
+
+        public Task<ApiResponse<SectionModel>> CreateFromTemplateAsync(
+            string pageId,
+            SectionTemplateCreateRequestDto request) =>
+            _http.PostAsync<SectionModel>($"{Base(pageId)}/from-template", request);
+
         public Task<ApiResponse<SectionModel>> UpdateAsync(string pageId, string sectionId, object dto) =>
             _http.PutAsync<SectionModel>($"{Base(pageId)}/{sectionId}", dto);
 

@@ -36,7 +36,7 @@ namespace SharedComponents.Helpers
                     parts.Add("background-color: var(--theme-color-background)");
                     break;
 
-                case "image" when !string.IsNullOrEmpty(s.BackgroundImageUrl):
+                case "image" when !string.IsNullOrEmpty(s.BackgroundImageUrl) && s.BackgroundImagePlacement is null:
                     parts.Add($"background-image: url('{s.BackgroundImageUrl}')");
                     parts.Add($"background-size: {NormalizeBackgroundImageFit(s.BackgroundImageFit)}");
                     parts.Add($"background-position: {NormalizeBackgroundImagePosition(s.BackgroundImagePosition)}");
@@ -135,6 +135,41 @@ namespace SharedComponents.Helpers
                 "right" => "right center",
                 _ => "center center"
             };
+
+        public static string GetMediaPlacementStyle(
+            PublicMediaPlacementDto? placement,
+            string? fallbackFit = "cover",
+            string? fallbackPosition = "center")
+        {
+            var (legacyX, legacyY) = LegacyMediaCoordinates(fallbackPosition);
+            var fit = placement?.Fit ?? fallbackFit;
+            fit = string.Equals(fit, "contain", StringComparison.OrdinalIgnoreCase) ? "contain" : "cover";
+            var x = Coordinate(placement?.FocalPointX, legacyX);
+            var y = Coordinate(placement?.FocalPointY, legacyY);
+            var zoom = Zoom(placement?.Zoom, 1);
+            var useMobile = placement?.UseMobileOverride == true;
+            var mobileX = useMobile ? Coordinate(placement?.MobileFocalPointX, x) : x;
+            var mobileY = useMobile ? Coordinate(placement?.MobileFocalPointY, y) : y;
+            var mobileZoom = useMobile ? Zoom(placement?.MobileZoom, zoom) : zoom;
+
+            return FormattableString.Invariant(
+                $"--sc-media-fit:{fit};--sc-media-x:{x:0.##}%;--sc-media-y:{y:0.##}%;--sc-media-zoom:{zoom:0.###};--sc-media-mobile-x:{mobileX:0.##}%;--sc-media-mobile-y:{mobileY:0.##}%;--sc-media-mobile-zoom:{mobileZoom:0.###}");
+        }
+
+        private static (double X, double Y) LegacyMediaCoordinates(string? position) => position?.Trim().ToLowerInvariant() switch
+        {
+            "top" => (50, 0),
+            "bottom" => (50, 100),
+            "left" => (0, 50),
+            "right" => (100, 50),
+            _ => (50, 50)
+        };
+
+        private static double Coordinate(double? value, double fallback) =>
+            value is { } number && double.IsFinite(number) ? Math.Clamp(number, 0, 100) : fallback;
+
+        private static double Zoom(double? value, double fallback) =>
+            value is { } number && double.IsFinite(number) ? Math.Clamp(number, 1, 20) : fallback;
 
         public static string Lang(Dictionary<string, string>? dict, string lang)
         {

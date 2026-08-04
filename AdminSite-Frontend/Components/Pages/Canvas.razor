@@ -2409,6 +2409,7 @@
         BackgroundVideoUrl = style?.BackgroundVideoUrl,
         BackgroundImageFit = style?.BackgroundImageFit,
         BackgroundImagePosition = style?.BackgroundImagePosition,
+        BackgroundImagePlacement = ToPlacementDto(style?.BackgroundImagePlacement),
         GradientFrom = style?.GradientFrom,
         GradientTo = style?.GradientTo,
         GradientDirection = style?.GradientDirection,
@@ -2423,6 +2424,18 @@
         BlockLayoutMode = style?.BlockLayoutMode,
         BlockGridColumns = style?.BlockGridColumns,
         BlockGap = style?.BlockGap
+    };
+
+    private static MediaPlacementDto? ToPlacementDto(MediaPlacementModel? value) => value is null ? null : new()
+    {
+        Fit = value.Fit,
+        FocalPointX = value.FocalPointX,
+        FocalPointY = value.FocalPointY,
+        Zoom = value.Zoom,
+        UseMobileOverride = value.UseMobileOverride,
+        MobileFocalPointX = value.MobileFocalPointX,
+        MobileFocalPointY = value.MobileFocalPointY,
+        MobileZoom = value.MobileZoom
     };
 
     private void ApplyStateLocally(CanvasLayoutState state)

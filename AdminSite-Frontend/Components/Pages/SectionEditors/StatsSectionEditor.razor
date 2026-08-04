@@ -1,40 +1,66 @@
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+<section class="ez-content-editor__text">
+    <h3>@T("SectionText")</h3>
     <div class="form-group">
-        <label class="form-label">@T("Columns")</label>
-        <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="5" CssClass="w-100" />
+        <label class="form-label">@T("SectionTitle")</label>
+        <LangField @bind-Value="_title" Languages="Languages" />
     </div>
-    <div class="form-group">
-        <label class="form-label">@T("DurationMs")</label>
-        <DxSpinEdit @bind-Value="_durationMs" MinValue="200" MaxValue="5000" CssClass="w-100" />
-    </div>
-</div>
+</section>
 
-<div class="form-group">
-    <label class="form-label">@T("SectionTitle")</label>
-    <LangField @bind-Value="_title" Languages="Languages" />
-</div>
-
-@foreach (var (item, i) in _items.Select((x, i) => (x, i)))
-{
-    <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin-bottom:.5rem">
-        <div style="display:flex;justify-content:space-between">
-            <strong>@T("Stat") @(i + 1)</strong>
-            <button class="btn-admin btn-danger" @onclick="() => _items.RemoveAt(i)"><i class="fas fa-trash"></i></button>
+<ContentEditorGroup Title="@T("Metrics")"
+                    Summary="@($"{_items.Count} metrics · {_columns} columns")"
+                    @bind-Expanded="_elementsExpanded">
+    <div class="ez-content-editor__settings">
+        <div class="form-group">
+            <label class="form-label">@T("Columns")</label>
+            <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="5" CssClass="w-100" />
         </div>
-        <LangField Value="@(item.Label ?? new())" ValueChanged="v => item.Label = v" Languages="Languages" />
-        <DxSpinEdit @bind-Value="item.Value" CssClass="w-100" />
-        <DxTextBox @bind-Text="item.Suffix" NullText="@T("Suffix")" CssClass="w-100" />
+        <div class="form-group">
+            <label class="form-label">@T("DurationMs")</label>
+            <DxSpinEdit @bind-Value="_durationMs" MinValue="200" MaxValue="5000" CssClass="w-100" />
+        </div>
     </div>
-}
 
-<button class="btn-admin btn-outline" @onclick="AddItem"><i class="fas fa-plus"></i> @T("AddStat")</button>
+    <ContentSortableList Reordered="ReorderItems">
+        @foreach (var item in _items.OrderBy(item => item.Order))
+        {
+            var number = item.Order + 1;
+            <ContentItemAccordion @key="item.Id"
+                                  ItemId="@item.Id"
+                                  Number="@number"
+                                  Title="@ItemTitle(item, number)"
+                                  Summary="@MetricSummary(item)"
+                                  Expanded="@(_openItemId == item.Id)"
+                                  OnToggle="() => ToggleItem(item.Id)"
+                                  OnDelete="() => RemoveItem(item)"
+                                  Visible="@item.Visible"
+                                  VisibleChanged="value => SetVisible(item, value)">
+                <div class="form-group">
+                    <label class="form-label">@T("Label")</label>
+                    <LangField Value="@(item.Label ?? new())" ValueChanged="value => item.Label = value" Languages="Languages" />
+                </div>
+                <div class="ez-content-editor__settings">
+                    <div class="form-group">
+                        <label class="form-label">@T("Prefix")</label>
+                        <DxTextBox @bind-Text="item.Prefix" CssClass="w-100" NullText="$" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">@T("Value")</label>
+                        <DxSpinEdit @bind-Value="item.Value" CssClass="w-100" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">@T("Suffix")</label>
+                        <DxTextBox @bind-Text="item.Suffix" CssClass="w-100" NullText="%, +, years" />
+                    </div>
+                </div>
+            </ContentItemAccordion>
+        }
+    </ContentSortableList>
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving"><i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))</button>
-</div>
+    <button type="button" class="btn-admin btn-outline ez-content-add" @onclick="AddItem"><i class="fas fa-plus"></i> @T("AddStat")</button>
+</ContentEditorGroup>
 
 @code {
     [Parameter] public SectionModel Section { get; set; } = new();
@@ -42,27 +68,75 @@
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
     private int _columns = 4;
     private int _durationMs = 1200;
     private Dictionary<string, string> _title = new();
     private List<StatItemModel> _items = new();
     private bool _saving;
+    private bool _elementsExpanded;
+    private string? _openItemId;
     private string? _loadedSectionId;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override void OnParametersSet()
     {
+        ContentSession?.Register(Save);
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
-
         _columns = Section.Columns ?? 4;
         _durationMs = Section.DurationMs ?? 1200;
         _title = new(Section.SectionTitle ?? new());
-        _items = Section.Stats?.Select(x => new StatItemModel { Label = new(x.Label ?? new()), Value = x.Value, Prefix = x.Prefix, Suffix = x.Suffix, Visible = x.Visible, Order = x.Order }).ToList() ?? new();
+        _items = Section.Stats?.OrderBy(item => item.Order).Select((item, index) => new StatItemModel
+        {
+            Id = string.IsNullOrWhiteSpace(item.Id) ? ClientId() : item.Id,
+            Label = new(item.Label ?? new()),
+            Value = item.Value,
+            Prefix = item.Prefix,
+            Suffix = item.Suffix,
+            Visible = item.Visible,
+            Order = index
+        }).ToList() ?? new();
+        _elementsExpanded = false;
+        _openItemId = null;
     }
 
-    private void AddItem() => _items.Add(new StatItemModel { Label = new(), Visible = true, Order = _items.Count });
+    private void AddItem()
+    {
+        var item = new StatItemModel { Id = ClientId(), Label = new(), Visible = true, Order = _items.Count };
+        _items.Add(item);
+        _elementsExpanded = true;
+        _openItemId = item.Id;
+        ContentSession?.MarkDirty();
+    }
+
+    private void RemoveItem(StatItemModel item)
+    {
+        _items.Remove(item);
+        NormalizeOrder();
+        if (_openItemId == item.Id) _openItemId = null;
+        ContentSession?.MarkDirty();
+    }
+
+    private void SetVisible(StatItemModel item, bool value) { item.Visible = value; ContentSession?.MarkDirty(); }
+    private void ToggleItem(string id) => _openItemId = _openItemId == id ? null : id;
+
+    private Task ReorderItems(List<string> orderedIds)
+    {
+        var byId = _items.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        if (orderedIds.Count != _items.Count || orderedIds.Any(id => !byId.ContainsKey(id))) return Task.CompletedTask;
+        _items = orderedIds.Select(id => byId[id]).ToList();
+        NormalizeOrder();
+        ContentSession?.MarkDirty();
+        return Task.CompletedTask;
+    }
+
+    private void NormalizeOrder() { for (var index = 0; index < _items.Count; index++) _items[index].Order = index; }
+    private string ItemTitle(StatItemModel item, int number) => Localized(item.Label, $"Metric {number}");
+    private static string MetricSummary(StatItemModel item) => $"{item.Prefix}{item.Value}{item.Suffix}";
+    private string Localized(Dictionary<string, string>? values, string fallback) => values is not null && values.TryGetValue(AdminLanguage, out var value) && !string.IsNullOrWhiteSpace(value) ? value : values?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+    private static string ClientId() => $"metric-{Guid.NewGuid():N}";
 
     private async Task Save()
     {
@@ -74,25 +148,16 @@
                 SectionTitle = _title,
                 Columns = _columns,
                 DurationMs = _durationMs,
-                Items = _items.Select(MapItem).ToList(),
+                Items = _items.OrderBy(item => item.Order).Select(item => new StatItemDto
+                {
+                    Label = item.Label ?? new(), Value = item.Value, Prefix = item.Prefix, Suffix = item.Suffix,
+                    Visible = item.Visible, Order = item.Order
+                }).ToList(),
                 Visible = Section.Visible
             });
             Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
-        finally
-        {
-            _saving = false;
-        }
+        finally { _saving = false; }
     }
-
-    private static StatItemDto MapItem(StatItemModel item) => new()
-    {
-        Label = item.Label ?? new(),
-        Value = item.Value,
-        Prefix = item.Prefix,
-        Suffix = item.Suffix,
-        Visible = item.Visible,
-        Order = item.Order
-    };
 }

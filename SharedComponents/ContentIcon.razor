@@ -6,7 +6,7 @@
 }
 else if (!string.IsNullOrWhiteSpace(BuiltInClass))
 {
-    <i class="@($"{BuiltInClass} {CssClassValue}")" aria-hidden="true"></i>
+    <i class="@($"{BuiltInClass} {CssClassValue}")" style="@BuiltInStyle" aria-hidden="true"></i>
 }
 
 @code {
@@ -19,4 +19,37 @@ else if (!string.IsNullOrWhiteSpace(BuiltInClass))
     private string BuiltInClass => IconCatalog.Normalize(Icon?.ClassName ?? LegacyClass);
     private string CssClassValue => string.IsNullOrWhiteSpace(CssClass) ? "sc-content-icon" : $"sc-content-icon {CssClass}";
     private string AltText => StyleHelper.Lang(Icon?.AltText, Lang);
+    private string BuiltInStyle
+    {
+        get
+        {
+            var appearance = Icon?.Appearance;
+            if (appearance is null) return string.Empty;
+            var size = appearance.Size switch { "small" => 16, "large" => 32, "x-large" => 40, _ => 24 };
+            var color = appearance.ColorMode == "custom"
+                ? SafeColor(appearance.Color, "#1f6feb")
+                : appearance.ThemeRole switch
+                {
+                    "primary" => "var(--theme-color-primary)",
+                    "text" => "var(--theme-color-text)",
+                    _ => "var(--theme-color-accent)"
+                };
+            var declarations = $"font-size:{size}px;color:{color};";
+            if (appearance.BackgroundMode == "none") return declarations;
+            var background = appearance.BackgroundMode == "custom"
+                ? SafeColor(appearance.BackgroundColor, "#eef2f7")
+                : appearance.BackgroundThemeRole switch
+                {
+                    "primary" => "var(--theme-color-primary)",
+                    "accent" => "var(--theme-color-accent)",
+                    "background" => "var(--theme-color-background)",
+                    _ => "color-mix(in srgb, var(--theme-color-background) 92%, var(--theme-color-primary))"
+                };
+            var radius = appearance.Shape switch { "circle" => "50%", "rounded" => "10px", _ => "0" };
+            var box = size + 20;
+            return $"{declarations}display:inline-grid;place-items:center;width:{box}px;height:{box}px;background:{background};border-radius:{radius};";
+        }
+    }
+
+    private static string SafeColor(string? value, string fallback) => value is { Length: 7 } && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit) ? value : fallback;
 }

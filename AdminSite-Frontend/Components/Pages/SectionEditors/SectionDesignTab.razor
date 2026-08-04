@@ -66,7 +66,7 @@
                         <span class="section-design-field__label">@T("BackgroundImage")</span>
                         @if (!string.IsNullOrWhiteSpace(Draft.BackgroundImageUrl))
                         {
-                            <div class="section-design-media-preview section-design-media-preview--image">
+                            <div class="section-design-media-preview section-design-media-preview--image media-crop-background-preview" style="@BackgroundPreviewStyle">
                                 <img src="@Draft.BackgroundImageUrl" alt="" />
                                 <button type="button" class="ez-icon-btn" title="@T("Remove")" aria-label="@T("Remove")" @onclick="RemoveImage">
                                     <i class="fas fa-times" aria-hidden="true"></i>
@@ -81,6 +81,12 @@
                             <button type="button" class="btn-admin btn-ghost" @onclick='() => OpenResourcePicker("image")'>
                                 <i class="fas fa-photo-film" aria-hidden="true"></i>@T("ChooseFromResourceLibrary")
                             </button>
+                            @if (!string.IsNullOrWhiteSpace(Draft.BackgroundImageUrl))
+                            {
+                                <button type="button" class="btn-admin btn-ghost" @onclick="OpenCropEditor">
+                                    <i class="fas fa-crop-simple" aria-hidden="true"></i>@T("AdjustCrop")
+                                </button>
+                            }
                         </div>
                     </div>
                 }
@@ -211,16 +217,6 @@
                                   Value="@ImageFit"
                                   Options="@ImageFitOptions"
                                   ValueChanged="SetImageFit" />
-                    <label class="section-design-field section-design-field--wide">
-                        <span class="section-design-field__label">@T("BackgroundImagePosition")</span>
-                        <select class="section-design-select" value="@ImagePosition" @onchange="SetImagePosition">
-                            <option value="center">@T("Center")</option>
-                            <option value="top">@T("Top")</option>
-                            <option value="bottom">@T("Bottom")</option>
-                            <option value="left">@T("Left")</option>
-                            <option value="right">@T("Right")</option>
-                        </select>
-                    </label>
                 }
                 else
                 {
@@ -236,6 +232,19 @@
                      ResourceSelected="SelectBackgroundResource"
                      Closed="CloseResourcePicker" />
 
+<MediaCropEditor Open="_cropEditorOpen"
+                 ImageUrl="@(Draft.BackgroundImageUrl ?? string.Empty)"
+                 Value="@BackgroundPlacement"
+                 Title="@T("AdjustBackgroundImage")"
+                 DesktopAspectRatio="@BackgroundDesktopAspect"
+                 MobileAspectRatio="@(3d / 4d)"
+                 RecommendedWidth="1920"
+                 RecommendedMobileWidth="750"
+                 MinimumWidth="960"
+                 MinimumMobileWidth="375"
+                 Applied="ApplyBackgroundPlacement"
+                 Closed="CloseCropEditor" />
+
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
     [Parameter, EditorRequired] public SectionStyleModel Draft { get; set; } = new();
@@ -248,6 +257,7 @@
     private bool _responsiveOpen;
     private bool _advancedOpen;
     private bool _resourcePickerOpen;
+    private bool _cropEditorOpen;
     private string _resourcePickerKind = "image";
     private const long MaxBackgroundImageBytes = 5L * 1024 * 1024;
     private const long MaxBackgroundVideoBytes = 250L * 1024 * 1024;
@@ -289,8 +299,26 @@
     private string Height => Draft.Height is "half" or "full" or "custom" ? Draft.Height : "auto";
     private int CustomMinHeight => Math.Clamp(Draft.CustomMinHeightPx ?? 640, 120, 3000);
     private string MobileLayout => Draft.MobileLayout is "scroll" or "hide" ? Draft.MobileLayout : "stack";
-    private string ImageFit => Draft.BackgroundImageFit == "contain" ? "contain" : "cover";
-    private string ImagePosition => Draft.BackgroundImagePosition is "top" or "bottom" or "left" or "right" ? Draft.BackgroundImagePosition : "center";
+    private MediaPlacementModel BackgroundPlacement => MediaCropEditor.Normalize(
+        Draft.BackgroundImagePlacement is null
+            ? MediaCropEditor.FromLegacy(Draft.BackgroundImageFit, Draft.BackgroundImagePosition)
+            : MediaCropEditor.Clone(Draft.BackgroundImagePlacement));
+    private string ImageFit => BackgroundPlacement.Fit;
+    private double BackgroundDesktopAspect => Height switch
+    {
+        "full" => 16d / 9d,
+        "half" => 16d / 5d,
+        "custom" => Math.Clamp(1440d / CustomMinHeight, .8d, 3.2d),
+        _ => 16d / 6d
+    };
+    private string BackgroundPreviewStyle
+    {
+        get
+        {
+            var placement = BackgroundPlacement;
+            return FormattableString.Invariant($"--media-crop-x:{placement.FocalPointX:0.##}%;--media-crop-y:{placement.FocalPointY:0.##}%;--media-crop-zoom:{placement.Zoom:0.###};--media-crop-fit:{placement.Fit}");
+        }
+    }
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
@@ -309,18 +337,18 @@
     private async Task SetPadding(string value) { Draft.Padding = value is "small" or "large" ? value : "medium"; await NotifyChanged(); }
     private async Task SetHeight(string value) { Draft.Height = value is "half" or "full" or "custom" ? value : "auto"; await NotifyChanged(); }
     private async Task SetMobileLayout(string value) { Draft.MobileLayout = value is "scroll" or "hide" ? value : "stack"; await NotifyChanged(); }
-    private async Task SetImageFit(string value) { Draft.BackgroundImageFit = value == "contain" ? "contain" : "cover"; await NotifyChanged(); }
+    private async Task SetImageFit(string value)
+    {
+        var placement = BackgroundPlacement;
+        placement.Fit = value == "contain" ? "contain" : "cover";
+        Draft.BackgroundImageFit = placement.Fit;
+        Draft.BackgroundImagePlacement = placement;
+        await NotifyChanged();
+    }
 
     private async Task SetGradientDirection(ChangeEventArgs args)
     {
         Draft.GradientDirection = NormalizeGradientDirection(args.Value?.ToString());
-        await NotifyChanged();
-    }
-
-    private async Task SetImagePosition(ChangeEventArgs args)
-    {
-        var value = args.Value?.ToString();
-        Draft.BackgroundImagePosition = value is "top" or "bottom" or "left" or "right" ? value : "center";
         await NotifyChanged();
     }
 
@@ -340,8 +368,8 @@
         await NotifyChanged();
     }
 
-    private async Task RemoveImage() { Draft.BackgroundImageUrl = null; await NotifyChanged(); }
-    private async Task RemoveVideo() { Draft.BackgroundVideoUrl = null; await NotifyChanged(); }
+    private async Task RemoveImage() { Draft.BackgroundImageUrl = string.Empty; Draft.BackgroundImagePlacement = MediaCropEditor.DefaultPlacement(); _cropEditorOpen = false; await NotifyChanged(); }
+    private async Task RemoveVideo() { Draft.BackgroundVideoUrl = string.Empty; await NotifyChanged(); }
 
     private async Task OnImageSelected(InputFileChangeEventArgs args)
     {
@@ -359,6 +387,10 @@
         }
 
         Draft.BackgroundImageUrl = response.Data.Url;
+        Draft.BackgroundImagePlacement = MediaCropEditor.DefaultPlacement();
+        Draft.BackgroundImageFit = "cover";
+        Draft.BackgroundImagePosition = "center";
+        _cropEditorOpen = true;
         Http.Notify(T("NotificationBackgroundImageUploaded"), response.StatusCode);
         await NotifyChanged();
     }
@@ -396,8 +428,27 @@
         if (_resourcePickerKind == "video")
             Draft.BackgroundVideoUrl = resource.Url;
         else
+        {
             Draft.BackgroundImageUrl = resource.Url;
+            Draft.BackgroundImagePlacement = MediaCropEditor.DefaultPlacement();
+            Draft.BackgroundImageFit = "cover";
+            Draft.BackgroundImagePosition = "center";
+            _cropEditorOpen = true;
+        }
         _resourcePickerOpen = false;
+        await NotifyChanged();
+    }
+
+    private void OpenCropEditor() => _cropEditorOpen = !string.IsNullOrWhiteSpace(Draft.BackgroundImageUrl);
+    private void CloseCropEditor() => _cropEditorOpen = false;
+
+    private async Task ApplyBackgroundPlacement(MediaPlacementModel placement)
+    {
+        var normalized = MediaCropEditor.Normalize(MediaCropEditor.Clone(placement));
+        if (Draft.BackgroundImagePlacement is not null && MediaCropEditor.AreEqual(Draft.BackgroundImagePlacement, normalized)) return;
+        Draft.BackgroundImagePlacement = normalized;
+        Draft.BackgroundImageFit = Draft.BackgroundImagePlacement.Fit;
+        Draft.BackgroundImagePosition = "center";
         await NotifyChanged();
     }
 

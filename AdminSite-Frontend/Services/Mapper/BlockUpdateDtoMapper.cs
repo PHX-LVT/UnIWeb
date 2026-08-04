@@ -252,7 +252,18 @@ public static class BlockUpdateDtoMapper
         FileName = value.FileName,
         ContentType = value.ContentType,
         SizeBytes = value.SizeBytes,
-        AltText = new(value.AltText)
+        AltText = new(value.AltText),
+        Appearance = value.Appearance is null ? null : new Contracts.Icons.IconAppearanceDto
+        {
+            ColorMode = value.Appearance.ColorMode,
+            ThemeRole = value.Appearance.ThemeRole,
+            Color = value.Appearance.Color,
+            Size = value.Appearance.Size,
+            BackgroundMode = value.Appearance.BackgroundMode,
+            BackgroundThemeRole = value.Appearance.BackgroundThemeRole,
+            BackgroundColor = value.Appearance.BackgroundColor,
+            Shape = value.Appearance.Shape
+        }
     };
 
     private static BlockResponsiveSettingsDto ToResponsiveDto(BlockResponsiveSettingsModel? responsive) => new()

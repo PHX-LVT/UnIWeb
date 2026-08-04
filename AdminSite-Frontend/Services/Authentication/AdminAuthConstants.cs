@@ -11,6 +11,7 @@ public static class AdminAuthConstants
     public const string CookieName = "__Host-AdminSession";
     public const string RememberedDeviceCookieName = "__Host-AdminSiteRememberedDevice";
     public const string ApiClientName = "AdminApi";
+    public const string ApiUploadClientName = "AdminApiUpload";
 
     public const string AdminIdClaim = "adminId";
     public const string StatusClaim = "adminStatus";

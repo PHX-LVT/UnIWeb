@@ -36,10 +36,10 @@
         }
         <SectionBlocks Blocks="Section.Blocks" BlockZone="header" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
 
-        @if (Section.Items?.Any() == true)
+        @if (VisibleItems.Any())
         {
             <div class="sc-testimonial__grid sc-testimonial__grid--@(Math.Clamp(Section.Columns ?? 4, 1, 5))">
-                @foreach (var item in Section.Items.OrderBy(i => i.Order))
+                @foreach (var item in VisibleItems)
                 {
                     <article class="sc-testimonial__card @(item.Highlighted ? "sc-testimonial__card--highlight" : "")">
                         @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
@@ -89,5 +89,8 @@
         "right" => "right",
         _ => "center"
     };
+
+    private IEnumerable<PublicTestimonialItemDto> VisibleItems =>
+        Section.Items?.OrderBy(item => item.Order) ?? Enumerable.Empty<PublicTestimonialItemDto>();
 
 }

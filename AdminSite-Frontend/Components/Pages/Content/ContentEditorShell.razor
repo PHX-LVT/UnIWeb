@@ -1,6 +1,7 @@
 @page "/content/new"
 @page "/content/edit/{Id}"
 @inject AdminContentService ContentService
+@inject DirectResourceUploadService DirectUploads
 @inject IHttpService Http
 @inject NavigationManager Nav
 @inject AdminAuthService Auth
@@ -151,7 +152,9 @@ else
                         <h2 style="font-size:1rem;margin:0 0 1rem">@T("CoverImage")</h2>
                         @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
                         {
-                            <img class="content-editor-preview" src="@_edit.HeroImageUrl" alt="" />
+                            <div class="content-editor-preview-frame content-editor-preview-frame--hero" style="@PlacementStyle(_edit.HeroImagePlacement)">
+                                <img class="content-editor-preview" src="@_edit.HeroImageUrl" alt="" />
+                            </div>
                         }
                         <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
                             <InputFile class="content-editor-file-input"
@@ -166,6 +169,9 @@ else
                             </button>
                             @if (!string.IsNullOrWhiteSpace(_edit.HeroImageUrl))
                             {
+                                <button class="btn-admin btn-ghost" type="button" @onclick="OpenHeroCropEditor">
+                                    <i class="fas fa-crop-simple"></i> @T("AdjustCrop")
+                                </button>
                                 <button class="btn-admin btn-danger" @onclick="RemoveHero">@T("RemoveImage")</button>
                             }
                         </div>
@@ -367,11 +373,15 @@ else
 
                             @if (kind == "image" && !string.IsNullOrWhiteSpace(item.Url))
                             {
-                                <img class="content-editor-preview" src="@item.Url" alt="" />
+                                <div class="content-editor-preview-frame content-editor-preview-frame--gallery" style="@PlacementStyle(item.ThumbnailPlacement)">
+                                    <img class="content-editor-preview" src="@item.Url" alt="" />
+                                </div>
                             }
                             else if (kind == "video" && !string.IsNullOrWhiteSpace(item.ThumbnailUrl))
                             {
-                                <img class="content-editor-preview" src="@item.ThumbnailUrl" alt="" />
+                                <div class="content-editor-preview-frame content-editor-preview-frame--gallery" style="@PlacementStyle(item.ThumbnailPlacement)">
+                                    <img class="content-editor-preview" src="@item.ThumbnailUrl" alt="" />
+                                </div>
                             }
 
                             <label>@T("Type")</label>
@@ -414,7 +424,14 @@ else
                                        style="margin-top:.75rem"
                                        placeholder="@T("ThumbnailUrl")"
                                        value="@item.ThumbnailUrl"
-                                       @oninput="e => item.ThumbnailUrl = e.Value?.ToString()" />
+                                       @oninput="e => OnGalleryThumbnailUrlChanged(item, e.Value?.ToString())" />
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(GalleryCropImageUrl(item)))
+                            {
+                                <button class="btn-admin btn-ghost" type="button" style="margin-top:.75rem" @onclick="() => OpenGalleryCropEditor(item)">
+                                    <i class="fas fa-crop-simple"></i> @T("AdjustCrop")
+                                </button>
                             }
 
                             <div class="form-hint">@T("Source"): @AssetSourceLabel(item.ResourceSource, item.ResourceId)</div>
@@ -497,7 +514,9 @@ else
                     <div class="form-hint" style="margin-bottom:.85rem">@T("PreviewImageHint")</div>
                     @if (!string.IsNullOrWhiteSpace(_edit.ThumbnailUrl))
                     {
-                        <img class="content-editor-preview" src="@_edit.ThumbnailUrl" alt="" />
+                        <div class="content-editor-preview-frame content-editor-preview-frame--thumbnail" style="@PlacementStyle(_edit.ThumbnailPlacement)">
+                            <img class="content-editor-preview" src="@_edit.ThumbnailUrl" alt="" />
+                        </div>
                     }
                     <label>@T("ThumbnailUrl")</label>
                     <input class="form-control content-editor-input" value="@_edit.ThumbnailUrl" @oninput="OnThumbnailUrlChanged" />
@@ -514,6 +533,9 @@ else
                         </button>
                         @if (!string.IsNullOrWhiteSpace(_edit.ThumbnailUrl))
                         {
+                            <button class="btn-admin btn-ghost" type="button" @onclick="OpenThumbnailCropEditor">
+                                <i class="fas fa-crop-simple"></i> @T("AdjustCrop")
+                            </button>
                             <button class="btn-admin btn-danger" type="button" @onclick="RemoveThumbnail">@T("RemoveImage")</button>
                         }
                     </div>
@@ -529,6 +551,20 @@ else
                      Kind="_resourcePickerKind"
                      ResourceSelected="SelectResource"
                      Closed="CloseResourcePicker" />
+
+<MediaCropEditor Open="_cropEditorOpen"
+                 ImageUrl="@CropImageUrl"
+                 Value="@CropPlacement"
+                 Title="@CropTitle"
+                 DesktopAspectRatio="@CropDesktopAspectRatio"
+                 MobileAspectRatio="@CropMobileAspectRatio"
+                 AllowMobileOverride="@CropAllowsMobileOverride"
+                 RecommendedWidth="@CropRecommendedWidth"
+                 RecommendedMobileWidth="750"
+                 MinimumWidth="@CropMinimumWidth"
+                 MinimumMobileWidth="375"
+                 Applied="ApplyCropPlacement"
+                 Closed="CloseCropEditor" />
 @code {
     private const string DirectUploadSource = "DirectUpload";
     private const string ManagedResourceSource = "ManagedResource";
@@ -559,6 +595,9 @@ else
     private string _resourcePickerTarget = string.Empty;
     private ContentBodyItemModel? _resourcePickerBodyItem;
     private ContentGalleryItemModel? _resourcePickerGalleryItem;
+    private bool _cropEditorOpen;
+    private string _cropEditorTarget = string.Empty;
+    private ContentGalleryItemModel? _cropEditorGalleryItem;
 
     private bool IsNew => string.IsNullOrWhiteSpace(Id);
     private string CurrentLang => NormalizeLang(AdminLanguage);
@@ -575,7 +614,7 @@ else
     private bool ShowsTemplate => IsPageContent;
     private bool ShowsFile => IsFileResource || (!IsPageContent && (SelectedType?.RequiresFile == true || ClickBehavior == "download"));
     private bool ShowsVideo => IsVideoResource || (!IsPageContent && (SelectedType?.RequiresVideoUrl == true || ClickBehavior == "video"));
-    private bool ShowsThumbnail => ShowsFile || ShowsVideo || IsImageResource;
+    private bool ShowsThumbnail => IsPageContent || ShowsFile || ShowsVideo || IsImageResource;
     private bool ShowsGallery => IsGalleryResource;
     private string SelectedBehaviorLabel => SelectedBehavior switch
     {
@@ -600,6 +639,41 @@ else
             : T("DirectUpload");
     private bool BodyLimitReached => _edit.BodyItems.Count >= 10;
     private bool GalleryLimitReached => _edit.GalleryItems.Count >= MaxGalleryItems;
+    private string CropImageUrl => _cropEditorTarget switch
+    {
+        "hero" => _edit.HeroImageUrl ?? string.Empty,
+        "thumbnail" => _edit.ThumbnailUrl ?? string.Empty,
+        "gallery" when _cropEditorGalleryItem is not null => GalleryCropImageUrl(_cropEditorGalleryItem),
+        _ => string.Empty
+    };
+    private MediaPlacementModel? CropPlacement => _cropEditorTarget switch
+    {
+        "hero" => _edit.HeroImagePlacement,
+        "thumbnail" => _edit.ThumbnailPlacement,
+        "gallery" when _cropEditorGalleryItem is not null => _cropEditorGalleryItem.ThumbnailPlacement,
+        _ => null
+    };
+    private string CropTitle => _cropEditorTarget == "hero" ? T("AdjustHeroImage") : T("AdjustCrop");
+    private double CropDesktopAspectRatio => _cropEditorTarget switch
+    {
+        "hero" => 3d,
+        "thumbnail" => 16d / 10d,
+        _ => 4d / 3d
+    };
+    private double CropMobileAspectRatio => _cropEditorTarget == "hero" ? 4d / 3d : CropDesktopAspectRatio;
+    private bool CropAllowsMobileOverride => _cropEditorTarget == "hero";
+    private int CropRecommendedWidth => _cropEditorTarget switch
+    {
+        "hero" => 1600,
+        "thumbnail" => 800,
+        _ => 320
+    };
+    private int CropMinimumWidth => _cropEditorTarget switch
+    {
+        "hero" => 800,
+        "thumbnail" => 480,
+        _ => 240
+    };
     private string ReturnUrl => GetReturnUrl();
     private bool IsDraft => string.Equals(_status, "Draft", StringComparison.OrdinalIgnoreCase);
     private bool IsSubmitted => string.Equals(_status, "Submitted", StringComparison.OrdinalIgnoreCase);
@@ -704,10 +778,12 @@ else
             HeroImageResourceSource = NormalizeResourceSource(item.HeroImageResourceSource, item.HeroImageResourceId),
             HeroImageStorageKey = item.HeroImageStorageKey,
             HeroImageAlt = item.HeroImageAlt,
+            HeroImagePlacement = item.HeroImagePlacement is null ? null : MediaCropEditor.Normalize(MediaCropEditor.Clone(item.HeroImagePlacement)),
             ThumbnailUrl = item.ThumbnailUrl,
             ThumbnailResourceId = item.ThumbnailResourceId,
             ThumbnailResourceSource = NormalizeResourceSource(item.ThumbnailResourceSource, item.ThumbnailResourceId),
             ThumbnailStorageKey = item.ThumbnailStorageKey,
+            ThumbnailPlacement = item.ThumbnailPlacement is null ? null : MediaCropEditor.Normalize(MediaCropEditor.Clone(item.ThumbnailPlacement)),
             VideoUrl = item.VideoUrl,
             VideoResourceId = item.VideoResourceId,
             VideoResourceSource = NormalizeResourceSource(item.VideoResourceSource, item.VideoResourceId),
@@ -852,6 +928,46 @@ else
         _resourcePickerOpen = true;
     }
 
+    private void OpenHeroCropEditor() => OpenCropEditor("hero");
+
+    private void OpenThumbnailCropEditor() => OpenCropEditor("thumbnail");
+
+    private void OpenGalleryCropEditor(ContentGalleryItemModel item)
+    {
+        _cropEditorGalleryItem = item;
+        OpenCropEditor("gallery");
+    }
+
+    private void OpenCropEditor(string target)
+    {
+        _cropEditorTarget = target;
+        _cropEditorOpen = !string.IsNullOrWhiteSpace(CropImageUrl);
+    }
+
+    private void ApplyCropPlacement(MediaPlacementModel placement)
+    {
+        var normalized = MediaCropEditor.Normalize(MediaCropEditor.Clone(placement));
+        switch (_cropEditorTarget)
+        {
+            case "hero":
+                _edit.HeroImagePlacement = normalized;
+                break;
+            case "thumbnail":
+                _edit.ThumbnailPlacement = normalized;
+                break;
+            case "gallery" when _cropEditorGalleryItem is not null:
+                _cropEditorGalleryItem.ThumbnailPlacement = normalized;
+                break;
+        }
+    }
+
+    private void CloseCropEditor()
+    {
+        _cropEditorOpen = false;
+        _cropEditorTarget = string.Empty;
+        _cropEditorGalleryItem = null;
+    }
+
     private void SelectResource(ManagedResourceModel resource)
     {
         switch (_resourcePickerTarget)
@@ -861,6 +977,7 @@ else
                 _edit.HeroImageResourceId = resource.Id;
                 _edit.HeroImageResourceSource = ManagedResourceSource;
                 _edit.HeroImageStorageKey = resource.StorageKey;
+                _edit.HeroImagePlacement = MediaCropEditor.DefaultPlacement();
                 if (string.IsNullOrWhiteSpace(_edit.HeroImageAlt))
                     _edit.HeroImageAlt = ResourceName(resource);
                 break;
@@ -869,6 +986,7 @@ else
                 _edit.ThumbnailResourceId = resource.Id;
                 _edit.ThumbnailResourceSource = ManagedResourceSource;
                 _edit.ThumbnailStorageKey = resource.StorageKey;
+                _edit.ThumbnailPlacement = MediaCropEditor.DefaultPlacement();
                 break;
             case "primary-file":
                 SetPrimaryFileFromResource(resource);
@@ -879,7 +997,10 @@ else
                 _edit.VideoResourceSource = ManagedResourceSource;
                 _edit.VideoStorageKey = resource.StorageKey;
                 if (string.IsNullOrWhiteSpace(_edit.ThumbnailUrl) && !string.IsNullOrWhiteSpace(resource.ThumbnailUrl))
+                {
                     _edit.ThumbnailUrl = resource.ThumbnailUrl;
+                    _edit.ThumbnailPlacement = MediaCropEditor.DefaultPlacement();
+                }
                 break;
             case "body-image" when _resourcePickerBodyItem is not null:
                 _resourcePickerBodyItem.Url = resource.Url;
@@ -934,6 +1055,7 @@ else
         item.ResourceId = resource.Id;
         item.ResourceSource = ManagedResourceSource;
         item.StorageKey = resource.StorageKey;
+        item.ThumbnailPlacement = MediaCropEditor.DefaultPlacement();
 
         if (string.IsNullOrWhiteSpace(GetValue(item.Caption, CurrentLang)))
             SetValue(item.Caption, CurrentLang, ResourceDescription(resource));
@@ -951,6 +1073,7 @@ else
             _edit.ThumbnailResourceId = string.Empty;
             _edit.ThumbnailResourceSource = DirectUploadSource;
             _edit.ThumbnailStorageKey = string.Empty;
+            _edit.ThumbnailPlacement = null;
             return;
         }
 
@@ -958,6 +1081,7 @@ else
         _edit.ThumbnailResourceId = first.ResourceId;
         _edit.ThumbnailResourceSource = NormalizeResourceSource(first.ResourceSource, first.ResourceId);
         _edit.ThumbnailStorageKey = first.StorageKey;
+        _edit.ThumbnailPlacement = MediaCropEditor.Clone(first.ThumbnailPlacement);
     }
 
     private string ResourceName(ManagedResourceModel resource) =>
@@ -971,6 +1095,16 @@ else
 
     private static string ResourceThumbnailUrl(ManagedResourceModel resource) =>
         ResourceLibraryUiHelper.ResourceThumbnailUrl(resource);
+
+    private static string GalleryCropImageUrl(ContentGalleryItemModel item) =>
+        !string.IsNullOrWhiteSpace(item.ThumbnailUrl) ? item.ThumbnailUrl! : item.Url ?? string.Empty;
+
+    private static string PlacementStyle(MediaPlacementModel? value)
+    {
+        var placement = MediaCropEditor.Normalize(MediaCropEditor.Clone(value));
+        return FormattableString.Invariant(
+            $"--media-crop-fit:{placement.Fit};--media-crop-x:{placement.FocalPointX:0.##}%;--media-crop-y:{placement.FocalPointY:0.##}%;--media-crop-zoom:{placement.Zoom:0.###}");
+    }
 
     private static string ResourceIcon(ManagedResourceModel resource) =>
         ResourceLibraryUiHelper.ResourceIcon(resource);
@@ -1017,10 +1151,6 @@ else
             _edit.VideoResourceId = string.Empty;
             _edit.VideoResourceSource = DirectUploadSource;
             _edit.VideoStorageKey = string.Empty;
-            _edit.ThumbnailUrl = string.Empty;
-            _edit.ThumbnailResourceId = string.Empty;
-            _edit.ThumbnailResourceSource = DirectUploadSource;
-            _edit.ThumbnailStorageKey = string.Empty;
             _edit.Attachments = new();
             _edit.GalleryItems = new();
         }
@@ -1034,6 +1164,7 @@ else
             _edit.HeroImageResourceSource = DirectUploadSource;
             _edit.HeroImageStorageKey = string.Empty;
             _edit.HeroImageAlt = string.Empty;
+            _edit.HeroImagePlacement = null;
         }
 
         AddPendingTag();
@@ -1124,6 +1255,7 @@ else
         _edit.ThumbnailResourceId = null;
         _edit.ThumbnailResourceSource = DirectUploadSource;
         _edit.ThumbnailStorageKey = null;
+        _edit.ThumbnailPlacement = null;
     }
 
     private static void OnBodyMediaUrlChanged(ContentBodyItemModel item, string? value)
@@ -1142,6 +1274,7 @@ else
             _edit.HeroImageResourceId = null;
             _edit.HeroImageResourceSource = DirectUploadSource;
             _edit.HeroImageStorageKey = res.Data.StorageKey;
+            _edit.HeroImagePlacement = MediaCropEditor.DefaultPlacement();
         }
     }
 
@@ -1149,7 +1282,7 @@ else
     {
         if (IsImageResource)
         {
-            var managed = await ContentService.UploadResourceAsync(e.File, "image");
+            var managed = await DirectUploads.UploadInputAsync("content-thumbnail-upload", "image");
             Http.Notify(managed.Message, managed.StatusCode);
             if (managed.Success && managed.Data is not null)
             {
@@ -1157,6 +1290,7 @@ else
                 _edit.ThumbnailResourceId = managed.Data.Id;
                 _edit.ThumbnailResourceSource = ManagedResourceSource;
                 _edit.ThumbnailStorageKey = managed.Data.StorageKey;
+                _edit.ThumbnailPlacement = MediaCropEditor.DefaultPlacement();
             }
             return;
         }
@@ -1169,6 +1303,7 @@ else
             _edit.ThumbnailResourceId = null;
             _edit.ThumbnailResourceSource = DirectUploadSource;
             _edit.ThumbnailStorageKey = res.Data.StorageKey;
+            _edit.ThumbnailPlacement = MediaCropEditor.DefaultPlacement();
         }
     }
 
@@ -1176,7 +1311,7 @@ else
     {
         if (!IsPageContent)
         {
-            var managed = await ContentService.UploadResourceAsync(e.File, "file");
+            var managed = await DirectUploads.UploadInputAsync("content-file-upload", "file");
             Http.Notify(managed.Message, managed.StatusCode);
             if (managed.Success && managed.Data is not null)
                 SetPrimaryFileFromResource(managed.Data);
@@ -1224,7 +1359,7 @@ else
 
     private async Task UploadGalleryImage(ContentGalleryItemModel item, InputFileChangeEventArgs e)
     {
-        var managed = await ContentService.UploadResourceAsync(e.File, "image");
+        var managed = await DirectUploads.UploadInputAsync($"content-gallery-image-{item.Id}", "image");
         Http.Notify(managed.Message, managed.StatusCode);
         if (managed.Success && managed.Data is not null)
             SetGalleryItemFromResource(item, managed.Data);
@@ -1285,6 +1420,7 @@ else
         item.ResourceId = null;
         item.ResourceSource = DirectUploadSource;
         item.StorageKey = null;
+        item.ThumbnailPlacement = null;
     }
 
     private static void OnGalleryItemUrlChanged(ContentGalleryItemModel item, string? value)
@@ -1295,6 +1431,13 @@ else
         item.ResourceId = null;
         item.ResourceSource = DirectUploadSource;
         item.StorageKey = null;
+        item.ThumbnailPlacement = null;
+    }
+
+    private static void OnGalleryThumbnailUrlChanged(ContentGalleryItemModel item, string? value)
+    {
+        item.ThumbnailUrl = value;
+        item.ThumbnailPlacement = null;
     }
 
     private void RemoveBodyItem(ContentBodyItemModel item)
@@ -1418,6 +1561,7 @@ else
         _edit.HeroImageResourceSource = DirectUploadSource;
         _edit.HeroImageStorageKey = string.Empty;
         _edit.HeroImageAlt = string.Empty;
+        _edit.HeroImagePlacement = null;
     }
 
     private void RemoveThumbnail()
@@ -1426,6 +1570,7 @@ else
         _edit.ThumbnailResourceId = string.Empty;
         _edit.ThumbnailResourceSource = DirectUploadSource;
         _edit.ThumbnailStorageKey = string.Empty;
+        _edit.ThumbnailPlacement = null;
     }
 
     private string DisplayStatus =>
@@ -1557,6 +1702,9 @@ else
                 item.Kind = NormalizeGalleryKind(item.Kind);
                 item.Caption = EnsureLangs(item.Caption);
                 item.ResourceSource = NormalizeResourceSource(item.ResourceSource, item.ResourceId);
+                item.ThumbnailPlacement = item.ThumbnailPlacement is null
+                    ? null
+                    : MediaCropEditor.Normalize(MediaCropEditor.Clone(item.ThumbnailPlacement));
                 item.Visible = true;
                 item.Order = index;
                 return item;

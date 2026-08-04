@@ -26,6 +26,7 @@ public sealed class ApiPipelineTests(MongoApiFixture mongo) : IClassFixture<Mong
     [Theory]
     [InlineData("/api/admin/pages")]
     [InlineData("/api/admin/global/theme")]
+    [InlineData("/api/admin/resource-uploads/capabilities")]
     [InlineData("/api/auth/session")]
     [Trait("Category", "Integration")]
     public async Task ProtectedEndpoints_RejectAnonymousRequests(string path)

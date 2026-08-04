@@ -2,6 +2,7 @@ using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
 using FullProject.Services.AssetService;
+using FullProject.Services.SectionServices;
 using MongoDB.Driver;
 
 namespace FullProject.Services
@@ -130,10 +131,12 @@ namespace FullProject.Services
                 HeroImageResourceSource = ContentAssetMetadataService.NormalizeResourceSource(dto.HeroImageResourceSource, dto.HeroImageResourceId),
                 HeroImageStorageKey = ContentAssetMetadataService.CleanStorageKey(dto.HeroImageStorageKey),
                 HeroImageAlt = dto.HeroImageAlt?.Trim(),
+                HeroImagePlacement = dto.HeroImagePlacement is null ? null : MediaPlacementPolicy.Normalize(dto.HeroImagePlacement),
                 ThumbnailUrl = ContentAssetMetadataService.CleanUrl(dto.ThumbnailUrl),
                 ThumbnailResourceId = ContentAssetMetadataService.CleanResourceId(dto.ThumbnailResourceId),
                 ThumbnailResourceSource = ContentAssetMetadataService.NormalizeResourceSource(dto.ThumbnailResourceSource, dto.ThumbnailResourceId),
                 ThumbnailStorageKey = ContentAssetMetadataService.CleanStorageKey(dto.ThumbnailStorageKey),
+                ThumbnailPlacement = dto.ThumbnailPlacement is null ? null : MediaPlacementPolicy.Normalize(dto.ThumbnailPlacement),
                 VideoUrl = ContentAssetMetadataService.CleanUrl(dto.VideoUrl),
                 VideoResourceId = ContentAssetMetadataService.CleanResourceId(dto.VideoResourceId),
                 VideoResourceSource = ContentAssetMetadataService.NormalizeResourceSource(dto.VideoResourceSource, dto.VideoResourceId),
@@ -218,8 +221,12 @@ namespace FullProject.Services
             if (dto.GalleryItems is not null)
                 updates.Add(Builders<ContentItem>.Update.Set(c => c.GalleryItems, _assets.NormalizeGalleryItems(dto.GalleryItems)));
             AddHeroImageUpdates(updates, dto);
+            if (dto.HeroImagePlacement is not null)
+                updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImagePlacement, MediaPlacementPolicy.Normalize(dto.HeroImagePlacement)));
             if (dto.HeroImageAlt is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.HeroImageAlt, dto.HeroImageAlt.Trim()));
             AddThumbnailUpdates(updates, dto);
+            if (dto.ThumbnailPlacement is not null)
+                updates.Add(Builders<ContentItem>.Update.Set(c => c.ThumbnailPlacement, MediaPlacementPolicy.Normalize(dto.ThumbnailPlacement)));
             AddVideoUpdates(updates, dto);
             if (dto.ExternalUrl is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.ExternalUrl, ContentAssetMetadataService.CleanUrl(dto.ExternalUrl)));
             if (dto.TemplateKey is not null) updates.Add(Builders<ContentItem>.Update.Set(c => c.TemplateKey, ContentAssetMetadataService.CleanTemplateKey(dto.TemplateKey)));
@@ -270,6 +277,8 @@ namespace FullProject.Services
             updates.Add(update.Set(c => c.HeroImageResourceId, ContentAssetMetadataService.CleanResourceId(dto.HeroImageResourceId)));
             updates.Add(update.Set(c => c.HeroImageResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.HeroImageResourceSource, dto.HeroImageResourceId)));
             updates.Add(update.Set(c => c.HeroImageStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.HeroImageStorageKey)));
+            if (string.IsNullOrWhiteSpace(dto.HeroImageUrl))
+                updates.Add(update.Set(c => c.HeroImagePlacement, null));
         }
 
         private static void AddThumbnailUpdates(List<UpdateDefinition<ContentItem>> updates, ContentUpdateDto dto)
@@ -281,6 +290,8 @@ namespace FullProject.Services
             updates.Add(update.Set(c => c.ThumbnailResourceId, ContentAssetMetadataService.CleanResourceId(dto.ThumbnailResourceId)));
             updates.Add(update.Set(c => c.ThumbnailResourceSource, ContentAssetMetadataService.NormalizeResourceSource(dto.ThumbnailResourceSource, dto.ThumbnailResourceId)));
             updates.Add(update.Set(c => c.ThumbnailStorageKey, ContentAssetMetadataService.CleanStorageKey(dto.ThumbnailStorageKey)));
+            if (string.IsNullOrWhiteSpace(dto.ThumbnailUrl))
+                updates.Add(update.Set(c => c.ThumbnailPlacement, null));
         }
 
         private static void AddVideoUpdates(List<UpdateDefinition<ContentItem>> updates, ContentUpdateDto dto)

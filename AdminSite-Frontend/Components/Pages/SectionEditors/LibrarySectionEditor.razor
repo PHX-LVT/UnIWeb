@@ -2,184 +2,89 @@
 @inject AdminContentService ContentService
 @inject IHttpService Http
 
-<div class="form-group">
-    <label class="form-label">@T("ContentType")</label>
-    <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:.5rem">
-        @T("LibraryContentTypeHint")
-    </div>
+<section class="ez-content-editor__text">
+    <h3>@T("SectionText")</h3>
+    <div class="form-group"><label class="form-label">@T("Eyebrow")</label><LangField @bind-Value="_eyebrow" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("SectionTitle")</label><LangField @bind-Value="_sectionTitle" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("Subheading")</label><LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" /></div>
+</section>
+
+<ContentEditorGroup Title="@T("ContentSource")" Summary="@SourceSummary" @bind-Expanded="_sourceExpanded">
+    <p class="form-hint">@T("LibraryContentTypeHint")</p>
     @if (_contentTypes.Count == 0)
     {
         <div class="ez-empty-state">@T("NoContentTypesYet")</div>
     }
     else if (!_enableTabs)
     {
-        <DxComboBox Data="_contentTypeOptions"
-                    Value="_sourceTypes.FirstOrDefault()"
-                    ValueChanged="@((string? value) => SetSource(0, value))"
-                    TextFieldName="Label"
-                    ValueFieldName="Key"
-                    CssClass="w-100"
-                    NullText="@T("SelectContentType")" />
+        <DxComboBox Data="_contentTypeOptions" Value="_sourceTypes.FirstOrDefault()" ValueChanged="@((string? value) => SetSource(0, value))"
+                    TextFieldName="Label" ValueFieldName="Key" CssClass="w-100" NullText="@T("SelectContentType")" />
     }
     else
     {
-        <div style="display:grid;gap:.65rem">
-            @for (var i = 0; i < _sourceTypes.Count; i++)
+        <div class="ez-content-source-list">
+            @for (var index = 0; index < _sourceTypes.Count; index++)
             {
-                var index = i;
-                <div style="display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center">
-                    <DxComboBox Data="_contentTypeOptions"
-                                Value="_sourceTypes[index]"
-                                ValueChanged="@((string? value) => SetSource(index, value))"
-                                TextFieldName="Label"
-                                ValueFieldName="Key"
-                                CssClass="w-100"
-                                NullText="@T("SelectContentType")" />
-                    <button type="button" class="btn-admin btn-secondary" @onclick="() => RemoveSource(index)" disabled="@(_sourceTypes.Count <= 1)">
-                        @T("Remove")
-                    </button>
-                </div>
+                var sourceIndex = index;
+                <div><DxComboBox Data="_contentTypeOptions" Value="_sourceTypes[sourceIndex]" ValueChanged="@((string? value) => SetSource(sourceIndex, value))"
+                                 TextFieldName="Label" ValueFieldName="Key" CssClass="w-100" NullText="@T("SelectContentType")" />
+                    <button type="button" class="ez-icon-btn ez-icon-btn--danger" @onclick="() => RemoveSource(sourceIndex)" disabled="@(_sourceTypes.Count <= 1)"><i class="fas fa-trash"></i></button></div>
             }
-            <div>
-                <button type="button" class="btn-admin btn-secondary" @onclick="AddSource">@T("AddMore")</button>
-            </div>
+            <button type="button" class="btn-admin btn-outline ez-content-add" @onclick="AddSource"><i class="fas fa-plus"></i> @T("AddMore")</button>
         </div>
     }
-</div>
+    <label class="form-group ez-content-check"><span class="form-label">@T("MultipleSources")</span><span><DxCheckBox @bind-Checked="_enableTabs" /> @T("EnableTabs")</span></label>
+</ContentEditorGroup>
 
-<div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-bottom:1rem">
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_enableTabs" /> @T("EnableTabs")
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_enablePagination" /> @T("EnablePagination")
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_showTime" /> @T("ShowTimes")
-    </label>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
-    <div class="form-group">
-        <label class="form-label">@T("Layout")</label>
-        <DxComboBox Data="_layouts"
-                    @bind-Value="_layout"
-                    TextFieldName="Label"
-                    ValueFieldName="Key"
-                    CssClass="w-100" />
-    </div>
-    <div class="form-group">
-        <label class="form-label">@T("Columns")</label>
-        <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="@MaxColumns" CssClass="w-100" />
-        @if (!UsesGridColumns)
+<ContentEditorGroup Title="@T("LibraryItems")" Summary="@($"{_layout} · {(_enablePagination ? $"{_rows} rows/page" : $"{_limit} items")}")" @bind-Expanded="_itemsExpanded">
+    <div class="ez-content-editor__settings">
+        <div class="form-group"><label class="form-label">@T("Layout")</label><DxComboBox Data="_layouts" Value="_layout" ValueChanged="@((string? value) => ChangeLayout(value))" TextFieldName="Label" ValueFieldName="Key" CssClass="w-100" /></div>
+        <div class="form-group"><label class="form-label">@T("Columns")</label><DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="@MaxColumns" CssClass="w-100" /></div>
+        <label class="form-group ez-content-check"><span class="form-label">@T("Pagination")</span><span><DxCheckBox @bind-Checked="_enablePagination" /> @T("EnablePagination")</span></label>
+        @if (_enablePagination)
         {
-            <div style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem">
-                @T("ColumnsApplyToLayouts")
-            </div>
+            <div class="form-group"><label class="form-label">@T("Rows")</label><DxSpinEdit @bind-Value="_rows" MinValue="1" MaxValue="12" CssClass="w-100" /></div>
         }
+        else
+        {
+            <div class="form-group"><label class="form-label">@T("Limit")</label><DxSpinEdit @bind-Value="_limit" MinValue="1" MaxValue="24" CssClass="w-100" /></div>
+        }
+        <div class="form-group"><label class="form-label">@T("SortBy")</label><DxComboBox Data="_sortModes" @bind-Value="_sortMode" CssClass="w-100" /></div>
     </div>
-    @if (_enablePagination)
+
+    <div class="ez-content-option-grid">
+        <label><DxCheckBox @bind-Checked="_showImage" /> @T("ShowImage")</label>
+        <label><DxCheckBox @bind-Checked="_showSummary" /> @T("ShowSummary")</label>
+        <label><DxCheckBox @bind-Checked="_showTime" /> @T("ShowTimes")</label>
+        <label><DxCheckBox @bind-Checked="_showButton" /> @T("ShowButton")</label>
+        <label><DxCheckBox @bind-Checked="_showSearchBar" /> @T("ShowSearchBar")</label>
+        <label><DxCheckBox @bind-Checked="_showFilters" /> @T("ShowFilters")</label>
+    </div>
+
+    @if (_showButton)
     {
-        <div class="form-group">
-            <label class="form-label">@T("Rows")</label>
-            <DxSpinEdit @bind-Value="_rows" MinValue="1" MaxValue="12" CssClass="w-100" />
+        <div class="ez-content-editor__settings">
+            <div class="form-group"><label class="form-label">@T("ButtonLabel")</label><LangField @bind-Value="_buttonLabel" Languages="Languages" NullText="@T("ReadMore")" /></div>
+            <div class="form-group"><label class="form-label">@T("Style")</label><DxComboBox Data="_buttonStyles" @bind-Value="_buttonStyle" TextFieldName="Label" ValueFieldName="Key" CssClass="w-100" /></div>
         </div>
     }
-    else
+    @if (_showSearchBar)
     {
-        <div class="form-group">
-            <label class="form-label">@T("Limit")</label>
-            <DxSpinEdit @bind-Value="_limit" MinValue="1" MaxValue="24" CssClass="w-100" />
-        </div>
+        <div class="form-group"><label class="form-label">@T("SearchPlaceholder")</label><LangField @bind-Value="_searchPlaceholder" Languages="Languages" NullText="@T("SearchContents")" /></div>
     }
-</div>
-
-<div class="form-group">
-    <label class="form-label">@T("Eyebrow")</label>
-    <LangField @bind-Value="_eyebrow" Languages="Languages" />
-</div>
-
-<div class="form-group">
-    <label class="form-label">@T("SectionTitle")</label>
-    <LangField @bind-Value="_sectionTitle" Languages="Languages" />
-</div>
-
-<div class="form-group">
-    <label class="form-label">@T("Subheading")</label>
-    <LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" />
-</div>
-
-<div style="display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:1rem">
-    <div class="form-group">
-        <label class="form-label">@T("ButtonLabel")</label>
-        <LangField @bind-Value="_buttonLabel" Languages="Languages" NullText="@T("ReadMore")" />
-    </div>
-    <div class="form-group">
-        <label class="form-label">@T("Style")</label>
-        <DxComboBox Data="_buttonStyles"
-                    @bind-Value="_buttonStyle"
-                    TextFieldName="Label"
-                    ValueFieldName="Key"
-                    CssClass="w-100" />
-    </div>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-    <div class="form-group">
-        <label class="form-label">@T("SearchPlaceholder")</label>
-        <LangField @bind-Value="_searchPlaceholder" Languages="Languages" NullText="@T("SearchContents")" />
-    </div>
-    <div class="form-group">
-        <label class="form-label">@T("SortBy")</label>
-        <DxComboBox Data="_sortModes" @bind-Value="_sortMode" CssClass="w-100" />
-    </div>
-</div>
-
-<div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:.25rem">
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_showImage" /> @T("ShowImage")
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_showSummary" /> @T("ShowSummary")
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_showButton" /> @T("ShowButton")
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_showSearchBar" /> @T("ShowSearchBar")
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <DxCheckBox @bind-Checked="_showFilters" /> @T("ShowFilters")
-    </label>
-</div>
-
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
-    </button>
-</div>
+</ContentEditorGroup>
 
 @code {
     [Parameter] public SectionModel Section { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
-    private readonly List<LayoutOption> _layouts = new()
-    {
-        new("card", "Card"),
-        new("grid", "Grid"),
-        new("rows", "Rows"),
-        new("lists", "Lists"),
-        new("gallery", "Gallery")
-    };
+    private readonly List<LayoutOption> _layouts = new() { new("card", "Cards"), new("grid", "Grid"), new("rows", "Rows"), new("lists", "Downloads"), new("gallery", "Gallery") };
     private readonly List<string> _sortModes = new() { "newest", "oldest", "title" };
-    private readonly List<ButtonStyleOption> _buttonStyles = new()
-    {
-        new("filled", "Filled"),
-        new("outline", "Outline"),
-        new("ghost", "Ghost")
-    };
+    private readonly List<ButtonStyleOption> _buttonStyles = new() { new("filled", "Filled"), new("outline", "Outline"), new("ghost", "Ghost") };
     private List<ContentTypeModel> _contentTypes = new();
     private List<ContentTypeOption> _contentTypeOptions = new();
     private List<string> _sourceTypes = new() { string.Empty };
@@ -202,56 +107,33 @@
     private bool _showSearchBar;
     private bool _showFilters;
     private string _sortMode = "newest";
+    private bool _sourceExpanded;
+    private bool _itemsExpanded;
     private bool _saving;
     private string? _loadedSectionId;
-    private bool UsesGridColumns => _layout is "card" or "grid" or "rows" or "gallery";
     private int MaxColumns => _layout == "rows" ? 2 : 6;
-
-    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
-
+    private string SourceSummary => string.Join(", ", GetSavedSources()) is { Length: > 0 } value ? value : T("SelectContentType");
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override async Task OnInitializedAsync()
     {
         var res = await ContentService.GetTypesAsync();
-        _contentTypes = (res.Data ?? new())
-            .Where(t => t.Visible)
-            .OrderBy(t => t.Order)
-            .ToList();
-
-        _contentTypeOptions = _contentTypes
-            .Select(t => new ContentTypeOption(t.Key, GetLang(t.Name)))
-            .ToList();
-
-        if (_sourceTypes.Count == 0)
-            _sourceTypes = new() { string.Empty };
+        _contentTypes = (res.Data ?? new()).Where(type => type.Visible).OrderBy(type => type.Order).ToList();
+        _contentTypeOptions = _contentTypes.Select(type => new ContentTypeOption(type.Key, GetLang(type.Name))).ToList();
     }
 
     protected override void OnParametersSet()
     {
+        ContentSession?.Register(Save);
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
-
-        _layout = NormalizeLayout(Section.Layout);
-        _columns = Math.Clamp(Section.Columns ?? 3, 1, MaxColumns);
-        _rows = Math.Clamp(Section.Rows ?? 3, 1, 12);
-        _limit = Math.Clamp(Section.Limit ?? 6, 1, 24);
-        _enableTabs = Section.EnableTabs == true;
-        _enablePagination = Section.EnablePagination == true;
-        _showTime = Section.ShowTime != false;
-        _sourceTypes = NormalizeSources(Section.ContentTypes);
-        _eyebrow = Copy(Section.Eyebrow);
-        _sectionTitle = Copy(Section.SectionTitle);
-        _subheading = Copy(Section.Subheading);
-        _buttonLabel = Copy(Section.ButtonLabel, "Read More");
-        _buttonStyle = NormalizeButtonStyle(Section.ButtonStyle);
-        _searchPlaceholder = Copy(Section.SearchPlaceholder);
-        _showImage = Section.ShowImage != false;
-        _showSummary = Section.ShowSummary != false;
-        _showButton = Section.ShowButton != false;
-        _showSearchBar = Section.ShowSearchBar == true;
-        _showFilters = Section.ShowFilters == true;
-        _sortMode = Section.SortMode ?? "newest";
+        _layout = NormalizeLayout(Section.Layout); _columns = Math.Clamp(Section.Columns ?? 3, 1, MaxColumns);
+        _rows = Math.Clamp(Section.Rows ?? 3, 1, 12); _limit = Math.Clamp(Section.Limit ?? 6, 1, 24);
+        _enableTabs = Section.EnableTabs == true; _enablePagination = Section.EnablePagination == true; _showTime = Section.ShowTime != false;
+        _sourceTypes = NormalizeSources(Section.ContentTypes); _eyebrow = Copy(Section.Eyebrow); _sectionTitle = Copy(Section.SectionTitle); _subheading = Copy(Section.Subheading);
+        _buttonLabel = Copy(Section.ButtonLabel, "Read More"); _buttonStyle = NormalizeButtonStyle(Section.ButtonStyle); _searchPlaceholder = Copy(Section.SearchPlaceholder);
+        _showImage = Section.ShowImage != false; _showSummary = Section.ShowSummary != false; _showButton = Section.ShowButton != false;
+        _showSearchBar = Section.ShowSearchBar == true; _showFilters = Section.ShowFilters == true; _sortMode = Section.SortMode ?? "newest";
     }
 
     private async Task Save()
@@ -261,150 +143,47 @@
         {
             var res = await SectionService.UpdateAsync(PageId, Section.Id, new LibrarySectionUpdateDto
             {
-                ContentTypes = GetSavedSources(),
-                Layout = _layout,
-                Columns = _columns,
-                Rows = _rows,
-                Limit = _limit,
-                EnableTabs = _enableTabs,
-                EnablePagination = _enablePagination,
-                ShowTime = _showTime,
-                Eyebrow = _eyebrow,
-                SectionTitle = _sectionTitle,
-                Subheading = _subheading,
-                ButtonLabel = _buttonLabel,
-                ButtonStyle = _buttonStyle,
-                ShowImage = _showImage,
-                ShowSummary = _showSummary,
-                ShowButton = _showButton,
-                ShowSearchBar = _showSearchBar,
-                ShowFilters = _showFilters,
-                SearchPlaceholder = _searchPlaceholder,
-                SortMode = _sortMode
+                ContentTypes = GetSavedSources(), Layout = _layout, Columns = _columns, Rows = _rows, Limit = _limit,
+                EnableTabs = _enableTabs, EnablePagination = _enablePagination, ShowTime = _showTime,
+                Eyebrow = _eyebrow, SectionTitle = _sectionTitle, Subheading = _subheading, ButtonLabel = _buttonLabel,
+                ButtonStyle = _buttonStyle, ShowImage = _showImage, ShowSummary = _showSummary, ShowButton = _showButton,
+                ShowSearchBar = _showSearchBar, ShowFilters = _showFilters, SearchPlaceholder = _searchPlaceholder, SortMode = _sortMode
             });
-
             Http.Notify(res.Message, res.StatusCode);
-            if (res.Success)
-            {
-                ApplyLocalSectionState();
-                await OnSaved.InvokeAsync();
-            }
+            if (res.Success) { ApplyLocalSectionState(); await OnSaved.InvokeAsync(); }
         }
-        finally
-        {
-            _saving = false;
-        }
+        finally { _saving = false; }
     }
 
-    private string GetLang(Dictionary<string, string> values)
-    {
-        if (values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized))
-            return localized;
-        return values.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? string.Empty;
-    }
-
+    private string GetLang(Dictionary<string, string> values) => values.TryGetValue(AdminLanguage, out var localized) && !string.IsNullOrWhiteSpace(localized) ? localized : values.GetValueOrDefault(AdminUiLocalizer.FallbackLanguage) ?? string.Empty;
     private sealed record ContentTypeOption(string Key, string Label);
     private sealed record LayoutOption(string Key, string Label);
     private sealed record ButtonStyleOption(string Key, string Label);
-
-    private void SetSource(int index, string? value)
+    private void ChangeLayout(string? value)
     {
-        EnsureSourceSlot(index);
-        _sourceTypes[index] = value ?? string.Empty;
+        var normalized = NormalizeLayout(value);
+        if (string.Equals(_layout, normalized, StringComparison.Ordinal)) return;
+        _layout = normalized;
+        _columns = Math.Clamp(_columns, 1, MaxColumns);
+        ContentSession?.MarkDirty();
     }
-
-    private void AddSource()
-    {
-        var next = _contentTypeOptions
-            .FirstOrDefault(option => !_sourceTypes.Contains(option.Key, StringComparer.OrdinalIgnoreCase))
-            ?.Key
-            ?? _contentTypeOptions.FirstOrDefault()?.Key
-            ?? string.Empty;
-        _sourceTypes.Add(next);
-    }
-
-    private void RemoveSource(int index)
-    {
-        if (_sourceTypes.Count <= 1 || index < 0 || index >= _sourceTypes.Count)
-            return;
-
-        _sourceTypes.RemoveAt(index);
-    }
-
-    private void EnsureSourceSlot(int index)
-    {
-        while (_sourceTypes.Count <= index)
-            _sourceTypes.Add(_contentTypeOptions.FirstOrDefault()?.Key ?? string.Empty);
-    }
-
-    private List<string> GetSavedSources()
-    {
-        var sources = (_enableTabs ? _sourceTypes : _sourceTypes.Take(1))
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Select(s => s.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return sources;
-    }
+    private void SetSource(int index, string? value) { EnsureSourceSlot(index); _sourceTypes[index] = value ?? string.Empty; ContentSession?.MarkDirty(); }
+    private void AddSource() { var next = _contentTypeOptions.FirstOrDefault(option => !_sourceTypes.Contains(option.Key, StringComparer.OrdinalIgnoreCase))?.Key ?? _contentTypeOptions.FirstOrDefault()?.Key ?? string.Empty; _sourceTypes.Add(next); ContentSession?.MarkDirty(); }
+    private void RemoveSource(int index) { if (_sourceTypes.Count <= 1 || index < 0 || index >= _sourceTypes.Count) return; _sourceTypes.RemoveAt(index); ContentSession?.MarkDirty(); }
+    private void EnsureSourceSlot(int index) { while (_sourceTypes.Count <= index) _sourceTypes.Add(_contentTypeOptions.FirstOrDefault()?.Key ?? string.Empty); }
+    private List<string> GetSavedSources() => (_enableTabs ? _sourceTypes : _sourceTypes.Take(1)).Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     private void ApplyLocalSectionState()
     {
-        Section.ContentTypes = GetSavedSources();
-        Section.Layout = _layout;
-        Section.Columns = _columns;
-        Section.Rows = _rows;
-        Section.Limit = _limit;
-        Section.EnableTabs = _enableTabs;
-        Section.EnablePagination = _enablePagination;
-        Section.ShowTime = _showTime;
-        Section.Eyebrow = Copy(_eyebrow);
-        Section.SectionTitle = Copy(_sectionTitle);
-        Section.Subheading = Copy(_subheading);
-        Section.ButtonLabel = Copy(_buttonLabel);
-        Section.ButtonStyle = _buttonStyle;
-        Section.ShowImage = _showImage;
-        Section.ShowSummary = _showSummary;
-        Section.ShowButton = _showButton;
-        Section.ShowSearchBar = _showSearchBar;
-        Section.ShowFilters = _showFilters;
-        Section.SearchPlaceholder = Copy(_searchPlaceholder);
-        Section.SortMode = _sortMode;
+        Section.ContentTypes = GetSavedSources(); Section.Layout = _layout; Section.Columns = _columns; Section.Rows = _rows; Section.Limit = _limit;
+        Section.EnableTabs = _enableTabs; Section.EnablePagination = _enablePagination; Section.ShowTime = _showTime; Section.Eyebrow = Copy(_eyebrow);
+        Section.SectionTitle = Copy(_sectionTitle); Section.Subheading = Copy(_subheading); Section.ButtonLabel = Copy(_buttonLabel); Section.ButtonStyle = _buttonStyle;
+        Section.ShowImage = _showImage; Section.ShowSummary = _showSummary; Section.ShowButton = _showButton; Section.ShowSearchBar = _showSearchBar;
+        Section.ShowFilters = _showFilters; Section.SearchPlaceholder = Copy(_searchPlaceholder); Section.SortMode = _sortMode;
     }
 
-    private static List<string> NormalizeSources(IEnumerable<string>? values)
-    {
-        var result = (values ?? Enumerable.Empty<string>())
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return result.Count > 0 ? result : new List<string> { string.Empty };
-    }
-
-    private static string NormalizeLayout(string? layout) => layout switch
-    {
-        "card" or "featured-grid" or "card-grid" => "card",
-        "grid" or "resource-grid" => "grid",
-        "rows" => "rows",
-        "lists" or "compact-list" or "resource-list" => "lists",
-        "gallery" or "media-gallery" => "gallery",
-        _ => "card"
-    };
-
-    private static string NormalizeButtonStyle(string? style) => style switch
-    {
-        "outline" => "outline",
-        "ghost" => "ghost",
-        _ => "filled"
-    };
-
-    private static Dictionary<string, string> Copy(Dictionary<string, string>? value, string? fallbackEn = null)
-    {
-        var result = value is null ? new() : new Dictionary<string, string>(value, StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(fallbackEn) && !result.Values.Any(v => !string.IsNullOrWhiteSpace(v)))
-            result["en"] = fallbackEn;
-        return result;
-    }
+    private static List<string> NormalizeSources(IEnumerable<string>? values) { var result = (values ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(); return result.Count > 0 ? result : new() { string.Empty }; }
+    private static string NormalizeLayout(string? layout) => layout switch { "grid" or "resource-grid" => "grid", "rows" => "rows", "lists" or "compact-list" or "resource-list" => "lists", "gallery" or "media-gallery" => "gallery", _ => "card" };
+    private static string NormalizeButtonStyle(string? style) => style switch { "outline" => "outline", "ghost" => "ghost", _ => "filled" };
+    private static Dictionary<string, string> Copy(Dictionary<string, string>? value, string? fallbackEn = null) { Dictionary<string, string> result = value is null ? new() : new(value, StringComparer.OrdinalIgnoreCase); if (!string.IsNullOrWhiteSpace(fallbackEn) && !result.Values.Any(v => !string.IsNullOrWhiteSpace(v))) result["en"] = fallbackEn; return result; }
 }

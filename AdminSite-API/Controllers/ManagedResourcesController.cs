@@ -8,9 +8,9 @@ using FullProject.Utils;
 using FullProject.Services.AssetService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace FullProject.Controllers
 {
@@ -237,11 +237,14 @@ namespace FullProject.Controllers
         }
 
         [HttpPost("upload")]
+        [EnableRateLimiting("admin-resource-upload-initiate")]
         [Consumes("multipart/form-data")]
-        [RequestSizeLimit(250 * 1024 * 1024)]
+        [RequestSizeLimit(3L * 1024 * 1024)]
         public async Task<IActionResult> Upload([FromForm] ManagedResourceUploadRequest request)
         {
             if (!IsResourceUploader) return Forbid();
+            if (!string.Equals(request.Purpose, "custom-icon", StringComparison.OrdinalIgnoreCase))
+                return UnprocessableEntity(ApiResult.BadRequest("Resource Library files must use the direct upload session API."));
 
             var validation = await ValidateUploadAsync(request);
             if (validation.Error is not null) return validation.Error;
@@ -251,30 +254,28 @@ namespace FullProject.Controllers
             R2UploadResult? upload = null;
             try
             {
-                var customIcon = string.Equals(request.Purpose, "custom-icon", StringComparison.OrdinalIgnoreCase);
                 await using var input = file.OpenReadStream();
                 Stream uploadStream = input;
                 var uploadName = file.FileName;
                 var uploadType = file.ContentType;
                 long uploadLength = file.Length;
                 MemoryStream? processedStream = null;
-                if (customIcon)
-                {
-                    var processed = await CustomIconUploadPolicy.ReadAndValidateAsync(input, file.FileName, file.ContentType, file.Length, HttpContext.RequestAborted);
-                    if (!processed.Success)
-                        return UnprocessableEntity(ApiResult.BadRequest(processed.Error ?? "Custom Icon upload is invalid."));
-                    processedStream = new MemoryStream(processed.Bytes!, writable: false);
-                    uploadStream = processedStream;
-                    uploadName = processed.FileName;
-                    uploadType = processed.ContentType;
-                    uploadLength = processed.Bytes!.LongLength;
-                }
+                var processed = await CustomIconUploadPolicy.ReadAndValidateAsync(input, file.FileName, file.ContentType, file.Length, HttpContext.RequestAborted);
+                if (!processed.Success)
+                    return UnprocessableEntity(ApiResult.BadRequest(processed.Error ?? "Custom Icon upload is invalid."));
+                processedStream = new MemoryStream(processed.Bytes!, writable: false);
+                uploadStream = processedStream;
+                uploadName = processed.FileName;
+                uploadType = processed.ContentType;
+                uploadLength = processed.Bytes!.LongLength;
 
                 await using (processedStream)
                 {
-                    upload = await _storage.UploadWithMetadataAsync(uploadStream, uploadName, uploadType, customIcon ? "custom-icons" : "managed-resources", HttpContext.RequestAborted);
+                    upload = await _storage.UploadWithMetadataAsync(uploadStream, uploadName, uploadType, "custom-icons", HttpContext.RequestAborted);
                 }
                 var dto = _resources.BuildUploadCreateDto(upload.Url, upload.StorageKey, inferredKind, uploadName, uploadType, uploadLength, request.AlbumId, request.Purpose);
+                if (!string.IsNullOrWhiteSpace(request.ResourceName))
+                    dto.Name = LocalizedUploadValue(CleanUploadName(request.ResourceName, uploadName));
                 dto.OriginalSourceUrl = request.OriginalSourceUrl;
                 dto.LicenseName = request.LicenseName;
                 dto.Attribution = request.Attribution;
@@ -294,184 +295,16 @@ namespace FullProject.Controllers
             }
         }
 
-        [HttpPost("upload-batch")]
-        [Consumes("multipart/form-data")]
-        [RequestSizeLimit(2L * 1024 * 1024 * 1024)]
-        public async Task<IActionResult> UploadBatch([FromForm] ManagedResourceBatchUploadRequest request)
-        {
-            if (!IsResourceUploader) return Forbid();
-
-            if (request.Files.Count == 0)
-                return BadRequest(ApiResult.BadRequest("No files were uploaded."));
-            if (string.Equals(request.Purpose, "custom-icon", StringComparison.OrdinalIgnoreCase))
-                return UnprocessableEntity(ApiResult.BadRequest("Upload Custom Icons one at a time so each icon can be validated and named."));
-
-            var resourceNames = ParseUploadNames(request.ResourceNamesJson);
-            var results = new List<ManagedResourceUploadResultDto>();
-
-            for (var i = 0; i < request.Files.Count; i++)
-            {
-                var file = request.Files[i];
-                var validation = await ValidateUploadFileAsync(file, request.Kind);
-                if (!string.IsNullOrWhiteSpace(validation.ErrorMessage))
-                {
-                    results.Add(FailedUploadResult(i, file.FileName, validation.ErrorMessage));
-                    continue;
-                }
-
-                R2UploadResult? upload = null;
-                try
-                {
-                    var validatedFile = validation.File!;
-                    var inferredKind = validation.Kind!;
-                    await using var stream = validatedFile.OpenReadStream();
-                    upload = await _storage.UploadWithMetadataAsync(
-                        stream,
-                        validatedFile.FileName,
-                        validatedFile.ContentType,
-                        "managed-resources",
-                        HttpContext.RequestAborted);
-
-                    var dto = _resources.BuildUploadCreateDto(
-                        upload.Url,
-                        upload.StorageKey,
-                        inferredKind,
-                        validatedFile.FileName,
-                        validatedFile.ContentType,
-                        validatedFile.Length,
-                        request.AlbumId);
-
-                    var uploadName = CleanUploadName(resourceNames.ElementAtOrDefault(i), validatedFile.FileName);
-                    dto.Name = LocalizedUploadValue(uploadName);
-                    dto.Description = LocalizedUploadValue(string.Empty);
-
-                    var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
-                    if (errors.Count > 0)
-                    {
-                        await TryDeleteUploadedAssetAsync(upload, "resource-batch-create-validation-failed");
-                        results.Add(FailedUploadResult(i, validatedFile.FileName, string.Join(" ", errors)));
-                        continue;
-                    }
-
-                    results.Add(new ManagedResourceUploadResultDto
-                    {
-                        Index = i,
-                        FileName = validatedFile.FileName,
-                        Success = true,
-                        Resource = MapResource(resource!, 0)
-                    });
-                }
-                catch (Exception ex)
-                {
-                    await TryDeleteUploadedAssetAsync(upload, "resource-batch-create-exception");
-                    results.Add(FailedUploadResult(i, file.FileName, $"Storage upload failed: {ex.Message}"));
-                }
-            }
-
-            var response = new ManagedResourceUploadBatchResponseDto
-            {
-                Results = results,
-                SuccessCount = results.Count(r => r.Success),
-                FailedCount = results.Count(r => !r.Success)
-            };
-
-            var message = response.SuccessCount > 0
-                ? $"Uploaded {response.SuccessCount} resource(s)."
-                : "No resources were uploaded.";
-            return Ok(ApiResult.Ok(response, message));
-        }
-
-        [HttpPost("{id}/replace")]
-        [Consumes("multipart/form-data")]
-        [RequestSizeLimit(250 * 1024 * 1024)]
-        public async Task<IActionResult> ReplaceUpload(string id, [FromForm] ManagedResourceUploadRequest request)
-        {
-            if (!IsContentManager) return Forbid();
-
-            var existing = await _resources.GetByIdAsync(id);
-            if (existing is null) return NotFound(ApiResult.NotFound("Resource not found."));
-
-            var validation = await ValidateUploadAsync(request, existing.Kind, existing.Purpose);
-            if (validation.Error is not null) return validation.Error;
-
-            var file = validation.File!;
-            var inferredKind = validation.Kind!;
-            R2UploadResult? upload = null;
-            ManagedResource? resource;
-            int updatedDocuments;
-            List<string> errors;
-            try
-            {
-                var customIcon = string.Equals(existing.Purpose, "custom-icon", StringComparison.OrdinalIgnoreCase);
-                await using var input = file.OpenReadStream();
-                Stream uploadStream = input;
-                var uploadName = file.FileName;
-                var uploadType = file.ContentType;
-                long uploadLength = file.Length;
-                MemoryStream? processedStream = null;
-                if (customIcon)
-                {
-                    var processed = await CustomIconUploadPolicy.ReadAndValidateAsync(input, file.FileName, file.ContentType, file.Length, HttpContext.RequestAborted);
-                    if (!processed.Success)
-                        return UnprocessableEntity(ApiResult.BadRequest(processed.Error ?? "Custom Icon replacement is invalid."));
-                    processedStream = new MemoryStream(processed.Bytes!, writable: false);
-                    uploadStream = processedStream;
-                    uploadName = processed.FileName;
-                    uploadType = processed.ContentType;
-                    uploadLength = processed.Bytes!.LongLength;
-                }
-                await using (processedStream)
-                {
-                    upload = await _storage.UploadWithMetadataAsync(uploadStream, uploadName, uploadType, customIcon ? "custom-icons" : "managed-resources", HttpContext.RequestAborted);
-                }
-                (resource, updatedDocuments, errors) = await _resources.ReplaceUploadAsync(
-                    id,
-                    upload.Url,
-                    upload.StorageKey,
-                    inferredKind,
-                    uploadName,
-                    uploadType,
-                    uploadLength,
-                    ActorId);
-            }
-            catch
-            {
-                await TryDeleteUploadedAssetAsync(upload, "resource-replace-exception");
-                throw;
-            }
-
-            if (errors.Count > 0)
-            {
-                await TryDeleteUploadedAssetAsync(upload, "resource-replace-validation-failed");
-                if (errors.Contains("Resource not found.")) return NotFound(ApiResult.NotFound("Resource not found."));
-                return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
-            }
-
-            var usage = await _resources.GetUsageAsync(resource!.Id);
-            var message = updatedDocuments > 0
-                ? $"Resource file replaced. {updatedDocuments} current record(s) updated."
-                : "Resource file replaced.";
-            return Ok(ApiResult.Ok(MapResource(resource!, usage.UsageCount), message));
-        }
-
         public sealed class ManagedResourceUploadRequest
         {
             public IFormFile? File { get; set; }
             public string? Kind { get; set; }
             public string? AlbumId { get; set; }
+            public string? ResourceName { get; set; }
             public string? Purpose { get; set; }
             public string? OriginalSourceUrl { get; set; }
             public string? LicenseName { get; set; }
             public string? Attribution { get; set; }
-        }
-
-        public sealed class ManagedResourceBatchUploadRequest
-        {
-            public List<IFormFile> Files { get; set; } = new();
-            public string? Kind { get; set; }
-            public string? AlbumId { get; set; }
-            public string? Purpose { get; set; }
-            public string? ResourceNamesJson { get; set; }
         }
 
         private async Task<(IFormFile? File, string? Kind, IActionResult? Error)> ValidateUploadAsync(
@@ -583,28 +416,6 @@ namespace FullProject.Controllers
                 "video" => "Video",
                 _ => "File"
             };
-
-        private static ManagedResourceUploadResultDto FailedUploadResult(int index, string fileName, string error) => new()
-        {
-            Index = index,
-            FileName = fileName,
-            Success = false,
-            Error = error
-        };
-
-        private static List<string> ParseUploadNames(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return [];
-
-            try
-            {
-                return JsonSerializer.Deserialize<List<string>>(json) ?? [];
-            }
-            catch (JsonException)
-            {
-                return [];
-            }
-        }
 
         private static string CleanUploadName(string? requestedName, string fileName)
         {

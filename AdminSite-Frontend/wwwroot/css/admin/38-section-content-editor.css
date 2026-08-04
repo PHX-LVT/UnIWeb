@@ -1,0 +1,40 @@
+.ez-content-editor { display: grid; gap: .8rem; }
+.ez-content-editor__text { display: grid; gap: .75rem; padding: .85rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.ez-content-editor__text > h3 { margin: 0; font-size: .85rem; }
+.ez-content-editor__settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+.ez-content-group { overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.ez-content-group__toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem .9rem; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.ez-content-group__toggle > span { display: grid; gap: .12rem; }
+.ez-content-group__toggle strong { font-size: .83rem; }
+.ez-content-group__toggle small { color: var(--text-muted); font-size: .72rem; font-weight: 400; }
+.ez-content-group__toggle > i { color: var(--text-muted); font-size: .68rem; }
+.ez-content-group.is-open > .ez-content-group__toggle { border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 94%, var(--primary) 6%); }
+.ez-content-group__body { display: grid; gap: .75rem; padding: .85rem; }
+.ez-content-item-list { display: grid; gap: .55rem; }
+.ez-content-item { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: grab; }
+.ez-content-item:active { cursor: grabbing; }
+.ez-content-item__header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; }
+.ez-content-item__toggle { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: .55rem; min-width: 0; padding: .62rem .7rem; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.ez-content-item__index { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--primary) 9%, var(--surface)); color: var(--primary); font-size: .7rem; font-weight: 700; }
+.ez-content-item__label { display: grid; min-width: 0; gap: .08rem; }
+.ez-content-item__label strong, .ez-content-item__label small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ez-content-item__label strong { font-size: .8rem; }
+.ez-content-item__label small { color: var(--text-muted); font-size: .7rem; }
+.ez-content-item__toggle > i { color: var(--text-muted); font-size: .65rem; }
+.ez-content-item__actions { display: flex; align-items: center; gap: .15rem; padding-right: .45rem; }
+.ez-icon-btn--danger { color: var(--danger); }
+.ez-content-item__body { display: grid; gap: .7rem; padding: .8rem; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 97%, var(--primary) 3%); cursor: default; }
+.ez-content-item.sortable-ghost { opacity: .35; }
+.ez-content-item.sortable-chosen { border-color: var(--primary); box-shadow: 0 8px 20px rgba(0,0,0,.09); }
+.ez-content-add { justify-self: start; }
+.ez-content-check > span:last-child { display: flex; align-items: center; gap: .45rem; min-height: 38px; }
+.ez-content-media-preview { display: flex; align-items: center; gap: .65rem; margin-bottom: .55rem; }
+.ez-content-media-preview img { width: 96px; height: 64px; object-fit: cover; border: 1px solid var(--border); border-radius: 6px; }
+.ez-content-media-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+.ez-content-metric-row { display: grid; grid-template-columns: 1fr 1fr 110px 34px; gap: .45rem; align-items: end; }
+.ez-content-source-list { display: grid; gap: .5rem; }
+.ez-content-source-list > div { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: .4rem; align-items: center; }
+.ez-content-option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
+.ez-content-option-grid label { display: flex; align-items: center; gap: .45rem; padding: .55rem; border: 1px solid var(--border); border-radius: 7px; font-size: .78rem; }
+@media (max-width: 760px) { .ez-content-metric-row { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 680px) { .ez-content-editor__settings { grid-template-columns: 1fr; } }

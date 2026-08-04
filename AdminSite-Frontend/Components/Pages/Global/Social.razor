@@ -196,6 +196,7 @@ else if (_group is not null)
         FileName = value.FileName,
         ContentType = value.ContentType,
         SizeBytes = value.SizeBytes,
-        AltText = new(value.AltText)
+        AltText = new(value.AltText),
+        Appearance = IconReferenceModelMapper.CloneAppearance(value.Appearance)
     };
 }

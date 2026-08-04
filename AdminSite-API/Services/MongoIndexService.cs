@@ -26,6 +26,7 @@ namespace FullProject.Services
             await EnsureSectionPresetIndexesAsync();
             await EnsureContentIndexesAsync();
             await EnsureManagedResourceIndexesAsync();
+            await EnsureResourceUploadSessionIndexesAsync();
             await EnsureUserIndexesAsync();
             await EnsureLogManagementIndexesAsync();
             await EnsureSystemIndexesAsync();
@@ -273,6 +274,33 @@ namespace FullProject.Services
                     .Descending(m => m.Day)
                     .Ascending(m => m.MetricType)
                     .Descending(m => m.Count)));
+        }
+
+        private async Task EnsureResourceUploadSessionIndexesAsync()
+        {
+            var sessions = _database.GetCollection<ResourceUploadSession>("resource_upload_sessions");
+            await EnsureIndexAsync(sessions,
+                Builders<ResourceUploadSession>.IndexKeys
+                    .Ascending(item => item.ActorId)
+                    .Descending(item => item.CreatedAt),
+                IndexOptions("ix_resource_upload_sessions_actor_created"));
+            await EnsureIndexAsync(sessions,
+                Builders<ResourceUploadSession>.IndexKeys
+                    .Ascending(item => item.Status)
+                    .Ascending(item => item.ExpiresAtUtc),
+                IndexOptions("ix_resource_upload_sessions_status_expiry"));
+            await EnsureIndexAsync(sessions,
+                Builders<ResourceUploadSession>.IndexKeys
+                    .Ascending(item => item.Status)
+                    .Ascending(item => item.CleanupAfterUtc),
+                IndexOptions("ix_resource_upload_sessions_status_cleanup"));
+            await EnsureIndexAsync(sessions,
+                Builders<ResourceUploadSession>.IndexKeys.Ascending(item => item.DeleteAfterUtc),
+                new CreateIndexOptions
+                {
+                    Name = "ix_resource_upload_sessions_delete_after_ttl",
+                    ExpireAfter = TimeSpan.Zero
+                });
         }
 
         private async Task EnsureLogManagementIndexesAsync()

@@ -34,6 +34,7 @@ namespace Contracts.Public
         public string? HeadingSize { get; set; }
         public string? ContentAlignment { get; set; }
         public string? ImageUrl { get; set; }
+        public PublicMediaPlacementDto? ImagePlacement { get; set; }
         public List<PublicSectionButtonDto>? Buttons { get; set; }
     }
 

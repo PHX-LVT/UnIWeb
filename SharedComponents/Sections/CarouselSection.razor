@@ -21,7 +21,7 @@
 
         <div class="sc-carousel__viewport">
             <div class="sc-carousel__track sc-carousel__track--@(Math.Clamp(Section.Columns ?? 3, 1, 5))">
-                @foreach (var item in Section.Items?.OrderBy(i => i.Order) ?? Enumerable.Empty<PublicCarouselItemDto>())
+                @foreach (var item in VisibleItems)
                 {
                     var isVideo = IsVideoLink(item.LinkHref);
                     <article class="sc-carousel__item @(isVideo ? "sc-carousel__item--video" : string.Empty)">
@@ -99,6 +99,15 @@
             <button type="button" class="sc-carousel__nav sc-carousel__nav--prev" data-sc-carousel-prev aria-label="Previous">‹</button>
             <button type="button" class="sc-carousel__nav sc-carousel__nav--next" data-sc-carousel-next aria-label="Next">›</button>
         }
+        @if (Section.ShowDots != false && VisibleItems.Count > 1)
+        {
+            <div class="sc-carousel__dots" aria-label="Carousel pages">
+                @for (var index = 0; index < VisibleItems.Count; index++)
+                {
+                    <button type="button" class="sc-carousel__dot @(index == 0 ? "is-active" : null)" data-sc-carousel-dot="@index" aria-label="Go to item @(index + 1)"></button>
+                }
+            </div>
+        }
     </div>
     <SectionBlocks Blocks="Section.Blocks" SectionId="@Section.Id" Style="Section.Style" Lang="@Lang" ShowInvisible="@ShowInvisible" OnSubmit="OnSubmit" />
 </section>
@@ -110,6 +119,7 @@
     [Parameter] public Func<string, Dictionary<string, string>, Task<PublicFormSubmitResult>>? OnSubmit { get; set; }
 
     private string CarouselLayout => Section.Layout == "case-metrics" ? "case-metrics" : "cards";
+    private List<PublicCarouselItemDto> VisibleItems => Section.Items?.OrderBy(item => item.Order).ToList() ?? new();
 
     private static string MetricTone(string? tone) => tone switch
     {

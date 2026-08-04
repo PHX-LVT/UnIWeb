@@ -4,6 +4,13 @@
 @inject IHttpService Http
 @inject AdminFormSubmissionService FormService
 
+<section class="ez-content-editor__text">
+    <h3>@T("SectionText")</h3>
+    <div class="form-group"><label class="form-label">@T("Eyebrow")</label><LangField @bind-Value="_eyebrow" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("SectionTitle")</label><LangField @bind-Value="_sectionTitle" Languages="Languages" /></div>
+</section>
+
+<ContentEditorGroup Title="@T("ContentSource")" Summary="@SourcePageSummary" @bind-Expanded="_sourceExpanded">
 <div class="form-group">
     <label class="form-label">@T("SourcePage")</label>
     <DxComboBox Data="_sourcePages"
@@ -14,11 +21,13 @@
                 CssClass="w-100"
                 NullText="Select a page..." />
 </div>
+</ContentEditorGroup>
 
+<ContentEditorGroup Title="@T("PageCards")" Summary="@($"{_childCards.Count} pages · {_layout}")" @bind-Expanded="_cardsExpanded">
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
     <div class="form-group">
         <label class="form-label">@T("Layout")</label>
-        <DxComboBox Data="_layouts" @bind-Value="_layout" CssClass="w-100" />
+        <DxComboBox Data="_layouts" Value="_layout" ValueChanged="@((string? value) => ChangeLayout(value))" CssClass="w-100" />
     </div>
     <div class="form-group">
         <label class="form-label">@ColumnLabel</label>
@@ -38,16 +47,7 @@
     </div>
 }
 
-<div class="form-group">
-    <label class="form-label">@T("Eyebrow")</label>
-    <LangField @bind-Value="_eyebrow" Languages="Languages" />
-</div>
-
-<div class="form-group">
-    <label class="form-label">@T("SectionTitle")</label>
-    <LangField @bind-Value="_sectionTitle" Languages="Languages" />
-</div>
-
+<ContentEditorGroup Title="@T("Actions")" Summary="@ActionSummary" @bind-Expanded="_actionsExpanded">
 <div class="showcase-action-editor">
     <div class="showcase-action-editor__label">
         <label class="form-label">@T("ButtonLabel")</label>
@@ -74,6 +74,7 @@
                         FormDefinitions="_formDefinitions"
                         AdminLanguage="AdminLanguage" />
 </div>
+</ContentEditorGroup>
 
 <div class="form-group">
     <label class="form-label">@T("SearchPlaceholder")</label>
@@ -101,7 +102,9 @@
     <LangField @bind-Value="_buttonLabel" Languages="Languages"
                NullText="View Details" />
 </div>
+</ContentEditorGroup>
 
+<ContentEditorGroup Title="@T("PageOverrides")" Summary="@($"{_childCards.Count} linked pages")" @bind-Expanded="_overridesExpanded">
 <div class="showcase-child-editor">
     <div class="showcase-child-editor__head">
         <div>
@@ -128,7 +131,11 @@
     {
         @foreach (var card in _childCards)
         {
-            <div @key="card.Id" class="showcase-child-card">
+            <ContentItemAccordion @key="card.Id" ItemId="@card.Id" Number="@(_childCards.IndexOf(card) + 1)"
+                                  Title="@ChildFallbackName(card)" Summary="@card.FullSlug" ShowVisibility="false"
+                                  Expanded="@(_openChildId == card.Id)" OnToggle="() => ToggleChild(card.Id)" OnDelete="() => ResetCard(card)"
+                                  DeleteTitle="@T("Reset")" DeleteIcon="fa-rotate-left" DangerDelete="false">
+            <div class="showcase-child-card">
                 <div class="showcase-child-card__top">
                     <div>
                         <strong>@ChildFallbackName(card)</strong>
@@ -206,15 +213,11 @@
                     }
                 </div>
             </div>
+            </ContentItemAccordion>
         }
     }
 </div>
-
-<div style="display:flex;justify-content:flex-end;margin-top:1rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
-    </button>
-</div>
+</ContentEditorGroup>
 
 <ResourcePickerModal Open="_resourcePickerOpen"
                      Kind="image"
@@ -275,6 +278,7 @@
     [Parameter] public List<string>  Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved   { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
     private string? _sourcePageId;
     private string  _layout        = "card-grid";
@@ -301,11 +305,18 @@
     private string? _uploadingCardId;
     private bool _resourcePickerOpen;
     private ShowcaseChildCardModel? _resourcePickerCard;
+    private bool _sourceExpanded;
+    private bool _cardsExpanded;
+    private bool _actionsExpanded;
+    private bool _overridesExpanded;
+    private string? _openChildId;
 
     private List<string> _layouts = new() { "media-rows", "link-bar", "card-grid" };
     private List<string> _backgroundTypes = new() { "color", "image" };
     private List<string> _buttonStyles = new() { "filled", "outline", "ghost" };
     private List<string> _buttonPositions = new() { "top-right", "bottom-center", "bottom-right", "bottom-left" };
+    private string SourcePageSummary => _sourcePages.FirstOrDefault(page => page.Id == _sourcePageId)?.Label ?? T("SelectSourcePage");
+    private string ActionSummary => _actionButton.Visible ? T("Visible") : T("Hidden");
 
     protected override async Task OnInitializedAsync()
     {
@@ -327,6 +338,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        ContentSession?.Register(Save);
         if (!_saving && _loadedSectionId != Section.Id)
         {
             _loadedSectionId = Section.Id;
@@ -354,8 +366,11 @@
     private async Task OnSourcePageChanged(string? sourcePageId)
     {
         _sourcePageId = sourcePageId;
+        ContentSession?.MarkDirty();
         await LoadChildrenAsync(sourcePageId);
     }
+
+    private void ToggleChild(string id) => _openChildId = _openChildId == id ? null : id;
 
     private async Task LoadChildrenAsync(string? sourcePageId)
     {
@@ -476,6 +491,7 @@
 
             card.CardImageUrl = res.Data.Url;
             card.CardBackgroundType = "image";
+            ContentSession?.MarkDirty();
         }
         catch (Exception)
         {
@@ -488,10 +504,11 @@
         }
     }
 
-    private static void ClearCardImage(ShowcaseChildCardModel card)
+    private void ClearCardImage(ShowcaseChildCardModel card)
     {
         card.CardImageUrl = string.Empty;
         card.UploadVersion++;
+        ContentSession?.MarkDirty();
     }
 
     private void OpenResourcePicker(ShowcaseChildCardModel card)
@@ -511,6 +528,7 @@
         if (_resourcePickerCard is null) return;
         _resourcePickerCard.CardImageUrl = resource.Url;
         _resourcePickerCard.CardBackgroundType = "image";
+        ContentSession?.MarkDirty();
     }
 
     private string PageTitle(PageModel page) =>
@@ -529,6 +547,14 @@
     private bool IsUploading(ShowcaseChildCardModel card) => _uploadingCardId == card.Id;
 
     private int ColumnMax => _layout == "link-bar" ? 10 : 4;
+    private void ChangeLayout(string? value)
+    {
+        var normalized = NormalizeLayout(value);
+        if (string.Equals(_layout, normalized, StringComparison.Ordinal)) return;
+        _layout = normalized;
+        _columns = Math.Clamp(_columns, 1, ColumnMax);
+        ContentSession?.MarkDirty();
+    }
 
     private string ColumnLabel => _layout == "link-bar" ? T("LinkbarColumns") : T("CardGridColumns");
 

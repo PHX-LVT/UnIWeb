@@ -109,6 +109,18 @@ namespace FullProject.Security
                 : HasAllowedSignature(sample, read, fileName, contentType);
         }
 
+        public static bool HasAllowedManagedResourceSignature(
+            byte[] sample,
+            string fileName,
+            string? contentType,
+            string kind)
+        {
+            if (sample.Length == 0) return false;
+            return kind == "video"
+                ? HasAllowedVideoSignature(sample, sample.Length, fileName, contentType)
+                : HasAllowedSignature(sample, sample.Length, fileName, contentType);
+        }
+
         private static bool HasAllowedSignature(byte[] sample, int read, string fileName, string? contentType)
         {
             var bytes = sample.AsSpan(0, read);

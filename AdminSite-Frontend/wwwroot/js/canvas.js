@@ -584,9 +584,64 @@ window.disposeCanvasOverlay = function () {
     window.__ezCanvasRequestPositions = null;
 };
 
-window.reloadPreviewIframe = function () {
+window.reloadPreviewIframe = function (focusSectionId) {
     const iframe = document.getElementById("ez-preview-iframe");
-    if (iframe) iframe.src = iframe.src;
+    if (!iframe) return;
+
+    const parentScrollY = window.scrollY;
+    let frameScrollY = 0;
+    try {
+        frameScrollY = iframe.contentWindow?.scrollY || 0;
+    } catch {
+    }
+
+    const restoreOrFocus = () => {
+        let attempts = 0;
+        const settle = () => {
+            attempts += 1;
+            const doc = iframe.contentDocument;
+            const target = focusSectionId && doc
+                ? [...doc.querySelectorAll("[data-section-id]")]
+                    .find(section => section.getAttribute("data-section-id") === String(focusSectionId))
+                : null;
+
+            if (target) {
+                const frameWindow = iframe.contentWindow;
+                const targetRect = target.getBoundingClientRect();
+                const iframeScrolls = iframe.getAttribute("scrolling") !== "no"
+                    && doc.documentElement.scrollHeight > iframe.clientHeight + 2;
+                if (iframeScrolls && frameWindow) {
+                    frameWindow.scrollTo({
+                        top: Math.max(0, frameWindow.scrollY + targetRect.top - 72),
+                        behavior: "smooth"
+                    });
+                } else {
+                    const iframeRect = iframe.getBoundingClientRect();
+                    const scale = iframe.offsetWidth > 0 ? iframeRect.width / iframe.offsetWidth : 1;
+                    window.scrollTo({
+                        top: Math.max(0, window.scrollY + iframeRect.top + (targetRect.top * scale) - 112),
+                        behavior: "smooth"
+                    });
+                }
+                return;
+            }
+
+            if (focusSectionId && attempts < 8) {
+                setTimeout(settle, 100);
+                return;
+            }
+
+            try {
+                iframe.contentWindow?.scrollTo(0, frameScrollY);
+            } catch {
+            }
+            window.scrollTo(0, parentScrollY);
+        };
+        requestAnimationFrame(() => requestAnimationFrame(settle));
+    };
+
+    iframe.addEventListener("load", restoreOrFocus, { once: true });
+    iframe.src = iframe.src;
 };
 
 window.setArrangeColumnWorkspace = function (sectionId, zoneId, height) {
@@ -638,6 +693,28 @@ window.blockEditor.initItemSortable = (root, dotnet) => {
 window.blockEditor.destroyItemSortable = root => {
     window.destroySortableSafely(root?.__blockItemSortable);
     if (root) root.__blockItemSortable = null;
+};
+
+window.sectionContentEditor = window.sectionContentEditor || {};
+window.sectionContentEditor.initSortable = (root, dotnet) => {
+    if (!root || !dotnet || typeof Sortable === "undefined") return;
+    window.destroySortableSafely(root.__sectionContentSortable);
+    root.__sectionContentSortable = Sortable.create(root, {
+        draggable: ".ez-content-item",
+        dataIdAttr: "data-section-content-item-id",
+        animation: 150,
+        delay: 110,
+        delayOnTouchOnly: false,
+        filter: "input,textarea,select,option,button,a,label,[contenteditable=true],.dxbl-input-editor",
+        preventOnFilter: false,
+        chosenClass: "sortable-chosen",
+        ghostClass: "sortable-ghost",
+        onEnd: () => dotnet.invokeMethodAsync("OnReordered", root.__sectionContentSortable.toArray()).catch(() => {})
+    });
+};
+window.sectionContentEditor.destroySortable = root => {
+    window.destroySortableSafely(root?.__sectionContentSortable);
+    if (root) root.__sectionContentSortable = null;
 };
 
 window.patchPreviewSectionStyle = function (sectionId, style) {

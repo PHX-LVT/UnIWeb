@@ -110,6 +110,17 @@ builder.Services
         AllowAutoRedirect = false,
         UseCookies = false
     });
+builder.Services
+    .AddHttpClient(AdminAuthConstants.ApiUploadClientName, client =>
+    {
+        client.BaseAddress = apiBaseUri;
+        client.Timeout = TimeSpan.FromMinutes(3);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient(AdminAuthConstants.ApiClientName));
 
@@ -135,6 +146,7 @@ builder.Services.AddScoped<AdminSettingsService>();
 builder.Services.AddScoped<AdminFormSubmissionService>();
 builder.Services.AddScoped<AdminLanguageService>();
 builder.Services.AddScoped<AdminContentService>();
+builder.Services.AddScoped<DirectResourceUploadService>();
 builder.Services.AddScoped<AdminUserService>();
 builder.Services.AddScoped<LogManagementService>();
 

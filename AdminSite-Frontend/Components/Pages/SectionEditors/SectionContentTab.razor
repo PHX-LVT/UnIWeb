@@ -1,65 +1,53 @@
 @using AdminSite.Models
 
-@switch (Section.Type)
-{
-    case "hero":
-        <HeroSectionEditor Section="@Section" PageId="@PageId"
-                           Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "cta":
-        <CtaSectionEditor Section="@Section" PageId="@PageId"
-                          Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "list":
-        <ListSectionEditor Section="@Section" PageId="@PageId"
-                           Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "html":
-        <HtmlSectionEditor Section="@Section" PageId="@PageId"
-                           Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "columns":
-        <ColumnsSectionEditor Section="@Section" PageId="@PageId"
-                              Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "showcase":
-        <ShowcaseSectionEditor Section="@Section" PageId="@PageId"
-                               Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "library":
-        <LibrarySectionEditor @key="Section.Id"
-                              Section="@Section" PageId="@PageId"
-                              Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "stats":
-        <StatsSectionEditor Section="@Section" PageId="@PageId"
-                            Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "carousel":
-        <CarouselSectionEditor Section="@Section" PageId="@PageId"
-                               Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "network-map":
-        <NetworkMapSectionEditor Section="@Section" PageId="@PageId"
-                                 Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "testimonial":
-        <TestimonialSectionEditor Section="@Section" PageId="@PageId"
-                                  Languages="@Languages" OnSaved="NotifySaved" />
-        break;
-    case "canvas":
-        <CanvasSectionEditor Section="@Section" PageId="@PageId"
-                             OnSaved="NotifySaved"
-                             OnSectionsChanged="NotifySaved" />
-        break;
-    default:
-        <p class="text-muted">@T("UnknownSectionType"): @Section.Type</p>
-        break;
-}
+<div class="ez-content-editor" @oninput="MarkDirty" @onchange="MarkDirty">
+    @switch (Section.Type)
+    {
+        case "hero":
+            <HeroSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "cta":
+            <CtaSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "list":
+            <ListSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "html":
+            <HtmlSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "columns":
+            <ColumnsSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "showcase":
+            <ShowcaseSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "library":
+            <LibrarySectionEditor @key="Section.Id" Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "stats":
+            <StatsSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "carousel":
+            <CarouselSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "network-map":
+            <NetworkMapSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "testimonial":
+            <TestimonialSectionEditor Section="@Section" PageId="@PageId" Languages="@Languages" OnSaved="NotifySaved" />
+            break;
+        case "canvas":
+            <CanvasSectionEditor Section="@Section" PageId="@PageId" OnSaved="NotifySaved" OnSectionsChanged="NotifySaved" />
+            break;
+        default:
+            <p class="text-muted">@T("UnknownSectionType"): @Section.Type</p>
+            break;
+    }
+</div>
 
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
-
+    [CascadingParameter] public SectionContentEditSession? EditSession { get; set; }
     [Parameter] public SectionModel Section { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
@@ -67,4 +55,5 @@
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private Task NotifySaved() => OnSaved.InvokeAsync(Section.Id);
+    private void MarkDirty() => EditSession?.MarkDirty();
 }

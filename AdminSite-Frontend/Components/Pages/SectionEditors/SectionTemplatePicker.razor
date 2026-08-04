@@ -1,86 +1,250 @@
-<div class="ez-modal-overlay" @onclick="OnCancel">
+@using AdminSite.Models
+@using Contracts.Admin
+@inject AdminSectionService SectionService
+@inject AdminPageService PageService
+@inject AdminContentService ContentService
+
+<div class="ez-modal-overlay ez-section-picker-overlay" @onclick="OnCancel">
     <div class="ez-modal ez-modal--section-picker" @onclick:stopPropagation="true">
-        <div class="ez-modal__header">
-            <h2>@T("AddSection")</h2>
-            <button class="ez-icon-btn" @onclick="OnCancel">
+        <div class="ez-modal__header ez-section-picker__header">
+            <div>
+                <span class="ez-section-picker__step">@StepLabel</span>
+                <h2>@ModalTitle</h2>
+            </div>
+            <button type="button" class="ez-icon-btn" title="Close" @onclick="OnCancel">
                 <i class="fas fa-times"></i>
             </button>
         </div>
 
         <div class="ez-modal__body ez-section-picker">
-            @foreach (var group in _templates)
+            @if (_loading)
             {
-                <div class="ez-picker-group">
-                    <h4 class="ez-picker-group__label">@T(group.Key)</h4>
-                    <div class="ez-picker-grid">
-                        @foreach (var template in group.Value)
-                        {
-                            <button class="ez-picker-card @(template.Type == SavedPresetsType ? "ez-picker-card--saved-presets" : null)"
-                                    @onclick="() => Pick(template.Type)">
-                                <div class="ez-picker-card__icon">
-                                    <i class="fas @template.Icon"></i>
-                                </div>
-                                <div class="ez-picker-card__text">
-                                    <span>@T(template.NameKey)</span>
-                                    <small>@T(template.DescriptionKey)</small>
-                                </div>
-                            </button>
-                        }
-                    </div>
+                <div class="ez-section-picker__loading"><span class="sc-spinner"></span> Loading Section catalogue…</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="ez-section-picker__error">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <span>@_error</span>
+                    <button type="button" class="btn-admin btn-ghost" @onclick="LoadAsync">Retry</button>
                 </div>
             }
+            else if (_selectedType is null)
+            {
+                <button type="button" class="ez-section-picker__presets" @onclick="OnSavedPresets">
+                    <i class="fas fa-bookmark"></i>
+                    <span><strong>Saved presets</strong><small>Insert a Section you previously saved.</small></span>
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+
+                @foreach (var group in _catalog.Groups.OrderBy(group => group.Order))
+                {
+                    <section class="ez-picker-group">
+                        <h3 class="ez-picker-group__label">@group.Name</h3>
+                        <div class="ez-picker-grid">
+                            @foreach (var item in group.Items.OrderBy(item => item.Order))
+                            {
+                                <button type="button" class="ez-picker-card" @onclick="() => SelectType(item)">
+                                    <span class="ez-picker-card__icon"><i class="fas @item.Icon"></i></span>
+                                    <span class="ez-picker-card__text">
+                                        <strong>@item.Name</strong>
+                                        <small>@item.Description</small>
+                                    </span>
+                                    <i class="fas fa-chevron-right ez-picker-card__arrow"></i>
+                                </button>
+                            }
+                        </div>
+                    </section>
+                }
+            }
+            else
+            {
+                <div class="ez-layout-picker__intro">
+                    <button type="button" class="ez-section-picker__back" @onclick="BackToTypes"><i class="fas fa-arrow-left"></i> All Sections</button>
+                    <p>@_selectedType.Description</p>
+                </div>
+                <div class="ez-layout-picker">
+                    @foreach (var option in _selectedType.Layouts.OrderBy(entry => entry.Order))
+                    {
+                        <button type="button"
+                                class="ez-layout-card @(_selectedLayout?.Id == option.Id ? "is-selected" : null)"
+                                aria-pressed="@(_selectedLayout?.Id == option.Id)"
+                                @onclick="() => SelectLayout(option)">
+                            <span class="@($"ez-layout-preview ez-layout-preview--{option.Preview}")" aria-hidden="true">
+                                <i></i><i></i><i></i><i></i>
+                            </span>
+                            <span class="ez-layout-card__copy">
+                                <span><strong>@option.Name</strong>@if (option.Recommended) { <em>Recommended</em> }</span>
+                                <small>@option.Description</small>
+                            </span>
+                            @if (_selectedLayout?.Id == option.Id)
+                            {
+                                <i class="fas fa-circle-check ez-layout-card__selected" aria-hidden="true"></i>
+                            }
+                        </button>
+                    }
+                </div>
+                @if (_selectedType.RequiresSourcePage || _selectedType.RequiresContentTypes)
+                {
+                    <div class="ez-section-setup">
+                    @if (_selectedType.RequiresSourcePage)
+                    {
+                        <div class="form-group">
+                            <label class="form-label" for="section-source-page">Source page</label>
+                            <select id="section-source-page" class="form-select" @bind="_sourcePageId">
+                                <option value="">Choose a parent page</option>
+                                @foreach (var entry in _pages.OrderBy(PageTitle))
+                                {
+                                    <option value="@entry.Id">@PageTitle(entry)</option>
+                                }
+                            </select>
+                            <small class="form-hint">The Showcase will stay connected to this page's child pages.</small>
+                        </div>
+                    }
+
+                    @if (_selectedType.RequiresContentTypes)
+                    {
+                        <fieldset class="ez-section-setup__types">
+                            <legend>Content sources</legend>
+                            <small class="form-hint">Choose one or more managed content types.</small>
+                            @if (_contentTypes.Count == 0)
+                            {
+                                <p class="ez-section-setup__empty">No visible content types are available.</p>
+                            }
+                            else
+                            {
+                                @foreach (var contentType in _contentTypes.OrderBy(type => type.Order))
+                                {
+                                    <label>
+                                        <input type="checkbox"
+                                               checked="@_selectedContentTypes.Contains(contentType.Key)"
+                                               @onchange="args => ToggleContentType(contentType.Key, args.Value as bool? == true)" />
+                                        <span><strong>@ContentTypeName(contentType)</strong><small>@contentType.Key</small></span>
+                                    </label>
+                                }
+                            }
+                        </fieldset>
+                    }
+
+                    </div>
+                }
+            }
         </div>
+
+        @if (!_loading && _selectedType is not null)
+        {
+            <div class="ez-modal__footer">
+                <button type="button" class="btn-admin btn-ghost" @onclick="OnCancel">Cancel</button>
+                <button type="button" class="btn-admin btn-primary" disabled="@(!CanCreate || _creating)" @onclick="CreateAsync">
+                    @if (_creating) { <i class="fas fa-spinner fa-spin"></i> }
+                    @(_creating ? "Adding…" : "Add Section")
+                </button>
+            </div>
+        }
     </div>
 </div>
 
 @code {
-    [Parameter] public EventCallback<string> OnPicked { get; set; }
+    [Parameter, EditorRequired] public string PageId { get; set; } = string.Empty;
+    [Parameter] public EventCallback<SectionTemplateCreateRequestDto> OnPicked { get; set; }
     [Parameter] public EventCallback OnSavedPresets { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
 
-    private Dictionary<string, List<SectionTemplate>> _templates = new()
+    private SectionCatalogDto _catalog = new();
+    private readonly List<PageModel> _pages = new();
+    private readonly List<ContentTypeModel> _contentTypes = new();
+    private readonly HashSet<string> _selectedContentTypes = new(StringComparer.OrdinalIgnoreCase);
+    private SectionCatalogItemDto? _selectedType;
+    private SectionLayoutTemplateDto? _selectedLayout;
+    private string _sourcePageId = string.Empty;
+    private string? _error;
+    private bool _loading = true;
+    private bool _creating;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
     {
-        ["SectionGroupSavedPresets"] = new()
+        _loading = true;
+        _error = null;
+        var catalogTask = SectionService.GetCatalogAsync(PageId);
+        var pagesTask = PageService.GetAllAsync();
+        var contentTypesTask = ContentService.GetTypesAsync();
+        await Task.WhenAll(catalogTask, pagesTask, contentTypesTask);
+
+        var catalog = await catalogTask;
+        if (!catalog.Success || catalog.Data is null)
         {
-            new(SavedPresetsType, "SavedPresets", "fa-bookmark", "SavedPresetsCardHint")
-        },
-        ["SectionGroupPageStructure"] = new()
-        {
-            new("hero",    "SectionTemplateHeroName", "fa-image", "SectionTemplateHeroDesc"),
-            new("cta",     "SectionTemplateCtaName",  "fa-bullhorn", "SectionTemplateCtaDesc"),
-            new("html",    "SectionTemplateHtmlName", "fa-code", "SectionTemplateHtmlDesc")
-        },
-        ["SectionGroupStructuredContent"] = new()
-        {
-            new("columns", "SectionTemplateColumnsName", "fa-columns", "SectionTemplateColumnsDesc"),
-            new("list",    "SectionTemplateListName",    "fa-th-large", "SectionTemplateListDesc"),
-            new("stats",   "SectionTemplateStatsName",   "fa-chart-line", "SectionTemplateStatsDesc")
-        },
-        ["SectionGroupRepeaters"] = new()
-        {
-            new("testimonial", "SectionTemplateTestimonialName", "fa-comments", "SectionTemplateTestimonialDesc"),
-            new("carousel",    "SectionTemplateCarouselName",    "fa-window-restore", "SectionTemplateCarouselDesc")
-        },
-        ["SectionGroupConnectedData"] = new()
-        {
-            new("showcase",    "SectionTemplateShowcaseName", "fa-sitemap", "SectionTemplateShowcaseDesc"),
-            new("library",     "SectionTemplateLibraryName",  "fa-newspaper", "SectionTemplateLibraryDesc"),
-            new("network-map", "SectionTemplateMapName",      "fa-map-location-dot", "SectionTemplateMapDesc")
-        },
-        ["SectionGroupComposition"] = new()
-        {
-            new("canvas", "SectionTemplateCanvasName", "fa-object-group", "SectionTemplateCanvasDesc")
+            _error = string.IsNullOrWhiteSpace(catalog.Message) ? "The Section catalogue could not be loaded." : catalog.Message;
+            _loading = false;
+            return;
         }
-    };
 
-    private const string SavedPresetsType = "saved-presets";
+        _catalog = catalog.Data;
+        _pages.Clear();
+        _pages.AddRange((await pagesTask).Data ?? new());
+        _contentTypes.Clear();
+        _contentTypes.AddRange(((await contentTypesTask).Data ?? new()).Where(type => type.Visible));
+        _loading = false;
+    }
 
-    private Task Pick(string type) => type == SavedPresetsType
-        ? OnSavedPresets.InvokeAsync()
-        : OnPicked.InvokeAsync(type);
+    private string ModalTitle => _selectedType is null
+        ? "Add Section"
+        : $"Choose {_selectedType.Name} layout";
 
-    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string StepLabel => _selectedType is null ? "1 of 2 · Section" : "2 of 2 · Layout";
 
-    private record SectionTemplate(string Type, string NameKey, string Icon, string DescriptionKey);
+    private bool CanCreate => _selectedType is not null && _selectedLayout is not null
+        && (!_selectedType.RequiresSourcePage || !string.IsNullOrWhiteSpace(_sourcePageId))
+        && (!_selectedType.RequiresContentTypes || _selectedContentTypes.Count > 0);
+
+    private void SelectType(SectionCatalogItemDto item)
+    {
+        _selectedType = item;
+        _selectedLayout = null;
+        _sourcePageId = string.Empty;
+        _selectedContentTypes.Clear();
+    }
+
+    private void SelectLayout(SectionLayoutTemplateDto layout)
+    {
+        _selectedLayout = layout;
+    }
+
+    private void BackToTypes()
+    {
+        _selectedType = null;
+        _selectedLayout = null;
+    }
+
+    private void ToggleContentType(string key, bool selected)
+    {
+        if (selected) _selectedContentTypes.Add(key);
+        else _selectedContentTypes.Remove(key);
+    }
+
+    private async Task CreateAsync()
+    {
+        if (!CanCreate || _selectedType is null || _selectedLayout is null) return;
+        _creating = true;
+        await OnPicked.InvokeAsync(new SectionTemplateCreateRequestDto
+        {
+            Type = _selectedType.Type,
+            TemplateId = _selectedLayout.Id,
+            SourcePageId = string.IsNullOrWhiteSpace(_sourcePageId) ? null : _sourcePageId,
+            ContentTypes = _selectedContentTypes.ToList()
+        });
+        _creating = false;
+    }
+
+    private string PageTitle(PageModel page) => Localized(page.Name, string.IsNullOrWhiteSpace(page.Slug) ? "Untitled page" : page.Slug);
+    private string ContentTypeName(ContentTypeModel type) => Localized(type.Name, type.Key);
+
+    private string Localized(Dictionary<string, string> values, string fallback)
+    {
+        if (values.TryGetValue(AdminLanguage, out var direct) && !string.IsNullOrWhiteSpace(direct)) return direct;
+        if (values.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english)) return english;
+        return values.Values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? fallback;
+    }
 }

@@ -1,0 +1,491 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@using System.Globalization
+
+@if (Open && !string.IsNullOrWhiteSpace(ImageUrl))
+{
+    <div class="ez-modal-overlay media-crop-overlay" role="presentation" @onclick="Close">
+        <section class="ez-modal media-crop-modal" role="dialog" aria-modal="true" aria-labelledby="@TitleId" @onclick:stopPropagation="true">
+            <header class="media-crop-modal__header">
+                <div>
+                    <h2 id="@TitleId">@Title</h2>
+                    <p>@T("MediaCropHint")</p>
+                </div>
+                <button type="button" class="ez-icon-btn" title="@T("Close")" aria-label="@T("Close")" @onclick="Close">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </header>
+
+            <div class="media-crop-modal__body">
+                <div class="media-crop-workspace">
+                    <div class="media-crop-breakpoints" role="group" aria-label="@T("PreviewMode")">
+                        <button type="button" class="media-crop-chip @(_mode == "desktop" ? "active" : null)" aria-pressed="@(_mode == "desktop")" @onclick='() => SelectMode("desktop")'>
+                            <i class="fas fa-desktop" aria-hidden="true"></i>@T("Desktop")
+                        </button>
+                        <button type="button" class="media-crop-chip @(_mode == "mobile" ? "active" : null)" aria-pressed="@(_mode == "mobile")" disabled="@(!_draft.UseMobileOverride)" @onclick='() => SelectMode("mobile")'>
+                            <i class="fas fa-mobile-screen" aria-hidden="true"></i>@T("Mobile")
+                        </button>
+                    </div>
+
+                    <div id="@EditorId"
+                         class="media-crop-canvas @(_mode == "mobile" ? "media-crop-canvas--mobile" : null)"
+                         tabindex="0"
+                         aria-label="@T("MediaCropDragHint")">
+                        <div class="media-crop-source" data-media-crop-source>
+                            <img src="@ImageUrl" alt="" draggable="false" />
+                        </div>
+                        <div class="media-crop-selection" data-media-crop-selection>
+                            <span class="media-crop-grid" aria-hidden="true"></span>
+                        </div>
+                    </div>
+
+                    <div class="media-crop-workspace-hint">
+                        <i class="fas fa-arrows-up-down-left-right" aria-hidden="true"></i>
+                        <span>@T("MediaCropDragHint")</span>
+                        <span aria-hidden="true">&middot;</span>
+                        <i class="fas fa-computer-mouse" aria-hidden="true"></i>
+                        <span>@T("MediaCropWheelHint")</span>
+                    </div>
+
+                    @if (_naturalWidth > 0 && _naturalHeight > 0)
+                    {
+                        <div class="media-crop-image-meta">
+                            <span>@($"{_naturalWidth} × {_naturalHeight}px")</span>
+                            <span>@T("MediaCropSafeZoom"): @SafeZoomLabel</span>
+                            <span>@T("MediaCropMaximumZoom"): @MaximumZoomLabel</span>
+                            @if (IsBeyondRecommendedQuality)
+                            {
+                                <span class="media-crop-warning"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i>@T("MediaCropResolutionWarning")</span>
+                            }
+                        </div>
+                    }
+                    else if (_imageSizeResolved)
+                    {
+                        <div class="media-crop-image-meta">
+                            <span class="media-crop-warning"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i>@T("MediaCropResolutionUnavailable")</span>
+                        </div>
+                    }
+                </div>
+
+                <aside class="media-crop-controls">
+                    <div class="media-crop-control-group">
+                        <span class="form-label">@T("ImageFit")</span>
+                        <div class="section-design-segments" role="group" aria-label="@T("ImageFit")">
+                            <button type="button" class="section-design-segment @(_draft.Fit == "cover" ? "active" : null)" aria-pressed="@(_draft.Fit == "cover")" @onclick='() => SetFit("cover")'>@T("Fill")</button>
+                            <button type="button" class="section-design-segment @(_draft.Fit == "contain" ? "active" : null)" aria-pressed="@(_draft.Fit == "contain")" @onclick='() => SetFit("contain")'>@T("Fit")</button>
+                        </div>
+                    </div>
+
+                    <label class="media-crop-control-group">
+                        <span class="form-label">@T("Zoom") <strong>@ZoomLabel</strong></span>
+                        <input type="range"
+                               min="1"
+                               max="@CurrentMaximumZoom.ToString("0.##", CultureInfo.InvariantCulture)"
+                               step="0.01"
+                               value="@CurrentZoom.ToString(CultureInfo.InvariantCulture)"
+                               disabled="@(CurrentMaximumZoom <= 1.001)"
+                               @oninput="SetZoom" />
+                    </label>
+
+                    @if (AllowMobileOverride)
+                    {
+                        <label class="media-crop-mobile-toggle">
+                            <input type="checkbox" checked="@_draft.UseMobileOverride" @onchange="ToggleMobileOverride" />
+                            <span>
+                                <strong>@T("SeparateMobileCrop")</strong>
+                                <small>@T("SeparateMobileCropHint")</small>
+                            </span>
+                        </label>
+                    }
+
+                    <button type="button" class="btn-admin btn-ghost media-crop-reset" @onclick="ResetCurrent">
+                        <i class="fas fa-rotate-left" aria-hidden="true"></i>@T("ResetCrop")
+                    </button>
+                </aside>
+            </div>
+
+            <footer class="media-crop-modal__footer">
+                <button type="button" class="btn-admin btn-ghost" @onclick="Close">@T("Cancel")</button>
+                <button type="button" class="btn-admin btn-primary" @onclick="Apply">
+                    <i class="fas fa-check" aria-hidden="true"></i>@T("ApplyCrop")
+                </button>
+            </footer>
+        </section>
+    </div>
+}
+
+@code {
+    private const double MaximumSupportedZoom = 20;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public string ImageUrl { get; set; } = string.Empty;
+    [Parameter] public MediaPlacementModel? Value { get; set; }
+    [Parameter] public string Title { get; set; } = "Adjust image";
+    [Parameter] public double DesktopAspectRatio { get; set; } = 4d / 3d;
+    [Parameter] public double MobileAspectRatio { get; set; } = 4d / 3d;
+    [Parameter] public bool AllowMobileOverride { get; set; } = true;
+    [Parameter] public int RecommendedWidth { get; set; } = 1600;
+    [Parameter] public int RecommendedMobileWidth { get; set; } = 750;
+    [Parameter] public int MinimumWidth { get; set; }
+    [Parameter] public int MinimumMobileWidth { get; set; }
+    [Parameter] public EventCallback<MediaPlacementModel> Applied { get; set; }
+    [Parameter] public EventCallback Closed { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private readonly string _instanceId = Guid.NewGuid().ToString("N");
+    private MediaPlacementModel _draft = DefaultPlacement();
+    private DotNetObjectReference<MediaCropEditor>? _selfReference;
+    private bool _wasOpen;
+    private bool _initializePending;
+    private string _mode = "desktop";
+    private int _naturalWidth;
+    private int _naturalHeight;
+    private bool _imageSizeResolved;
+
+    private string EditorId => $"media-crop-{_instanceId}";
+    private string TitleId => $"media-crop-title-{_instanceId}";
+    private double CurrentAspect => Math.Max(0.2, _mode == "mobile" ? MobileAspectRatio : DesktopAspectRatio);
+    private int CurrentRecommendedWidth => Math.Max(1, _mode == "mobile" ? RecommendedMobileWidth : RecommendedWidth);
+    private int CurrentRecommendedHeight => Math.Max(1, (int)Math.Ceiling(CurrentRecommendedWidth / CurrentAspect));
+    private int CurrentMinimumWidth
+    {
+        get
+        {
+            var configured = _mode == "mobile" ? MinimumMobileWidth : MinimumWidth;
+            return Math.Max(1, configured > 0 ? configured : (int)Math.Ceiling(CurrentRecommendedWidth / 2d));
+        }
+    }
+    private int CurrentMinimumHeight => Math.Max(1, (int)Math.Ceiling(CurrentMinimumWidth / CurrentAspect));
+    private double CurrentX => _mode == "mobile" ? _draft.MobileFocalPointX ?? _draft.FocalPointX : _draft.FocalPointX;
+    private double CurrentY => _mode == "mobile" ? _draft.MobileFocalPointY ?? _draft.FocalPointY : _draft.FocalPointY;
+    private double CurrentZoom => _mode == "mobile" ? _draft.MobileZoom ?? _draft.Zoom : _draft.Zoom;
+    private double CurrentSafeZoom => CalculateZoomLimit(CurrentAspect, CurrentRecommendedWidth, CurrentRecommendedHeight);
+    private double CurrentMaximumZoom => CalculateZoomLimit(CurrentAspect, CurrentMinimumWidth, CurrentMinimumHeight);
+    private string ZoomLabel => $"{CurrentZoom * 100:0}%";
+    private string SafeZoomLabel => IsBaseBelowRecommended ? T("MediaCropBelowRecommended") : $"{CurrentSafeZoom * 100:0}%";
+    private string MaximumZoomLabel => $"{CurrentMaximumZoom * 100:0}%";
+    private bool IsBaseBelowRecommended
+    {
+        get
+        {
+            var crop = BaseCrop(CurrentAspect);
+            return crop.Width + .01 < CurrentRecommendedWidth || crop.Height + .01 < CurrentRecommendedHeight;
+        }
+    }
+    private bool IsBeyondRecommendedQuality => IsBaseBelowRecommended || CurrentZoom > CurrentSafeZoom + .001;
+
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _draft = Normalize(Clone(Value));
+            _mode = "desktop";
+            _naturalWidth = 0;
+            _naturalHeight = 0;
+            _imageSizeResolved = false;
+            _initializePending = true;
+        }
+        else if (!Open && _wasOpen)
+        {
+            _initializePending = false;
+        }
+
+        _wasOpen = Open;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_initializePending || !Open) return;
+        _initializePending = false;
+        _selfReference ??= DotNetObjectReference.Create(this);
+        var size = await JS.InvokeAsync<ImageSize>("mediaCropEditor.init", EditorId, _selfReference);
+        _naturalWidth = Math.Max(0, size.Width);
+        _naturalHeight = Math.Max(0, size.Height);
+        _imageSizeResolved = size.Resolved;
+        ClampCurrentToHardLimit();
+        await SyncJs();
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task CommitInteraction(double x, double y, double zoom)
+    {
+        SetCurrent(
+            Math.Clamp(x, 0, 100),
+            Math.Clamp(y, 0, 100),
+            Math.Clamp(zoom, 1, CurrentMaximumZoom));
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task SetImageSize(int width, int height)
+    {
+        _naturalWidth = Math.Max(0, width);
+        _naturalHeight = Math.Max(0, height);
+        _imageSizeResolved = true;
+        ClampCurrentToHardLimit();
+        await SyncJs();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task RequestClose() => Close();
+
+    private async Task SelectMode(string mode)
+    {
+        _mode = mode == "mobile" && _draft.UseMobileOverride ? "mobile" : "desktop";
+        ClampCurrentToHardLimit();
+        await SyncJs();
+    }
+
+    private async Task SetFit(string fit)
+    {
+        _draft.Fit = fit == "contain" ? "contain" : "cover";
+        await SyncJs();
+    }
+
+    private async Task SetZoom(ChangeEventArgs args)
+    {
+        var nextZoom = Parse(args.Value, CurrentZoom, 1, CurrentMaximumZoom);
+        SetZoomPreservingCenter(nextZoom);
+        await SyncJs();
+    }
+
+    private async Task ToggleMobileOverride(ChangeEventArgs args)
+    {
+        _draft.UseMobileOverride = args.Value is true || string.Equals(args.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        if (_draft.UseMobileOverride)
+        {
+            _draft.MobileFocalPointX ??= _draft.FocalPointX;
+            _draft.MobileFocalPointY ??= _draft.FocalPointY;
+            _draft.MobileZoom ??= _draft.Zoom;
+            _mode = "mobile";
+        }
+        else
+        {
+            _mode = "desktop";
+        }
+
+        ClampCurrentToHardLimit();
+        await SyncJs();
+    }
+
+    private async Task ResetCurrent()
+    {
+        SetCurrent(50, 50, 1);
+        await SyncJs();
+    }
+
+    private void SetZoomPreservingCenter(double zoom)
+    {
+        if (_naturalWidth <= 0 || _naturalHeight <= 0)
+        {
+            SetCurrent(CurrentX, CurrentY, zoom);
+            return;
+        }
+
+        var previous = CropAt(CurrentAspect, CurrentZoom, CurrentX, CurrentY);
+        var centerX = previous.Left + previous.Width / 2;
+        var centerY = previous.Top + previous.Height / 2;
+        var nextSize = CropAt(CurrentAspect, zoom, 50, 50);
+        var availableX = Math.Max(0, _naturalWidth - nextSize.Width);
+        var availableY = Math.Max(0, _naturalHeight - nextSize.Height);
+        var x = availableX <= .001 ? 50 : (centerX - nextSize.Width / 2) / availableX * 100;
+        var y = availableY <= .001 ? 50 : (centerY - nextSize.Height / 2) / availableY * 100;
+        SetCurrent(Math.Clamp(x, 0, 100), Math.Clamp(y, 0, 100), zoom);
+    }
+
+    private void ClampCurrentToHardLimit()
+    {
+        if (_naturalWidth <= 0 || _naturalHeight <= 0) return;
+        var maximum = CurrentMaximumZoom;
+        if (CurrentZoom > maximum)
+            SetZoomPreservingCenter(maximum);
+    }
+
+    private void SetCurrent(double x, double y, double zoom)
+    {
+        if (_mode == "mobile" && _draft.UseMobileOverride)
+        {
+            _draft.MobileFocalPointX = x;
+            _draft.MobileFocalPointY = y;
+            _draft.MobileZoom = zoom;
+        }
+        else
+        {
+            _draft.FocalPointX = x;
+            _draft.FocalPointY = y;
+            _draft.Zoom = zoom;
+        }
+    }
+
+    private async Task SyncJs()
+    {
+        if (!Open) return;
+        await JS.InvokeVoidAsync("mediaCropEditor.setState", EditorId, new
+        {
+            x = CurrentX,
+            y = CurrentY,
+            zoom = CurrentZoom,
+            maxZoom = CurrentMaximumZoom,
+            aspect = CurrentAspect,
+            fit = _draft.Fit
+        });
+    }
+
+    private async Task Apply()
+    {
+        await Applied.InvokeAsync(Normalize(Clone(_draft)));
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        if (Open) await JS.InvokeVoidAsync("mediaCropEditor.destroy", EditorId);
+        await Closed.InvokeAsync();
+    }
+
+    private CropRect BaseCrop(double aspect)
+    {
+        if (_naturalWidth <= 0 || _naturalHeight <= 0) return new CropRect(0, 0, 0, 0);
+        var width = Math.Min(_naturalWidth, _naturalHeight * aspect);
+        return new CropRect(0, 0, width, width / aspect);
+    }
+
+    private CropRect CropAt(double aspect, double zoom, double x, double y)
+    {
+        var baseCrop = BaseCrop(aspect);
+        var width = baseCrop.Width / Math.Max(1, zoom);
+        var height = baseCrop.Height / Math.Max(1, zoom);
+        var left = Math.Max(0, _naturalWidth - width) * Math.Clamp(x, 0, 100) / 100;
+        var top = Math.Max(0, _naturalHeight - height) * Math.Clamp(y, 0, 100) / 100;
+        return new CropRect(left, top, width, height);
+    }
+
+    private double CalculateZoomLimit(double aspect, int targetWidth, int targetHeight)
+    {
+        return CalculateResolutionZoomLimit(
+            _naturalWidth,
+            _naturalHeight,
+            aspect,
+            targetWidth,
+            targetHeight);
+    }
+
+    public static double CalculateQualitySafeZoom(
+        int sourceWidth,
+        int sourceHeight,
+        double aspect,
+        int recommendedWidth,
+        int recommendedHeight) =>
+        CalculateResolutionZoomLimit(sourceWidth, sourceHeight, aspect, recommendedWidth, recommendedHeight);
+
+    public static double CalculateResolutionZoomLimit(
+        int sourceWidth,
+        int sourceHeight,
+        double aspect,
+        int targetWidth,
+        int targetHeight)
+    {
+        if (sourceWidth <= 0 || sourceHeight <= 0 || !double.IsFinite(aspect) || aspect <= 0) return 1;
+        targetWidth = Math.Max(1, targetWidth);
+        targetHeight = Math.Max(1, targetHeight);
+        var cropWidth = Math.Min(sourceWidth, sourceHeight * aspect);
+        var cropHeight = cropWidth / aspect;
+        var limit = Math.Min(cropWidth / targetWidth, cropHeight / targetHeight);
+        if (!double.IsFinite(limit) || limit <= 1) return 1;
+        return Math.Clamp(Math.Floor((limit + 1e-9) * 100) / 100, 1, MaximumSupportedZoom);
+    }
+
+    private static double Parse(object? value, double fallback, double minimum, double maximum) =>
+        double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && double.IsFinite(number)
+            ? Math.Clamp(number, minimum, maximum)
+            : fallback;
+
+    public static MediaPlacementModel DefaultPlacement() => new();
+
+    public static MediaPlacementModel FromLegacy(string? fit, string? position)
+    {
+        var (x, y) = position switch
+        {
+            "top" => (50d, 0d),
+            "bottom" => (50d, 100d),
+            "left" => (0d, 50d),
+            "right" => (100d, 50d),
+            _ => (50d, 50d)
+        };
+        return new MediaPlacementModel { Fit = fit == "contain" ? "contain" : "cover", FocalPointX = x, FocalPointY = y };
+    }
+
+    public static MediaPlacementModel Clone(MediaPlacementModel? value) => value is null ? DefaultPlacement() : new()
+    {
+        Fit = value.Fit,
+        FocalPointX = value.FocalPointX,
+        FocalPointY = value.FocalPointY,
+        Zoom = value.Zoom,
+        UseMobileOverride = value.UseMobileOverride,
+        MobileFocalPointX = value.MobileFocalPointX,
+        MobileFocalPointY = value.MobileFocalPointY,
+        MobileZoom = value.MobileZoom
+    };
+
+    public static MediaPlacementModel Normalize(MediaPlacementModel value)
+    {
+        value.Fit = value.Fit == "contain" ? "contain" : "cover";
+        value.FocalPointX = FiniteClamp(value.FocalPointX, 50, 0, 100);
+        value.FocalPointY = FiniteClamp(value.FocalPointY, 50, 0, 100);
+        value.Zoom = FiniteClamp(value.Zoom, 1, 1, MaximumSupportedZoom);
+        if (value.UseMobileOverride)
+        {
+            value.MobileFocalPointX = FiniteClamp(value.MobileFocalPointX, value.FocalPointX, 0, 100);
+            value.MobileFocalPointY = FiniteClamp(value.MobileFocalPointY, value.FocalPointY, 0, 100);
+            value.MobileZoom = FiniteClamp(value.MobileZoom, value.Zoom, 1, MaximumSupportedZoom);
+        }
+        else
+        {
+            value.MobileFocalPointX = null;
+            value.MobileFocalPointY = null;
+            value.MobileZoom = null;
+        }
+        return value;
+    }
+
+    public static bool AreEqual(MediaPlacementModel? left, MediaPlacementModel? right)
+    {
+        var first = Normalize(Clone(left));
+        var second = Normalize(Clone(right));
+        return first.Fit == second.Fit
+            && Near(first.FocalPointX, second.FocalPointX)
+            && Near(first.FocalPointY, second.FocalPointY)
+            && Near(first.Zoom, second.Zoom)
+            && first.UseMobileOverride == second.UseMobileOverride
+            && Near(first.MobileFocalPointX, second.MobileFocalPointX)
+            && Near(first.MobileFocalPointY, second.MobileFocalPointY)
+            && Near(first.MobileZoom, second.MobileZoom);
+    }
+
+    private static double FiniteClamp(double? value, double fallback, double minimum, double maximum) =>
+        value is { } number && double.IsFinite(number) ? Math.Clamp(number, minimum, maximum) : Math.Clamp(fallback, minimum, maximum);
+
+    private static bool Near(double? left, double? right) =>
+        left is null && right is null || left is not null && right is not null && Math.Abs(left.Value - right.Value) < .001;
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("mediaCropEditor.destroy", EditorId); }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+        _selfReference?.Dispose();
+    }
+
+    private readonly record struct CropRect(double Left, double Top, double Width, double Height);
+
+    private sealed class ImageSize
+    {
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public bool Resolved { get; set; }
+    }
+}

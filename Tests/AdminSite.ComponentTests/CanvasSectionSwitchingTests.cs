@@ -161,10 +161,10 @@ public sealed class CanvasSectionSwitchingTests : BunitContext
     {
         public Task<ApiResponse<T>> GetAsync<T>(string uri) => Success<T>();
         public Task<ApiResponse<T>> PostAsync<T>(string uri, object body) => Success<T>();
+        public Task<ApiResponse<T>> PostLongRunningAsync<T>(string uri, object body) => Success<T>();
         public Task<ApiResponse<T>> PutAsync<T>(string uri, object body) => Success<T>();
         public Task<ApiResponse<T>> DeleteAsync<T>(string uri) => Success<T>();
         public Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null) => Success<T>();
-        public Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null) => Success<T>();
         public Task<FileDownloadResult> GetFileAsync(string uri) => Task.FromResult(new FileDownloadResult { Success = true });
         public Task<FileDownloadResult> PostFileDownloadAsync(string uri, object body) => Task.FromResult(new FileDownloadResult { Success = true });
         public void Notify(string? message, int statusCode) { }

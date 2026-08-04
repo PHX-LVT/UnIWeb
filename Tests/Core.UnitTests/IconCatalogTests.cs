@@ -1,5 +1,6 @@
 using Contracts.Icons;
 using FullProject.Security;
+using FullProject.Services.IconServices;
 using System.Text;
 
 namespace Core.UnitTests;
@@ -59,5 +60,54 @@ public sealed class IconCatalogTests
 
         Assert.False(result.Success);
         Assert.Contains("extension", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuiltInIcon_AppearanceIsNormalizedPerUsage()
+    {
+        var result = IconReferenceService.ToModel(new IconReferenceDto
+        {
+            Source = IconSources.BuiltIn,
+            ClassName = "fa-solid fa-star",
+            Appearance = new IconAppearanceDto
+            {
+                ColorMode = "custom",
+                Color = "#ABCDEF",
+                Size = "x-large",
+                BackgroundMode = "theme",
+                BackgroundThemeRole = "primary",
+                Shape = "circle"
+            }
+        });
+
+        Assert.NotNull(result?.Appearance);
+        Assert.Equal("#abcdef", result.Appearance.Color);
+        Assert.Equal("x-large", result.Appearance.Size);
+        Assert.Equal("primary", result.Appearance.BackgroundThemeRole);
+        Assert.Equal("circle", result.Appearance.Shape);
+    }
+
+    [Fact]
+    public void CustomIcon_DiscardsAppearanceOverrides()
+    {
+        var result = IconReferenceService.ToModel(new IconReferenceDto
+        {
+            SchemaVersion = 1,
+            Source = IconSources.Custom,
+            ResourceId = "resource",
+            Url = "https://assets.test/icon.svg",
+            Appearance = new IconAppearanceDto
+            {
+                ColorMode = "custom",
+                Color = "#abcdef",
+                Size = "x-large",
+                BackgroundMode = "custom",
+                BackgroundColor = "#000000",
+                Shape = "circle"
+            }
+        });
+
+        Assert.NotNull(result);
+        Assert.Null(result.Appearance);
     }
 }

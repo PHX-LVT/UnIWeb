@@ -1,11 +1,17 @@
 @page "/content/resources"
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using Contracts.Admin
+@using Contracts.Api
+@implements IAsyncDisposable
 @inject AdminContentService ContentService
+@inject DirectResourceUploadService DirectUploads
 @inject AdminUserService Users
 @inject AdminLanguageService AdminLanguageState
 @inject AdminAuthService Auth
 @inject IHttpService Http
+@inject IJSRuntime JS
 
 <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
     <h1 class="page-title"><i class="fas fa-photo-film"></i> @T("ResourceLibrary")</h1>
@@ -20,7 +26,7 @@
             }
             @if (CanUploadResources)
             {
-                <button class="btn-admin btn-primary" @onclick="NewResource">
+                <button class="btn-admin btn-primary" data-testid="open-resource-upload" @onclick="NewResource">
                     <i class="fas fa-upload"></i> @T("UploadResources")
                 </button>
             }
@@ -472,7 +478,7 @@ else
                         <label>@T("Album")</label>
                         <select class="form-control"
                                 value="@_uploadAlbumId"
-                                disabled="@(_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadAlbumLocked)"
+                                disabled="@(_uploadingQueue || _savingYoutubeResource || IsUploadAlbumLocked)"
                                 @onchange="OnUploadAlbumChanged">
                             <option value="">@T("NoAlbum")</option>
                             @foreach (var album in AlbumsForKind(_uploadKind))
@@ -546,44 +552,51 @@ else
                             <span class="text-muted">@string.Format(T("QueuedFileCount"), _uploadQueue.Count)</span>
                         </div>
 
-                        @if (!_uploadQueue.Any())
-                        {
-                            <div style="position:relative;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;padding:1.4rem;min-height:140px;display:grid;place-items:center;text-align:center">
-                                <InputFile OnChange="QueueUploadFiles"
-                                           multiple
-                                           accept="@UploadAcceptForKind(_uploadKind)"
-                                           disabled="@_uploadingQueue"
-                                           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
-                                <div style="pointer-events:none">
-                                    <i class="fas fa-cloud-arrow-up" style="font-size:2rem;color:#0f2742"></i>
-                                    <strong style="display:block;margin-top:.5rem">@T("DragDropOrSelectFiles")</strong>
-                                </div>
-                            </div>
-                        }
-                        else
-                        {
-                            <div style="position:relative;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;padding:.75rem;margin-bottom:.75rem;display:flex;align-items:center;justify-content:center;gap:.5rem;text-align:center">
-                                <InputFile OnChange="QueueUploadFiles"
-                                           multiple
-                                           accept="@UploadAcceptForKind(_uploadKind)"
-                                           disabled="@_uploadingQueue"
-                                           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer" />
-                                <div style="pointer-events:none;display:flex;align-items:center;gap:.5rem;color:#475569">
-                                    <i class="fas fa-cloud-arrow-up"></i>
+                        <div class="@UploadPickerClass">
+                            <InputFile id="resource-upload-input"
+                                       data-testid="resource-upload-input"
+                                       class="resource-upload-picker__input"
+                                       aria-label="@T("DragDropOrSelectFiles")"
+                                       OnChange="QueueUploadFiles"
+                                       multiple
+                                       accept="@UploadAcceptForKind(_uploadKind)"
+                                       disabled="@(_uploadingQueue || _uploadQueue.Count >= MaxQueuedFiles)" />
+                            <div class="resource-upload-picker__prompt">
+                                <i class="fas fa-cloud-arrow-up"></i>
+                                @if (_uploadQueue.Any())
+                                {
                                     <span>@T("DragDropOrSelectFiles")</span>
-                                </div>
+                                }
+                                else
+                                {
+                                    <strong>@T("DragDropOrSelectFiles")</strong>
+                                }
                             </div>
+                        </div>
 
-                            <div style="display:grid;gap:.55rem;max-height:36vh;overflow:auto;padding-right:.15rem">
+                        @if (_uploadQueue.Any())
+                        {
+                            <div class="resource-upload-queue">
                                 @foreach (var item in _uploadQueue)
                                 {
-                                    <div @key="item.Id" style="display:grid;grid-template-columns:48px minmax(150px,1.2fr) minmax(160px,1fr) minmax(110px,.65fr) auto;gap:.65rem;align-items:center;border:1px solid #e5e7eb;border-radius:8px;background:#fff;padding:.55rem">
-                                        <span style="width:48px;height:42px;border-radius:7px;background:#fff7e6;color:#0f2742;display:inline-flex;align-items:center;justify-content:center">
-                                            <i class="fas @UploadQueueIconClass(item)"></i>
+                                    <div @key="item.Id" class="resource-upload-queue__item" data-testid="resource-upload-queue-item">
+                                        <span style="width:56px;height:48px;border-radius:7px;background:#fff7e6;color:#0f2742;display:inline-flex;align-items:center;justify-content:center;overflow:hidden">
+                                            @if (item.PreviewKind == "image" && !string.IsNullOrWhiteSpace(item.PreviewUrl))
+                                            {
+                                                <img src="@item.PreviewUrl" alt="" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover" />
+                                            }
+                                            else if (item.PreviewKind == "video" && !string.IsNullOrWhiteSpace(item.PreviewUrl))
+                                            {
+                                                <video src="@item.PreviewUrl" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>
+                                            }
+                                            else
+                                            {
+                                                <i class="fas @UploadQueueIconClass(item)"></i>
+                                            }
                                         </span>
                                         <div style="min-width:0">
                                             <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@item.OriginalFileName">@item.OriginalFileName</div>
-                                            <small class="text-muted">@FormatBytes(item.File.Size)</small>
+                                            <small class="text-muted">@FormatBytes(item.SizeBytes)</small>
                                         </div>
                                         <input class="form-control"
                                                value="@item.ResourceName"
@@ -591,6 +604,15 @@ else
                                                @oninput="e => item.ResourceName = e.Value?.ToString() ?? string.Empty" />
                                         <div>
                                             <span style="@UploadQueueStatusStyle(item)">@UploadQueueStatusText(item)</span>
+                                            @if (item.IsUploading && !string.IsNullOrWhiteSpace(item.SessionId))
+                                            {
+                                                <div data-resource-upload-progress="@item.Id">
+                                                    <div style="height:4px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:.35rem">
+                                                        <div data-resource-upload-progress-bar style="height:100%;width:@($"{item.ProgressPercent:0.#}%");background:#2563eb;transition:width .12s linear"></div>
+                                                    </div>
+                                                    <small data-resource-upload-progress-label class="text-muted">@($"{item.ProgressPercent:0}%")</small>
+                                                </div>
+                                            }
                                             @if (!string.IsNullOrWhiteSpace(item.Error))
                                             {
                                                 <small style="display:block;color:#b91c1c;margin-top:.25rem">@item.Error</small>
@@ -607,10 +629,20 @@ else
                                                     <i class="fas fa-rotate"></i>
                                                 </button>
                                             }
+                                            @if (item.IsUploading)
+                                            {
+                                                <button type="button"
+                                                        class="btn-admin btn-ghost content-icon-btn"
+                                                        title="@T("Cancel")"
+                                                        @onclick="() => CancelUpload(item)">
+                                                    <i class="fas fa-stop"></i>
+                                                </button>
+                                            }
                                             <button type="button"
                                                     class="btn-admin btn-ghost content-icon-btn"
+                                                    data-testid="remove-resource-upload"
                                                     title="@T("Remove")"
-                                                    disabled="@_uploadingQueue"
+                                                    disabled="@item.IsUploading"
                                                     @onclick="() => RemoveUploadQueueItem(item)">
                                                 <i class="fas fa-times"></i>
                                             </button>
@@ -1028,9 +1060,9 @@ else
 
     private const int PageSize = 30;
     private const int MaxQueuedFiles = 200;
-    private const long MaxImageUploadBytes = 20L * 1024 * 1024;
-    private const long MaxFileUploadBytes = 100L * 1024 * 1024;
-    private const long MaxVideoUploadBytes = 250L * 1024 * 1024;
+    private const long DefaultMaxImageUploadBytes = 20L * 1024 * 1024;
+    private const long DefaultMaxFileUploadBytes = 100L * 1024 * 1024;
+    private const long DefaultMaxVideoUploadBytes = 250L * 1024 * 1024;
 
     private List<string> _languages = new() { "en" };
     private List<ManagedResourceModel> _resources = new();
@@ -1059,6 +1091,8 @@ else
     private bool _uploadingQueue;
     private bool _savingYoutubeResource;
     private readonly List<ResourceUploadQueueItem> _uploadQueue = new();
+    private ResourceUploadCapabilitiesDto _uploadCapabilities = DefaultUploadCapabilities();
+    private DotNetObjectReference<ContentResources>? _uploadDotNetRef;
     private readonly List<ManagedResourceModel> _albumExistingResources = new();
     private readonly HashSet<string> _albumExistingSelectedIds = new(StringComparer.OrdinalIgnoreCase);
     private string _albumExistingSearch = string.Empty;
@@ -1157,9 +1191,9 @@ else
             ? T("YouTubeNoFileUploadHint")
             : _uploadKind switch
             {
-                "image" => string.Format(T("UploadMaxHint"), FormatBytes(MaxImageUploadBytes)),
-                "video" => string.Format(T("UploadMaxHint"), FormatBytes(MaxVideoUploadBytes)),
-                _ => string.Format(T("UploadMaxHint"), FormatBytes(MaxFileUploadBytes))
+                "image" => string.Format(T("UploadMaxHint"), FormatBytes(_uploadCapabilities.MaxImageBytes)),
+                "video" => string.Format(T("UploadMaxHint"), FormatBytes(_uploadCapabilities.MaxVideoBytes)),
+                _ => string.Format(T("UploadMaxHint"), FormatBytes(_uploadCapabilities.MaxFileBytes))
             };
     private bool IsYoutubeLinkMode =>
         string.Equals(_uploadKind, "video", StringComparison.OrdinalIgnoreCase) &&
@@ -1182,8 +1216,16 @@ else
         }
 
         await LoadAdminUsers();
+        await LoadUploadCapabilities();
         await LoadAlbums();
         await LoadResources();
+    }
+
+    private async Task LoadUploadCapabilities()
+    {
+        var response = await ContentService.GetResourceUploadCapabilitiesAsync();
+        if (response.Success && response.Data is not null)
+            _uploadCapabilities = response.Data;
     }
 
     private async Task LoadAdminUsers()
@@ -1386,6 +1428,7 @@ else
         _uploadKind = DefaultUploadKind();
         _uploadAlbumId = SelectedAlbum?.Id ?? string.Empty;
         ApplyUploadAlbumConstraints();
+        await ReleaseUploadQueueAsync(_uploadQueue);
         _uploadQueue.Clear();
         _videoUploadMode = VideoUploadModes.File;
         ResetYouTubeDraft();
@@ -1400,11 +1443,12 @@ else
             await LoadAlbumExistingResources();
     }
 
-    private void CloseUploadModal()
+    private async Task CloseUploadModal()
     {
         if (_uploadingQueue || _savingYoutubeResource) return;
 
         _showUploadModal = false;
+        await ReleaseUploadQueueAsync(_uploadQueue);
         _uploadQueue.Clear();
         _albumExistingResources.Clear();
         _albumExistingSelectedIds.Clear();
@@ -1435,10 +1479,14 @@ else
 
     private void OnUploadAlbumChanged(ChangeEventArgs e)
     {
-        if (_uploadingQueue || _savingYoutubeResource || _uploadQueue.Any() || IsUploadAlbumLocked) return;
+        if (_uploadingQueue || _savingYoutubeResource || IsUploadAlbumLocked) return;
 
         _uploadAlbumId = e.Value?.ToString() ?? string.Empty;
         ApplyUploadAlbumConstraints();
+
+        var albumId = EmptyToNull(_uploadAlbumId);
+        foreach (var item in _uploadQueue.Where(item => !item.IsUploading && !item.IsComplete))
+            item.AlbumId = albumId;
     }
 
     private void SetVideoUploadMode(string mode)
@@ -1452,31 +1500,47 @@ else
             ResetYouTubeDraft();
     }
 
-    private Task QueueUploadFiles(InputFileChangeEventArgs e)
+    private async Task QueueUploadFiles(InputFileChangeEventArgs _)
     {
-        if (!EnsureCanUploadResources()) return Task.CompletedTask;
+        if (!EnsureCanUploadResources()) return;
 
-        IReadOnlyList<IBrowserFile> files;
+        var remainingCapacity = Math.Max(0, MaxQueuedFiles - _uploadQueue.Count);
+        BrowserCaptureBatch capture;
         try
         {
-            files = e.GetMultipleFiles(MaxQueuedFiles);
+            capture = await JS.InvokeAsync<BrowserCaptureBatch>(
+                "resourceUploadClient.captureFiles",
+                "resource-upload-input",
+                remainingCapacity);
         }
-        catch (InvalidOperationException)
+        catch (JSException)
         {
-            Http.Notify(string.Format(T("TooManyQueuedFiles"), MaxQueuedFiles), 422);
-            return Task.CompletedTask;
+            Http.Notify(T("UploadFailed"), 500);
+            return;
         }
 
-        foreach (var file in files)
+        if (capture.SelectedCount > capture.Files.Count)
+            Http.Notify(string.Format(T("TooManyQueuedFiles"), MaxQueuedFiles), 422);
+
+        foreach (var browserFile in capture.Files)
         {
+            if (string.IsNullOrWhiteSpace(browserFile.Token))
+                continue;
+
             var item = new ResourceUploadQueueItem
             {
-                File = file,
-                OriginalFileName = file.Name,
-                ResourceName = DefaultResourceName(file.Name)
+                OriginalFileName = browserFile.Name,
+                ResourceName = DefaultResourceName(browserFile.Name),
+                SizeBytes = browserFile.Size,
+                ContentType = NormalizeUploadContentType(browserFile.ContentType),
+                Kind = NormalizeKind(_uploadKind),
+                AlbumId = EmptyToNull(_uploadAlbumId),
+                BrowserToken = browserFile.Token,
+                PreviewKind = browserFile.PreviewKind,
+                PreviewUrl = browserFile.PreviewUrl
             };
 
-            var validationError = ValidateQueuedFile(file, _uploadKind);
+            var validationError = ValidateQueuedFile(item.OriginalFileName, item.SizeBytes, _uploadKind);
             if (!string.IsNullOrWhiteSpace(validationError))
             {
                 item.Status = UploadQueueStatus.Blocked;
@@ -1485,8 +1549,6 @@ else
 
             _uploadQueue.Add(item);
         }
-
-        return Task.CompletedTask;
     }
 
     private async Task UploadQueuedResources()
@@ -1508,7 +1570,7 @@ else
         if (_uploadingQueue || item.IsComplete) return;
 
         item.Status = UploadQueueStatus.Queued;
-        item.Error = ValidateQueuedFile(item.File, _uploadKind);
+        item.Error = ValidateQueuedFile(item.OriginalFileName, item.SizeBytes, _uploadKind);
         if (!string.IsNullOrWhiteSpace(item.Error))
         {
             item.Status = UploadQueueStatus.Blocked;
@@ -1523,61 +1585,319 @@ else
         if (items.Count == 0) return;
 
         _uploadingQueue = true;
-        foreach (var item in items)
-        {
-            item.Status = UploadQueueStatus.Uploading;
-            item.Error = null;
-        }
-
         try
         {
-            var files = items.Select(item => item.File).ToList();
-            var names = items.Select(CleanQueueResourceName).ToList();
-            var res = await ContentService.UploadResourcesAsync(files, _uploadKind, EmptyToNull(_uploadAlbumId), names);
-            Http.Notify(res.Message, res.StatusCode);
-
-            if (!res.Success || res.Data is null)
+            using var gate = new SemaphoreSlim(Math.Clamp(_uploadCapabilities.MaxConcurrentUploads, 1, 6));
+            var jobs = items.Select(async item =>
             {
-                foreach (var item in items)
+                await gate.WaitAsync();
+                try
                 {
-                    item.Status = UploadQueueStatus.Failed;
-                    item.Error = string.IsNullOrWhiteSpace(res.Message) ? T("UploadFailed") : res.Message;
+                    await UploadQueueItemAsync(item);
                 }
-                return;
-            }
-
-            foreach (var result in res.Data.Results)
-            {
-                var item = items.ElementAtOrDefault(result.Index);
-                if (item is null) continue;
-
-                if (result.Success && result.Resource is not null)
+                finally
                 {
-                    item.Status = UploadQueueStatus.Done;
-                    item.Error = null;
-                    item.Resource = result.Resource;
-                    continue;
+                    gate.Release();
                 }
+            }).ToList();
+            await Task.WhenAll(jobs);
 
-                item.Status = UploadQueueStatus.Failed;
-                item.Error = string.IsNullOrWhiteSpace(result.Error) ? T("UploadFailed") : result.Error;
-            }
+            ApplyCompletedUploads(items);
+            await ReleaseCompletedBrowserFilesAsync(items);
 
-            await LoadAlbums();
-            await LoadResources();
+            var lastUploaded = items.LastOrDefault(item => item.IsComplete)?.Resource;
+            if (lastUploaded is not null && ResourceMatchesCurrentView(lastUploaded))
+                _selectedResource = _resources.FirstOrDefault(resource => resource.Id == lastUploaded.Id) ?? lastUploaded;
 
-            var lastUploadedId = res.Data.Results
-                .LastOrDefault(result => result.Success && result.Resource is not null)
-                ?.Resource
-                ?.Id;
-            if (!string.IsNullOrWhiteSpace(lastUploadedId))
-                _selectedResource = _resources.FirstOrDefault(r => r.Id == lastUploadedId) ?? _selectedResource;
+            var successful = items.Count(item => item.IsComplete);
+            var failed = items.Count - successful;
+            Http.Notify(failed == 0
+                ? $"Uploaded {successful} resource(s)."
+                : $"Uploaded {successful} resource(s); {failed} failed or were cancelled.",
+                failed == 0 ? 200 : 422);
         }
         finally
         {
             _uploadingQueue = false;
         }
     }
+
+    private async Task UploadQueueItemAsync(ResourceUploadQueueItem item)
+    {
+        item.Status = UploadQueueStatus.Uploading;
+        item.Error = null;
+        item.ProgressPercent = 0;
+        item.CancelRequested = false;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (!_uploadCapabilities.DirectUploadEnabled)
+                throw new InvalidOperationException("Direct R2 upload is not available. Check the API storage configuration.");
+            await UploadQueueItemDirectAsync(item);
+
+            if (item.CancelRequested)
+                throw new OperationCanceledException("Upload cancelled.");
+            item.ProgressPercent = 100;
+            item.Status = UploadQueueStatus.Done;
+        }
+        catch (OperationCanceledException)
+        {
+            item.Status = UploadQueueStatus.Cancelled;
+            item.Error = "Upload cancelled.";
+        }
+        catch (Exception exception)
+        {
+            item.Status = UploadQueueStatus.Failed;
+            item.Error = string.IsNullOrWhiteSpace(exception.Message) ? T("UploadFailed") : exception.Message;
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UploadQueueItemDirectAsync(ResourceUploadQueueItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.BrowserToken))
+            throw new InvalidOperationException("The selected browser file is no longer available. Select it again.");
+
+        var initiated = await InitiateUploadWithRetryAsync(item, new ResourceUploadInitiateRequest
+        {
+            FileName = item.OriginalFileName,
+            ResourceName = CleanQueueResourceName(item),
+            Kind = item.Kind,
+            ContentType = item.ContentType,
+            SizeBytes = item.SizeBytes,
+            AlbumId = item.AlbumId,
+            ReplaceResourceId = item.ReplaceResourceId
+        });
+        if (!initiated.Success || initiated.Data is null)
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(initiated.Message) ? T("UploadFailed") : initiated.Message);
+
+        var upload = initiated.Data;
+        item.SessionId = upload.SessionId;
+        _uploadDotNetRef ??= DotNetObjectReference.Create(this);
+
+        try
+        {
+            List<ResourceUploadCompletedPartDto> completedParts = [];
+            if (upload.Mode == "multipart")
+            {
+                completedParts = await UploadMultipartAsync(item, upload);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(upload.UploadUrl))
+                    throw new InvalidOperationException("The upload URL was not returned.");
+                item.ProgressBaseBytes = 0;
+                await JS.InvokeAsync<BrowserUploadResult>(
+                    "resourceUploadClient.upload",
+                    item.BrowserToken,
+                    upload.UploadUrl,
+                    upload.RequiredHeaders,
+                    item.Id,
+                    _uploadDotNetRef,
+                    null,
+                    null,
+                    UploadTimeoutMilliseconds(item.SizeBytes));
+            }
+
+            if (item.CancelRequested) throw new OperationCanceledException();
+            var completed = await CompleteUploadWithRetryAsync(item, upload.SessionId, completedParts);
+            if (!completed.Success || completed.Data is null || completed.Data.Status != "ready")
+                throw new InvalidOperationException(completed.Data?.ErrorMessage ?? completed.Message ?? T("UploadFailed"));
+            item.ResourceId = completed.Data.ResourceId;
+            item.Resource = MapUploadedResource(completed.Data.Resource);
+        }
+        catch
+        {
+            await ContentService.AbortResourceUploadAsync(upload.SessionId);
+            throw;
+        }
+    }
+
+    private async Task<List<ResourceUploadCompletedPartDto>> UploadMultipartAsync(
+        ResourceUploadQueueItem item,
+        ResourceUploadInitiateResponse upload)
+    {
+        var completed = new List<ResourceUploadCompletedPartDto>(upload.PartCount);
+        var allPartNumbers = Enumerable.Range(1, upload.PartCount).ToList();
+        foreach (var batch in allPartNumbers.Chunk(100))
+        {
+            var urls = await GetPartUrlsWithRetryAsync(item, upload.SessionId, batch);
+            if (!urls.Success || urls.Data is null)
+                throw new InvalidOperationException(urls.Message ?? "Upload part URLs could not be created.");
+
+            foreach (var part in urls.Data.Parts.OrderBy(value => value.PartNumber))
+            {
+                if (item.CancelRequested) throw new OperationCanceledException();
+                var start = (part.PartNumber - 1L) * upload.PartSizeBytes;
+                var end = Math.Min(item.SizeBytes, start + upload.PartSizeBytes);
+                item.ProgressBaseBytes = start;
+                var result = await JS.InvokeAsync<BrowserUploadResult>(
+                    "resourceUploadClient.upload",
+                    item.BrowserToken,
+                    part.UploadUrl,
+                    upload.RequiredHeaders,
+                    item.Id,
+                    _uploadDotNetRef,
+                    start,
+                    end,
+                    UploadTimeoutMilliseconds(end - start));
+                if (string.IsNullOrWhiteSpace(result.ETag))
+                    throw new InvalidOperationException("R2 did not expose the ETag response header required for multipart upload.");
+                completed.Add(new ResourceUploadCompletedPartDto { PartNumber = part.PartNumber, ETag = result.ETag });
+                item.ProgressPercent = Math.Min(99, end * 100d / item.SizeBytes);
+            }
+        }
+        return completed;
+    }
+
+    private async Task<ApiResponse<ResourceUploadInitiateResponse>> InitiateUploadWithRetryAsync(
+        ResourceUploadQueueItem item,
+        ResourceUploadInitiateRequest request)
+    {
+        ApiResponse<ResourceUploadInitiateResponse>? response = null;
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            if (item.CancelRequested) throw new OperationCanceledException();
+            response = await ContentService.InitiateResourceUploadAsync(request);
+            if (response.StatusCode != 429) return response;
+            await DelayForRateLimitAsync(item, response.RetryAfterSeconds, attempt);
+        }
+        return response ?? ApiResponse<ResourceUploadInitiateResponse>.Fail(T("UploadFailed"), 500);
+    }
+
+    private async Task<ApiResponse<ResourceUploadPartUrlsResponse>> GetPartUrlsWithRetryAsync(
+        ResourceUploadQueueItem item,
+        string sessionId,
+        IEnumerable<int> partNumbers)
+    {
+        ApiResponse<ResourceUploadPartUrlsResponse>? response = null;
+        var numbers = partNumbers.ToList();
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            if (item.CancelRequested) throw new OperationCanceledException();
+            response = await ContentService.GetResourceUploadPartUrlsAsync(sessionId, numbers);
+            if (response.StatusCode != 429) return response;
+            await DelayForRateLimitAsync(item, response.RetryAfterSeconds, attempt);
+        }
+        return response ?? ApiResponse<ResourceUploadPartUrlsResponse>.Fail(T("UploadFailed"), 500);
+    }
+
+    private async Task<ApiResponse<ResourceUploadSessionDto>> CompleteUploadWithRetryAsync(
+        ResourceUploadQueueItem item,
+        string sessionId,
+        IEnumerable<ResourceUploadCompletedPartDto> completedParts)
+    {
+        ApiResponse<ResourceUploadSessionDto>? response = null;
+        var parts = completedParts.ToList();
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            if (item.CancelRequested) throw new OperationCanceledException();
+            response = await ContentService.CompleteResourceUploadAsync(sessionId, parts);
+            if (response.StatusCode != 429) return response;
+            await DelayForRateLimitAsync(item, response.RetryAfterSeconds, attempt);
+        }
+        return response ?? ApiResponse<ResourceUploadSessionDto>.Fail(T("UploadFailed"), 500);
+    }
+
+    private static async Task DelayForRateLimitAsync(ResourceUploadQueueItem item, int? retryAfterSeconds, int attempt)
+    {
+        if (item.CancelRequested) throw new OperationCanceledException();
+        var seconds = Math.Clamp(retryAfterSeconds ?? (attempt + 1), 1, 30);
+        await Task.Delay(TimeSpan.FromSeconds(seconds));
+        if (item.CancelRequested) throw new OperationCanceledException();
+    }
+
+    private void ApplyCompletedUploads(IEnumerable<ResourceUploadQueueItem> items)
+    {
+        foreach (var item in items.Where(value => value.IsComplete && value.Resource is not null))
+        {
+            var resource = item.Resource!;
+            if (ResourceMatchesCurrentView(resource))
+            {
+                var index = _resources.FindIndex(existing => existing.Id == resource.Id);
+                if (index >= 0) _resources[index] = resource;
+                else _resources.Insert(0, resource);
+            }
+
+            if (!string.IsNullOrWhiteSpace(resource.AlbumId))
+            {
+                var album = _albums.FirstOrDefault(value => value.Id == resource.AlbumId);
+                if (album is not null) album.ResourceCount++;
+            }
+        }
+        PruneSelection();
+        ClampPage();
+    }
+
+    private bool ResourceMatchesCurrentView(ManagedResourceModel resource)
+    {
+        if (ShowingAlbumRoot) return false;
+        if (!string.IsNullOrWhiteSpace(_kindFilter) &&
+            !string.Equals(NormalizeKind(resource.Kind), NormalizeKind(_kindFilter), StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!string.IsNullOrWhiteSpace(ActiveAlbumId) &&
+            !string.Equals(resource.AlbumId, ActiveAlbumId, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var term = _search.Trim();
+        return ResourceName(resource).Contains(term, StringComparison.OrdinalIgnoreCase) ||
+               ResourceFileName(resource).Contains(term, StringComparison.OrdinalIgnoreCase) ||
+               resource.ContentType.Contains(term, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ManagedResourceModel? MapUploadedResource(ResourceUploadResourceDto? resource) => resource is null ? null : new()
+    {
+        Id = resource.Id,
+        Kind = resource.Kind,
+        Purpose = resource.Purpose,
+        Name = new Dictionary<string, string>(resource.Name),
+        Description = new Dictionary<string, string>(resource.Description),
+        Url = resource.Url,
+        StorageKey = resource.StorageKey,
+        ThumbnailUrl = resource.ThumbnailUrl,
+        FileName = resource.FileName,
+        ContentType = resource.ContentType,
+        SizeBytes = resource.SizeBytes,
+        Source = resource.Source,
+        OriginalSourceUrl = resource.OriginalSourceUrl,
+        LicenseName = resource.LicenseName,
+        Attribution = resource.Attribution,
+        DeletionState = resource.DeletionState,
+        Tags = [.. resource.Tags],
+        AlbumId = resource.AlbumId,
+        Active = resource.Active,
+        UsageCount = resource.UsageCount,
+        IsInUse = resource.IsInUse,
+        CreatedById = resource.CreatedById,
+        UpdatedById = resource.UpdatedById,
+        CreatedAt = resource.CreatedAt,
+        UpdatedAt = resource.UpdatedAt
+    };
+
+    [JSInvokable]
+    public Task UpdateResourceUploadProgress(string itemId, long loaded, long total)
+    {
+        var item = _uploadQueue.FirstOrDefault(value => value.Id == itemId);
+        if (item is null || item.SizeBytes <= 0) return Task.CompletedTask;
+        item.ProgressPercent = Math.Clamp((item.ProgressBaseBytes + loaded) * 100d / item.SizeBytes, 0, 99);
+        return Task.CompletedTask;
+    }
+
+    private async Task CancelUpload(ResourceUploadQueueItem item)
+    {
+        if (!item.IsUploading) return;
+        item.CancelRequested = true;
+        await JS.InvokeVoidAsync("resourceUploadClient.abort", item.Id);
+        if (!string.IsNullOrWhiteSpace(item.SessionId))
+            await ContentService.AbortResourceUploadAsync(item.SessionId);
+    }
+
+    private static int UploadTimeoutMilliseconds(long bytes) =>
+        (int)Math.Clamp(60_000d + bytes / (256d * 1024) * 1000d, 120_000d, 30 * 60_000d);
 
     private async Task CreateYouTubeVideoResource()
     {
@@ -1630,16 +1950,19 @@ else
         _youtubeDescription = string.Empty;
     }
 
-    private void RemoveUploadQueueItem(ResourceUploadQueueItem item)
+    private async Task RemoveUploadQueueItem(ResourceUploadQueueItem item)
     {
-        if (_uploadingQueue) return;
+        if (item.IsUploading) return;
         _uploadQueue.Remove(item);
+        await ReleaseBrowserFileAsync(item);
     }
 
-    private void ClearCompletedUploads()
+    private async Task ClearCompletedUploads()
     {
         if (_uploadingQueue) return;
+        var completed = _uploadQueue.Where(item => item.IsComplete).ToList();
         _uploadQueue.RemoveAll(item => item.IsComplete);
+        await ReleaseUploadQueueAsync(completed);
     }
 
     private async Task LoadAlbumExistingResources()
@@ -1788,13 +2111,19 @@ else
         _replaceUploading = true;
         try
         {
-            var res = await ContentService.ReplaceResourceFileAsync(_editingId, e.File, NormalizeKind(_edit.Kind));
-            Http.Notify(res.Message, res.StatusCode);
-            if (res.Success && res.Data is not null)
-            {
-                await LoadResources();
-                EditResource(res.Data);
-            }
+            var response = await DirectUploads.UploadInputAsync(
+                "managed-resource-replace-upload",
+                NormalizeKind(_edit.Kind),
+                _edit.AlbumId,
+                GetValue(_edit.Name, CurrentLang, fallback: true),
+                _editingId);
+            Http.Notify(response.Message, response.StatusCode);
+            if (!response.Success || response.Data is null) return;
+
+            var index = _resources.FindIndex(resource => resource.Id == response.Data.Id);
+            if (index >= 0) _resources[index] = response.Data;
+            _selectedResource = response.Data;
+            EditResource(response.Data);
         }
         finally
         {
@@ -2330,14 +2659,14 @@ else
             _uploadKind = "image";
     }
 
-    private static string UploadAcceptForKind(string kind) => NormalizeKind(kind) switch
-    {
-        "image" => "image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif",
-        "video" => "video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov",
-        _ => ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    };
+    private string UploadPickerClass =>
+        $"resource-upload-picker {(_uploadQueue.Any() ? "resource-upload-picker--compact" : "resource-upload-picker--empty")}" +
+        (_uploadingQueue || _uploadQueue.Count >= MaxQueuedFiles ? " resource-upload-picker--disabled" : string.Empty);
 
-    private string ValidateQueuedFile(IBrowserFile file, string kind)
+    private string UploadAcceptForKind(string kind) =>
+        string.Join(',', AllowedFormatsForKind(kind).Select(format => $".{format.TrimStart('.')}"));
+
+    private string ValidateQueuedFile(string fileName, long sizeBytes, string kind)
     {
         var normalizedKind = NormalizeKind(kind);
         var album = UploadAlbum;
@@ -2348,35 +2677,34 @@ else
         }
 
         var maxBytes = MaxUploadBytesForKind(normalizedKind);
-        if (file.Size > maxBytes)
+        if (sizeBytes > maxBytes)
             return string.Format(T("FileTooLarge"), FormatBytes(maxBytes));
 
-        if (!UploadFileMatchesKind(file, normalizedKind))
+        if (!UploadFileMatchesKind(fileName, normalizedKind))
             return T("InvalidFileTypeForResource");
 
         return string.Empty;
     }
 
-    private static long MaxUploadBytesForKind(string kind) => NormalizeKind(kind) switch
+    private long MaxUploadBytesForKind(string kind) => NormalizeKind(kind) switch
     {
-        "image" => MaxImageUploadBytes,
-        "video" => MaxVideoUploadBytes,
-        _ => MaxFileUploadBytes
+        "image" => _uploadCapabilities.MaxImageBytes,
+        "video" => _uploadCapabilities.MaxVideoBytes,
+        _ => _uploadCapabilities.MaxFileBytes
     };
 
-    private static bool UploadFileMatchesKind(IBrowserFile file, string kind)
+    private bool UploadFileMatchesKind(string fileName, string kind)
     {
-        var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
-        var contentType = (file.ContentType ?? string.Empty).Trim().ToLowerInvariant();
-        return NormalizeKind(kind) switch
-        {
-            "image" => contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
-                       ext is ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif",
-            "video" => contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
-                       ext is ".mp4" or ".webm" or ".mov",
-            _ => ext is ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".txt"
-        };
+        var extension = System.IO.Path.GetExtension(fileName).TrimStart('.');
+        return AllowedFormatsForKind(kind).Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
+
+    private IReadOnlyList<string> AllowedFormatsForKind(string kind) => NormalizeKind(kind) switch
+    {
+        "image" => _uploadCapabilities.AllowedImageFormats,
+        "video" => _uploadCapabilities.AllowedVideoFormats,
+        _ => _uploadCapabilities.AllowedFileFormats
+    };
 
     private static string DefaultResourceName(string fileName)
     {
@@ -2392,7 +2720,7 @@ else
 
     private string UploadQueueIconClass(ResourceUploadQueueItem item)
     {
-        var kind = NormalizeKind(_uploadKind);
+        var kind = NormalizeKind(item.Kind);
         if (kind == "image") return "fa-image";
         if (kind == "video") return "fa-play";
 
@@ -2414,13 +2742,14 @@ else
         UploadQueueStatus.Done => T("Done"),
         UploadQueueStatus.Failed => T("Failed"),
         UploadQueueStatus.Blocked => T("Blocked"),
+        UploadQueueStatus.Cancelled => T("Cancelled"),
         _ => T("Queued")
     };
 
     private static string UploadQueueStatusStyle(ResourceUploadQueueItem item) => item.Status switch
     {
         UploadQueueStatus.Done => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#ecfdf5;color:#166534;font-size:.78rem",
-        UploadQueueStatus.Failed or UploadQueueStatus.Blocked => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#fef2f2;color:#b91c1c;font-size:.78rem",
+        UploadQueueStatus.Failed or UploadQueueStatus.Blocked or UploadQueueStatus.Cancelled => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#fef2f2;color:#b91c1c;font-size:.78rem",
         UploadQueueStatus.Uploading => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:.78rem",
         _ => "display:inline-flex;padding:.18rem .45rem;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.78rem"
     };
@@ -2490,6 +2819,63 @@ else
         Active = true
     };
 
+    private static ResourceUploadCapabilitiesDto DefaultUploadCapabilities() => new()
+    {
+        DirectUploadEnabled = false,
+        MaxImageBytes = DefaultMaxImageUploadBytes,
+        MaxFileBytes = DefaultMaxFileUploadBytes,
+        MaxVideoBytes = DefaultMaxVideoUploadBytes,
+        AllowedImageFormats = ["jpg", "jpeg", "png", "webp", "gif"],
+        AllowedFileFormats = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"],
+        AllowedVideoFormats = ["mp4", "webm", "mov"],
+        MultipartThresholdBytes = 100L * 1024 * 1024,
+        MultipartPartSizeBytes = 10L * 1024 * 1024,
+        MaxConcurrentUploads = 2,
+        PendingLifetimeMinutes = 30
+    };
+
+    private async Task ReleaseCompletedBrowserFilesAsync(IEnumerable<ResourceUploadQueueItem> items)
+    {
+        foreach (var item in items.Where(value => value.IsComplete && !string.IsNullOrWhiteSpace(value.BrowserToken)))
+            await ReleaseBrowserFileAsync(item, preserveResourcePreview: true);
+    }
+
+    private async Task ReleaseBrowserFileAsync(ResourceUploadQueueItem item, bool preserveResourcePreview = false)
+    {
+        if (string.IsNullOrWhiteSpace(item.BrowserToken)) return;
+        var replacementPreview = preserveResourcePreview
+            ? item.Resource?.ThumbnailUrl ?? item.Resource?.Url
+            : null;
+        try { await JS.InvokeVoidAsync("resourceUploadClient.release", item.BrowserToken); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        item.BrowserToken = null;
+        item.PreviewUrl = replacementPreview;
+    }
+
+    private static string NormalizeUploadContentType(string? contentType) =>
+        string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType.Trim();
+
+    private async Task ReleaseUploadQueueAsync(IEnumerable<ResourceUploadQueueItem> items)
+    {
+        var tokens = items.Select(item => item.BrowserToken).Where(token => !string.IsNullOrWhiteSpace(token)).ToList();
+        if (tokens.Count == 0) return;
+        try { await JS.InvokeVoidAsync("resourceUploadClient.releaseMany", tokens); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        foreach (var item in items)
+        {
+            item.BrowserToken = null;
+            item.PreviewUrl = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await ReleaseUploadQueueAsync(_uploadQueue);
+        _uploadDotNetRef?.Dispose();
+    }
+
     private static class UploadQueueStatus
     {
         public const string Queued = "Queued";
@@ -2497,6 +2883,7 @@ else
         public const string Done = "Done";
         public const string Failed = "Failed";
         public const string Blocked = "Blocked";
+        public const string Cancelled = "Cancelled";
     }
 
     private static class VideoUploadModes
@@ -2508,16 +2895,54 @@ else
     private sealed class ResourceUploadQueueItem
     {
         public string Id { get; } = Guid.NewGuid().ToString("N");
-        public IBrowserFile File { get; set; } = default!;
         public string OriginalFileName { get; set; } = string.Empty;
         public string ResourceName { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string ContentType { get; set; } = "application/octet-stream";
+        public string Kind { get; set; } = "file";
+        public string? AlbumId { get; set; }
+        public string? ReplaceResourceId { get; set; }
         public string Status { get; set; } = UploadQueueStatus.Queued;
         public string? Error { get; set; }
+        public string? BrowserToken { get; set; }
+        public string? PreviewKind { get; set; }
+        public string? PreviewUrl { get; set; }
+        public string? SessionId { get; set; }
+        public string? ResourceId { get; set; }
+        public double ProgressPercent { get; set; }
+        public long ProgressBaseBytes { get; set; }
+        public bool CancelRequested { get; set; }
         public ManagedResourceModel? Resource { get; set; }
         public bool IsComplete => string.Equals(Status, UploadQueueStatus.Done, StringComparison.OrdinalIgnoreCase);
-        public bool IsFailed => string.Equals(Status, UploadQueueStatus.Failed, StringComparison.OrdinalIgnoreCase);
+        public bool IsUploading => string.Equals(Status, UploadQueueStatus.Uploading, StringComparison.OrdinalIgnoreCase);
+        public bool IsFailed =>
+            string.Equals(Status, UploadQueueStatus.Failed, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Status, UploadQueueStatus.Cancelled, StringComparison.OrdinalIgnoreCase);
         public bool CanUpload =>
             string.Equals(Status, UploadQueueStatus.Queued, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(Status, UploadQueueStatus.Failed, StringComparison.OrdinalIgnoreCase);
+            string.Equals(Status, UploadQueueStatus.Failed, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Status, UploadQueueStatus.Cancelled, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class BrowserCapturedFile
+    {
+        public string Token { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public long Size { get; set; }
+        public string ContentType { get; set; } = string.Empty;
+        public string PreviewKind { get; set; } = "file";
+        public string? PreviewUrl { get; set; }
+    }
+
+    private sealed class BrowserCaptureBatch
+    {
+        public int SelectedCount { get; set; }
+        public List<BrowserCapturedFile> Files { get; set; } = [];
+    }
+
+    private sealed class BrowserUploadResult
+    {
+        public int Status { get; set; }
+        public string ETag { get; set; } = string.Empty;
     }
 }

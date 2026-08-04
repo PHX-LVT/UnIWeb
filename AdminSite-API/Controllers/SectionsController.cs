@@ -19,12 +19,23 @@ namespace FullProject.Controllers
     {
         private readonly SectionService _service;
         private readonly PageService _pageService;
+        private readonly SectionCatalogService _catalog;
+        private readonly SectionTemplateFactory _templates;
 
-        public SectionsController(SectionService service, PageService pageService)
+        public SectionsController(
+            SectionService service,
+            PageService pageService,
+            SectionCatalogService catalog,
+            SectionTemplateFactory templates)
         {
             _service = service;
             _pageService = pageService;
+            _catalog = catalog;
+            _templates = templates;
         }
+
+        [HttpGet("catalog")]
+        public IActionResult GetCatalog() => Ok(ApiResult.Ok(_catalog.GetCatalog()));
 
         // GET api/admin/pages/:pageId/sections
         [HttpGet]
@@ -68,6 +79,37 @@ namespace FullProject.Controllers
                 new { pageId, sectionId = created.Id },
                 ApiResult.Created(MapToDto(pageId, created), "Section created.")
                     .WithNotification("NotificationSectionSaved"));
+        }
+
+        [Authorize(Policy = AdminPermissionKeys.PageBuilder)]
+        [HttpPost("from-template")]
+        public async Task<IActionResult> CreateFromTemplate(
+            string pageId,
+            [FromBody] SectionTemplateCreateRequestDto request)
+        {
+            if (!CanUsePageBuilder) return Forbid();
+            var page = await _pageService.GetByIdAsync(pageId);
+            if (page is null) return NotFound(ApiResult.NotFound("Page not found."));
+
+            if (string.Equals(request.Type, "showcase", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(request.SourcePageId)
+                && await _pageService.GetByIdAsync(request.SourcePageId) is null)
+            {
+                return BadRequest(ApiResult.BadRequest("Choose an existing source page for Page Showcase."));
+            }
+
+            try
+            {
+                var created = await _service.CreateAsync(pageId, _templates.Create(request));
+                return CreatedAtAction(nameof(GetById),
+                    new { pageId, sectionId = created.Id },
+                    ApiResult.Created(MapToDto(pageId, created), "Section created from layout.")
+                        .WithNotification("NotificationSectionSaved"));
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(ApiResult.BadRequest(exception.Message));
+            }
         }
 
         // PUT api/admin/pages/:pageId/sections/:sectionId
@@ -183,6 +225,7 @@ namespace FullProject.Controllers
                     BackgroundVideoUrl = s.Style.BackgroundVideoUrl,
                     BackgroundImageFit = s.Style.BackgroundImageFit,
                     BackgroundImagePosition = s.Style.BackgroundImagePosition,
+                    BackgroundImagePlacement = MediaPlacementPolicy.ToAdmin(s.Style.BackgroundImagePlacement),
                     GradientFrom = s.Style.GradientFrom,
                     GradientTo = s.Style.GradientTo,
                     GradientDirection = s.Style.GradientDirection,
@@ -210,6 +253,7 @@ namespace FullProject.Controllers
                     dto.HeadingSize = h.HeadingSize;
                     dto.ContentAlignment = h.ContentAlignment;
                     dto.ImageUrl = h.ImageUrl;
+                    dto.ImagePlacement = MediaPlacementPolicy.ToAdmin(h.ImagePlacement);
                     dto.Buttons = h.Buttons.Select(MapButtonToDto).ToList();
                     break;
 

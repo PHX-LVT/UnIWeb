@@ -1,0 +1,27 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="ez-content-item-list" @ref="_root">@ChildContent</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback<List<string>> Reordered { get; set; }
+
+    private ElementReference _root;
+    private DotNetObjectReference<ContentSortableList>? _reference;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        _reference ??= DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("sectionContentEditor.initSortable", _root, _reference);
+    }
+
+    [JSInvokable]
+    public Task OnReordered(List<string> orderedIds) => Reordered.InvokeAsync(orderedIds);
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("sectionContentEditor.destroySortable", _root); } catch { }
+        _reference?.Dispose();
+    }
+}

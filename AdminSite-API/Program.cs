@@ -23,6 +23,7 @@ using FullProject.Services.CloneServices;
 using FullProject.Services.BlockServices;
 using FullProject.Services.IconServices;
 using Contracts.Auth;
+using Contracts.Api;
 using FullProject.Security;
 using FullProject.Services.LogManagement;
 using FullProject.Services.Health;
@@ -114,6 +115,8 @@ builder.Services.AddScoped<SocialButtonsService>();
 builder.Services.AddScoped<PageCleanupService>();
 builder.Services.AddScoped<PageService>();
 builder.Services.AddScoped<SectionService>();
+builder.Services.AddSingleton<SectionCatalogService>();
+builder.Services.AddScoped<SectionTemplateFactory>();
 builder.Services.AddScoped<BlockService>();
 builder.Services.AddScoped<BlockAssetMetadataService>();
 builder.Services.AddScoped<BlockAuthoringService>();
@@ -147,6 +150,8 @@ builder.Services.AddScoped<ManagedResourceAlbumService>();
 builder.Services.AddScoped<ManagedResourceValidationService>();
 builder.Services.AddScoped<ManagedResourceUsageService>();
 builder.Services.AddScoped<ManagedResourceService>();
+builder.Services.AddScoped<ResourceUploadSessionService>();
+builder.Services.AddHostedService<ResourceUploadCleanupService>();
 builder.Services.AddScoped<IconReferenceService>();
 builder.Services.AddScoped<VisitorMetricService>();
 builder.Services.AddScoped<FullProject.Services.PublicService.PublicPageAssemblyService>();
@@ -169,6 +174,22 @@ builder.Services.AddMemoryCache();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var retryAfterSeconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+            ? Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))
+            : 1;
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+        await context.HttpContext.Response.WriteAsJsonAsync(new ApiResponse<object>
+        {
+            Success = false,
+            StatusCode = StatusCodes.Status429TooManyRequests,
+            Message = "Too many requests. Try again shortly.",
+            Errors = ["rate_limited"],
+            RetryAfterSeconds = retryAfterSeconds
+        }, cancellationToken);
+    };
     options.AddPolicy("public-form", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: $"{context.Connection.RemoteIpAddress}:{context.Request.Path}",
@@ -199,6 +220,42 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("admin-resource-upload-read", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"admin-resource-upload-read:{context.User.FindFirst("adminId")?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 240,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("admin-resource-upload-initiate", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"admin-resource-upload-initiate:{context.User.FindFirst("adminId")?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("admin-resource-upload-mutation", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"admin-resource-upload-mutation:{context.User.FindFirst("adminId")?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 240,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
@@ -446,8 +503,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowFrontends");
 app.UseHttpsRedirection();
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseMiddleware<AdminMutationAuditMiddleware>();
 app.UseMiddleware<AdminSessionValidationMiddleware>();
 app.UseAuthorization();

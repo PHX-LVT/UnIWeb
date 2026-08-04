@@ -1,6 +1,7 @@
 using FullProject.Models;
 using System.Text.Json.Serialization;
 using Contracts.Icons;
+using Contracts.Admin;
 
 namespace FullProject.DTOs
 {
@@ -442,6 +443,7 @@ namespace FullProject.DTOs
         public string Kind { get; set; } = "image";
         public string? Url { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public MediaPlacementDto? ThumbnailPlacement { get; set; }
         public string? ResourceId { get; set; }
         public string ResourceSource { get; set; } = "DirectUpload";
         public string? StorageKey { get; set; }
@@ -464,10 +466,12 @@ namespace FullProject.DTOs
         public string HeroImageResourceSource { get; set; } = "DirectUpload";
         public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
+        public MediaPlacementDto? HeroImagePlacement { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string? ThumbnailResourceId { get; set; }
         public string ThumbnailResourceSource { get; set; } = "DirectUpload";
         public string? ThumbnailStorageKey { get; set; }
+        public MediaPlacementDto? ThumbnailPlacement { get; set; }
         public string? VideoUrl { get; set; }
         public string? VideoResourceId { get; set; }
         public string VideoResourceSource { get; set; } = "DirectUpload";
@@ -493,10 +497,12 @@ namespace FullProject.DTOs
         public string? HeroImageResourceSource { get; set; }
         public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
+        public MediaPlacementDto? HeroImagePlacement { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string? ThumbnailResourceId { get; set; }
         public string? ThumbnailResourceSource { get; set; }
         public string? ThumbnailStorageKey { get; set; }
+        public MediaPlacementDto? ThumbnailPlacement { get; set; }
         public string? VideoUrl { get; set; }
         public string? VideoResourceId { get; set; }
         public string? VideoResourceSource { get; set; }
@@ -535,10 +541,12 @@ namespace FullProject.DTOs
         public string HeroImageResourceSource { get; set; } = "DirectUpload";
         public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
+        public MediaPlacementDto? HeroImagePlacement { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string? ThumbnailResourceId { get; set; }
         public string ThumbnailResourceSource { get; set; } = "DirectUpload";
         public string? ThumbnailStorageKey { get; set; }
+        public MediaPlacementDto? ThumbnailPlacement { get; set; }
         public string? VideoUrl { get; set; }
         public string? VideoResourceId { get; set; }
         public string VideoResourceSource { get; set; } = "DirectUpload";
@@ -679,22 +687,6 @@ namespace FullProject.DTOs
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-    }
-
-    public class ManagedResourceUploadBatchResponseDto
-    {
-        public List<ManagedResourceUploadResultDto> Results { get; set; } = new();
-        public int SuccessCount { get; set; }
-        public int FailedCount { get; set; }
-    }
-
-    public class ManagedResourceUploadResultDto
-    {
-        public int Index { get; set; }
-        public string FileName { get; set; } = string.Empty;
-        public bool Success { get; set; }
-        public string? Error { get; set; }
-        public ManagedResourceResponseDto? Resource { get; set; }
     }
 
     public class ManagedResourceDeleteResultDto

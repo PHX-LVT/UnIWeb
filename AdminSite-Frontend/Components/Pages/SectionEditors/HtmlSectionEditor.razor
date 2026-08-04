@@ -14,14 +14,9 @@
     </div>
 </div>
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
-    </button>
-</div>
-
 @code {
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
     [Parameter] public SectionModel  Section   { get; set; } = new();
     [Parameter] public string        PageId    { get; set; } = string.Empty;
@@ -34,6 +29,7 @@
 
     protected override void OnParametersSet()
     {
+        ContentSession?.Register(Save);
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
         _content = new(Section.Content ?? new());

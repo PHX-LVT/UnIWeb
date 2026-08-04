@@ -72,6 +72,7 @@ namespace FullProject.Services.SectionServices
                     HeadingSize = h.HeadingSize,
                     ContentAlignment = h.ContentAlignment,
                     ImageUrl = h.ImageUrl,
+                    ImagePlacement = h.ImagePlacement is null ? null : MediaPlacementPolicy.Normalize(h.ImagePlacement),
                     Buttons = h.Buttons.Select(MapButton).ToList()
                 },
                 CtaSectionCreateDto c => new CtaSection
@@ -226,6 +227,12 @@ namespace FullProject.Services.SectionServices
                 if (s.BackgroundVideoUrl != null) section.Style.BackgroundVideoUrl = CleanBackgroundVideoUrl(s.BackgroundVideoUrl);
                 if (s.BackgroundImageFit != null) section.Style.BackgroundImageFit = NormalizeBackgroundImageFit(s.BackgroundImageFit);
                 if (s.BackgroundImagePosition != null) section.Style.BackgroundImagePosition = NormalizeBackgroundImagePosition(s.BackgroundImagePosition);
+                if (s.BackgroundImagePlacement != null)
+                {
+                    section.Style.BackgroundImagePlacement = MediaPlacementPolicy.Normalize(s.BackgroundImagePlacement);
+                    section.Style.BackgroundImageFit = section.Style.BackgroundImagePlacement.Fit;
+                    section.Style.BackgroundImagePosition = "center";
+                }
                 if (s.GradientFrom != null) section.Style.GradientFrom = s.GradientFrom;
                 if (s.GradientTo != null) section.Style.GradientTo = s.GradientTo;
                 if (s.GradientDirection != null) section.Style.GradientDirection = s.GradientDirection;
@@ -306,6 +313,7 @@ namespace FullProject.Services.SectionServices
                         if (hDto.HeadingSize != null) u.Add(Builders<Section>.Update.Set(s => ((HeroSection)s).HeadingSize, hDto.HeadingSize));
                         if (hDto.ContentAlignment != null) u.Add(Builders<Section>.Update.Set(s => ((HeroSection)s).ContentAlignment, hDto.ContentAlignment));
                         if (hDto.ImageUrl != null) u.Add(Builders<Section>.Update.Set(s => ((HeroSection)s).ImageUrl, EmptyToNull(hDto.ImageUrl)));
+                        if (hDto.ImagePlacement != null) u.Add(Builders<Section>.Update.Set(s => ((HeroSection)s).ImagePlacement, MediaPlacementPolicy.Normalize(hDto.ImagePlacement)));
                         if (hDto.Buttons != null) u.Add(Builders<Section>.Update.Set(s => ((HeroSection)s).Buttons, hDto.Buttons.Select(MapButton).ToList()));
                         await _context.SectionsDraft.UpdateOneAsync(s => s.Id == sectionId, Builders<Section>.Update.Combine(u));
 
@@ -383,6 +391,9 @@ namespace FullProject.Services.SectionServices
                             if (colDto.Heading != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Heading, colDto.Heading));
                             if (colDto.Subheading != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Subheading, colDto.Subheading));
                             if (colDto.Content != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Content, colDto.Content));
+                            if (colDto.ColumnRatio != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).ColumnRatio, NormalizeSplitRatio(colDto.ColumnRatio)));
+                            if (colDto.Gap != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).Gap, NormalizeBlockGap(colDto.Gap)));
+                            if (colDto.StackOnMobile != null) u.Add(Builders<Section>.Update.Set(s => ((ColumnsSection)s).StackOnMobile, colDto.StackOnMobile.Value));
                         }
                         else if (colDto.ColumnCount != null)
                         {
@@ -609,6 +620,12 @@ namespace FullProject.Services.SectionServices
             if (dto.BackgroundVideoUrl != null) style.BackgroundVideoUrl = CleanBackgroundVideoUrl(dto.BackgroundVideoUrl);
             if (dto.BackgroundImageFit != null) style.BackgroundImageFit = NormalizeBackgroundImageFit(dto.BackgroundImageFit);
             if (dto.BackgroundImagePosition != null) style.BackgroundImagePosition = NormalizeBackgroundImagePosition(dto.BackgroundImagePosition);
+            if (dto.BackgroundImagePlacement != null)
+            {
+                style.BackgroundImagePlacement = MediaPlacementPolicy.Normalize(dto.BackgroundImagePlacement);
+                style.BackgroundImageFit = style.BackgroundImagePlacement.Fit;
+                style.BackgroundImagePosition = "center";
+            }
             if (dto.GradientFrom != null) style.GradientFrom = EmptyToNull(dto.GradientFrom);
             if (dto.GradientTo != null) style.GradientTo = EmptyToNull(dto.GradientTo);
             if (dto.GradientDirection != null) style.GradientDirection = string.IsNullOrWhiteSpace(dto.GradientDirection) ? "top" : dto.GradientDirection;
@@ -840,8 +857,8 @@ namespace FullProject.Services.SectionServices
                 Subheading = dto.Subheading,
                 Content = dto.Content,
                 ColumnCount = split ? 2 : slotCount,
-                ColumnRatio = split ? "equal" : dto.ColumnRatio,
-                Gap = dto.Gap,
+                ColumnRatio = split ? NormalizeSplitRatio(dto.ColumnRatio) : dto.ColumnRatio,
+                Gap = NormalizeBlockGap(dto.Gap),
                 StackOnMobile = dto.StackOnMobile,
                 Columns = Enumerable.Range(0, slotCount).Select(i => new ColumnSlot
                 {
@@ -853,6 +870,13 @@ namespace FullProject.Services.SectionServices
 
         private static bool IsSplitColumns(ColumnsSection section) =>
             string.Equals(section.LayoutMode, "split", StringComparison.OrdinalIgnoreCase);
+
+        private static string NormalizeSplitRatio(string? value) => value switch
+        {
+            "40-60" => "40-60",
+            "60-40" => "60-40",
+            _ => "equal"
+        };
 
         private static ShowcaseItemOverride MapShowcaseItemOverride(ShowcaseItemOverrideDto item) => new()
         {

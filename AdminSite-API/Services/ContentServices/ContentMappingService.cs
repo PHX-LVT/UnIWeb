@@ -1,6 +1,7 @@
 using FullProject.DTOs;
 using FullProject.Models;
 using MongoDB.Bson;
+using FullProject.Services.SectionServices;
 
 namespace FullProject.Services
 {
@@ -41,10 +42,12 @@ namespace FullProject.Services
             HeroImageResourceSource = item.HeroImageResourceSource,
             HeroImageStorageKey = item.HeroImageStorageKey,
             HeroImageAlt = item.HeroImageAlt,
+            HeroImagePlacement = MediaPlacementPolicy.ToAdmin(item.HeroImagePlacement),
             ThumbnailUrl = item.ThumbnailUrl,
             ThumbnailResourceId = item.ThumbnailResourceId,
             ThumbnailResourceSource = item.ThumbnailResourceSource,
             ThumbnailStorageKey = item.ThumbnailStorageKey,
+            ThumbnailPlacement = MediaPlacementPolicy.ToAdmin(item.ThumbnailPlacement),
             VideoUrl = item.VideoUrl,
             VideoResourceId = item.VideoResourceId,
             VideoResourceSource = item.VideoResourceSource,
@@ -106,10 +109,12 @@ namespace FullProject.Services
             HeroImageResourceSource = item.HeroImageResourceSource,
             HeroImageStorageKey = item.HeroImageStorageKey,
             HeroImageAlt = item.HeroImageAlt,
+            HeroImagePlacement = ClonePlacement(item.HeroImagePlacement),
             ThumbnailUrl = item.ThumbnailUrl,
             ThumbnailResourceId = item.ThumbnailResourceId,
             ThumbnailResourceSource = item.ThumbnailResourceSource,
             ThumbnailStorageKey = item.ThumbnailStorageKey,
+            ThumbnailPlacement = ClonePlacement(item.ThumbnailPlacement),
             VideoUrl = item.VideoUrl,
             VideoResourceId = item.VideoResourceId,
             VideoResourceSource = item.VideoResourceSource,
@@ -165,6 +170,7 @@ namespace FullProject.Services
             Kind = item.Kind,
             Url = item.Url,
             ThumbnailUrl = item.ThumbnailUrl,
+            ThumbnailPlacement = ClonePlacement(item.ThumbnailPlacement),
             ResourceId = item.ResourceId,
             ResourceSource = item.ResourceSource,
             StorageKey = item.StorageKey,
@@ -172,5 +178,9 @@ namespace FullProject.Services
             Visible = item.Visible,
             Order = item.Order
         };
+
+        private static MediaPlacement? ClonePlacement(MediaPlacement? value) => value is null
+            ? null
+            : MediaPlacementPolicy.Normalize(value);
     }
 }

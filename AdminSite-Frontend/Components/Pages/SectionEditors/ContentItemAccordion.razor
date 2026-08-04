@@ -1,0 +1,40 @@
+<article class="ez-content-item @(Expanded ? "is-open" : null)" data-section-content-item-id="@ItemId">
+    <header class="ez-content-item__header">
+        <button type="button" class="ez-content-item__toggle" aria-expanded="@Expanded" @onclick="OnToggle">
+            <span class="ez-content-item__index">@Number</span>
+            <span class="ez-content-item__label"><strong>@Title</strong>@if (!string.IsNullOrWhiteSpace(Summary)) { <small>@Summary</small> }</span>
+            <i class="fas @(Expanded ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+        </button>
+        <div class="ez-content-item__actions">
+            @if (ShowVisibility)
+            {
+                <button type="button" class="ez-icon-btn" title="@(Visible ? "Hide" : "Show")" @onclick="ToggleVisibility">
+                    <i class="fas @(Visible ? "fa-eye" : "fa-eye-slash")"></i>
+                </button>
+            }
+            <button type="button" class="ez-icon-btn @(DangerDelete ? "ez-icon-btn--danger" : null)" title="@DeleteTitle" @onclick="OnDelete"><i class="fas @DeleteIcon"></i></button>
+        </div>
+    </header>
+    @if (Expanded)
+    {
+        <div class="ez-content-item__body">@ChildContent</div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired] public string ItemId { get; set; } = string.Empty;
+    [Parameter] public int Number { get; set; }
+    [Parameter] public string Title { get; set; } = "Untitled";
+    [Parameter] public string? Summary { get; set; }
+    [Parameter] public bool Expanded { get; set; }
+    [Parameter] public bool Visible { get; set; } = true;
+    [Parameter] public bool ShowVisibility { get; set; } = true;
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public string DeleteTitle { get; set; } = "Delete";
+    [Parameter] public string DeleteIcon { get; set; } = "fa-trash";
+    [Parameter] public bool DangerDelete { get; set; } = true;
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    private Task ToggleVisibility() => VisibleChanged.InvokeAsync(!Visible);
+}

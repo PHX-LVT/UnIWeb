@@ -2,9 +2,18 @@
 @inject IHttpService Http
 @inject AdminFormSubmissionService FormService
 
+<section class="ez-content-editor__text">
+    <h3>@T("SectionText")</h3>
+    <div class="form-group"><label class="form-label">@T("Eyebrow")</label><LangField @bind-Value="_eyebrow" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("Heading")</label><LangField @bind-Value="_heading" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("Subheading")</label><LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" /></div>
+</section>
+
+<ContentEditorGroup Title="@T("BannerLayout")" Summary="@_layout" @bind-Expanded="_layoutExpanded">
+<div class="ez-content-editor__settings">
 <div class="form-group">
     <label class="form-label">@T("Layout")</label>
-    <DxComboBox Data="_layouts" @bind-Value="_layout" CssClass="w-100" />
+    <DxComboBox Data="_layouts" Value="_layout" ValueChanged="@((string? value) => ChangeLayout(value))" CssClass="w-100" />
 </div>
 
 <div class="form-group">
@@ -16,32 +25,19 @@
     <label class="form-label">@T("ContentAlignment")</label>
     <DxComboBox Data="_alignments" @bind-Value="_alignment" CssClass="w-100" />
 </div>
-
-<div class="form-group">
-    <label class="form-label">@T("Eyebrow")</label>
-    <LangField @bind-Value="_eyebrow" Languages="Languages" />
 </div>
+</ContentEditorGroup>
 
-<div class="form-group">
-    <label class="form-label">@T("Heading")</label>
-    <LangField @bind-Value="_heading" Languages="Languages" />
-</div>
-
-<div class="form-group">
-    <label class="form-label">@T("Subheading")</label>
-    <LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" />
-</div>
-
+<ContentEditorGroup Title="@T("Media")" Summary="@(string.IsNullOrWhiteSpace(_imageUrl) ? T("NoImage") : T("ImageSelected"))" @bind-Expanded="_mediaExpanded">
 <div class="form-group">
     <label class="form-label">@T("HeroImage")</label>
     @if (!string.IsNullOrEmpty(_imageUrl))
     {
-        <div style="margin-bottom:.75rem">
-            <img src="@_imageUrl"
-                 style="max-height:120px;border-radius:6px;
-                        border:1px solid var(--border)" />
-            <button class="btn-admin btn-ghost" style="margin-left:.5rem"
-                    @onclick="RemoveImage">
+        <div class="media-crop-inline-selection">
+            <div class="media-crop-inline-preview" style="@ImagePreviewStyle">
+                <img src="@_imageUrl" alt="" />
+            </div>
+            <button type="button" class="btn-admin btn-ghost" @onclick="RemoveImage">
                 <i class="fas fa-times"></i> @T("Remove")
             </button>
         </div>
@@ -57,18 +53,41 @@
         <button type="button" class="btn-admin btn-ghost" @onclick="OpenResourcePicker">
             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
         </button>
+        @if (!string.IsNullOrWhiteSpace(_imageUrl))
+        {
+            <button type="button" class="btn-admin btn-ghost" @onclick="OpenCropEditor">
+                <i class="fas fa-crop-simple"></i> @T("AdjustCrop")
+            </button>
+        }
     </div>
 </div>
+</ContentEditorGroup>
 
 <ResourcePickerModal Open="_resourcePickerOpen"
                      Kind="image"
                      ResourceSelected="SelectResourceImage"
                      Closed="CloseResourcePicker" />
 
-<div class="form-group">
-    <label class="form-label">@T("Buttons")</label>
+<MediaCropEditor Open="_cropEditorOpen"
+                 ImageUrl="@(_imageUrl ?? string.Empty)"
+                 Value="_imagePlacement"
+                 Title="@T("AdjustHeroImage")"
+                 DesktopAspectRatio="@(4d / 3d)"
+                 MobileAspectRatio="@(4d / 3d)"
+                 RecommendedWidth="960"
+                 RecommendedMobileWidth="750"
+                 MinimumWidth="480"
+                 MinimumMobileWidth="375"
+                 Applied="ApplyImagePlacement"
+                 Closed="CloseCropEditor" />
+
+<ContentEditorGroup Title="@T("Actions")" Summary="@($"{_buttons.Count} buttons")" @bind-Expanded="_actionsExpanded">
+    <ContentSortableList Reordered="ReorderButtons">
     @foreach (var (btn, i) in _buttons.Select((b, i) => (b, i)))
     {
+        <ContentItemAccordion @key="btn.Id" ItemId="@btn.Id" Number="@(i + 1)" Title="@ButtonTitle(btn, i + 1)" Summary="@btn.Action"
+                              Visible="@btn.Visible" VisibleChanged="value => SetButtonVisible(btn, value)"
+                              Expanded="@(_openButtonId == btn.Id)" OnToggle="() => ToggleButton(btn.Id)" OnDelete="() => RemoveButton(btn)">
         <div class="section-button-editor">
             <div class="section-button-cell section-button-cell--label">
                 <span class="section-button-cell__label">@T("Label")</span>
@@ -88,13 +107,11 @@
                     <DxComboBox Data="_btnStyles" @bind-Value="btn.Style"
                                 CssClass="w-100" />
                 </div>
-                <button class="btn-admin btn-danger"
-                        @onclick="() => _buttons.RemoveAt(i)">
-                    <i class="fas fa-trash"></i>
-                </button>
             </div>
         </div>
+        </ContentItemAccordion>
     }
+    </ContentSortableList>
     @if (_buttons.Count < 4)
     {
         <button class="btn-admin btn-outline"
@@ -102,13 +119,7 @@
             <i class="fas fa-plus"></i> @T("AddButton")
         </button>
     }
-</div>
-
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
-    </button>
-</div>
+</ContentEditorGroup>
 
 <style>
     .section-button-editor {
@@ -171,11 +182,13 @@
     [Parameter] public List<string>  Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved   { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
     private string   _layout      = "centered";
     private string   _headingSize = "large";
     private string   _alignment   = "center";
     private string?  _imageUrl;
+    private MediaPlacementModel _imagePlacement = MediaCropEditor.DefaultPlacement();
     private Dictionary<string, string> _eyebrow    = new();
     private Dictionary<string, string> _heading    = new();
     private Dictionary<string, string> _subheading = new();
@@ -183,9 +196,14 @@
     private bool _saving;
     private string? _loadedSectionId;
     private bool _resourcePickerOpen;
+    private bool _cropEditorOpen;
     private List<FormDefinitionModel> _formDefinitions = new();
+    private bool _layoutExpanded;
+    private bool _mediaExpanded;
+    private bool _actionsExpanded;
+    private string? _openButtonId;
 
-    private List<string> _layouts = new() { "centered", "split-left", "split-right" };
+    private List<string> _layouts = new() { "centered", "split-left", "split-right", "compact" };
     private List<string> _sizes = new() { "small", "medium", "large", "xl" };
     private List<string> _alignments = new() { "left","center","right" };
     private List<string> _btnStyles = new() { "filled", "outline", "ghost" };
@@ -199,6 +217,7 @@
 
     protected override void OnParametersSet()
     {
+        ContentSession?.Register(Save);
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
 
@@ -206,24 +225,53 @@
         _headingSize  = Section.HeadingSize  ?? "large";
         _alignment    = Section.ContentAlignment ?? "center";
         _imageUrl = Section.ImageUrl;
+        _imagePlacement = MediaCropEditor.Normalize(MediaCropEditor.Clone(Section.ImagePlacement));
         _eyebrow      = new(Section.Eyebrow    ?? new());
         _heading      = new(Section.Heading    ?? new());
         _subheading   = new(Section.Subheading ?? new());
         _buttons      = Section.Buttons?.Select(b => new SectionButtonModel
         {
-            Id = b.Id, Label = b.Label, Action = NormalizeButtonAction(b.Action), Href = b.Href,
+            Id = string.IsNullOrWhiteSpace(b.Id) ? ButtonId() : b.Id, Label = b.Label, Action = NormalizeButtonAction(b.Action), Href = b.Href,
             FormDefinitionId = b.FormDefinitionId, Style = b.Style, Visible = b.Visible, Order = b.Order
         }).ToList() ?? new();
     }
 
-    private void AddButton() => _buttons.Add(new SectionButtonModel
+    private void AddButton()
     {
-        Label = new() { ["en"] = "Learn More" },
-        Action = "linkToPage",
-        Style = "filled",
-        Visible = true,
-        Order = _buttons.Count
-    });
+        var button = new SectionButtonModel { Id = ButtonId(), Label = new() { ["en"] = "Learn More" }, Action = "linkToPage", Style = "filled", Visible = true, Order = _buttons.Count };
+        _buttons.Add(button);
+        _actionsExpanded = true;
+        _openButtonId = button.Id;
+        ContentSession?.MarkDirty();
+    }
+
+    private void RemoveButton(SectionButtonModel button)
+    {
+        _buttons.Remove(button);
+        for (var index = 0; index < _buttons.Count; index++) _buttons[index].Order = index;
+        ContentSession?.MarkDirty();
+    }
+
+    private void ToggleButton(string id) => _openButtonId = _openButtonId == id ? null : id;
+    private void ChangeLayout(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? "centered" : value;
+        if (string.Equals(_layout, normalized, StringComparison.Ordinal)) return;
+        _layout = normalized;
+        ContentSession?.MarkDirty();
+    }
+    private void SetButtonVisible(SectionButtonModel button, bool visible) { button.Visible = visible; ContentSession?.MarkDirty(); }
+    private Task ReorderButtons(List<string> orderedIds)
+    {
+        var byId = _buttons.ToDictionary(button => button.Id, StringComparer.Ordinal);
+        if (orderedIds.Count != _buttons.Count || orderedIds.Any(id => !byId.ContainsKey(id))) return Task.CompletedTask;
+        _buttons = orderedIds.Select(id => byId[id]).ToList();
+        for (var index = 0; index < _buttons.Count; index++) _buttons[index].Order = index;
+        ContentSession?.MarkDirty();
+        return Task.CompletedTask;
+    }
+    private string ButtonTitle(SectionButtonModel button, int number) => button.Label?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } value ? value : button.Label?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? $"Button {number}";
+    private static string ButtonId() => $"button-{Guid.NewGuid():N}";
 
     private async Task OnImageSelected(InputFileChangeEventArgs e)
     {
@@ -234,6 +282,9 @@
         if (res.Success && res.Data is not null)
         {
             _imageUrl = res.Data.Url;
+            _imagePlacement = MediaCropEditor.DefaultPlacement();
+            _cropEditorOpen = true;
+            ContentSession?.MarkDirty();
             Http.Notify(T("NotificationImageUploaded"), res.StatusCode);
         }
         else
@@ -245,6 +296,9 @@
     private void RemoveImage()
     {
         _imageUrl = string.Empty;
+        _imagePlacement = MediaCropEditor.DefaultPlacement();
+        _cropEditorOpen = false;
+        ContentSession?.MarkDirty();
     }
 
     private void OpenResourcePicker()
@@ -260,6 +314,21 @@
     private void SelectResourceImage(ManagedResourceModel resource)
     {
         _imageUrl = resource.Url;
+        _imagePlacement = MediaCropEditor.DefaultPlacement();
+        _resourcePickerOpen = false;
+        _cropEditorOpen = true;
+        ContentSession?.MarkDirty();
+    }
+
+    private void OpenCropEditor() => _cropEditorOpen = !string.IsNullOrWhiteSpace(_imageUrl);
+    private void CloseCropEditor() => _cropEditorOpen = false;
+
+    private void ApplyImagePlacement(MediaPlacementModel placement)
+    {
+        var normalized = MediaCropEditor.Normalize(MediaCropEditor.Clone(placement));
+        if (PlacementEquals(_imagePlacement, normalized)) return;
+        _imagePlacement = normalized;
+        ContentSession?.MarkDirty();
     }
 
     private async Task Save()
@@ -276,6 +345,7 @@
                 Heading = _heading,
                 Subheading = _subheading,
                 ImageUrl = _imageUrl,
+                ImagePlacement = ToDto(_imagePlacement),
                 Buttons = _buttons.Select(MapButton).ToList(),
                 Visible = Section.Visible
             };
@@ -306,5 +376,32 @@
         Visible = button.Visible,
         Order = button.Order
     };
+
+    private string ImagePreviewStyle => FormattableString.Invariant($"--media-crop-x:{_imagePlacement.FocalPointX:0.##}%;--media-crop-y:{_imagePlacement.FocalPointY:0.##}%;--media-crop-zoom:{_imagePlacement.Zoom:0.###};--media-crop-fit:{_imagePlacement.Fit}");
+
+    private static MediaPlacementDto ToDto(MediaPlacementModel value) => new()
+    {
+        Fit = value.Fit,
+        FocalPointX = value.FocalPointX,
+        FocalPointY = value.FocalPointY,
+        Zoom = value.Zoom,
+        UseMobileOverride = value.UseMobileOverride,
+        MobileFocalPointX = value.MobileFocalPointX,
+        MobileFocalPointY = value.MobileFocalPointY,
+        MobileZoom = value.MobileZoom
+    };
+
+    private static bool PlacementEquals(MediaPlacementModel left, MediaPlacementModel right) =>
+        left.Fit == right.Fit
+        && Math.Abs(left.FocalPointX - right.FocalPointX) < .001
+        && Math.Abs(left.FocalPointY - right.FocalPointY) < .001
+        && Math.Abs(left.Zoom - right.Zoom) < .001
+        && left.UseMobileOverride == right.UseMobileOverride
+        && NullableEquals(left.MobileFocalPointX, right.MobileFocalPointX)
+        && NullableEquals(left.MobileFocalPointY, right.MobileFocalPointY)
+        && NullableEquals(left.MobileZoom, right.MobileZoom);
+
+    private static bool NullableEquals(double? left, double? right) =>
+        left is null && right is null || left is not null && right is not null && Math.Abs(left.Value - right.Value) < .001;
 }
 

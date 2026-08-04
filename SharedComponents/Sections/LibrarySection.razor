@@ -192,6 +192,7 @@
                                             {
                                                 <button type="button"
                                                         class="sc-library__gallery-tile sc-library__gallery-tile--video"
+                                                        style="@MediaStyle(galleryItem.ThumbnailPlacement)"
                                                         data-sc-library-video
                                                         data-video-url="@mediaUrl"
                                                         data-video-title="@mediaTitle"
@@ -212,6 +213,7 @@
                                             {
                                                 <button type="button"
                                                         class="sc-library__gallery-tile"
+                                                        style="@MediaStyle(galleryItem.ThumbnailPlacement)"
                                                         data-sc-library-image
                                                         data-image-url="@mediaUrl"
                                                         data-image-title="@mediaTitle"
@@ -234,6 +236,7 @@
                             {
                                 <button type="button"
                                         class="sc-library__media sc-library__media--video"
+                                        style="@MediaStyle(ImagePlacement(item))"
                                         data-sc-library-video
                                         data-video-url="@ItemHref(item)"
                                         data-video-title="@ItemTitle(item)"
@@ -247,6 +250,7 @@
                             {
                                 <button type="button"
                                         class="sc-library__media sc-library__media--image"
+                                        style="@MediaStyle(ImagePlacement(item))"
                                         data-sc-library-image
                                         data-image-url="@imageUrl"
                                         data-image-title="@ItemTitle(item)">
@@ -255,7 +259,7 @@
                             }
                             else
                             {
-                                <div class="sc-library__media">
+                                <div class="sc-library__media" style="@MediaStyle(ImagePlacement(item))">
                                     <img src="@imageUrl" alt="@ItemTitle(item)" />
                                 </div>
                             }
@@ -565,6 +569,19 @@
         var galleryImage = GalleryMediaItems(item).FirstOrDefault(i => !GalleryItemIsVideo(i));
         return galleryImage is null ? string.Empty : GalleryItemThumbnailUrl(galleryImage);
     }
+
+    private static PublicMediaPlacementDto? ImagePlacement(PublicLibraryItemDto item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.ThumbnailUrl)) return item.ThumbnailPlacement;
+        if (!string.IsNullOrWhiteSpace(item.HeroImageUrl)) return item.HeroImagePlacement;
+
+        return GalleryMediaItems(item)
+            .FirstOrDefault(i => !GalleryItemIsVideo(i))
+            ?.ThumbnailPlacement;
+    }
+
+    private static string MediaStyle(PublicMediaPlacementDto? placement) =>
+        StyleHelper.GetMediaPlacementStyle(placement);
 
     private static string PlaceholderLabel(PublicLibraryItemDto item) =>
         IsGallery(item)

@@ -1,5 +1,5 @@
 using AdminSite.Models;
-using System.Text.Json;
+using Contracts.Admin;
 
 namespace AdminSite.Services
 {
@@ -120,12 +120,26 @@ namespace AdminSite.Services
         public Task<ApiResponse<object>> DeleteResourceAsync(string id) =>
             _http.DeleteAsync<object>($"api/admin/resources/{id}");
 
-        public Task<ApiResponse<ManagedResourceModel>> UploadResourceAsync(Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string kind, string? albumId = null) =>
-            _http.PostFileAsync<ManagedResourceModel>(
-                "api/admin/resources/upload",
-                file,
-                maxBytes: 250 * 1024 * 1024,
-                formFields: BuildUploadFields(kind, albumId));
+        public Task<ApiResponse<ResourceUploadCapabilitiesDto>> GetResourceUploadCapabilitiesAsync() =>
+            _http.GetAsync<ResourceUploadCapabilitiesDto>("api/admin/resource-uploads/capabilities");
+
+        public Task<ApiResponse<ResourceUploadInitiateResponse>> InitiateResourceUploadAsync(ResourceUploadInitiateRequest request) =>
+            _http.PostAsync<ResourceUploadInitiateResponse>("api/admin/resource-uploads", request);
+
+        public Task<ApiResponse<ResourceUploadPartUrlsResponse>> GetResourceUploadPartUrlsAsync(string sessionId, IEnumerable<int> partNumbers) =>
+            _http.PostAsync<ResourceUploadPartUrlsResponse>($"api/admin/resource-uploads/{sessionId}/parts", new ResourceUploadPartUrlsRequest
+            {
+                PartNumbers = partNumbers.ToList()
+            });
+
+        public Task<ApiResponse<ResourceUploadSessionDto>> CompleteResourceUploadAsync(string sessionId, IEnumerable<ResourceUploadCompletedPartDto>? parts = null) =>
+            _http.PostLongRunningAsync<ResourceUploadSessionDto>($"api/admin/resource-uploads/{sessionId}/complete", new ResourceUploadCompleteRequest
+            {
+                Parts = parts?.ToList() ?? []
+            });
+
+        public Task<ApiResponse<ResourceUploadSessionDto>> AbortResourceUploadAsync(string sessionId) =>
+            _http.PostAsync<ResourceUploadSessionDto>($"api/admin/resource-uploads/{sessionId}/abort", new { });
 
         public Task<ApiResponse<ManagedResourceModel>> UploadCustomIconAsync(
             Microsoft.AspNetCore.Components.Forms.IBrowserFile file,
@@ -146,37 +160,6 @@ namespace AdminSite.Services
                 file,
                 maxBytes: 2 * 1024 * 1024,
                 formFields: fields);
-        }
-
-        public Task<ApiResponse<ManagedResourceUploadBatchModel>> UploadResourcesAsync(
-            IReadOnlyList<Microsoft.AspNetCore.Components.Forms.IBrowserFile> files,
-            string kind,
-            string? albumId = null,
-            IReadOnlyList<string>? resourceNames = null)
-        {
-            var fields = BuildUploadFields(kind, albumId);
-            fields["ResourceNamesJson"] = JsonSerializer.Serialize(resourceNames ?? []);
-            return _http.PostFilesAsync<ManagedResourceUploadBatchModel>(
-                "api/admin/resources/upload-batch",
-                files,
-                fieldName: "Files",
-                maxBytes: 250 * 1024 * 1024,
-                formFields: fields);
-        }
-
-        public Task<ApiResponse<ManagedResourceModel>> ReplaceResourceFileAsync(string id, Microsoft.AspNetCore.Components.Forms.IBrowserFile file, string kind) =>
-            _http.PostFileAsync<ManagedResourceModel>(
-                $"api/admin/resources/{id}/replace",
-                file,
-                maxBytes: 250 * 1024 * 1024,
-                formFields: new Dictionary<string, string> { ["Kind"] = kind });
-
-        private static Dictionary<string, string> BuildUploadFields(string kind, string? albumId)
-        {
-            var fields = new Dictionary<string, string> { ["Kind"] = kind };
-            if (!string.IsNullOrWhiteSpace(albumId))
-                fields["AlbumId"] = albumId;
-            return fields;
         }
 
         private static void AddOptional(IDictionary<string, string> fields, string key, string? value)

@@ -10,6 +10,7 @@ public class ApiResponse<T>
     public T? Data { get; set; }
     public List<string>? Errors { get; set; }
     public int StatusCode { get; set; }
+    public int? RetryAfterSeconds { get; set; }
 
     public static ApiResponse<T> Fail(
         string message,

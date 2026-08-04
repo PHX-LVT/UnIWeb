@@ -218,7 +218,8 @@
 
 @if (_showSectionPicker)
 {
-    <SectionTemplatePicker OnPicked="CreateSection"
+    <SectionTemplatePicker PageId="@(_selectedPageId ?? string.Empty)"
+                           OnPicked="CreateSection"
                            OnSavedPresets="ShowPresetGallery"
                            OnCancel="() => _showSectionPicker = false" />
 }
@@ -734,8 +735,15 @@
     private async Task HandlePresetInserted(string sectionId)
     {
         _showPresetGallery = false;
-        await ReloadSections();
-        await ReloadPreviewSafelyAsync();
+        if (_selectedPageId is not null)
+        {
+            var response = await SectionService.GetByIdAsync(_selectedPageId, sectionId);
+            if (response.Success && response.Data is not null)
+                UpsertSection(response.Data);
+            else
+                await ReloadSections();
+        }
+        await ReloadPreviewSafelyAsync(sectionId);
     }
 
     private void ShowCreateChildForm()
@@ -1011,55 +1019,41 @@
     // -- Section flow -----------------------------------------
 
 
-    private static SectionCreateDto CreateSectionDto(string type) => type switch
+    private async Task CreateSection(SectionTemplateCreateRequestDto request)
     {
-        "hero" => new HeroSectionCreateDto(),
-        "cta" => new CtaSectionCreateDto(),
-        "list" => new ListSectionCreateDto(),
-        "showcase" => new ShowcaseSectionCreateDto(),
-        "library" => new LibrarySectionCreateDto(),
-        "columns" => new ColumnsSectionCreateDto(),
-        "html" => new HtmlSectionCreateDto(),
-        "stats" => new StatsSectionCreateDto(),
-        "carousel" => new CarouselSectionCreateDto(),
-        "network-map" => new NetworkMapSectionCreateDto(),
-        "testimonial" => new TestimonialSectionCreateDto(),
-        "canvas" => new CanvasSectionCreateDto
-        {
-            Style = new SectionStyleDto
-            {
-                BackgroundType = "color",
-                BackgroundColor = "#ffffff",
-                Height = "custom",
-                CustomMinHeightPx = 640,
-                Padding = "none",
-                ContentWidth = "full",
-                BlockLayoutMode = "freeform",
-                BlockGap = "none"
-            }
-        },
-        _ => throw new InvalidOperationException($"Unsupported section type '{type}'.")
-    };
-    private async Task CreateSection(string type)
-    {
-        _showSectionPicker = false;
         if (_selectedPageId is null) return;
-        var res = await SectionService.CreateAsync(_selectedPageId, CreateSectionDto(type));
+        var res = await SectionService.CreateFromTemplateAsync(_selectedPageId, request);
         Http.Notify(res.Message, res.StatusCode);
         if (!res.Success)
         {
             return;
         }
 
-        await ReloadSections();
-        await ReloadPreviewSafelyAsync();
+        _showSectionPicker = false;
+        if (res.Data is not null)
+            UpsertSection(res.Data);
+        else
+            await ReloadSections();
+        await ReloadPreviewSafelyAsync(res.Data?.Id);
     }
 
-    private async Task ReloadPreviewSafelyAsync()
+    private void UpsertSection(SectionModel section)
+    {
+        var index = _sections.FindIndex(existing => existing.Id == section.Id);
+        if (index >= 0)
+            _sections[index] = section;
+        else
+            _sections.Add(section);
+        _sections = _sections.OrderBy(existing => existing.Order).ToList();
+    }
+
+    private Task ReloadPreviewSafelyAsync() => ReloadPreviewSafelyAsync(null);
+
+    private async Task ReloadPreviewSafelyAsync(string? focusSectionId)
     {
         try
         {
-            await JS.InvokeVoidAsync("reloadPreviewIframe");
+            await JS.InvokeVoidAsync("reloadPreviewIframe", focusSectionId);
             _previewRefreshError = null;
         }
         catch (JSDisconnectedException)

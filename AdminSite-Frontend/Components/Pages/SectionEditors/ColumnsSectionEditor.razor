@@ -8,6 +8,8 @@
         @T("SplitSectionContentHint")
     </div>
 
+    <section class="ez-content-editor__text">
+    <h3>@T("SectionText")</h3>
     <div class="form-group">
         <label class="form-label">@T("Eyebrow")</label>
         <LangField @bind-Value="_eyebrow" Languages="Languages" />
@@ -27,6 +29,15 @@
         <label class="form-label">@T("Content")</label>
         <LangField @bind-Value="_content" Languages="Languages" Multiline="true" />
     </div>
+    </section>
+
+    <ContentEditorGroup Title="@T("SplitLayout")" Summary="@_columnRatio" @bind-Expanded="_splitSettingsExpanded">
+        <div class="ez-content-editor__settings">
+            <div class="form-group"><label class="form-label">@T("ColumnRatio")</label><DxComboBox Data="_splitRatios" Value="_columnRatio" ValueChanged="@((string? value) => ChangeColumnRatio(value))" CssClass="w-100" /></div>
+            <div class="form-group"><label class="form-label">@T("Gap")</label><DxComboBox Data="_gaps" @bind-Value="_gap" CssClass="w-100" /></div>
+            <label class="form-group ez-content-check"><span class="form-label">@T("Mobile")</span><span><DxCheckBox @bind-Checked="_stackOnMobile" /> @T("StackOnMobile")</span></label>
+        </div>
+    </ContentEditorGroup>
 }
 else
 {
@@ -57,12 +68,6 @@ else
     </div>
 }
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
-    </button>
-</div>
-
 @code {
     [Parameter] public SectionModel Section { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
@@ -70,6 +75,7 @@ else
     [Parameter] public EventCallback OnSaved { get; set; }
 
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
     private Dictionary<string, string> _eyebrow = new();
     private Dictionary<string, string> _heading = new();
@@ -80,17 +86,27 @@ else
     private string _gap = "medium";
     private bool _stackOnMobile = true;
     private bool _saving;
+    private bool _splitSettingsExpanded;
     private string? _loadedSectionId;
 
     private bool IsSplit => string.Equals(Section.LayoutMode, "split", StringComparison.OrdinalIgnoreCase);
     private List<int> _counts = new() { 2, 3 };
     private List<string> _ratios = new() { "equal", "60-40", "40-60", "70-30", "30-70", "thirds", "quarters" };
+    private List<string> _splitRatios = new() { "equal", "40-60", "60-40" };
     private List<string> _gaps = new() { "none", "small", "medium", "large" };
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private void ChangeColumnRatio(string? value)
+    {
+        var normalized = value is "40-60" or "60-40" ? value : "equal";
+        if (string.Equals(_columnRatio, normalized, StringComparison.Ordinal)) return;
+        _columnRatio = normalized;
+        ContentSession?.MarkDirty();
+    }
 
     protected override void OnParametersSet()
     {
+        ContentSession?.Register(Save);
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
 
@@ -116,6 +132,9 @@ else
                     Heading = _heading,
                     Subheading = _subheading,
                     Content = _content,
+                    ColumnRatio = _columnRatio,
+                    Gap = _gap,
+                    StackOnMobile = _stackOnMobile,
                     Visible = Section.Visible
                 }
                 : new ColumnsSectionUpdateDto

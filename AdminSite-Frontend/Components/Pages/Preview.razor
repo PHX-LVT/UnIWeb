@@ -275,6 +275,7 @@ else
                 HeadingSize = s.HeadingSize,
                 ContentAlignment = s.ContentAlignment,
                 ImageUrl = s.ImageUrl,
+                ImagePlacement = ToPublicPlacement(s.ImagePlacement),
                 Buttons = s.Buttons?.Select(MapButton).ToList()
             },
             "cta" => new PublicCtaSectionDto
@@ -872,7 +873,8 @@ else
                 ? IconCatalog.Normalize(value.ClassName ?? legacy)
                 : null,
             Url = string.Equals(value.Source, IconSources.Custom, StringComparison.OrdinalIgnoreCase) ? value.Url : null,
-            AltText = new(value.AltText)
+            AltText = new(value.AltText),
+            Appearance = IconReferenceModelMapper.ToDto(value.Appearance)
         };
     }
 
@@ -1225,6 +1227,7 @@ else
             BackgroundVideoUrl = s.BackgroundVideoUrl,
             BackgroundImageFit = s.BackgroundImageFit ?? "cover",
             BackgroundImagePosition = s.BackgroundImagePosition ?? "center",
+            BackgroundImagePlacement = ToPublicPlacement(s.BackgroundImagePlacement),
             GradientFrom = s.GradientFrom,
             GradientTo = s.GradientTo,
             GradientDirection = s.GradientDirection ?? "top",
@@ -1240,6 +1243,18 @@ else
             BlockGridColumns = Math.Clamp(s.BlockGridColumns ?? 12, 1, 12),
             BlockGap = s.BlockGap ?? "medium"
         };
+
+    private static PublicMediaPlacementDto? ToPublicPlacement(MediaPlacementModel? value) => value is null ? null : new()
+    {
+        Fit = value.Fit == "contain" ? "contain" : "cover",
+        FocalPointX = Math.Clamp(value.FocalPointX, 0, 100),
+        FocalPointY = Math.Clamp(value.FocalPointY, 0, 100),
+        Zoom = Math.Clamp(value.Zoom, 1, 20),
+        UseMobileOverride = value.UseMobileOverride,
+        MobileFocalPointX = value.UseMobileOverride ? Math.Clamp(value.MobileFocalPointX ?? value.FocalPointX, 0, 100) : null,
+        MobileFocalPointY = value.UseMobileOverride ? Math.Clamp(value.MobileFocalPointY ?? value.FocalPointY, 0, 100) : null,
+        MobileZoom = value.UseMobileOverride ? Math.Clamp(value.MobileZoom ?? value.Zoom, 1, 20) : null
+    };
 
     private static PublicSectionButtonDto MapButton(SectionButtonModel b) => new()
     {

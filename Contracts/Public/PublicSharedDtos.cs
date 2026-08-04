@@ -1,5 +1,17 @@
 namespace Contracts.Public
 {
+    public class PublicMediaPlacementDto
+    {
+        public string Fit { get; set; } = "cover";
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
+        public double Zoom { get; set; } = 1;
+        public bool UseMobileOverride { get; set; }
+        public double? MobileFocalPointX { get; set; }
+        public double? MobileFocalPointY { get; set; }
+        public double? MobileZoom { get; set; }
+    }
+
     public class PublicSectionStyleDto
     {
         public string BackgroundType { get; set; } = "color";
@@ -8,6 +20,7 @@ namespace Contracts.Public
         public string? BackgroundVideoUrl { get; set; }
         public string BackgroundImageFit { get; set; } = "cover";
         public string BackgroundImagePosition { get; set; } = "center";
+        public PublicMediaPlacementDto? BackgroundImagePlacement { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";
@@ -167,6 +180,7 @@ namespace Contracts.Public
         public string Kind { get; set; } = "image";
         public string Url { get; set; } = string.Empty;
         public string? ThumbnailUrl { get; set; }
+        public PublicMediaPlacementDto? ThumbnailPlacement { get; set; }
         public Dictionary<string, string> Caption { get; set; } = new();
         public int Order { get; set; }
     }
@@ -181,7 +195,9 @@ namespace Contracts.Public
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Summary { get; set; } = new();
         public string? HeroImageUrl { get; set; }
+        public PublicMediaPlacementDto? HeroImagePlacement { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public PublicMediaPlacementDto? ThumbnailPlacement { get; set; }
         public string? VideoUrl { get; set; }
         public string? ExternalUrl { get; set; }
         public string ClickBehavior { get; set; } = "detail";

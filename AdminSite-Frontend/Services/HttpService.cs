@@ -14,9 +14,9 @@ namespace AdminSite.Services
     {
         Task<ApiResponse<T>> GetAsync<T>(string uri);
         Task<ApiResponse<T>> PostAsync<T>(string uri, object body);
+        Task<ApiResponse<T>> PostLongRunningAsync<T>(string uri, object body);
         Task<ApiResponse<T>> PutAsync<T>(string uri, object body);
         Task<ApiResponse<T>> PostFileAsync<T>(string uri, IBrowserFile file, string fieldName = "file", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
-        Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null);
         Task<ApiResponse<T>> DeleteAsync<T>(string uri);
         Task<FileDownloadResult> GetFileAsync(string uri);
         Task<FileDownloadResult> PostFileDownloadAsync(string uri, object body);
@@ -48,6 +48,7 @@ namespace AdminSite.Services
     public class HttpService : IHttpService
     {
         private readonly HttpClient _http;
+        private readonly HttpClient _uploadHttp;
         private readonly AuthenticationStateProvider _authenticationStateProvider;
         private readonly AdminSessionInvalidationService _invalidations;
         private readonly IAdminNotificationService _notifications;
@@ -60,12 +61,13 @@ namespace AdminSite.Services
         };
 
         public HttpService(
-            HttpClient http,
+            IHttpClientFactory httpClientFactory,
             AuthenticationStateProvider authenticationStateProvider,
             AdminSessionInvalidationService invalidations,
             IAdminNotificationService notifications)
         {
-            _http = http;
+            _http = httpClientFactory.CreateClient(AdminAuthConstants.ApiClientName);
+            _uploadHttp = httpClientFactory.CreateClient(AdminAuthConstants.ApiUploadClientName);
             _authenticationStateProvider = authenticationStateProvider;
             _invalidations = invalidations;
             _notifications = notifications;
@@ -79,6 +81,12 @@ namespace AdminSite.Services
             {
                 Content = Json(body)
             });
+
+        public Task<ApiResponse<T>> PostLongRunningAsync<T>(string uri, object body) =>
+            SendAsync<T>(new HttpRequestMessage(HttpMethod.Post, uri)
+            {
+                Content = Json(body)
+            }, _uploadHttp);
 
         public Task<ApiResponse<T>> PutAsync<T>(string uri, object body) =>
             SendAsync<T>(new HttpRequestMessage(HttpMethod.Put, uri)
@@ -104,33 +112,9 @@ namespace AdminSite.Services
             return await SendAsync<T>(new HttpRequestMessage(HttpMethod.Post, uri)
             {
                 Content = content
-            });
+            }, _uploadHttp);
         }
 
-        public async Task<ApiResponse<T>> PostFilesAsync<T>(string uri, IReadOnlyList<IBrowserFile> files, string fieldName = "files", long maxBytes = 10 * 1024 * 1024, IReadOnlyDictionary<string, string>? formFields = null)
-        {
-            var content = new MultipartFormDataContent();
-            foreach (var file in files)
-            {
-                var fileContent = new StreamContent(file.OpenReadStream(maxBytes));
-                fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
-                content.Add(fileContent, fieldName, file.Name);
-            }
-
-            if (formFields is not null)
-            {
-                foreach (var field in formFields)
-                {
-                    if (!string.IsNullOrWhiteSpace(field.Key))
-                        content.Add(new StringContent(field.Value ?? string.Empty), field.Key);
-                }
-            }
-
-            return await SendAsync<T>(new HttpRequestMessage(HttpMethod.Post, uri)
-            {
-                Content = content
-            });
-        }
         public Task<ApiResponse<T>> DeleteAsync<T>(string uri) =>
             SendAsync<T>(new HttpRequestMessage(HttpMethod.Delete, uri));
 
@@ -224,7 +208,9 @@ namespace AdminSite.Services
             }
         }
 
-        private async Task<ApiResponse<T>> SendAsync<T>(HttpRequestMessage request)
+        private Task<ApiResponse<T>> SendAsync<T>(HttpRequestMessage request) => SendAsync<T>(request, _http);
+
+        private async Task<ApiResponse<T>> SendAsync<T>(HttpRequestMessage request, HttpClient client)
         {
             try
             {
@@ -233,7 +219,7 @@ namespace AdminSite.Services
                     request.Headers.Authorization =
                         new AuthenticationHeaderValue("Bearer", auth.Token);
 
-                using var response = await _http.SendAsync(request);
+                using var response = await client.SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {

@@ -2,25 +2,23 @@
 @inject IHttpService Http
 @inject AdminFormSubmissionService FormService
 
-<div class="form-group">
-    <label class="form-label">@T("Layout")</label>
-    <DxComboBox Data="_layouts" @bind-Value="_layout" CssClass="w-100" />
-</div>
+<section class="ez-content-editor__text">
+    <h3>@T("SectionText")</h3>
+    <div class="form-group"><label class="form-label">@T("Heading")</label><LangField @bind-Value="_heading" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("Subtext")</label><LangField @bind-Value="_subtext" Languages="Languages" Multiline="true" /></div>
+</section>
 
-<div class="form-group">
-    <label class="form-label">@T("Heading")</label>
-    <LangField @bind-Value="_heading" Languages="Languages" />
-</div>
+<ContentEditorGroup Title="@T("CtaLayout")" Summary="@_layout" @bind-Expanded="_layoutExpanded">
+    <div class="form-group"><label class="form-label">@T("Layout")</label><DxComboBox Data="_layouts" Value="_layout" ValueChanged="@((string? value) => ChangeLayout(value))" CssClass="w-100" /></div>
+</ContentEditorGroup>
 
-<div class="form-group">
-    <label class="form-label">@T("Subtext")</label>
-    <LangField @bind-Value="_subtext" Languages="Languages" Multiline="true" />
-</div>
-
-<div class="form-group">
-    <label class="form-label">@T("Buttons")</label>
+<ContentEditorGroup Title="@T("Actions")" Summary="@($"{_buttons.Count} buttons")" @bind-Expanded="_actionsExpanded">
+    <ContentSortableList Reordered="ReorderButtons">
     @foreach (var (button, i) in _buttons.Select((x, i) => (x, i)))
     {
+        <ContentItemAccordion @key="button.Id" ItemId="@button.Id" Number="@(i + 1)" Title="@ButtonTitle(button, i + 1)" Summary="@button.Action"
+                              Visible="@button.Visible" VisibleChanged="value => SetButtonVisible(button, value)"
+                              Expanded="@(_openButtonId == button.Id)" OnToggle="() => ToggleButton(button.Id)" OnDelete="() => RemoveButton(button)">
         <div class="section-button-editor">
             <div class="section-button-cell section-button-cell--label">
                 <span class="section-button-cell__label">@T("Label")</span>
@@ -39,12 +37,13 @@
                     <span class="section-button-cell__label">@T("Style")</span>
                     <DxComboBox Data="_btnStyles" @bind-Value="button.Style" CssClass="w-100" />
                 </div>
-                <button class="btn-admin btn-danger" @onclick="() => RemoveButton(i)"><i class="fas fa-trash"></i></button>
             </div>
         </div>
+        </ContentItemAccordion>
     }
+    </ContentSortableList>
     <button class="btn-admin btn-outline" @onclick="AddButton"><i class="fas fa-plus"></i> @T("AddButton")</button>
-</div>
+</ContentEditorGroup>
 
 <style>
     .section-button-editor {
@@ -101,18 +100,13 @@
     }
 </style>
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving">
-        <i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))
-    </button>
-</div>
-
 @code {
     [Parameter] public SectionModel Section { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
     private string _layout = "center";
     private Dictionary<string, string> _heading = new();
@@ -121,6 +115,9 @@
     private bool _saving;
     private string? _loadedSectionId;
     private List<FormDefinitionModel> _formDefinitions = new();
+    private bool _layoutExpanded;
+    private bool _actionsExpanded;
+    private string? _openButtonId;
 
     private List<string> _layouts = new() { "center", "left", "right", "final-card", "about-final" };
     private List<string> _btnStyles = new() { "filled", "outline", "ghost" };
@@ -134,6 +131,7 @@
 
     protected override void OnParametersSet()
     {
+        ContentSession?.Register(Save);
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
 
@@ -147,7 +145,7 @@
 
         _buttons = sourceButtons.Select((button, i) => new SectionButtonModel
         {
-            Id = button.Id,
+            Id = string.IsNullOrWhiteSpace(button.Id) ? ButtonId() : button.Id,
             Label = button.Label is null ? new() : new(button.Label),
             Action = NormalizeButtonAction(button.Action),
             Href = button.Href,
@@ -158,21 +156,36 @@
         }).ToList();
     }
 
-    private void AddButton() => _buttons.Add(new SectionButtonModel
+    private void AddButton()
     {
-        Label = new() { ["en"] = "Learn More" },
-        Action = "linkToPage",
-        Style = "filled",
-        Visible = true,
-        Order = _buttons.Count
-    });
-
-    private void RemoveButton(int index)
-    {
-        if (index < 0 || index >= _buttons.Count) return;
-        _buttons.RemoveAt(index);
-        for (var i = 0; i < _buttons.Count; i++) _buttons[i].Order = i;
+        var button = new SectionButtonModel { Id = ButtonId(), Label = new() { ["en"] = "Learn More" }, Action = "linkToPage", Style = "filled", Visible = true, Order = _buttons.Count };
+        _buttons.Add(button);
+        _actionsExpanded = true;
+        _openButtonId = button.Id;
+        ContentSession?.MarkDirty();
     }
+
+    private void RemoveButton(SectionButtonModel button) { _buttons.Remove(button); for (var index = 0; index < _buttons.Count; index++) _buttons[index].Order = index; ContentSession?.MarkDirty(); }
+    private void ToggleButton(string id) => _openButtonId = _openButtonId == id ? null : id;
+    private void ChangeLayout(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? "center" : value;
+        if (string.Equals(_layout, normalized, StringComparison.Ordinal)) return;
+        _layout = normalized;
+        ContentSession?.MarkDirty();
+    }
+    private void SetButtonVisible(SectionButtonModel button, bool visible) { button.Visible = visible; ContentSession?.MarkDirty(); }
+    private Task ReorderButtons(List<string> orderedIds)
+    {
+        var byId = _buttons.ToDictionary(button => button.Id, StringComparer.Ordinal);
+        if (orderedIds.Count != _buttons.Count || orderedIds.Any(id => !byId.ContainsKey(id))) return Task.CompletedTask;
+        _buttons = orderedIds.Select(id => byId[id]).ToList();
+        for (var index = 0; index < _buttons.Count; index++) _buttons[index].Order = index;
+        ContentSession?.MarkDirty();
+        return Task.CompletedTask;
+    }
+    private string ButtonTitle(SectionButtonModel button, int number) => button.Label?.GetValueOrDefault(AdminLanguage) is { Length: > 0 } value ? value : button.Label?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? $"Button {number}";
+    private static string ButtonId() => $"button-{Guid.NewGuid():N}";
 
     private async Task Save()
     {

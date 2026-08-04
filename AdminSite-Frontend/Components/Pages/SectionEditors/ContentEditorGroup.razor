@@ -1,0 +1,23 @@
+<section class="ez-content-group @(Expanded ? "is-open" : null)">
+    <button type="button" class="ez-content-group__toggle" aria-expanded="@Expanded" @onclick="Toggle">
+        <span>
+            <strong>@Title</strong>
+            @if (!string.IsNullOrWhiteSpace(Summary)) { <small>@Summary</small> }
+        </span>
+        <i class="fas @(Expanded ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+    </button>
+    @if (Expanded)
+    {
+        <div class="ez-content-group__body">@ChildContent</div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Summary { get; set; }
+    [Parameter] public bool Expanded { get; set; }
+    [Parameter] public EventCallback<bool> ExpandedChanged { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private Task Toggle() => ExpandedChanged.InvokeAsync(!Expanded);
+}

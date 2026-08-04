@@ -71,6 +71,19 @@ function initCarousels() {
         const move = dir => track.scrollBy({ left: dir * track.clientWidth * 0.85, behavior: "smooth" });
         root.querySelector("[data-sc-carousel-prev]")?.addEventListener("click", () => move(-1));
         root.querySelector("[data-sc-carousel-next]")?.addEventListener("click", () => move(1));
+        const items = [...track.querySelectorAll(".sc-carousel__item")];
+        const dots = [...root.querySelectorAll("[data-sc-carousel-dot]")];
+        const setActiveDot = index => dots.forEach((dot, dotIndex) => dot.classList.toggle("is-active", dotIndex === index));
+        dots.forEach((dot, index) => dot.addEventListener("click", () => {
+            items[index]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+            setActiveDot(index);
+        }));
+        if (dots.length) track.addEventListener("scroll", () => {
+            const left = track.scrollLeft;
+            const nearest = items.reduce((best, item, index) =>
+                Math.abs(item.offsetLeft - left) < Math.abs(items[best].offsetLeft - left) ? index : best, 0);
+            setActiveDot(nearest);
+        }, { passive: true });
         if (root.dataset.autoplay === "true") setInterval(() => move(1), 4500);
     });
 }

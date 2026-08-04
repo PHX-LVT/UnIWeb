@@ -1,5 +1,6 @@
 @using Contracts.Admin
 @using System.Text.Json
+@using AdminSite.Components.Pages.SectionEditors
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
@@ -15,7 +16,7 @@
     <header class="ez-right-panel__header">
         <span class="ez-right-panel__title">
             <i class="fas fa-sliders-h" aria-hidden="true"></i>
-            <span>@Section.Type?.ToUpperInvariant()</span>
+            <span>@T(SectionTypeLabelKey(Section.Type))</span>
             <span class="ez-right-panel__title-divider">/</span>
             <strong>@T(TabLabelKey)</strong>
         </span>
@@ -34,9 +35,12 @@
         <button type="button" class="ez-panel-tab @(_tab == "design" ? "active" : null)" aria-selected="@(_tab == "design")" @onclick='() => SelectTab("design")'>
             <i class="fas fa-paint-roller" aria-hidden="true"></i>@T("Design")
         </button>
-        <button type="button" class="ez-panel-tab @(_tab == "content" ? "active" : null)" aria-selected="@(_tab == "content")" @onclick='() => SelectTab("content")'>
-            <i class="fas fa-edit" aria-hidden="true"></i>@T("Content")
-        </button>
+        @if (Section.Type != "canvas")
+        {
+            <button type="button" class="ez-panel-tab @(_tab == "content" ? "active" : null)" aria-selected="@(_tab == "content")" @onclick='() => SelectTab("content")'>
+                <i class="fas fa-edit" aria-hidden="true"></i>@T("Content")
+            </button>
+        }
         <button type="button" class="ez-panel-tab @(_tab == "blocks" ? "active" : null)" aria-selected="@(_tab == "blocks")" @onclick='() => SelectTab("blocks")'>
             <i class="fas fa-cubes" aria-hidden="true"></i>@T("Blocks")
         </button>
@@ -57,11 +61,13 @@
                 <span>@T("EditingLanguage"): @AdminLanguage.ToUpperInvariant()</span>
             </div>
 
-            <SectionContentTab @key="Section.Id"
-                               Section="Section"
-                               PageId="@EffectivePageId"
-                               Languages="_languages"
-                               OnSaved="HandleSectionSaved" />
+            <CascadingValue Value="_contentSession" IsFixed="true">
+                <SectionContentTab @key="ContentEditorKey"
+                                   Section="Section"
+                                   PageId="@EffectivePageId"
+                                   Languages="_languages"
+                                   OnSaved="HandleSectionSaved" />
+            </CascadingValue>
         }
         else if (_tab == "blocks")
         {
@@ -144,10 +150,27 @@
         }
         else
         {
+            <div class="ez-design-footer__status" aria-live="polite">
+                @if (_contentSession.IsSaving)
+                {
+                    <i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>@T("Saving")</span>
+                }
+                else if (_contentSession.IsDirty)
+                {
+                    <i class="fas fa-circle" aria-hidden="true"></i><span>@T("UnsavedChanges")</span>
+                }
+                else
+                {
+                    <i class="fas fa-check-circle" aria-hidden="true"></i><span>@T("NotificationSaved")</span>
+                }
+            </div>
             <span></span>
-            <button type="button" class="btn-admin btn-ghost" @onclick="RequestClose">
-                <i class="fas fa-times" aria-hidden="true"></i>@T("Close")
-            </button>
+            <div class="ez-design-footer__actions">
+                <button type="button" class="btn-admin btn-ghost" disabled="@(!_contentSession.IsDirty || _contentSession.IsSaving)" @onclick="DiscardContent">@T("Discard")</button>
+                <button type="button" class="btn-admin btn-primary" disabled="@(!_contentSession.IsDirty || _contentSession.IsSaving || !_contentSession.CanSave)" @onclick="SaveContent">
+                    <i class="fas fa-save" aria-hidden="true"></i>@T("SaveChanges")
+                </button>
+            </div>
         }
     </footer>
 </div>
@@ -236,17 +259,36 @@
     private bool _showArrangeGuard;
     private bool _showCloseGuard;
     private bool _savingDesign;
+    private readonly SectionContentEditSession _contentSession = new();
+    private int _contentEditorRevision;
 
     private string EffectivePageId => !string.IsNullOrWhiteSpace(PageId) ? PageId : Section.PageId;
     private string TabLabelKey => _tab switch { "content" => "Content", "blocks" => "Blocks", _ => "Design" };
     private bool HasUnsavedDesignChanges => !DesignEquals(_savedDesign, _designDraft);
-    private bool HasUnsavedSectionChanges => HasUnsavedDesignChanges ||
+    private bool HasUnsavedSectionChanges => HasUnsavedDesignChanges || _contentSession.IsDirty ||
         !string.Equals(_savedSectionSnapshot, CaptureSectionSnapshot(), StringComparison.Ordinal);
     public bool HasUnsavedChanges => HasUnsavedSectionChanges;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private static string SectionTypeLabelKey(string? type) => type switch
+    {
+        "hero" => "SectionTemplateHeroName",
+        "cta" => "SectionTemplateCtaName",
+        "columns" => "SectionTemplateColumnsName",
+        "list" => "SectionTemplateListName",
+        "stats" => "SectionTemplateStatsName",
+        "testimonial" => "SectionTemplateTestimonialName",
+        "carousel" => "SectionTemplateCarouselName",
+        "showcase" => "SectionTemplateShowcaseName",
+        "library" => "SectionTemplateLibraryName",
+        "network-map" => "SectionTemplateMapName",
+        "html" => "SectionTemplateHtmlName",
+        "canvas" => "SectionTemplateCanvasName",
+        _ => type ?? "Section"
+    };
 
     protected override async Task OnInitializedAsync()
     {
+        _contentSession.Changed += ContentSessionChanged;
         await AdminLanguageState.LoadSettingsAsync();
         _languages = AdminLanguageState.SupportedLanguages.Any()
             ? AdminLanguageState.SupportedLanguages.ToList()
@@ -264,6 +306,8 @@
             _designDraft = CloneStyle(_savedDesign);
             _showArrangeGuard = false;
             _showCloseGuard = false;
+            _contentSession.Reset();
+            _contentEditorRevision++;
             _ = NotifyDirtyChangedAsync(Section.Id, false);
         }
 
@@ -273,11 +317,39 @@
         _loadedInitialTab = InitialTab;
         if (firstLoad || requestedTabChanged)
             _tab = NormalizeTab(InitialTab);
+        if (Section.Type == "canvas" && _tab == "content")
+            _tab = "blocks";
     }
 
     private void SelectTab(string tab)
     {
+        if (Section.Type == "canvas" && tab == "content") return;
+        if (!string.Equals(_tab, tab, StringComparison.Ordinal) && HasUnsavedSectionChanges)
+        {
+            Http.Notify(T("SaveOrDiscardBeforeSwitchingTabs"), 409);
+            return;
+        }
         _tab = NormalizeTab(tab);
+    }
+
+    private string ContentEditorKey => $"{Section.Id}:{_contentEditorRevision}";
+
+    private void ContentSessionChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await NotifyDirtyChangedAsync(Section.Id, HasUnsavedSectionChanges);
+            StateHasChanged();
+        });
+    }
+
+    private Task SaveContent() => _contentSession.SaveAsync();
+
+    private async Task DiscardContent()
+    {
+        _contentSession.Reset();
+        _contentEditorRevision++;
+        await NotifyDirtyChangedAsync(Section.Id, HasUnsavedSectionChanges);
     }
 
     private async Task DesignChanged()
@@ -346,6 +418,7 @@
     {
         if (string.Equals(Section.Id, sectionId, StringComparison.Ordinal))
             _savedSectionSnapshot = CaptureSectionSnapshot();
+        _contentSession.MarkSaved();
         await NotifyDirtyChangedAsync(sectionId, false);
         await OnSectionSaved.InvokeAsync(sectionId);
     }
@@ -383,6 +456,7 @@
         var sectionId = Section.Id;
         _showArrangeGuard = false;
         await OnDesignPreviewChanged.InvokeAsync(new(sectionId, CloneStyle(_savedDesign)));
+        _contentSession.Reset();
         await NotifyDirtyChangedAsync(sectionId, false);
         await OnDiscardAndArrangeRequested.InvokeAsync(sectionId);
     }
@@ -392,6 +466,7 @@
         var sectionId = Section.Id;
         _showCloseGuard = false;
         await OnDesignPreviewChanged.InvokeAsync(new(sectionId, CloneStyle(_savedDesign)));
+        _contentSession.Reset();
         await NotifyDirtyChangedAsync(sectionId, false);
         if (OnDiscardRequested.HasDelegate)
             await OnDiscardRequested.InvokeAsync(sectionId);
@@ -423,10 +498,11 @@
     {
         BackgroundType = "theme",
         BackgroundColor = "#ffffff",
-        BackgroundImageUrl = null,
-        BackgroundVideoUrl = null,
+        BackgroundImageUrl = string.Empty,
+        BackgroundVideoUrl = string.Empty,
         BackgroundImageFit = "cover",
         BackgroundImagePosition = "center",
+        BackgroundImagePlacement = null,
         GradientFrom = "#001a33",
         GradientTo = "#e5c076",
         GradientDirection = "to bottom",
@@ -451,6 +527,7 @@
         BackgroundVideoUrl = source?.BackgroundVideoUrl,
         BackgroundImageFit = source?.BackgroundImageFit ?? "cover",
         BackgroundImagePosition = source?.BackgroundImagePosition ?? "center",
+        BackgroundImagePlacement = ClonePlacement(source?.BackgroundImagePlacement),
         GradientFrom = source?.GradientFrom ?? "#001a33",
         GradientTo = source?.GradientTo ?? "#e5c076",
         GradientDirection = source?.GradientDirection ?? "to bottom",
@@ -475,6 +552,7 @@
         BackgroundVideoUrl = style.BackgroundVideoUrl,
         BackgroundImageFit = style.BackgroundImageFit,
         BackgroundImagePosition = style.BackgroundImagePosition,
+        BackgroundImagePlacement = ToDto(style.BackgroundImagePlacement),
         GradientFrom = style.GradientFrom,
         GradientTo = style.GradientTo,
         GradientDirection = style.GradientDirection,
@@ -489,5 +567,29 @@
         BlockLayoutMode = style.BlockLayoutMode,
         BlockGridColumns = style.BlockGridColumns,
         BlockGap = style.BlockGap
+    };
+
+    private static MediaPlacementModel? ClonePlacement(MediaPlacementModel? source) => source is null ? null : new()
+    {
+        Fit = source.Fit,
+        FocalPointX = source.FocalPointX,
+        FocalPointY = source.FocalPointY,
+        Zoom = source.Zoom,
+        UseMobileOverride = source.UseMobileOverride,
+        MobileFocalPointX = source.MobileFocalPointX,
+        MobileFocalPointY = source.MobileFocalPointY,
+        MobileZoom = source.MobileZoom
+    };
+
+    private static MediaPlacementDto? ToDto(MediaPlacementModel? source) => source is null ? null : new()
+    {
+        Fit = source.Fit,
+        FocalPointX = source.FocalPointX,
+        FocalPointY = source.FocalPointY,
+        Zoom = source.Zoom,
+        UseMobileOverride = source.UseMobileOverride,
+        MobileFocalPointX = source.MobileFocalPointX,
+        MobileFocalPointY = source.MobileFocalPointY,
+        MobileZoom = source.MobileZoom
     };
 }

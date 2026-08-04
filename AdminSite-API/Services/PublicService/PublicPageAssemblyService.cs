@@ -299,6 +299,7 @@ namespace FullProject.Services.PublicService
                     },
                     Button = (section as CtaSection)?.Button,
                     ImageUrl = (section as HeroSection)?.ImageUrl,
+                    ImagePlacement = (section as HeroSection)?.ImagePlacement,
                     Items = section switch
                     {
                         ListSection list => list.Items
@@ -435,6 +436,7 @@ namespace FullProject.Services.PublicService
                     HeadingSize = hero.HeadingSize,
                     ContentAlignment = hero.ContentAlignment,
                     ImageUrl = hero.ImageUrl,
+                    ImagePlacement = MediaPlacementPolicy.ToPublic(hero.ImagePlacement),
                     Buttons = hero.Buttons
                         .Where(button => button.Visible)
                         .OrderBy(button => button.Order)
@@ -750,7 +752,9 @@ namespace FullProject.Services.PublicService
             Title = item.Title,
             Summary = item.Summary,
             HeroImageUrl = item.HeroImageUrl,
+            HeroImagePlacement = MediaPlacementPolicy.ToPublic(item.HeroImagePlacement),
             ThumbnailUrl = item.ThumbnailUrl,
+            ThumbnailPlacement = MediaPlacementPolicy.ToPublic(item.ThumbnailPlacement),
             VideoUrl = !string.IsNullOrWhiteSpace(item.VideoUrl)
                 ? item.VideoUrl
                 : item.BodyItems.FirstOrDefault(i => i.Type == "video" && !string.IsNullOrWhiteSpace(i.Url))?.Url,
@@ -810,6 +814,7 @@ namespace FullProject.Services.PublicService
                     Kind = NormalizeGalleryItemKind(i.Kind),
                     Url = i.Url!,
                     ThumbnailUrl = i.ThumbnailUrl,
+                    ThumbnailPlacement = MediaPlacementPolicy.ToPublic(i.ThumbnailPlacement),
                     Caption = i.Caption,
                     Order = i.Order
                 })
@@ -929,6 +934,9 @@ namespace FullProject.Services.PublicService
             var typeLabel = H(ContentTypeLabel(item.ContentTypeKey));
             var typeQuery = U(typeRoute);
             var imageUrl = item.HeroImageUrl ?? item.ThumbnailUrl;
+            var imagePlacement = !string.IsNullOrWhiteSpace(item.HeroImageUrl)
+                ? item.HeroImagePlacement
+                : item.ThumbnailPlacement;
             var author = H(DisplayAuthor(item.AuthorId));
             var published = item.PublishedAt ?? item.UpdatedAt;
             var date = H(published.ToLocalTime().ToString("dd MMM yyyy"));
@@ -937,7 +945,7 @@ namespace FullProject.Services.PublicService
             var alt = H(!string.IsNullOrWhiteSpace(item.HeroImageAlt) ? item.HeroImageAlt! : LangValue(item.Title, lang, item.Slug));
             var imageHtml = string.IsNullOrWhiteSpace(imageUrl)
                 ? string.Empty
-                : $"<img class=\"sc-insight-hero-image\" src=\"{H(imageUrl)}\" alt=\"{alt}\">";
+                : $"<div class=\"sc-insight-hero-media\" style=\"{StyleHelper.GetMediaPlacementStyle(MediaPlacementPolicy.ToPublic(imagePlacement))}\"><img class=\"sc-insight-hero-image\" src=\"{H(imageUrl)}\" alt=\"{alt}\"></div>";
 
             return $"""
                 <div class="sc-insight-detail-hero">
@@ -1420,6 +1428,7 @@ namespace FullProject.Services.PublicService
             BackgroundVideoUrl = style.BackgroundVideoUrl,
             BackgroundImageFit = style.BackgroundImageFit,
             BackgroundImagePosition = style.BackgroundImagePosition,
+            BackgroundImagePlacement = MediaPlacementPolicy.ToPublic(style.BackgroundImagePlacement),
             GradientFrom = style.GradientFrom,
             GradientTo = style.GradientTo,
             GradientDirection = style.GradientDirection,

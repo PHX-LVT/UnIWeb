@@ -226,6 +226,7 @@ namespace AdminSite.Models
         public string? HeadingSize { get; set; }
         public string? ContentAlignment { get; set; }
         public string? ImageUrl { get; set; }
+        public MediaPlacementModel? ImagePlacement { get; set; }
         public List<SectionButtonModel>? Buttons { get; set; }
 
         // CTA
@@ -309,6 +310,18 @@ namespace AdminSite.Models
         public Dictionary<string, string>? AdminLabel { get; set; }
     }
 
+    public class MediaPlacementModel
+    {
+        public string Fit { get; set; } = "cover";
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
+        public double Zoom { get; set; } = 1;
+        public bool UseMobileOverride { get; set; }
+        public double? MobileFocalPointX { get; set; }
+        public double? MobileFocalPointY { get; set; }
+        public double? MobileZoom { get; set; }
+    }
+
     public class SectionStyleModel
     {
         public string? BackgroundType { get; set; }
@@ -317,6 +330,7 @@ namespace AdminSite.Models
         public string? BackgroundVideoUrl { get; set; }
         public string? BackgroundImageFit { get; set; }
         public string? BackgroundImagePosition { get; set; }
+        public MediaPlacementModel? BackgroundImagePlacement { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string? GradientDirection { get; set; }
@@ -954,6 +968,7 @@ namespace AdminSite.Models
         public string Kind { get; set; } = "image";
         public string? Url { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public MediaPlacementModel? ThumbnailPlacement { get; set; }
         public string? ResourceId { get; set; }
         public string ResourceSource { get; set; } = "DirectUpload";
         public string? StorageKey { get; set; }
@@ -978,10 +993,12 @@ namespace AdminSite.Models
         public string HeroImageResourceSource { get; set; } = "DirectUpload";
         public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
+        public MediaPlacementModel? HeroImagePlacement { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string? ThumbnailResourceId { get; set; }
         public string ThumbnailResourceSource { get; set; } = "DirectUpload";
         public string? ThumbnailStorageKey { get; set; }
+        public MediaPlacementModel? ThumbnailPlacement { get; set; }
         public string? VideoUrl { get; set; }
         public string? VideoResourceId { get; set; }
         public string VideoResourceSource { get; set; } = "DirectUpload";
@@ -1020,10 +1037,12 @@ namespace AdminSite.Models
         public string HeroImageResourceSource { get; set; } = "DirectUpload";
         public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
+        public MediaPlacementModel? HeroImagePlacement { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string? ThumbnailResourceId { get; set; }
         public string ThumbnailResourceSource { get; set; } = "DirectUpload";
         public string? ThumbnailStorageKey { get; set; }
+        public MediaPlacementModel? ThumbnailPlacement { get; set; }
         public string? VideoUrl { get; set; }
         public string? VideoResourceId { get; set; }
         public string VideoResourceSource { get; set; } = "DirectUpload";
@@ -1108,22 +1127,6 @@ namespace AdminSite.Models
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-    }
-
-    public class ManagedResourceUploadBatchModel
-    {
-        public List<ManagedResourceUploadResultModel> Results { get; set; } = new();
-        public int SuccessCount { get; set; }
-        public int FailedCount { get; set; }
-    }
-
-    public class ManagedResourceUploadResultModel
-    {
-        public int Index { get; set; }
-        public string FileName { get; set; } = string.Empty;
-        public bool Success { get; set; }
-        public string? Error { get; set; }
-        public ManagedResourceModel? Resource { get; set; }
     }
 
     public class ManagedResourceUsageModel

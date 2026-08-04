@@ -13,7 +13,7 @@
 
     @if (IsSplit)
     {
-        <div class="sc-split-section @(Section.StackOnMobile == true ? "sc-split-section--stack" : "")">
+        <div class="sc-split-section sc-split-section--@SplitRatio sc-split-section--gap-@SplitGap @(Section.StackOnMobile == true ? "sc-split-section--stack" : "")">
             <div class="sc-split-section__content">
                 @if (!string.IsNullOrWhiteSpace(Eyebrow))
                 {
@@ -91,6 +91,8 @@
     private string Heading => StyleHelper.Lang(Section.Heading, Lang).Trim();
     private string Subheading => StyleHelper.Lang(Section.Subheading, Lang).Trim();
     private string Content => StyleHelper.Lang(Section.Content, Lang).Trim();
+    private string SplitRatio => Section.ColumnRatio is "40-60" or "60-40" ? Section.ColumnRatio : "equal";
+    private string SplitGap => Section.Gap is "none" or "small" or "large" ? Section.Gap : "medium";
     private PublicColumnSlotDto? RightSlot => Section.ColumnSlots?.OrderBy(slot => slot.Order).FirstOrDefault();
     private List<PublicBlockDto> RightSlotBlocks => RightSlot?.Blocks.OrderBy(block => block.Order).ToList() ?? new();
     private string LegacyGap => Section.Gap is "none" or "small" or "medium" or "large" ? Section.Gap : "medium";

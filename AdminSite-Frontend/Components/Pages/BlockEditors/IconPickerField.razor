@@ -75,6 +75,69 @@
                 {
                     <div class="icon-catalog__empty">@T("NoIconsFound")</div>
                 }
+                @if (_draftVisual is not null && !string.IsNullOrWhiteSpace(_draftVisual.ClassName))
+                {
+                    <footer class="icon-catalog__appearance">
+                        <div class="icon-catalog__appearance-preview">
+                            <span style="@DraftPreviewStyle"><i class="@_draftVisual.ClassName"></i></span>
+                            <div><strong>@T("IconAppearance")</strong><small>@T("IconAppearanceHint")</small></div>
+                        </div>
+                        <div class="icon-catalog__appearance-controls">
+                            <label>@T("Color")
+                                <select class="form-control" @bind="_draftVisual.Appearance!.ColorMode">
+                                    <option value="theme">@T("ThemeDefault")</option>
+                                    <option value="custom">@T("Custom")</option>
+                                </select>
+                            </label>
+                            @if (_draftVisual.Appearance!.ColorMode == "theme")
+                            {
+                                <label>@T("ThemeRole")
+                                    <select class="form-control" @bind="_draftVisual.Appearance.ThemeRole">
+                                        <option value="accent">@T("Accent")</option><option value="primary">@T("Primary")</option><option value="text">@T("Text")</option>
+                                    </select>
+                                </label>
+                            }
+                            else
+                            {
+                                <label>@T("CustomColor")<input type="color" class="form-control" @bind="_draftVisual.Appearance.Color" /></label>
+                            }
+                            <label>@T("Size")
+                                <select class="form-control" @bind="_draftVisual.Appearance.Size">
+                                    <option value="small">@T("Small")</option><option value="medium">@T("Medium")</option><option value="large">@T("Large")</option><option value="x-large">@T("ExtraLarge")</option>
+                                </select>
+                            </label>
+                            <label>@T("Background")
+                                <select class="form-control" @bind="_draftVisual.Appearance.BackgroundMode">
+                                    <option value="none">@T("None")</option><option value="theme">@T("ThemeDefault")</option><option value="custom">@T("Custom")</option>
+                                </select>
+                            </label>
+                            @if (_draftVisual.Appearance.BackgroundMode == "theme")
+                            {
+                                <label>@T("BackgroundRole")
+                                    <select class="form-control" @bind="_draftVisual.Appearance.BackgroundThemeRole">
+                                        <option value="surface">@T("Surface")</option><option value="background">@T("Background")</option><option value="primary">@T("Primary")</option><option value="accent">@T("Accent")</option>
+                                    </select>
+                                </label>
+                            }
+                            else if (_draftVisual.Appearance.BackgroundMode == "custom")
+                            {
+                                <label>@T("BackgroundColor")<input type="color" class="form-control" @bind="_draftVisual.Appearance.BackgroundColor" /></label>
+                            }
+                            @if (_draftVisual.Appearance.BackgroundMode != "none")
+                            {
+                                <label>@T("Shape")
+                                    <select class="form-control" @bind="_draftVisual.Appearance.Shape">
+                                        <option value="none">@T("Square")</option><option value="rounded">@T("Rounded")</option><option value="circle">@T("Circle")</option>
+                                    </select>
+                                </label>
+                            }
+                        </div>
+                        <div class="icon-catalog__appearance-actions">
+                            <button type="button" class="btn-admin btn-ghost" @onclick="Close">@T("Cancel")</button>
+                            <button type="button" class="btn-admin btn-primary" @onclick="ApplyBuiltIn">@T("UseIcon")</button>
+                        </div>
+                    </footer>
+                }
             }
             else if (_tab == "custom")
             {
@@ -168,6 +231,7 @@
     private string? _license;
     private string? _attribution;
     private List<ManagedResourceModel> _customIcons = new();
+    private IconReferenceModel? _draftVisual;
 
     private string T(string key) => AdminUiLocalizer.T(key, Language);
     private bool IsCustom => string.Equals(Visual?.Source, IconSources.Custom, StringComparison.OrdinalIgnoreCase);
@@ -185,6 +249,9 @@
         if (Disabled) return;
         _open = true;
         _tab = IsCustom && AllowCustom ? "custom" : "built-in";
+        _draftVisual = IsCustom
+            ? null
+            : CloneBuiltIn(Visual, BuiltInClass);
         if (_tab == "custom") _ = LoadCustomIcons();
     }
 
@@ -204,9 +271,25 @@
 
     private async Task SelectBuiltIn(IconDefinition icon)
     {
-        var visual = new IconReferenceModel { Source = IconSources.BuiltIn, ClassName = icon.ClassName };
-        await VisualChanged.InvokeAsync(visual);
-        await ValueChanged.InvokeAsync(icon.ClassName);
+        var previous = _draftVisual?.Appearance;
+        _draftVisual = new IconReferenceModel
+        {
+            SchemaVersion = 2,
+            Source = IconSources.BuiltIn,
+            ClassName = icon.ClassName,
+            Appearance = CopyAppearance(previous) ?? DefaultAppearance()
+        };
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ApplyBuiltIn()
+    {
+        if (_draftVisual is null || string.IsNullOrWhiteSpace(_draftVisual.ClassName)) return;
+        _draftVisual.Source = IconSources.BuiltIn;
+        _draftVisual.SchemaVersion = 2;
+        _draftVisual.Appearance ??= DefaultAppearance();
+        await VisualChanged.InvokeAsync(_draftVisual);
+        await ValueChanged.InvokeAsync(_draftVisual.ClassName);
         _open = false;
     }
 
@@ -214,6 +297,7 @@
     {
         var visual = new IconReferenceModel
         {
+            SchemaVersion = 1,
             Source = IconSources.Custom,
             ResourceId = resource.Id,
             ResourceSource = "ManagedResource",
@@ -292,10 +376,46 @@
         if (resource.Name.TryGetValue("en", out var english) && !string.IsNullOrWhiteSpace(english)) return english;
         return Path.GetFileNameWithoutExtension(resource.FileName);
     }
+
+    private string DraftPreviewStyle
+    {
+        get
+        {
+            var appearance = _draftVisual?.Appearance ?? DefaultAppearance();
+            var size = appearance.Size switch { "small" => 16, "large" => 32, "x-large" => 40, _ => 24 };
+            var color = appearance.ColorMode == "custom" ? appearance.Color : appearance.ThemeRole switch { "primary" => "var(--primary)", "text" => "var(--text)", _ => "var(--primary-light)" };
+            if (appearance.BackgroundMode == "none") return $"font-size:{size}px;color:{color};";
+            var background = appearance.BackgroundMode == "custom" ? appearance.BackgroundColor : appearance.BackgroundThemeRole switch { "primary" => "var(--primary)", "accent" => "var(--primary-light)", "background" => "var(--bg,#fff)", _ => "var(--surface-muted,#eef2f7)" };
+            var radius = appearance.Shape switch { "circle" => "50%", "rounded" => "10px", _ => "0" };
+            return $"font-size:{size}px;color:{color};background:{background};border-radius:{radius};";
+        }
+    }
+
+    private static IconReferenceModel CloneBuiltIn(IconReferenceModel? value, string className) => new()
+    {
+        SchemaVersion = 2,
+        Source = IconSources.BuiltIn,
+        ClassName = className,
+        AltText = new(value?.AltText ?? new()),
+        Appearance = CopyAppearance(value?.Appearance) ?? DefaultAppearance()
+    };
+
+    private static IconAppearanceModel DefaultAppearance() => new();
+    private static IconAppearanceModel? CopyAppearance(IconAppearanceModel? value) => value is null ? null : new()
+    {
+        ColorMode = value.ColorMode,
+        ThemeRole = value.ThemeRole,
+        Color = value.Color,
+        Size = value.Size,
+        BackgroundMode = value.BackgroundMode,
+        BackgroundThemeRole = value.BackgroundThemeRole,
+        BackgroundColor = value.BackgroundColor,
+        Shape = value.Shape
+    };
 }
 
 <style>
     .icon-picker-field{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:.4rem;align-items:center}.icon-picker-field__current{min-height:42px;display:grid;grid-template-columns:42px minmax(0,1fr) 18px;align-items:center;gap:.55rem;text-align:left;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);padding:0 .65rem 0 0;cursor:pointer}.icon-picker-field__current:hover{border-color:var(--primary)}.icon-picker-field__preview{width:42px;height:40px;display:grid;place-items:center;border-right:1px solid var(--border);color:var(--primary)}.icon-picker-field__preview img{width:24px;height:24px;object-fit:contain}.icon-picker-field__label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.icon-picker-field__clear{width:38px;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted)}
-    .icon-catalog-backdrop{position:fixed;inset:0;z-index:2400;background:rgba(15,23,42,.55);display:grid;place-items:center;padding:24px}.icon-catalog{width:min(980px,96vw);height:min(760px,92vh);background:#fff;border-radius:14px;box-shadow:0 24px 70px rgba(15,23,42,.3);display:grid;grid-template-rows:auto auto auto minmax(0,1fr);overflow:hidden}.icon-catalog__header{display:flex;justify-content:space-between;gap:1rem;padding:1.2rem 1.35rem .85rem;border-bottom:1px solid var(--border)}.icon-catalog__header h3{margin:0;font-size:1.15rem}.icon-catalog__header p{margin:.25rem 0 0;color:var(--text-muted);font-size:.85rem}.icon-catalog__close{width:38px;height:38px;border:0;border-radius:8px;background:transparent}.icon-catalog__tabs{display:flex;gap:.25rem;padding:.65rem 1.35rem 0;border-bottom:1px solid var(--border)}.icon-catalog__tabs button{border:0;border-bottom:3px solid transparent;background:transparent;padding:.7rem .85rem;color:var(--text-muted)}.icon-catalog__tabs button.is-active{color:var(--primary);border-bottom-color:var(--primary)}.icon-catalog__filters{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:.75rem;padding:1rem 1.35rem}.icon-catalog__filters label{position:relative}.icon-catalog__filters label>i{position:absolute;left:.8rem;top:50%;transform:translateY(-50%);color:var(--text-muted)}.icon-catalog__filters label input{padding-left:2.35rem}.icon-catalog__grid{overflow:auto;padding:0 1.35rem 1.35rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:.6rem;align-content:start}.icon-catalog__item{min-height:92px;border:1px solid var(--border);border-radius:9px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.55rem;padding:.65rem;color:var(--text);cursor:pointer}.icon-catalog__item:hover{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,white)}.icon-catalog__item i{font-size:1.45rem;color:var(--primary)}.icon-catalog__item img{width:42px;height:42px;object-fit:contain}.icon-catalog__item span{font-size:.76rem;text-align:center;line-height:1.2}.icon-catalog__empty{display:grid;place-items:center;color:var(--text-muted);padding:3rem}.icon-catalog__grid--custom{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}.icon-catalog__custom{border:1px solid var(--border);border-radius:9px;overflow:hidden}.icon-catalog__custom .icon-catalog__item{border:0;border-radius:0;width:100%}.icon-catalog__custom-meta{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding:.35rem .55rem;font-size:.72rem}.icon-catalog__custom-meta .is-used{color:#087f5b}.icon-catalog__custom-meta .is-unused{color:var(--text-muted)}.icon-catalog__custom-meta button{border:0;background:transparent;color:#c92a2a}.icon-upload{overflow:auto;padding:1.25rem 1.35rem}.icon-upload__drop{border:2px dashed var(--border);border-radius:12px;padding:2rem;display:flex;flex-direction:column;align-items:center;gap:.55rem;text-align:center}.icon-upload__drop>i{font-size:2rem;color:var(--primary)}.icon-upload__drop span{color:var(--text-muted);font-size:.83rem}.icon-upload__metadata{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem;margin-top:1rem}.icon-upload__metadata label{font-size:.78rem;color:var(--text-muted)}.icon-upload__metadata input{margin-top:.3rem}.icon-upload__status{text-align:center;padding:1rem;color:var(--primary)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    .icon-catalog-backdrop{position:fixed;inset:0;z-index:2400;background:rgba(15,23,42,.55);display:grid;place-items:center;padding:24px}.icon-catalog{width:min(1040px,96vw);height:min(820px,94vh);background:#fff;border-radius:14px;box-shadow:0 24px 70px rgba(15,23,42,.3);display:grid;grid-template-rows:auto auto auto minmax(0,1fr) auto;overflow:hidden}.icon-catalog__header{display:flex;justify-content:space-between;gap:1rem;padding:1.2rem 1.35rem .85rem;border-bottom:1px solid var(--border)}.icon-catalog__header h3{margin:0;font-size:1.15rem}.icon-catalog__header p{margin:.25rem 0 0;color:var(--text-muted);font-size:.85rem}.icon-catalog__close{width:38px;height:38px;border:0;border-radius:8px;background:transparent}.icon-catalog__tabs{display:flex;gap:.25rem;padding:.65rem 1.35rem 0;border-bottom:1px solid var(--border)}.icon-catalog__tabs button{border:0;border-bottom:3px solid transparent;background:transparent;padding:.7rem .85rem;color:var(--text-muted)}.icon-catalog__tabs button.is-active{color:var(--primary);border-bottom-color:var(--primary)}.icon-catalog__filters{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:.75rem;padding:1rem 1.35rem}.icon-catalog__filters label{position:relative}.icon-catalog__filters label>i{position:absolute;left:.8rem;top:50%;transform:translateY(-50%);color:var(--text-muted)}.icon-catalog__filters label input{padding-left:2.35rem}.icon-catalog__grid{overflow:auto;padding:0 1.35rem 1.35rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:.6rem;align-content:start}.icon-catalog__item{min-height:92px;border:1px solid var(--border);border-radius:9px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.55rem;padding:.65rem;color:var(--text);cursor:pointer}.icon-catalog__item:hover{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,white)}.icon-catalog__item i{font-size:1.45rem;color:var(--primary)}.icon-catalog__item img{width:42px;height:42px;object-fit:contain}.icon-catalog__item span{font-size:.76rem;text-align:center;line-height:1.2}.icon-catalog__empty{display:grid;place-items:center;color:var(--text-muted);padding:3rem}.icon-catalog__grid--custom{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}.icon-catalog__custom{border:1px solid var(--border);border-radius:9px;overflow:hidden}.icon-catalog__custom .icon-catalog__item{border:0;border-radius:0;width:100%}.icon-catalog__custom-meta{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding:.35rem .55rem;font-size:.72rem}.icon-catalog__custom-meta .is-used{color:#087f5b}.icon-catalog__custom-meta .is-unused{color:var(--text-muted)}.icon-catalog__custom-meta button{border:0;background:transparent;color:#c92a2a}.icon-upload{overflow:auto;padding:1.25rem 1.35rem}.icon-upload__drop{border:2px dashed var(--border);border-radius:12px;padding:2rem;display:flex;flex-direction:column;align-items:center;gap:.55rem;text-align:center}.icon-upload__drop>i{font-size:2rem;color:var(--primary)}.icon-upload__drop span{color:var(--text-muted);font-size:.83rem}.icon-upload__metadata{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem;margin-top:1rem}.icon-upload__metadata label{font-size:.78rem;color:var(--text-muted)}.icon-upload__metadata input{margin-top:.3rem}.icon-upload__status{text-align:center;padding:1rem;color:var(--primary)}.icon-catalog__appearance{grid-column:1/-1;display:grid;grid-template-columns:180px minmax(0,1fr) auto;gap:1rem;align-items:center;padding:.85rem 1.35rem;border-top:1px solid var(--border);background:#fff}.icon-catalog__appearance-preview{display:flex;align-items:center;gap:.7rem}.icon-catalog__appearance-preview>span{display:grid;place-items:center;min-width:60px;min-height:60px}.icon-catalog__appearance-preview>div{display:grid}.icon-catalog__appearance-preview small{color:var(--text-muted)}.icon-catalog__appearance-controls{display:flex;flex-wrap:wrap;gap:.55rem}.icon-catalog__appearance-controls label{display:grid;gap:.2rem;min-width:110px;color:var(--text-muted);font-size:.68rem}.icon-catalog__appearance-controls .form-control{min-height:34px;padding:.3rem .45rem;font-size:.75rem}.icon-catalog__appearance-actions{display:flex;gap:.4rem}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
     @@media(max-width:700px){.icon-catalog-backdrop{padding:0}.icon-catalog{width:100vw;height:100vh;border-radius:0}.icon-catalog__tabs{overflow:auto}.icon-catalog__filters{grid-template-columns:1fr}.icon-upload__metadata{grid-template-columns:1fr}}
 </style>

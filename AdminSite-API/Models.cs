@@ -336,6 +336,20 @@ namespace FullProject.Models
     // ----------------------------------------------------------------
 
     [BsonIgnoreExtraElements]
+    [BsonNoId]
+    public class MediaPlacement
+    {
+        public string Fit { get; set; } = "cover";
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
+        public double Zoom { get; set; } = 1;
+        public bool UseMobileOverride { get; set; }
+        public double? MobileFocalPointX { get; set; }
+        public double? MobileFocalPointY { get; set; }
+        public double? MobileZoom { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
     public class SectionStyle
     {
         public string BackgroundType { get; set; } = "color";       // color | image | gradient | video
@@ -344,6 +358,7 @@ namespace FullProject.Models
         public string? BackgroundVideoUrl { get; set; }
         public string BackgroundImageFit { get; set; } = "cover";      // cover | contain
         public string BackgroundImagePosition { get; set; } = "center"; // center | top | bottom | left | right
+        public MediaPlacement? BackgroundImagePlacement { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";      // top | left | diagonal
@@ -473,6 +488,7 @@ namespace FullProject.Models
         public string HeadingSize { get; set; } = "medium";        // small | medium | large
         public string ContentAlignment { get; set; } = "center";   // left | center | right
         public string? ImageUrl { get; set; }
+        public MediaPlacement? ImagePlacement { get; set; }
         public List<SectionButton> Buttons { get; set; } = new();
     }
 
@@ -1371,6 +1387,40 @@ namespace FullProject.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
+
+    [BsonIgnoreExtraElements]
+    public class ResourceUploadSession
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string ActorId { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string ResourceName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? AlbumId { get; set; }
+        public string PendingStorageKey { get; set; } = string.Empty;
+        public string? FinalStorageKey { get; set; }
+        public string Mode { get; set; } = "single";
+        public string? MultipartUploadId { get; set; }
+        public string Status { get; set; } = "initiated";
+        public string? ErrorCode { get; set; }
+        public string? ErrorMessage { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? ResourceId { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? ReplaceResourceId { get; set; }
+        public DateTime? PresignedExpiresAtUtc { get; set; }
+        public DateTime? CleanupAfterUtc { get; set; }
+        public DateTime? StorageCleanupCompletedAtUtc { get; set; }
+        public DateTime? DeleteAfterUtc { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiresAtUtc { get; set; }
+    }
     public enum ContentStatus
     {
         Draft = 0,
@@ -1483,6 +1533,7 @@ namespace FullProject.Models
         public string Kind { get; set; } = "image";
         public string? Url { get; set; }
         public string? ThumbnailUrl { get; set; }
+        public MediaPlacement? ThumbnailPlacement { get; set; }
         public string? ResourceId { get; set; }
         public string ResourceSource { get; set; } = "DirectUpload";
         public string? StorageKey { get; set; }
@@ -1510,10 +1561,12 @@ namespace FullProject.Models
         public string HeroImageResourceSource { get; set; } = "DirectUpload";
         public string? HeroImageStorageKey { get; set; }
         public string? HeroImageAlt { get; set; }
+        public MediaPlacement? HeroImagePlacement { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string? ThumbnailResourceId { get; set; }
         public string ThumbnailResourceSource { get; set; } = "DirectUpload";
         public string? ThumbnailStorageKey { get; set; }
+        public MediaPlacement? ThumbnailPlacement { get; set; }
         public string? VideoUrl { get; set; }
         public string? VideoResourceId { get; set; }
         public string VideoResourceSource { get; set; } = "DirectUpload";

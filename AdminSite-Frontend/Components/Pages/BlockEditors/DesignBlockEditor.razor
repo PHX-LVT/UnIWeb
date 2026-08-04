@@ -540,7 +540,8 @@
         FileName = value.FileName,
         ContentType = value.ContentType,
         SizeBytes = value.SizeBytes,
-        AltText = new(value.AltText)
+        AltText = new(value.AltText),
+        Appearance = IconReferenceModelMapper.CloneAppearance(value.Appearance)
     };
 
     private static IconReferenceDto? IconDto(IconReferenceModel? value) => value is null ? null : new()
@@ -555,7 +556,8 @@
         FileName = value.FileName,
         ContentType = value.ContentType,
         SizeBytes = value.SizeBytes,
-        AltText = new(value.AltText)
+        AltText = new(value.AltText),
+        Appearance = IconReferenceModelMapper.ToDto(value.Appearance)
     };
 
     private static BlockResponsiveOverrideDto? ToResponsiveDto(BlockResponsiveOverrideModel? value) =>

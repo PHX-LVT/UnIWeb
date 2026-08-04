@@ -52,7 +52,8 @@ public sealed class IconReferenceService
                 FileName = resource.FileName,
                 ContentType = resource.ContentType,
                 SizeBytes = resource.SizeBytes,
-                AltText = NormalizeLang(requested.AltText)
+                AltText = NormalizeLang(requested.AltText),
+                Appearance = null
             }, string.Empty);
         }
 
@@ -62,10 +63,11 @@ public sealed class IconReferenceService
         {
             return IconResolutionResult.Valid(new IconReference
             {
-                SchemaVersion = 1,
+                SchemaVersion = 2,
                 Source = IconSources.BuiltIn,
                 ClassName = normalized,
-                AltText = NormalizeLang(requested?.AltText)
+                AltText = NormalizeLang(requested?.AltText),
+                Appearance = NormalizeAppearance(requested?.Appearance)
             }, normalized);
         }
 
@@ -94,7 +96,8 @@ public sealed class IconReferenceService
             FileName = value.FileName,
             ContentType = value.ContentType,
             SizeBytes = value.SizeBytes,
-            AltText = NormalizeLang(value.AltText)
+            AltText = NormalizeLang(value.AltText),
+            Appearance = value.Source == IconSources.BuiltIn ? CopyAppearance(value.Appearance) : null
         };
     }
 
@@ -113,7 +116,8 @@ public sealed class IconReferenceService
             FileName = value.FileName,
             ContentType = value.ContentType,
             SizeBytes = value.SizeBytes,
-            AltText = NormalizeLang(value.AltText)
+            AltText = NormalizeLang(value.AltText),
+            Appearance = value.Source == IconSources.BuiltIn ? NormalizeAppearance(value.Appearance) : null
         };
     }
 
@@ -132,7 +136,8 @@ public sealed class IconReferenceService
             Source = value.Source,
             ClassName = value.Source == IconSources.BuiltIn ? IconCatalog.Normalize(value.ClassName) : null,
             Url = value.Source == IconSources.Custom ? value.Url : null,
-            AltText = NormalizeLang(value.AltText)
+            AltText = NormalizeLang(value.AltText),
+            Appearance = value.Source == IconSources.BuiltIn ? CopyAppearance(value.Appearance) : null
         };
     }
 
@@ -148,8 +153,41 @@ public sealed class IconReferenceService
         FileName = value.FileName,
         ContentType = value.ContentType,
         SizeBytes = value.SizeBytes,
-        AltText = NormalizeLang(value.AltText)
+        AltText = NormalizeLang(value.AltText),
+        Appearance = value.Source == IconSources.BuiltIn ? CopyAppearance(value.Appearance) : null
     };
+
+    private static IconAppearanceDto NormalizeAppearance(IconAppearanceDto? value) => new()
+    {
+        ColorMode = value?.ColorMode == "custom" ? "custom" : "theme",
+        ThemeRole = value?.ThemeRole switch { "primary" => "primary", "text" => "text", _ => "accent" },
+        Color = NormalizeColor(value?.Color, "#1f6feb"),
+        Size = value?.Size switch { "small" => "small", "large" => "large", "x-large" => "x-large", _ => "medium" },
+        BackgroundMode = value?.BackgroundMode switch { "theme" => "theme", "custom" => "custom", _ => "none" },
+        BackgroundThemeRole = value?.BackgroundThemeRole switch { "primary" => "primary", "accent" => "accent", "background" => "background", _ => "surface" },
+        BackgroundColor = NormalizeColor(value?.BackgroundColor, "#eef2f7"),
+        Shape = value?.Shape switch { "circle" => "circle", "rounded" => "rounded", _ => "none" }
+    };
+
+    private static IconAppearanceDto? CopyAppearance(IconAppearanceDto? value) => value is null ? null : new()
+    {
+        ColorMode = value.ColorMode,
+        ThemeRole = value.ThemeRole,
+        Color = value.Color,
+        Size = value.Size,
+        BackgroundMode = value.BackgroundMode,
+        BackgroundThemeRole = value.BackgroundThemeRole,
+        BackgroundColor = value.BackgroundColor,
+        Shape = value.Shape
+    };
+
+    private static string NormalizeColor(string? value, string fallback)
+    {
+        var candidate = value?.Trim();
+        return candidate is { Length: 7 } && candidate[0] == '#' && candidate.Skip(1).All(Uri.IsHexDigit)
+            ? candidate.ToLowerInvariant()
+            : fallback;
+    }
 
     private static Dictionary<string, string> NormalizeLang(Dictionary<string, string>? source) =>
         (source ?? new())

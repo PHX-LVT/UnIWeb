@@ -6,7 +6,7 @@ namespace FullProject.Models;
 [BsonNoId]
 public sealed class IconReference
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     public string Source { get; set; } = "built-in";
     public string? ClassName { get; set; }
     public string? ResourceId { get; set; }
@@ -17,4 +17,5 @@ public sealed class IconReference
     public string? ContentType { get; set; }
     public long? SizeBytes { get; set; }
     public Dictionary<string, string> AltText { get; set; } = new();
+    public Contracts.Icons.IconAppearanceDto? Appearance { get; set; }
 }

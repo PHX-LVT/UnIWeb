@@ -1,74 +1,57 @@
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 
-<div style="display:grid;grid-template-columns:1fr;gap:1rem">
-    <div class="form-group">
-        <label class="form-label">@T("Eyebrow")</label>
-        <LangField @bind-Value="_eyebrow" Languages="Languages" />
-    </div>
-    <div class="form-group">
-        <label class="form-label">@T("SectionTitle")</label>
-        <LangField @bind-Value="_title" Languages="Languages" />
-    </div>
-    <div class="form-group">
-        <label class="form-label">@T("Subheading")</label>
-        <LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" />
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem">
-        <div class="form-group">
-            <label class="form-label">@T("Layout")</label>
-            <DxComboBox Data="@_layouts" @bind-Value="_layout" CssClass="w-100" />
-        </div>
-        <div class="form-group">
-            <label class="form-label">@T("HeadingPosition")</label>
-            <DxComboBox Data="@_alignments" @bind-Value="_headerAlignment" CssClass="w-100" />
-        </div>
-        <div class="form-group">
-            <label class="form-label">@T("Columns")</label>
-            <DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="5" CssClass="w-100" />
-        </div>
-    </div>
-</div>
+<section class="ez-content-editor__text">
+    <h3>@T("SectionText")</h3>
+    <div class="form-group"><label class="form-label">@T("Eyebrow")</label><LangField @bind-Value="_eyebrow" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("SectionTitle")</label><LangField @bind-Value="_title" Languages="Languages" /></div>
+    <div class="form-group"><label class="form-label">@T("Subheading")</label><LangField @bind-Value="_subheading" Languages="Languages" Multiline="true" /></div>
+</section>
 
-@foreach (var (item, i) in _items.Select((x, i) => (x, i)))
-{
-    <div style="border:1px solid var(--border);border-radius:8px;padding:.75rem;margin-bottom:.75rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
-            <strong>@T("Card") @(i + 1)</strong>
-            <button class="btn-admin btn-danger" @onclick="() => RemoveItem(i)"><i class="fas fa-trash"></i></button>
-        </div>
-        <div class="form-group">
-            <label class="form-label">@T("Icon")</label>
-            <IconPickerField @bind-Value="item.Icon" @bind-Visual="item.IconVisual" Label="@T("Icon")" />
-        </div>
-        <div class="form-group">
-            <label class="form-label">@T("Title")</label>
-            <LangField Value="@(item.Title ?? new())" ValueChanged="v => item.Title = v" Languages="Languages" />
-        </div>
-        <div class="form-group">
-            <label class="form-label">@T("Description")</label>
-            <LangField Value="@(item.Description ?? new())" ValueChanged="v => item.Description = v" Languages="Languages" Multiline="true" />
-        </div>
-        <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:end">
-            <div class="form-group">
-                <label class="form-label">@T("BadgeText")</label>
-                <DxTextBox @bind-Text="item.BadgeText" CssClass="w-100" />
-            </div>
-            <label style="display:flex;gap:.5rem;align-items:center;font-size:.85rem;padding-bottom:.7rem">
-                <input type="checkbox" @bind="item.Highlighted" /> @T("Highlighted")
-            </label>
-        </div>
-        <label style="display:flex;gap:.5rem;align-items:center;font-size:.85rem">
-            <input type="checkbox" @bind="item.Visible" /> @T("Visible")
-        </label>
+<ContentEditorGroup Title="@T("Cards")" Summary="@($"{_items.Count} cards · {_layout}")" @bind-Expanded="_cardsExpanded">
+    <div class="ez-content-editor__settings">
+        <div class="form-group"><label class="form-label">@T("Layout")</label><DxComboBox Data="@_layouts" Value="_layout" ValueChanged="@((string? value) => ChangeLayout(value))" CssClass="w-100" /></div>
+        <div class="form-group"><label class="form-label">@T("HeadingPosition")</label><DxComboBox Data="@_alignments" @bind-Value="_headerAlignment" CssClass="w-100" /></div>
+        <div class="form-group"><label class="form-label">@T("Columns")</label><DxSpinEdit @bind-Value="_columns" MinValue="1" MaxValue="5" CssClass="w-100" /></div>
     </div>
-}
 
-<button class="btn-admin btn-outline" @onclick="AddItem"><i class="fas fa-plus"></i> @T("AddCard")</button>
+    <ContentSortableList Reordered="ReorderItems">
+        @foreach (var item in _items.OrderBy(item => item.Order))
+        {
+            var number = item.Order + 1;
+            var uploadId = $"highlight-image-{item.Id}";
+            <ContentItemAccordion @key="item.Id" ItemId="@item.Id" Number="@number" Title="@ItemTitle(item, number)" Summary="@ItemSummary(item)"
+                                  Expanded="@(_openItemId == item.Id)" OnToggle="() => ToggleItem(item.Id)" OnDelete="() => RemoveItem(item)"
+                                  Visible="@item.Visible" VisibleChanged="value => SetVisible(item, value)">
+                <div class="form-group"><label class="form-label">@T("Icon")</label><IconPickerField Value="@(item.Icon ?? string.Empty)" ValueChanged="value => SetIconClass(item, value)" Visual="item.IconVisual" VisualChanged="value => SetIconVisual(item, value)" Label="@T("Icon")" /></div>
+                <div class="form-group"><label class="form-label">@T("Title")</label><LangField Value="@(item.Title ?? new())" ValueChanged="value => item.Title = value" Languages="Languages" /></div>
+                <div class="form-group"><label class="form-label">@T("Description")</label><LangField Value="@(item.Description ?? new())" ValueChanged="value => item.Description = value" Languages="Languages" Multiline="true" /></div>
+                @if (_layout == "feature-grid")
+                {
+                    <div class="ez-content-editor__settings">
+                        <div class="form-group"><label class="form-label">@T("BadgeText")</label><DxTextBox @bind-Text="item.BadgeText" CssClass="w-100" /></div>
+                        <label class="form-group ez-content-check"><span class="form-label">@T("Emphasis")</span><span><DxCheckBox @bind-Checked="item.Highlighted" /> @T("Highlighted")</span></label>
+                    </div>
+                }
+                <div class="form-group">
+                    <label class="form-label">@T("Image")</label>
+                    @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                    {
+                        <div class="ez-content-media-preview"><img src="@item.ImageUrl" alt="" /><button type="button" class="btn-admin btn-ghost" @onclick="() => ClearImage(item)"><i class="fas fa-times"></i> @T("Remove")</button></div>
+                    }
+                    <div class="ez-content-media-actions">
+                        <InputFile id="@uploadId" OnChange="args => UploadImage(args, item)" accept="image/*" style="display:none" />
+                        <label class="btn-admin btn-ghost" for="@uploadId"><i class="fas fa-image"></i> @T("UploadNew")</label>
+                        <button type="button" class="btn-admin btn-ghost" @onclick="() => OpenResourcePicker(item)"><i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")</button>
+                    </div>
+                </div>
+            </ContentItemAccordion>
+        }
+    </ContentSortableList>
+    <button type="button" class="btn-admin btn-outline ez-content-add" @onclick="AddItem"><i class="fas fa-plus"></i> @T("AddCard")</button>
+</ContentEditorGroup>
 
-<div style="display:flex;justify-content:flex-end;margin-top:.75rem">
-    <button class="btn-admin btn-primary" @onclick="Save" disabled="@_saving"><i class="fas fa-save"></i> @(_saving ? T("Saving") : T("Save"))</button>
-</div>
+<ResourcePickerModal Open="_resourcePickerOpen" Kind="image" ResourceSelected="SelectResourceImage" Closed="CloseResourcePicker" />
 
 @code {
     [Parameter] public SectionModel Section { get; set; } = new();
@@ -76,6 +59,7 @@
     [Parameter] public List<string> Languages { get; set; } = new() { "en" };
     [Parameter] public EventCallback OnSaved { get; set; }
     [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+    [CascadingParameter] public SectionContentEditSession? ContentSession { get; set; }
 
     private Dictionary<string, string> _eyebrow = new();
     private Dictionary<string, string> _title = new();
@@ -87,50 +71,70 @@
     private readonly List<string> _alignments = new() { "left", "center", "right" };
     private List<TestimonialItemModel> _items = new();
     private bool _saving;
+    private bool _cardsExpanded;
+    private string? _openItemId;
     private string? _loadedSectionId;
+    private bool _resourcePickerOpen;
+    private TestimonialItemModel? _resourcePickerItem;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
 
     protected override void OnParametersSet()
     {
+        ContentSession?.Register(Save);
         if (_saving || _loadedSectionId == Section.Id) return;
         _loadedSectionId = Section.Id;
-
-        _eyebrow = new(Section.Eyebrow ?? new());
-        _title = new(Section.SectionTitle ?? new());
-        _subheading = new(Section.Subheading ?? new());
+        _eyebrow = new(Section.Eyebrow ?? new()); _title = new(Section.SectionTitle ?? new()); _subheading = new(Section.Subheading ?? new());
         _layout = string.IsNullOrWhiteSpace(Section.Layout) ? "cards" : Section.Layout;
         _headerAlignment = string.IsNullOrWhiteSpace(Section.HeaderAlignment) ? "center" : Section.HeaderAlignment;
         _columns = Section.Columns ?? 4;
-        _items = Section.Testimonials?.Select(x => new TestimonialItemModel
+        _items = Section.Testimonials?.OrderBy(item => item.Order).Select((item, index) => new TestimonialItemModel
         {
-            Id = x.Id,
-            Icon = x.Icon,
-            IconVisual = CopyIcon(x.IconVisual),
-            BadgeText = x.BadgeText,
-            Highlighted = x.Highlighted,
-            Title = new(x.Title ?? new()),
-            Description = new(x.Description ?? new()),
-            ImageUrl = x.ImageUrl,
-            Visible = x.Visible,
-            Order = x.Order
+            Id = string.IsNullOrWhiteSpace(item.Id) ? ClientId() : item.Id, Icon = item.Icon, IconVisual = CopyIcon(item.IconVisual),
+            BadgeText = item.BadgeText, Highlighted = item.Highlighted, Title = new(item.Title ?? new()), Description = new(item.Description ?? new()),
+            ImageUrl = item.ImageUrl, Visible = item.Visible, Order = index
         }).ToList() ?? new();
     }
 
-    private void AddItem() => _items.Add(new TestimonialItemModel
+    private void AddItem()
     {
-        Icon = "fa-check",
-        Title = new(),
-        Description = new(),
-        Visible = true,
-        Order = _items.Count
-    });
-
-    private void RemoveItem(int index)
-    {
-        if (index < 0 || index >= _items.Count) return;
-        _items.RemoveAt(index);
-        for (var i = 0; i < _items.Count; i++) _items[i].Order = i;
+        var item = new TestimonialItemModel { Id = ClientId(), Icon = "fas fa-check", Title = new(), Description = new(), Visible = true, Order = _items.Count };
+        _items.Add(item); _cardsExpanded = true; _openItemId = item.Id; ContentSession?.MarkDirty();
     }
+    private void RemoveItem(TestimonialItemModel item) { _items.Remove(item); NormalizeOrder(); if (_openItemId == item.Id) _openItemId = null; ContentSession?.MarkDirty(); }
+    private void SetVisible(TestimonialItemModel item, bool value) { item.Visible = value; ContentSession?.MarkDirty(); }
+    private void SetIconClass(TestimonialItemModel item, string value) { item.Icon = value; ContentSession?.MarkDirty(); }
+    private void SetIconVisual(TestimonialItemModel item, IconReferenceModel? value) { item.IconVisual = value; ContentSession?.MarkDirty(); }
+    private void ToggleItem(string id) => _openItemId = _openItemId == id ? null : id;
+    private Task ReorderItems(List<string> ids)
+    {
+        var byId = _items.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        if (ids.Count != _items.Count || ids.Any(id => !byId.ContainsKey(id))) return Task.CompletedTask;
+        _items = ids.Select(id => byId[id]).ToList(); NormalizeOrder(); ContentSession?.MarkDirty(); return Task.CompletedTask;
+    }
+    private void NormalizeOrder() { for (var index = 0; index < _items.Count; index++) _items[index].Order = index; }
+    private static string ClientId() => $"highlight-{Guid.NewGuid():N}";
+    private void ChangeLayout(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? "cards" : value;
+        if (string.Equals(_layout, normalized, StringComparison.Ordinal)) return;
+        _layout = normalized;
+        ContentSession?.MarkDirty();
+    }
+    private string ItemTitle(TestimonialItemModel item, int number) => Localized(item.Title, $"Card {number}");
+    private string ItemSummary(TestimonialItemModel item) => Localized(item.Description, item.BadgeText ?? "No description");
+    private string Localized(Dictionary<string, string>? values, string fallback) => values is not null && values.TryGetValue(AdminLanguage, out var value) && !string.IsNullOrWhiteSpace(value) ? value : values?.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? fallback;
+
+    private async Task UploadImage(InputFileChangeEventArgs args, TestimonialItemModel item)
+    {
+        if (args.File.Size > 5 * 1024 * 1024) { Http.Notify(T("ImageTooLarge"), 400); return; }
+        var response = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=highlights", args.File, maxBytes: 5 * 1024 * 1024);
+        if (response.Success && response.Data is not null) { item.ImageUrl = response.Data.Url; ContentSession?.MarkDirty(); Http.Notify(response.Message, response.StatusCode); }
+        else Http.Notify(response.Message, response.StatusCode);
+    }
+    private void ClearImage(TestimonialItemModel item) { item.ImageUrl = string.Empty; ContentSession?.MarkDirty(); }
+    private void OpenResourcePicker(TestimonialItemModel item) { _resourcePickerItem = item; _resourcePickerOpen = true; }
+    private void CloseResourcePicker() { _resourcePickerItem = null; _resourcePickerOpen = false; }
+    private void SelectResourceImage(ManagedResourceModel resource) { if (_resourcePickerItem is not null) { _resourcePickerItem.ImageUrl = resource.Url; ContentSession?.MarkDirty(); } }
 
     private async Task Save()
     {
@@ -139,50 +143,25 @@
         {
             var res = await SectionService.UpdateAsync(PageId, Section.Id, new TestimonialSectionUpdateDto
             {
-                Eyebrow = _eyebrow,
-                SectionTitle = _title,
-                Subheading = _subheading,
-                Layout = _layout,
-                HeaderAlignment = _headerAlignment,
-                Columns = _columns,
-                Items = _items.Select(MapItem).ToList(),
-                Visible = Section.Visible
+                Eyebrow = _eyebrow, SectionTitle = _title, Subheading = _subheading, Layout = _layout, HeaderAlignment = _headerAlignment,
+                Columns = _columns, Items = _items.OrderBy(item => item.Order).Select(MapItem).ToList(), Visible = Section.Visible
             });
             Http.Notify(res.Message, res.StatusCode);
             if (res.Success) await OnSaved.InvokeAsync();
         }
-        finally
-        {
-            _saving = false;
-        }
+        finally { _saving = false; }
     }
-
     private static TestimonialItemDto MapItem(TestimonialItemModel item) => new()
     {
-        Id = item.Id,
-        Icon = item.Icon ?? string.Empty,
-        IconVisual = BlockUpdateDtoMapper.ToIconDto(item.IconVisual),
-        BadgeText = item.BadgeText,
-        Highlighted = item.Highlighted,
-        Title = item.Title ?? new(),
-        Description = item.Description ?? new(),
-        ImageUrl = item.ImageUrl,
-        Visible = item.Visible,
-        Order = item.Order
+        Id = item.Id, Icon = item.Icon ?? string.Empty, IconVisual = BlockUpdateDtoMapper.ToIconDto(item.IconVisual), BadgeText = item.BadgeText,
+        Highlighted = item.Highlighted, Title = item.Title ?? new(), Description = item.Description ?? new(), ImageUrl = item.ImageUrl,
+        Visible = item.Visible, Order = item.Order
     };
-
     private static IconReferenceModel? CopyIcon(IconReferenceModel? value) => value is null ? null : new()
     {
-        SchemaVersion = value.SchemaVersion,
-        Source = value.Source,
-        ClassName = value.ClassName,
-        ResourceId = value.ResourceId,
-        ResourceSource = value.ResourceSource,
-        Url = value.Url,
-        StorageKey = value.StorageKey,
-        FileName = value.FileName,
-        ContentType = value.ContentType,
-        SizeBytes = value.SizeBytes,
-        AltText = new(value.AltText)
+        SchemaVersion = value.SchemaVersion, Source = value.Source, ClassName = value.ClassName, ResourceId = value.ResourceId,
+        ResourceSource = value.ResourceSource, Url = value.Url, StorageKey = value.StorageKey, FileName = value.FileName,
+        ContentType = value.ContentType, SizeBytes = value.SizeBytes, AltText = new(value.AltText),
+        Appearance = IconReferenceModelMapper.CloneAppearance(value.Appearance)
     };
 }

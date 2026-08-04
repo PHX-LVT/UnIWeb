@@ -25,6 +25,7 @@ public static class AuditActionCatalog
             ["Forms"] = ("forms", "form"),
             ["Assets"] = ("assets", "asset"),
             ["ManagedResources"] = ("assets", "resource"),
+            ["ResourceUploads"] = ("assets", "resource-upload"),
             ["Settings"] = ("settings", "settings"),
             ["Theme"] = ("settings", "theme"),
             ["Branding"] = ("settings", "branding"),
@@ -97,6 +98,10 @@ public static class AuditActionCatalog
             ["ManagedResources.DeleteAlbum"] = new("assets", "resource-album.deleted", "resource-album", true),
             ["ManagedResources.AssignResourcesToAlbum"] = new("assets", "resource-album.resources-assigned", "resource-album"),
             ["ManagedResources.ReplaceUpload"] = new("assets", "resource.replaced", "resource", true),
+            ["ResourceUploads.Initiate"] = new("assets", "resource-upload.initiated", "resource-upload", ShouldAudit: false),
+            ["ResourceUploads.Parts"] = new("assets", "resource-upload.parts-issued", "resource-upload", ShouldAudit: false),
+            ["ResourceUploads.Complete"] = new("assets", "resource.uploaded", "resource"),
+            ["ResourceUploads.Abort"] = new("assets", "resource-upload.cancelled", "resource-upload", ShouldAudit: false),
 
             ["Settings.UpdateLanguages"] = new("settings", "language-settings.updated", "language-settings"),
             ["Settings.UpdateAdminAppearance"] = new("settings", "admin-appearance.updated", "admin-appearance"),

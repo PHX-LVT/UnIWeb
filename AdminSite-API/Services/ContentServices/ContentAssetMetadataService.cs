@@ -3,6 +3,7 @@ using FullProject.Models;
 using FullProject.Security;
 using MongoDB.Bson;
 using SharedComponents.Helpers;
+using FullProject.Services.SectionServices;
 using System.Net;
 using System.Text.RegularExpressions;
 using static FullProject.Security.ContentSecurityPolicy;
@@ -81,6 +82,7 @@ namespace FullProject.Services
             Kind = NormalizeGalleryKind(dto.Kind),
             Url = CleanUrl(dto.Url),
             ThumbnailUrl = CleanUrl(dto.ThumbnailUrl),
+            ThumbnailPlacement = dto.ThumbnailPlacement is null ? null : MediaPlacementPolicy.Normalize(dto.ThumbnailPlacement),
             ResourceId = CleanResourceId(dto.ResourceId),
             ResourceSource = NormalizeResourceSource(dto.ResourceSource, dto.ResourceId),
             StorageKey = CleanStorageKey(dto.StorageKey),
@@ -333,6 +335,7 @@ namespace FullProject.Services
             Kind = item.Kind,
             Url = item.Url,
             ThumbnailUrl = item.ThumbnailUrl,
+            ThumbnailPlacement = MediaPlacementPolicy.ToAdmin(item.ThumbnailPlacement),
             ResourceId = item.ResourceId,
             ResourceSource = item.ResourceSource,
             StorageKey = item.StorageKey,

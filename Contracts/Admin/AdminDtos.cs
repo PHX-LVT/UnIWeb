@@ -18,6 +18,18 @@ namespace Contracts.Admin
 
     // -- Shared sub-DTOs ---------------------------------------
 
+    public class MediaPlacementDto
+    {
+        public string Fit { get; set; } = "cover";
+        public double FocalPointX { get; set; } = 50;
+        public double FocalPointY { get; set; } = 50;
+        public double Zoom { get; set; } = 1;
+        public bool UseMobileOverride { get; set; }
+        public double? MobileFocalPointX { get; set; }
+        public double? MobileFocalPointY { get; set; }
+        public double? MobileZoom { get; set; }
+    }
+
     public class SectionStyleDto
     {
         public string? BackgroundType { get; set; }
@@ -26,6 +38,7 @@ namespace Contracts.Admin
         public string? BackgroundVideoUrl { get; set; }
         public string? BackgroundImageFit { get; set; }
         public string? BackgroundImagePosition { get; set; }
+        public MediaPlacementDto? BackgroundImagePlacement { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string? GradientDirection { get; set; }
@@ -50,6 +63,7 @@ namespace Contracts.Admin
         public string? BackgroundVideoUrl { get; set; }
         public string BackgroundImageFit { get; set; } = "cover";
         public string BackgroundImagePosition { get; set; } = "center";
+        public MediaPlacementDto? BackgroundImagePlacement { get; set; }
         public string? GradientFrom { get; set; }
         public string? GradientTo { get; set; }
         public string GradientDirection { get; set; } = "top";
@@ -253,6 +267,7 @@ namespace Contracts.Admin
         public string HeadingSize { get; set; } = "medium";
         public string ContentAlignment { get; set; } = "center";
         public string? ImageUrl { get; set; }
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public List<SectionButtonDto> Buttons { get; set; } = new();
     }
 
@@ -412,6 +427,7 @@ namespace Contracts.Admin
         public string? HeadingSize { get; set; }
         public string? ContentAlignment { get; set; }
         public string? ImageUrl { get; set; }
+        public MediaPlacementDto? ImagePlacement { get; set; }
         // Null = don't touch buttons; empty list = clear all buttons
         public List<SectionButtonDto>? Buttons { get; set; }
     }
@@ -657,6 +673,7 @@ namespace Contracts.Admin
         public string? HeadingSize { get; set; }
         public string? ContentAlignment { get; set; }
         public string? ImageUrl { get; set; }
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public List<SectionButtonResponseDto>? Buttons { get; set; }
 
         // CTA
