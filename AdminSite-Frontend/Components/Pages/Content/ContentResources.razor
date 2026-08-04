@@ -1,6 +1,7 @@
 @page "/content/resources"
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.JSInterop
 @using Contracts.Admin
 @using Contracts.Api
@@ -231,7 +232,7 @@ else
                     </div>
                 </div>
             }
-            else if (!ShowingAlbumRoot && CanManageResources && _selectedResourceIds.Any())
+            else if (!ShowingAlbumRoot && CanUploadResources && _selectedResourceIds.Any())
             {
                 <div class="alert alert-info" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
                     <span>
@@ -242,13 +243,19 @@ else
                         }
                     </span>
                     <span style="display:flex;gap:.5rem;flex-wrap:wrap">
-                        <button class="btn-admin btn-ghost" type="button" @onclick="ClearSelection">@T("ClearSelection")</button>
-                        <button class="btn-admin btn-danger"
-                                type="button"
-                                disabled="@(!BulkDeleteResources.Any())"
-                                @onclick="AskBulkDeleteResources">
-                            <i class="fas fa-trash"></i> @T("BulkDeleteResources")
+                        <button class="btn-admin btn-ghost" type="button" @onclick="OpenBulkMove">
+                            <i class="fas fa-folder-tree"></i> @T("MoveToAlbum")
                         </button>
+                        @if (CanManageResources)
+                        {
+                            <button class="btn-admin btn-danger"
+                                    type="button"
+                                    disabled="@(!BulkDeleteResources.Any())"
+                                    @onclick="AskBulkDeleteResources">
+                                <i class="fas fa-trash"></i> @T("BulkDeleteResources")
+                            </button>
+                        }
+                        <button class="btn-admin btn-ghost" type="button" @onclick="ClearSelection">@T("ClearSelection")</button>
                     </span>
                 </div>
             }
@@ -349,7 +356,7 @@ else
                     <table class="table content-table" style="width:100%">
                         <thead>
                             <tr>
-                                @if (CanManageResources)
+                                @if (CanUploadResources)
                                 {
                                     <th style="width:38px">
                                         <input type="checkbox"
@@ -365,18 +372,18 @@ else
                         <tbody>
                             @foreach (var resource in PagedResources)
                             {
-                                <tr class="@(IsSelected(resource) ? "is-selected" : string.Empty)"
+                                <tr class="@((IsSelected(resource) || IsBulkSelected(resource)) ? "is-selected" : string.Empty)"
                                     style="cursor:pointer"
-                                    @onclick="() => SelectResource(resource)">
-                                    @if (CanManageResources)
+                                    @onclick="e => HandleResourceClick(resource, e)">
+                                    @if (CanUploadResources)
                                     {
                                         <td>
                                             <input type="checkbox"
                                                    checked="@IsBulkSelected(resource)"
-                                                   disabled="@resource.IsInUse"
                                                    title="@BulkSelectTitle(resource)"
                                                    @onclick:stopPropagation="true"
-                                                   @onchange="e => ToggleBulkSelected(resource, e)" />
+                                                   @onclick:preventDefault="true"
+                                                   @onclick="e => HandleBulkSelectionClick(resource, e)" />
                                         </td>
                                     }
                                     <td colspan="2">
@@ -400,20 +407,21 @@ else
                 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.85rem">
                     @foreach (var resource in PagedResources)
                     {
-                        <div class="admin-card @(IsSelected(resource) ? "is-selected" : string.Empty)"
-                             style="position:relative;padding:.6rem;text-align:left;border-color:@(IsSelected(resource) ? "#0f2742" : "#d8e0ea");box-shadow:none">
-                            @if (CanManageResources)
+                        <div class="admin-card @((IsSelected(resource) || IsBulkSelected(resource)) ? "is-selected" : string.Empty)"
+                             style="position:relative;padding:.6rem;text-align:left;border-color:@((IsSelected(resource) || IsBulkSelected(resource)) ? "#0f2742" : "#d8e0ea");box-shadow:none">
+                            @if (CanUploadResources)
                             {
                                 <input type="checkbox"
                                        checked="@IsBulkSelected(resource)"
-                                       disabled="@resource.IsInUse"
                                        title="@BulkSelectTitle(resource)"
                                        style="position:absolute;top:.55rem;right:.55rem;z-index:1"
-                                       @onchange="e => ToggleBulkSelected(resource, e)" />
+                                       @onclick:stopPropagation="true"
+                                       @onclick:preventDefault="true"
+                                       @onclick="e => HandleBulkSelectionClick(resource, e)" />
                             }
                             <button type="button"
                                     style="width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer"
-                                    @onclick="() => SelectResource(resource)">
+                                    @onclick="e => HandleResourceClick(resource, e)">
                                 <span style="display:block;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:#f8fafc;border:1px solid #e5e7eb;margin-bottom:.55rem">
                                     @ResourceVisual(resource, "width:100%;height:100%;object-fit:cover")
                                 </span>
@@ -997,6 +1005,33 @@ else
     </div>
 }
 
+@if (CanUploadResources && _showBulkMove)
+{
+    <div class="modal-backdrop" @onclick="CloseBulkMove">
+        <div class="modal-card" style="max-width:560px" @onclick:stopPropagation="true">
+            <div class="modal-header">@T("MoveToAlbum")</div>
+            <div style="padding:1rem">
+                <p style="margin-top:0">@string.Format(T("MoveResourcesPrompt"), _selectedResourceIds.Count)</p>
+                <label>@T("Album")</label>
+                <select class="form-control" value="@_bulkMoveAlbumId" @onchange="e => _bulkMoveAlbumId = e.Value?.ToString() ?? string.Empty">
+                    <option value="">@T("NoAlbum")</option>
+                    @foreach (var album in BulkMoveAlbums)
+                    {
+                        <option value="@album.Id">@album.Name</option>
+                    }
+                </select>
+                <div class="form-hint">@T("MoveResourcesStorageUnchangedHint")</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-admin btn-ghost" disabled="@_bulkMoveLoading" @onclick="CloseBulkMove">@T("Cancel")</button>
+                <button class="btn-admin btn-primary" disabled="@_bulkMoveLoading" @onclick="ConfirmBulkMove">
+                    <i class="fas fa-folder-tree"></i> @(_bulkMoveLoading ? T("Saving") : T("Move"))
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_previewResource is not null)
 {
     <div class="modal-backdrop" @onclick="ClosePreview">
@@ -1082,6 +1117,10 @@ else
     private bool _showEditor;
     private bool _showAlbumEditor;
     private bool _showBulkDelete;
+    private bool _showBulkMove;
+    private bool _bulkMoveLoading;
+    private string _bulkMoveAlbumId = string.Empty;
+    private string? _selectionAnchorId;
     private string _uploadKind = "image";
     private string _uploadAlbumId = string.Empty;
     private string _videoUploadMode = VideoUploadModes.File;
@@ -1137,7 +1176,7 @@ else
     private int PageEnd => Math.Min(VisibleItemCount, _page * PageSize);
     private IEnumerable<ManagedResourceModel> PagedResources => FilteredResources.Skip((_page - 1) * PageSize).Take(PageSize);
     private IEnumerable<ResourceAlbumModel> PagedAlbums => FilteredAlbums.Skip((_page - 1) * PageSize).Take(PageSize);
-    private IEnumerable<ManagedResourceModel> DeletablePagedResources => PagedResources.Where(r => !r.IsInUse);
+    private IEnumerable<ManagedResourceModel> SelectablePagedResources => PagedResources;
     private List<ManagedResourceModel> BulkDeleteResources =>
         CanManageResources
             ? _resources.Where(r => _selectedResourceIds.Contains(r.Id) && !r.IsInUse).ToList()
@@ -1147,9 +1186,23 @@ else
             ? _resources.Count(r => _selectedResourceIds.Contains(r.Id) && r.IsInUse)
             : 0;
     private bool AllPagedBulkSelected =>
-        CanManageResources &&
-        DeletablePagedResources.Any() &&
-        DeletablePagedResources.All(r => _selectedResourceIds.Contains(r.Id));
+        CanUploadResources &&
+        SelectablePagedResources.Any() &&
+        SelectablePagedResources.All(r => _selectedResourceIds.Contains(r.Id));
+    private IEnumerable<ResourceAlbumModel> BulkMoveAlbums
+    {
+        get
+        {
+            var selected = _resources.Where(resource => _selectedResourceIds.Contains(resource.Id)).ToList();
+            if (selected.Count == 0) return [];
+            var scopes = selected.Select(resource => AlbumScopeForKind(resource.Kind))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return scopes.Count == 1
+                ? _albums.Where(album => string.Equals(album.Scope, scopes[0], StringComparison.OrdinalIgnoreCase))
+                : [];
+        }
+    }
     private ManagedResourceUsageModel? SelectedUsage =>
         _selectedResource is null ? null : _usageByResourceId.GetValueOrDefault(_selectedResource.Id);
     private string UploadAccept => NormalizeKind(_edit.Kind) switch
@@ -1349,54 +1402,77 @@ else
         _selectedResourceIds.Contains(resource.Id);
 
     private string BulkSelectTitle(ManagedResourceModel resource) =>
-        resource.IsInUse ? T("ResourceInUseCannotSelect") : T("Select");
+        T("Select");
 
-    private void ToggleBulkSelected(ManagedResourceModel resource, ChangeEventArgs e)
+    private async Task HandleResourceClick(ManagedResourceModel resource, MouseEventArgs e)
     {
-        if (!CanManageResources) return;
-
-        if (resource.IsInUse)
+        if (CanUploadResources && (e.ShiftKey || e.CtrlKey || e.MetaKey))
         {
-            _selectedResourceIds.Remove(resource.Id);
+            HandleBulkSelectionClick(resource, e);
             return;
         }
+        _selectionAnchorId = resource.Id;
+        await SelectResource(resource);
+    }
 
-        var selected = e.Value is bool value && value;
-        if (selected)
-            _selectedResourceIds.Add(resource.Id);
-        else
+    private void HandleBulkSelectionClick(ManagedResourceModel resource, MouseEventArgs e)
+    {
+        if (!CanUploadResources) return;
+
+        var page = PagedResources.ToList();
+        if (e.ShiftKey && !string.IsNullOrWhiteSpace(_selectionAnchorId))
+        {
+            var anchorIndex = page.FindIndex(item => item.Id == _selectionAnchorId);
+            var targetIndex = page.FindIndex(item => item.Id == resource.Id);
+            if (anchorIndex >= 0 && targetIndex >= 0)
+            {
+                var start = Math.Min(anchorIndex, targetIndex);
+                var end = Math.Max(anchorIndex, targetIndex);
+                for (var index = start; index <= end; index++)
+                    _selectedResourceIds.Add(page[index].Id);
+                _selectionAnchorId = resource.Id;
+                return;
+            }
+        }
+
+        if (!_selectedResourceIds.Add(resource.Id))
             _selectedResourceIds.Remove(resource.Id);
+        _selectionAnchorId = resource.Id;
     }
 
     private void ToggleAllPagedBulk(ChangeEventArgs e)
     {
-        if (!CanManageResources) return;
+        if (!CanUploadResources) return;
 
         var selected = e.Value is bool value && value;
-        foreach (var resource in DeletablePagedResources)
+        foreach (var resource in SelectablePagedResources)
         {
             if (selected)
                 _selectedResourceIds.Add(resource.Id);
             else
                 _selectedResourceIds.Remove(resource.Id);
         }
+        _selectionAnchorId = selected ? SelectablePagedResources.LastOrDefault()?.Id : null;
     }
 
     private void ClearSelection()
     {
         _selectedResourceIds.Clear();
+        _selectionAnchorId = null;
     }
 
     private void PruneSelection()
     {
-        if (!CanManageResources)
+        if (!CanUploadResources)
         {
-            _selectedResourceIds.Clear();
+            ClearSelection();
             return;
         }
 
         var ids = _resources.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         _selectedResourceIds.RemoveWhere(id => !ids.Contains(id));
+        if (!string.IsNullOrWhiteSpace(_selectionAnchorId) && !ids.Contains(_selectionAnchorId))
+            _selectionAnchorId = null;
     }
 
     private async Task PreviousPage()
@@ -1585,6 +1661,7 @@ else
         if (items.Count == 0) return;
 
         _uploadingQueue = true;
+        var closeAfterSuccess = false;
         try
         {
             using var gate = new SemaphoreSlim(Math.Clamp(_uploadCapabilities.MaxConcurrentUploads, 1, 6));
@@ -1615,11 +1692,15 @@ else
                 ? $"Uploaded {successful} resource(s)."
                 : $"Uploaded {successful} resource(s); {failed} failed or were cancelled.",
                 failed == 0 ? 200 : 422);
+            closeAfterSuccess = failed == 0 &&
+                _uploadQueue.All(item => item.Status == UploadQueueStatus.Done);
         }
         finally
         {
             _uploadingQueue = false;
         }
+        if (closeAfterSuccess)
+            await CloseUploadModal();
     }
 
     private async Task UploadQueueItemAsync(ResourceUploadQueueItem item)
@@ -1852,6 +1933,9 @@ else
     private static ManagedResourceModel? MapUploadedResource(ResourceUploadResourceDto? resource) => resource is null ? null : new()
     {
         Id = resource.Id,
+        AssetId = resource.AssetId,
+        AssetVersion = resource.AssetVersion,
+        StorageSchemaVersion = resource.StorageSchemaVersion,
         Kind = resource.Kind,
         Purpose = resource.Purpose,
         Name = new Dictionary<string, string>(resource.Name),
@@ -2202,6 +2286,49 @@ else
         _showBulkDelete = true;
     }
 
+    private void OpenBulkMove()
+    {
+        if (!EnsureCanUploadResources() || _selectedResourceIds.Count == 0) return;
+        var currentAlbums = _resources
+            .Where(resource => _selectedResourceIds.Contains(resource.Id))
+            .Select(resource => resource.AlbumId ?? string.Empty)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _bulkMoveAlbumId = currentAlbums.Count == 1 ? currentAlbums[0] : string.Empty;
+        if (!string.IsNullOrWhiteSpace(_bulkMoveAlbumId) && !BulkMoveAlbums.Any(album => album.Id == _bulkMoveAlbumId))
+            _bulkMoveAlbumId = string.Empty;
+        _showBulkMove = true;
+    }
+
+    private void CloseBulkMove()
+    {
+        if (_bulkMoveLoading) return;
+        _showBulkMove = false;
+    }
+
+    private async Task ConfirmBulkMove()
+    {
+        if (!EnsureCanUploadResources() || _selectedResourceIds.Count == 0) return;
+        _bulkMoveLoading = true;
+        try
+        {
+            var response = await ContentService.BulkMoveResourcesAsync(
+                _selectedResourceIds,
+                string.IsNullOrWhiteSpace(_bulkMoveAlbumId) ? null : _bulkMoveAlbumId);
+            Http.Notify(response.Message, response.StatusCode);
+            if (!response.Success) return;
+
+            _showBulkMove = false;
+            ClearSelection();
+            await LoadAlbums();
+            await LoadResources();
+        }
+        finally
+        {
+            _bulkMoveLoading = false;
+        }
+    }
+
     private void CancelBulkDeleteResources()
     {
         if (_bulkDeleteLoading) return;
@@ -2212,37 +2339,37 @@ else
     {
         if (!EnsureCanManageResources()) return;
 
-        var resources = BulkDeleteResources;
-        if (resources.Count == 0) return;
+        var selectedIds = _selectedResourceIds.ToList();
+        if (selectedIds.Count == 0) return;
 
         _bulkDeleteLoading = true;
-        var deleted = 0;
-        var failed = 0;
-
-        foreach (var resource in resources)
+        ApiResponse<ResourceBulkDeleteResult>? response = null;
+        try
         {
-            var res = await ContentService.DeleteResourceAsync(resource.Id);
-            if (res.Success)
-            {
-                deleted++;
-                _selectedResourceIds.Remove(resource.Id);
-                _usageByResourceId.Remove(resource.Id);
-            }
-            else
-            {
-                failed++;
-            }
+            response = await ContentService.BulkDeleteResourcesAsync(selectedIds);
         }
+        finally
+        {
+            _bulkDeleteLoading = false;
+        }
+        if (response is null) return;
+        var result = response.Data;
+        if (result is not null)
+            foreach (var item in result.Items.Where(item => item.Deleted))
+            {
+                _selectedResourceIds.Remove(item.ResourceId);
+                _usageByResourceId.Remove(item.ResourceId);
+            }
 
-        _bulkDeleteLoading = false;
         _showBulkDelete = false;
         await LoadAlbums();
         await LoadResources();
 
-        if (deleted > 0)
-            Http.Notify(string.Format(T("DeleteResourcesSucceeded"), deleted), 200);
-        if (failed > 0)
-            Http.Notify(string.Format(T("DeleteResourcesPartial"), failed), 422);
+        if (result?.DeletedCount > 0)
+            Http.Notify(string.Format(T("DeleteResourcesSucceeded"), result.DeletedCount), 200);
+        var notDeleted = (result?.BlockedCount ?? 0) + (result?.FailedCount ?? 0);
+        if (!response.Success || notDeleted > 0)
+            Http.Notify(string.Format(T("DeleteResourcesPartial"), notDeleted), 422);
     }
 
     private async Task LoadUsageDetails(ManagedResourceModel? resource, bool force = false)

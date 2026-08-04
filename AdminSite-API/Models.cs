@@ -1369,6 +1369,10 @@ namespace FullProject.Models
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
         public string? StorageKey { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? AssetId { get; set; }
+        public int AssetVersion { get; set; }
+        public int StorageSchemaVersion { get; set; }
         public string? ThumbnailUrl { get; set; }
         public string FileName { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
@@ -1404,6 +1408,10 @@ namespace FullProject.Models
         public string? AlbumId { get; set; }
         public string PendingStorageKey { get; set; } = string.Empty;
         public string? FinalStorageKey { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? AssetId { get; set; }
+        public int AssetVersion { get; set; }
+        public int StorageSchemaVersion { get; set; }
         public string Mode { get; set; } = "single";
         public string? MultipartUploadId { get; set; }
         public string Status { get; set; } = "initiated";
@@ -1411,6 +1419,8 @@ namespace FullProject.Models
         public string? ErrorMessage { get; set; }
         [BsonRepresentation(BsonType.ObjectId)]
         public string? ResourceId { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? ReservedResourceId { get; set; }
         [BsonRepresentation(BsonType.ObjectId)]
         public string? ReplaceResourceId { get; set; }
         public DateTime? PresignedExpiresAtUtc { get; set; }
@@ -1420,6 +1430,57 @@ namespace FullProject.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public DateTime ExpiresAtUtc { get; set; }
+    }
+
+    [BsonIgnoreExtraElements]
+    public class StoredAsset
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public int SchemaVersion { get; set; } = 2;
+        public string OwnerDomain { get; set; } = string.Empty;
+        public string OwnerType { get; set; } = string.Empty;
+        public string OwnerId { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? ResourceId { get; set; }
+        public int AssetVersion { get; set; } = 1;
+        public string StorageKey { get; set; } = string.Empty;
+        public string PublicUrl { get; set; } = string.Empty;
+        public string OriginalFileName { get; set; } = string.Empty;
+        public string StoredFileName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string? ETag { get; set; }
+        public string LifecycleStatus { get; set; } = "ready";
+        public string? PreviousStorageKey { get; set; }
+        public DateTime? DeleteAfterUtc { get; set; }
+        public string CreatedById { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    [BsonIgnoreExtraElements]
+    public class StorageMigrationRecord
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; } = string.Empty;
+        public string MigrationId { get; set; } = string.Empty;
+        public string SourceKey { get; set; } = string.Empty;
+        public string DestinationKey { get; set; } = string.Empty;
+        public string OwnerDomain { get; set; } = string.Empty;
+        public string OwnerType { get; set; } = string.Empty;
+        public string OwnerId { get; set; } = string.Empty;
+        public string Status { get; set; } = "planned";
+        public bool DryRun { get; set; } = true;
+        public int AttemptCount { get; set; }
+        public string? LastError { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? CompletedAt { get; set; }
+        public DateTime? SourceDeleteAfterUtc { get; set; }
     }
     public enum ContentStatus
     {

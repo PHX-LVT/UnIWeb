@@ -49,6 +49,8 @@ namespace FullProject.Data
         public IMongoCollection<ManagedResource> ManagedResources => _database.GetCollection<ManagedResource>("managed_resources");
         public IMongoCollection<ResourceAlbum> ResourceAlbums => _database.GetCollection<ResourceAlbum>("resource_albums");
         public IMongoCollection<ResourceUploadSession> ResourceUploadSessions => _database.GetCollection<ResourceUploadSession>("resource_upload_sessions");
+        public IMongoCollection<StoredAsset> StoredAssets => _database.GetCollection<StoredAsset>("stored_assets");
+        public IMongoCollection<StorageMigrationRecord> StorageMigrations => _database.GetCollection<StorageMigrationRecord>("storage_migrations");
         public IMongoCollection<VisitorMetricCounter> VisitorMetrics => _database.GetCollection<VisitorMetricCounter>("visitor_metrics");
         public IMongoCollection<SiteSettings> Settings => _database.GetCollection<SiteSettings>("settings");
         public IMongoCollection<Branding> Branding => _database.GetCollection<Branding>("branding");

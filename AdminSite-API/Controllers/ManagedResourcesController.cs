@@ -1,4 +1,5 @@
 using Contracts.Api;
+using Contracts.Admin;
 using FullProject.DTOs;
 using FullProject.Models;
 using FullProject.Security;
@@ -25,6 +26,7 @@ namespace FullProject.Controllers
         private readonly R2StorageSettings _settings;
         private readonly SettingsService _siteSettings;
         private readonly ILogger<ManagedResourcesController> _logger;
+        private readonly StoredAssetService _storedAssets;
 
         public ManagedResourcesController(
             ManagedResourceService resources,
@@ -32,6 +34,7 @@ namespace FullProject.Controllers
             R2StorageService storage,
             IOptions<R2StorageSettings> settings,
             SettingsService siteSettings,
+            StoredAssetService storedAssets,
             ILogger<ManagedResourcesController> logger)
         {
             _resources = resources;
@@ -39,6 +42,7 @@ namespace FullProject.Controllers
             _storage = storage;
             _settings = settings.Value;
             _siteSettings = siteSettings;
+            _storedAssets = storedAssets;
             _logger = logger;
         }
 
@@ -151,6 +155,61 @@ namespace FullProject.Controllers
             if (!IsContentManager && !resource.Active) return NotFound(ApiResult.NotFound("Resource not found."));
             var usage = await _resources.GetUsageAsync(resource.Id);
             return Ok(ApiResult.Ok(MapResource(resource, usage.UsageCount)));
+        }
+
+        [HttpPost("bulk-move")]
+        public async Task<IActionResult> BulkMove([FromBody] ResourceBulkMoveRequest request)
+        {
+            if (!IsResourceUploader) return Forbid();
+            var ids = request.ResourceIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var (updatedCount, errors) = await _resources.MoveToAlbumAsync(request.AlbumId, ids, ActorId);
+            if (errors.Count > 0)
+            {
+                if (errors.Contains("Album not found.")) return NotFound(ApiResult.NotFound("Album not found."));
+                return UnprocessableEntity(ApiResult.Unprocessable<ResourceBulkMoveResult>(errors));
+            }
+            return Ok(ApiResult.Ok(new ResourceBulkMoveResult
+            {
+                AlbumId = string.IsNullOrWhiteSpace(request.AlbumId) ? null : request.AlbumId.Trim(),
+                RequestedCount = ids.Count,
+                UpdatedCount = updatedCount
+            }, $"Moved {updatedCount} resource(s)."));
+        }
+
+        [HttpPost("bulk-delete")]
+        public async Task<IActionResult> BulkDelete([FromBody] ResourceBulkDeleteRequest request)
+        {
+            if (!IsContentManager) return Forbid();
+            var ids = request.ResourceIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(101)
+                .ToList();
+            if (ids.Count == 0)
+                return UnprocessableEntity(ApiResult.BadRequest("Choose at least one resource."));
+            if (ids.Count > 100)
+                return UnprocessableEntity(ApiResult.BadRequest("Delete no more than 100 resources at a time."));
+
+            var result = new ResourceBulkDeleteResult { RequestedCount = ids.Count };
+            foreach (var id in ids)
+            {
+                var (deleted, usage, errors) = await _resources.DeleteAsync(id);
+                var item = new ResourceBulkDeleteItemResult
+                {
+                    ResourceId = id,
+                    Deleted = deleted,
+                    UsageCount = usage?.UsageCount ?? 0,
+                    Error = errors.FirstOrDefault()
+                };
+                result.Items.Add(item);
+                if (deleted) result.DeletedCount++;
+                else if (item.UsageCount > 0) result.BlockedCount++;
+                else result.FailedCount++;
+            }
+            return Ok(ApiResult.Ok(result, $"Deleted {result.DeletedCount} resource(s)."));
         }
 
         [HttpGet("{id}/usage")]
@@ -279,11 +338,39 @@ namespace FullProject.Controllers
                 dto.OriginalSourceUrl = request.OriginalSourceUrl;
                 dto.LicenseName = request.LicenseName;
                 dto.Attribution = request.Attribution;
-                var (resource, errors) = await _resources.CreateAsync(dto, ActorId);
+                var reservedResourceId = MongoDB.Bson.ObjectId.GenerateNewId().ToString();
+                var (resource, errors) = await _resources.CreateUploadedAsync(
+                    dto,
+                    ActorId,
+                    reservedResourceId,
+                    upload.AssetId!,
+                    upload.AssetVersion,
+                    upload.StorageSchemaVersion);
                 if (errors.Count > 0)
                 {
                     await TryDeleteUploadedAssetAsync(upload, "resource-create-validation-failed");
                     return UnprocessableEntity(ApiResult.Unprocessable<ManagedResourceResponseDto>(errors));
+                }
+
+                try
+                {
+                    await _storedAssets.RecordReadyAsync(
+                        upload.AssetId!,
+                        upload.StorageSchemaVersion,
+                        new AssetStorageOwner("icons", "custom-icon", "catalogue", "icon"),
+                        upload.StorageKey,
+                        upload.Url,
+                        uploadName,
+                        uploadType,
+                        uploadLength,
+                        ActorId,
+                        upload.AssetVersion,
+                        resource!.Id,
+                        cancellationToken: HttpContext.RequestAborted);
+                }
+                catch (Exception registryException)
+                {
+                    _logger.LogError(registryException, "Custom Icon {ResourceId} uploaded but its storage registry record could not be saved.", resource!.Id);
                 }
 
                 return Ok(ApiResult.Created(MapResource(resource!, 0), "Resource uploaded."));
@@ -464,6 +551,9 @@ namespace FullProject.Controllers
         private static ManagedResourceResponseDto MapResource(ManagedResource resource, int usageCount = 0) => new()
         {
             Id = resource.Id,
+            AssetId = resource.AssetId,
+            AssetVersion = resource.AssetVersion,
+            StorageSchemaVersion = resource.StorageSchemaVersion,
             Kind = resource.Kind,
             Name = resource.Name,
             Description = resource.Description,

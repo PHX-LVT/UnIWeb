@@ -27,6 +27,7 @@ namespace FullProject.Services
             await EnsureContentIndexesAsync();
             await EnsureManagedResourceIndexesAsync();
             await EnsureResourceUploadSessionIndexesAsync();
+            await EnsureStoredAssetIndexesAsync();
             await EnsureUserIndexesAsync();
             await EnsureLogManagementIndexesAsync();
             await EnsureSystemIndexesAsync();
@@ -301,6 +302,43 @@ namespace FullProject.Services
                     Name = "ix_resource_upload_sessions_delete_after_ttl",
                     ExpireAfter = TimeSpan.Zero
                 });
+        }
+
+        private async Task EnsureStoredAssetIndexesAsync()
+        {
+            var assets = _database.GetCollection<StoredAsset>("stored_assets");
+            await EnsureIndexAsync(assets,
+                Builders<StoredAsset>.IndexKeys.Ascending(item => item.StorageKey),
+                IndexOptions("ux_stored_assets_storage_key", unique: true));
+            await EnsureIndexAsync(assets,
+                Builders<StoredAsset>.IndexKeys
+                    .Ascending(item => item.OwnerDomain)
+                    .Ascending(item => item.OwnerType)
+                    .Ascending(item => item.OwnerId)
+                    .Ascending(item => item.Role),
+                IndexOptions("ix_stored_assets_owner"));
+            await EnsureIndexAsync(assets,
+                Builders<StoredAsset>.IndexKeys
+                    .Ascending(item => item.ResourceId)
+                    .Descending(item => item.AssetVersion),
+                IndexOptions("ix_stored_assets_resource_version"));
+            await EnsureIndexAsync(assets,
+                Builders<StoredAsset>.IndexKeys
+                    .Ascending(item => item.LifecycleStatus)
+                    .Ascending(item => item.DeleteAfterUtc),
+                IndexOptions("ix_stored_assets_lifecycle_delete_after"));
+
+            var migrations = _database.GetCollection<StorageMigrationRecord>("storage_migrations");
+            await EnsureIndexAsync(migrations,
+                Builders<StorageMigrationRecord>.IndexKeys
+                    .Ascending(item => item.MigrationId)
+                    .Ascending(item => item.SourceKey),
+                IndexOptions("ux_storage_migrations_operation", unique: true));
+            await EnsureIndexAsync(migrations,
+                Builders<StorageMigrationRecord>.IndexKeys
+                    .Ascending(item => item.Status)
+                    .Ascending(item => item.UpdatedAt),
+                IndexOptions("ix_storage_migrations_status_updated"));
         }
 
         private async Task EnsureLogManagementIndexesAsync()

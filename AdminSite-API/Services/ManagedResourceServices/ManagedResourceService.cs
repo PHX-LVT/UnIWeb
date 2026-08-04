@@ -73,6 +73,32 @@ namespace FullProject.Services
             return (resource, errors);
         }
 
+        public async Task<(ManagedResource? Resource, List<string> Errors)> CreateUploadedAsync(
+            ManagedResourceCreateDto dto,
+            string actorId,
+            string resourceId,
+            string assetId,
+            int assetVersion,
+            int storageSchemaVersion)
+        {
+            if (!ObjectId.TryParse(resourceId, out _) || !ObjectId.TryParse(assetId, out _))
+                return (null, ["The reserved resource identity is invalid."]);
+
+            var (resource, errors) = _validation.BuildResource(dto, actorId);
+            if (resource is not null)
+            {
+                resource.Id = resourceId;
+                resource.AssetId = assetId;
+                resource.AssetVersion = Math.Max(1, assetVersion);
+                resource.StorageSchemaVersion = Math.Max(1, storageSchemaVersion);
+                await _validation.AddAlbumAssignmentErrorsAsync(resource, errors);
+            }
+            if (errors.Count > 0) return (null, errors);
+
+            await _context.ManagedResources.InsertOneAsync(resource!);
+            return (resource, errors);
+        }
+
         public async Task<(ManagedResource? Resource, List<string> Errors)> UpdateAsync(string id, ManagedResourceUpdateDto dto, string actorId)
         {
             var resource = await GetByIdAsync(id);
@@ -94,7 +120,11 @@ namespace FullProject.Services
             string fileName,
             string contentType,
             long sizeBytes,
-            string actorId)
+            string actorId,
+            string? assetId = null,
+            int assetVersion = 0,
+            int storageSchemaVersion = 0,
+            bool deferOldAssetCleanup = false)
         {
             var resource = await GetByIdAsync(id);
             if (resource is null) return (null, 0, ["Resource not found."]);
@@ -109,24 +139,62 @@ namespace FullProject.Services
             var errors = _validation.ApplyUploadReplacement(resource, url, storageKey, fileName, contentType, sizeBytes, actorId);
             if (errors.Count > 0) return (null, 0, errors);
 
+            if (!string.IsNullOrWhiteSpace(assetId)) resource.AssetId = assetId;
+            if (assetVersion > 0) resource.AssetVersion = assetVersion;
+            if (storageSchemaVersion > 0) resource.StorageSchemaVersion = storageSchemaVersion;
+
             await _context.ManagedResources.ReplaceOneAsync(r => r.Id == id, resource);
             var updatedDocuments = await PropagateUploadReplacementAsync(resource, oldUrl);
-            await _assetCleanup.DeleteIfUnusedAsync(oldUrl, resource.Url);
+            if (!deferOldAssetCleanup)
+                await _assetCleanup.DeleteIfUnusedAsync(oldUrl, resource.Url);
             return (resource, updatedDocuments, errors);
+        }
+
+        public async Task<(ManagedResource? Resource, string? PreviousStorageKey, int UpdatedDocuments, List<string> Errors)> MigrateStorageAsync(
+            string id,
+            string url,
+            string storageKey,
+            string assetId,
+            int assetVersion,
+            int storageSchemaVersion,
+            string actorId)
+        {
+            var resource = await GetByIdAsync(id);
+            if (resource is null) return (null, null, 0, ["Resource not found."]);
+            if (!ObjectId.TryParse(assetId, out _)) return (null, null, 0, ["Asset identity is invalid."]);
+
+            var oldUrl = resource.Url;
+            var oldStorageKey = resource.StorageKey;
+            resource.Url = url;
+            resource.StorageKey = storageKey;
+            resource.AssetId = assetId;
+            resource.AssetVersion = Math.Max(1, assetVersion);
+            resource.StorageSchemaVersion = Math.Max(1, storageSchemaVersion);
+            resource.UpdatedById = actorId;
+            resource.UpdatedAt = DateTime.UtcNow;
+            await _context.ManagedResources.ReplaceOneAsync(item => item.Id == resource.Id, resource);
+            var updatedDocuments = string.Equals(oldUrl, url, StringComparison.OrdinalIgnoreCase)
+                ? 0
+                : await PropagateUploadReplacementAsync(resource, oldUrl);
+            return (resource, oldStorageKey, updatedDocuments, []);
         }
 
         public Task<Dictionary<string, int>> GetUsageCountsAsync(IEnumerable<ManagedResource> resources) =>
             _usage.GetUsageCountsAsync(resources);
 
         public async Task<(int UpdatedCount, List<string> Errors)> AssignToAlbumAsync(string albumId, IEnumerable<string>? resourceIds, string actorId)
+            => await MoveToAlbumAsync(albumId, resourceIds, actorId);
+
+        public async Task<(int UpdatedCount, List<string> Errors)> MoveToAlbumAsync(string? albumId, IEnumerable<string>? resourceIds, string actorId)
         {
             var errors = new List<string>();
-            if (string.IsNullOrWhiteSpace(albumId) || !ObjectId.TryParse(albumId.Trim(), out _))
-                return (0, ["Album not found."]);
-
-            var album = await _albums.GetByIdAsync(albumId.Trim());
-            if (album is null)
-                return (0, ["Album not found."]);
+            ResourceAlbum? album = null;
+            if (!string.IsNullOrWhiteSpace(albumId))
+            {
+                if (!ObjectId.TryParse(albumId.Trim(), out _)) return (0, ["Album not found."]);
+                album = await _albums.GetByIdAsync(albumId.Trim());
+                if (album is null) return (0, ["Album not found."]);
+            }
 
             var ids = (resourceIds ?? [])
                 .Select(id => id?.Trim() ?? string.Empty)
@@ -136,6 +204,8 @@ namespace FullProject.Services
 
             if (ids.Count == 0)
                 return (0, ["Choose at least one resource."]);
+            if (ids.Count > 100)
+                return (0, ["Move no more than 100 resources at a time."]);
 
             if (ids.Any(id => !ObjectId.TryParse(id, out _)))
                 return (0, ["One or more resources were not found."]);
@@ -145,10 +215,10 @@ namespace FullProject.Services
             if (ids.Any(id => !foundIds.Contains(id)))
                 errors.Add("One or more resources were not found.");
 
-            foreach (var resource in resources)
+            foreach (var resource in resources.Where(_ => album is not null))
             {
                 var expectedScope = ManagedResourceAlbumService.ScopeForKind(resource.Kind);
-                if (!string.Equals(album.Scope, expectedScope, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(album!.Scope, expectedScope, StringComparison.OrdinalIgnoreCase))
                 {
                     var resourceName = resource.Name.GetValueOrDefault("en") ?? resource.FileName ?? resource.Id;
                     errors.Add($"{resourceName} does not match this album type.");
@@ -162,7 +232,7 @@ namespace FullProject.Services
             var result = await _context.ManagedResources.UpdateManyAsync(
                 r => ids.Contains(r.Id),
                 Builders<ManagedResource>.Update
-                    .Set(r => r.AlbumId, album.Id)
+                    .Set(r => r.AlbumId, album?.Id)
                     .Set(r => r.UpdatedById, actorId)
                     .Set(r => r.UpdatedAt, now));
 

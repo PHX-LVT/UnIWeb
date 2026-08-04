@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
+using MongoDB.Bson;
 
 namespace FullProject.Services.AssetService;
 
@@ -16,11 +17,13 @@ public class R2StorageService
     private const string UnsignedPayload = "UNSIGNED-PAYLOAD";
     private readonly HttpClient _http;
     private readonly R2StorageSettings _settings;
+    private readonly AssetStorageKeyPolicy _keyPolicy;
 
-    public R2StorageService(HttpClient http, IOptions<R2StorageSettings> settings)
+    public R2StorageService(HttpClient http, IOptions<R2StorageSettings> settings, AssetStorageKeyPolicy keyPolicy)
     {
         _http = http;
         _settings = settings.Value;
+        _keyPolicy = keyPolicy;
     }
 
     public bool IsConfigured => _settings.IsConfigured;
@@ -29,10 +32,10 @@ public class R2StorageService
         $"{_settings.PublicBaseUrl.TrimEnd('/')}/{key.TrimStart('/')}";
 
     public string CreatePendingKey(string sessionId, string fileName) =>
-        BuildKey(fileName, $"pending/{SanitizePath(sessionId)}", includeDate: false);
+        _keyPolicy.CreateTemporaryKey(sessionId, fileName);
 
-    public string CreateFinalKey(string fileName, string folder = "managed-resources") =>
-        BuildKey(fileName, folder, includeDate: true);
+    public string CreateResourceFinalKey(string resourceId, int version, string kind, string friendlyName, string fileName) =>
+        _keyPolicy.CreateResourceKey(resourceId, version, kind, friendlyName, fileName);
 
     public async Task<string> UploadAsync(Stream stream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
     {
@@ -42,6 +45,22 @@ public class R2StorageService
 
     public async Task<R2UploadResult> UploadWithMetadataAsync(Stream stream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
     {
+        var assetId = ObjectId.GenerateNewId().ToString();
+        var key = _keyPolicy.CreateMappedLegacyUploadKey(folder, assetId, 1, fileName);
+        var result = await UploadWithMetadataToKeyAsync(stream, fileName, contentType, key, cancellationToken);
+        result.AssetId = assetId;
+        result.AssetVersion = 1;
+        result.StorageSchemaVersion = _keyPolicy.SchemaVersion;
+        return result;
+    }
+
+    public async Task<R2UploadResult> UploadWithMetadataToKeyAsync(
+        Stream stream,
+        string fileName,
+        string contentType,
+        string key,
+        CancellationToken cancellationToken = default)
+    {
         EnsureConfigured();
         if (stream.CanSeek)
         {
@@ -50,7 +69,6 @@ public class R2StorageService
                 throw new InvalidOperationException($"Upload exceeds max size of {_settings.MaxUploadBytes / 1024 / 1024}MB.");
         }
 
-        var key = CreateFinalKey(fileName, folder);
         using var request = CreateSignedRequest(HttpMethod.Put, key, payloadHash: UnsignedPayload);
         request.Content = new StreamContent(stream);
         request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(NormalizeContentType(contentType));
@@ -173,6 +191,58 @@ public class R2StorageService
         };
     }
 
+    public async Task<R2ObjectListResult> ListObjectsAsync(
+        string? prefix = null,
+        int maximumObjects = 20_000,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+        maximumObjects = Math.Clamp(maximumObjects, 1, 100_000);
+        var result = new R2ObjectListResult();
+        string? continuationToken = null;
+        do
+        {
+            var query = new Dictionary<string, string>
+            {
+                ["list-type"] = "2",
+                ["max-keys"] = Math.Min(1000, maximumObjects - result.Objects.Count).ToString(CultureInfo.InvariantCulture)
+            };
+            if (!string.IsNullOrWhiteSpace(prefix)) query["prefix"] = prefix.TrimStart('/');
+            if (!string.IsNullOrWhiteSpace(continuationToken)) query["continuation-token"] = continuationToken;
+
+            using var request = CreateSignedRequest(HttpMethod.Get, string.Empty, query, EmptyHash);
+            using var response = await _http.SendAsync(request, cancellationToken);
+            await EnsureSuccessAsync(response, "list objects", cancellationToken);
+            var document = XDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            foreach (var content in document.Descendants().Where(node => node.Name.LocalName == "Contents"))
+            {
+                var key = content.Elements().FirstOrDefault(node => node.Name.LocalName == "Key")?.Value;
+                if (string.IsNullOrWhiteSpace(key)) continue;
+                _ = long.TryParse(content.Elements().FirstOrDefault(node => node.Name.LocalName == "Size")?.Value, out var size);
+                _ = DateTime.TryParse(
+                    content.Elements().FirstOrDefault(node => node.Name.LocalName == "LastModified")?.Value,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var modified);
+                result.Objects.Add(new R2ListedObject
+                {
+                    Key = key,
+                    SizeBytes = size,
+                    ETag = content.Elements().FirstOrDefault(node => node.Name.LocalName == "ETag")?.Value ?? string.Empty,
+                    LastModifiedUtc = modified == default ? null : modified
+                });
+                if (result.Objects.Count >= maximumObjects) break;
+            }
+
+            var truncatedValue = document.Descendants().FirstOrDefault(node => node.Name.LocalName == "IsTruncated")?.Value;
+            var pageTruncated = bool.TryParse(truncatedValue, out var truncated) && truncated;
+            continuationToken = document.Descendants().FirstOrDefault(node => node.Name.LocalName == "NextContinuationToken")?.Value;
+            result.Truncated = pageTruncated;
+            if (!pageTruncated || result.Objects.Count >= maximumObjects) break;
+        } while (!string.IsNullOrWhiteSpace(continuationToken));
+        return result;
+    }
+
     public async Task<byte[]> ReadPrefixAsync(string key, int maximumBytes = 512, CancellationToken cancellationToken = default)
     {
         maximumBytes = Math.Clamp(maximumBytes, 1, 512 * 1024);
@@ -282,24 +352,6 @@ public class R2StorageService
         return request;
     }
 
-    private string BuildKey(string fileName, string folder, bool includeDate)
-    {
-        var extension = Path.GetExtension(fileName);
-        if (string.IsNullOrWhiteSpace(extension)) extension = ".bin";
-        var segments = new List<string> { SanitizePath(_settings.KeyPrefix), SanitizePath(folder) };
-        if (includeDate) segments.Add(DateTime.UtcNow.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture));
-        segments.Add($"{Guid.NewGuid():N}{extension.ToLowerInvariant()}");
-        return string.Join('/', segments.Where(segment => !string.IsNullOrWhiteSpace(segment)));
-    }
-
-    private static string SanitizePath(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        return string.Join('/', value.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(part => new string(part.Where(character => char.IsLetterOrDigit(character) || character is '-' or '_').ToArray()))
-            .Where(part => part.Length > 0));
-    }
-
     private string Host => $"{_settings.AccountId}.r2.cloudflarestorage.com";
     private string CanonicalUri(string key) => $"/{EncodePath(_settings.BucketName)}/{EncodePath(key)}";
     private static string EncodePath(string value) => string.Join('/', value.Split('/').Select(Encode));
@@ -347,6 +399,9 @@ public sealed class R2UploadResult
 {
     public string Url { get; set; } = string.Empty;
     public string StorageKey { get; set; } = string.Empty;
+    public string? AssetId { get; set; }
+    public int AssetVersion { get; set; }
+    public int StorageSchemaVersion { get; set; }
 }
 
 public sealed class R2ObjectMetadata
@@ -357,3 +412,17 @@ public sealed class R2ObjectMetadata
 }
 
 public sealed record R2CompletedPart(int PartNumber, string ETag);
+
+public sealed class R2ObjectListResult
+{
+    public List<R2ListedObject> Objects { get; set; } = [];
+    public bool Truncated { get; set; }
+}
+
+public sealed class R2ListedObject
+{
+    public string Key { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public string ETag { get; set; } = string.Empty;
+    public DateTime? LastModifiedUtc { get; set; }
+}

@@ -120,6 +120,19 @@ namespace AdminSite.Services
         public Task<ApiResponse<object>> DeleteResourceAsync(string id) =>
             _http.DeleteAsync<object>($"api/admin/resources/{id}");
 
+        public Task<ApiResponse<ResourceBulkMoveResult>> BulkMoveResourcesAsync(IEnumerable<string> ids, string? albumId) =>
+            _http.PostAsync<ResourceBulkMoveResult>("api/admin/resources/bulk-move", new ResourceBulkMoveRequest
+            {
+                ResourceIds = ids.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                AlbumId = albumId
+            });
+
+        public Task<ApiResponse<ResourceBulkDeleteResult>> BulkDeleteResourcesAsync(IEnumerable<string> ids) =>
+            _http.PostAsync<ResourceBulkDeleteResult>("api/admin/resources/bulk-delete", new ResourceBulkDeleteRequest
+            {
+                ResourceIds = ids.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+            });
+
         public Task<ApiResponse<ResourceUploadCapabilitiesDto>> GetResourceUploadCapabilitiesAsync() =>
             _http.GetAsync<ResourceUploadCapabilitiesDto>("api/admin/resource-uploads/capabilities");
 

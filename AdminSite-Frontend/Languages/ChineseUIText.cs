@@ -6,6 +6,11 @@ namespace AdminSite.Languages
     {
         public static UiTextCatalog Catalog { get; } = new UiTextCatalogBuilder("cn")
         {
+            ["MoveToAlbum"] = "\u79fb\u52a8\u5230\u76f8\u518c",
+            ["Move"] = "\u79fb\u52a8",
+            ["NoAlbum"] = "\u65e0\u76f8\u518c",
+            ["MoveResourcesPrompt"] = "\u5c06 {0} \u4e2a\u6240\u9009\u8d44\u6e90\u79fb\u52a8\u5230\u5176\u4ed6\u76f8\u518c\u3002",
+            ["MoveResourcesStorageUnchangedHint"] = "\u6b64\u64cd\u4f5c\u4ec5\u66f4\u6539\u76f8\u518c\u5206\u7c7b\uff0c\u5b58\u50a8\u5bf9\u8c61\u548c\u516c\u5f00 URL \u4fdd\u6301\u4e0d\u53d8\u3002",
             ["Dashboard"] = "页面管理",
             ["Global"] = "全局",
             ["Website"] = "网站",

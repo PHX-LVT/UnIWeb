@@ -663,6 +663,9 @@ namespace FullProject.DTOs
     public class ManagedResourceResponseDto
     {
         public string Id { get; set; } = string.Empty;
+        public string? AssetId { get; set; }
+        public int AssetVersion { get; set; }
+        public int StorageSchemaVersion { get; set; }
         public string Kind { get; set; } = "file";
         public string? Purpose { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();

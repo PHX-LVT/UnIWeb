@@ -177,6 +177,9 @@ public sealed class DirectResourceUploadService
     public static ManagedResourceModel Map(ResourceUploadResourceDto resource) => new()
     {
         Id = resource.Id,
+        AssetId = resource.AssetId,
+        AssetVersion = resource.AssetVersion,
+        StorageSchemaVersion = resource.StorageSchemaVersion,
         Kind = resource.Kind,
         Purpose = resource.Purpose,
         Name = new Dictionary<string, string>(resource.Name),

@@ -24,6 +24,7 @@ namespace FullProject.Security
             "carousel",
             "showcase",
             "list-items",
+            "highlights",
             "section-backgrounds",
             "image-blocks",
             "video-blocks",

@@ -1103,6 +1103,9 @@ namespace AdminSite.Models
     public class ManagedResourceModel
     {
         public string Id { get; set; } = string.Empty;
+        public string? AssetId { get; set; }
+        public int AssetVersion { get; set; }
+        public int StorageSchemaVersion { get; set; }
         public string Kind { get; set; } = "file";
         public string? Purpose { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
@@ -1215,6 +1218,9 @@ namespace AdminSite.Models
 {
     public class AssetUploadModel
     {
+        public string? AssetId { get; set; }
+        public int AssetVersion { get; set; }
+        public int StorageSchemaVersion { get; set; }
         public string Url { get; set; } = string.Empty;
         public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;

@@ -6,6 +6,11 @@ namespace AdminSite.Languages
     {
         public static UiTextCatalog Catalog { get; } = new UiTextCatalogBuilder("vi")
         {
+            ["MoveToAlbum"] = "Chuy\u1ec3n sang album",
+            ["Move"] = "Chuy\u1ec3n",
+            ["NoAlbum"] = "Kh\u00f4ng c\u00f3 album",
+            ["MoveResourcesPrompt"] = "Chuy\u1ec3n {0} t\u00e0i nguy\u00ean \u0111\u00e3 ch\u1ecdn sang album kh\u00e1c.",
+            ["MoveResourcesStorageUnchangedHint"] = "Thao t\u00e1c n\u00e0y ch\u1ec9 thay \u0111\u1ed5i c\u00e1ch s\u1eafp x\u1ebfp album. T\u1ec7p l\u01b0u tr\u1eef v\u00e0 URL c\u00f4ng khai kh\u00f4ng thay \u0111\u1ed5i.",
             ["Dashboard"] = "Quản lý trang",
             ["Global"] = "Toàn cục",
             ["Website"] = "Trang web",

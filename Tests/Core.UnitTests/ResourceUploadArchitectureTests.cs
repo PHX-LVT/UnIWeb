@@ -16,9 +16,50 @@ public sealed class ResourceUploadArchitectureTests
 
         var key = storage.CreatePendingKey("session-123", "Quarterly Report.PDF");
 
-        Assert.StartsWith("cms/pending/session-123/", key);
+        Assert.StartsWith("cms/temporary/uploads/session-123/", key);
         Assert.EndsWith(".pdf", key);
         Assert.DoesNotContain("Quarterly", key, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResourceKeys_UseStableIdentityVersionAndReadableName()
+    {
+        var settings = Options.Create(Settings());
+        var policy = new AssetStorageKeyPolicy(settings);
+
+        var key = policy.CreateResourceKey(
+            "66b0a82f524cbe51f129d347",
+            3,
+            "image",
+            "Logistics Conference 2026",
+            "camera-original.JPG");
+
+        Assert.Equal(
+            "cms/resource-library/media/66b0a82f524cbe51f129d347-v3-logistics-conference-2026.jpg",
+            key);
+        Assert.DoesNotMatch(@"/\d{4}/\d{2}/\d{2}/", key);
+    }
+
+    [Fact]
+    public void LegacyUploadFolders_MapToOwnershipDomainsWithoutDates()
+    {
+        var settings = Options.Create(Settings());
+        var policy = new AssetStorageKeyPolicy(settings);
+
+        var content = policy.CreateMappedLegacyUploadKey(
+            "content-hero",
+            "66b0a82f524cbe51f129d347",
+            1,
+            "Hero Photo.png");
+        var section = policy.CreateMappedLegacyUploadKey(
+            "highlights",
+            "66b0a82f524cbe51f129d348",
+            1,
+            "Proof Icon.svg");
+
+        Assert.StartsWith("cms/content/content-item/unassigned/hero/", content);
+        Assert.StartsWith("cms/page-builder/section/unassigned/highlight/", section);
+        Assert.DoesNotMatch(@"/\d{4}/\d{2}/\d{2}/", content);
     }
 
     [Fact]
@@ -70,6 +111,33 @@ public sealed class ResourceUploadArchitectureTests
     }
 
     [Fact]
+    public async Task ListObjectsAsync_ParsesInventoryMetadata()
+    {
+        const string xml = """
+            <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+              <IsTruncated>false</IsTruncated>
+              <Contents>
+                <Key>cms/resource-library/media/item-v1-photo.jpg</Key>
+                <LastModified>2026-08-04T10:00:00.000Z</LastModified>
+                <ETag>&quot;abc&quot;</ETag>
+                <Size>2048</Size>
+              </Contents>
+            </ListBucketResult>
+            """;
+        var handler = new StaticResponseHandler(xml);
+        var storage = Storage(new HttpClient(handler));
+
+        var result = await storage.ListObjectsAsync("cms/", cancellationToken: TestContext.Current.CancellationToken);
+
+        var item = Assert.Single(result.Objects);
+        Assert.False(result.Truncated);
+        Assert.Equal("cms/resource-library/media/item-v1-photo.jpg", item.Key);
+        Assert.Equal(2048, item.SizeBytes);
+        Assert.Contains("list-type=2", handler.RequestUri!.Query);
+        Assert.Contains("prefix=cms%2F", handler.RequestUri.Query);
+    }
+
+    [Fact]
     public void ImageInspection_RejectsDecompressionBombDimensions()
     {
         var png = new byte[24];
@@ -105,7 +173,10 @@ public sealed class ResourceUploadArchitectureTests
 
     private static R2StorageService Storage(HttpClient? httpClient = null) => new(
         httpClient ?? new HttpClient(),
-        Options.Create(new R2StorageSettings
+        Options.Create(Settings()),
+        new AssetStorageKeyPolicy(Options.Create(Settings())));
+
+    private static R2StorageSettings Settings() => new()
         {
             AccountId = "account",
             AccessKeyId = "access",
@@ -113,7 +184,7 @@ public sealed class ResourceUploadArchitectureTests
             BucketName = "bucket",
             PublicBaseUrl = "https://public.example",
             KeyPrefix = "cms"
-        }));
+        };
 
     private static void WriteBigEndian(byte[] bytes, int offset, int value)
     {
@@ -133,6 +204,20 @@ public sealed class ResourceUploadArchitectureTests
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent(content)
+            });
+        }
+    }
+
+    private sealed class StaticResponseHandler(string body) : HttpMessageHandler
+    {
+        public Uri? RequestUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body)
             });
         }
     }

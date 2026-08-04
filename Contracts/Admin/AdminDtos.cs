@@ -788,6 +788,9 @@ public class ColumnSlotResponseDto
 
     public class AssetUploadResponseDto
     {
+        public string? AssetId { get; set; }
+        public int AssetVersion { get; set; }
+        public int StorageSchemaVersion { get; set; }
         public string Url { get; set; } = string.Empty;
         public string? StorageKey { get; set; }
         public string ContentType { get; set; } = string.Empty;

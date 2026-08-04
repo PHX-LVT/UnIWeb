@@ -19,15 +19,21 @@ namespace FullProject.Controllers
         private readonly R2StorageService _storage;
         private readonly R2StorageSettings _settings;
         private readonly SettingsService _siteSettings;
+        private readonly StoredAssetService _storedAssets;
+        private readonly AssetStorageKeyPolicy _keyPolicy;
 
         public AssetsController(
             R2StorageService storage,
             IOptions<R2StorageSettings> settings,
-            SettingsService siteSettings)
+            SettingsService siteSettings,
+            StoredAssetService storedAssets,
+            AssetStorageKeyPolicy keyPolicy)
         {
             _storage = storage;
             _settings = settings.Value;
             _siteSettings = siteSettings;
+            _storedAssets = storedAssets;
+            _keyPolicy = keyPolicy;
         }
 
         [HttpPost("upload")]
@@ -83,13 +89,29 @@ namespace FullProject.Controllers
 
             await using var stream = file.OpenReadStream();
             var upload = await _storage.UploadWithMetadataAsync(stream, file.FileName, file.ContentType, folder, HttpContext.RequestAborted);
+            var owner = _keyPolicy.MapLegacyFolder(folder);
+            await _storedAssets.RecordReadyAsync(
+                upload.AssetId!,
+                upload.StorageSchemaVersion,
+                owner,
+                upload.StorageKey,
+                upload.Url,
+                file.FileName,
+                file.ContentType,
+                file.Length,
+                ActorId,
+                upload.AssetVersion,
+                cancellationToken: HttpContext.RequestAborted);
             return Ok(ApiResult.Ok(new AssetUploadResponseDto
             {
                 Url = upload.Url,
                 StorageKey = upload.StorageKey,
                 ContentType = file.ContentType,
                 FileName = file.FileName,
-                Size = file.Length
+                Size = file.Length,
+                AssetId = upload.AssetId,
+                AssetVersion = upload.AssetVersion,
+                StorageSchemaVersion = upload.StorageSchemaVersion
             }, "Asset uploaded."));
         }
 
@@ -110,7 +132,7 @@ namespace FullProject.Controllers
                     CanManageContentAssets,
 
                 "sections" or "blocks" or "hero" or "gallery" or "carousel" or "showcase" or "list-items" or
-                "section-backgrounds" or "image-blocks" or "video-blocks" or "file-blocks" or "card-blocks" =>
+                "highlights" or "section-backgrounds" or "image-blocks" or "video-blocks" or "file-blocks" or "card-blocks" =>
                     AdminAuthorization.HasPermission(User, AdminPermissionKeys.PageBuilder),
 
                 "uploads" =>
@@ -126,6 +148,12 @@ namespace FullProject.Controllers
             AdminAuthorization.IsAdminAdmin(User) ||
             AdminAuthorization.HasPermission(User, AdminPermissionKeys.CreateEditContent) ||
             AdminAuthorization.HasPermission(User, AdminPermissionKeys.ApproveContent);
+
+        private string ActorId =>
+            User.FindFirst("adminId")?.Value ??
+            User.FindFirst("sub")?.Value ??
+            User.Identity?.Name ??
+            "unknown";
 
     }
 }

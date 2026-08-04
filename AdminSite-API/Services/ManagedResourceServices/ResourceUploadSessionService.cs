@@ -23,6 +23,7 @@ public sealed class ResourceUploadSessionService
     private readonly ManagedResourceAlbumService _albums;
     private readonly SettingsService _siteSettings;
     private readonly R2StorageService _storage;
+    private readonly StoredAssetService _storedAssets;
     private readonly R2StorageSettings _settings;
     private readonly ILogger<ResourceUploadSessionService> _logger;
 
@@ -32,6 +33,7 @@ public sealed class ResourceUploadSessionService
         ManagedResourceAlbumService albums,
         SettingsService siteSettings,
         R2StorageService storage,
+        StoredAssetService storedAssets,
         IOptions<R2StorageSettings> settings,
         ILogger<ResourceUploadSessionService> logger)
     {
@@ -40,6 +42,7 @@ public sealed class ResourceUploadSessionService
         _albums = albums;
         _siteSettings = siteSettings;
         _storage = storage;
+        _storedAssets = storedAssets;
         _settings = settings.Value;
         _logger = logger;
     }
@@ -109,6 +112,17 @@ public sealed class ResourceUploadSessionService
                 throw Validation("Custom Icons must be replaced through the protected Custom Icon upload flow.");
             if (!string.Equals(replacement.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 throw Validation($"Replacement file must be a {replacement.Kind} resource.");
+
+            var replacementUploadActive = await _context.ResourceUploadSessions.Find(item =>
+                    item.ReplaceResourceId == replacement.Id &&
+                    new[] { "initiated", "verifying", "cancelling" }.Contains(item.Status) &&
+                    item.ExpiresAtUtc > DateTime.UtcNow)
+                .AnyAsync(cancellationToken);
+            if (replacementUploadActive)
+                throw new ResourceUploadException(
+                    "replacement_in_progress",
+                    "A replacement upload for this resource is already active.",
+                    StatusCodes.Status409Conflict);
         }
 
         var now = DateTime.UtcNow;
@@ -135,17 +149,25 @@ public sealed class ResourceUploadSessionService
         var capabilities = await GetCapabilitiesAsync();
         var lifetime = TimeSpan.FromMinutes(Math.Clamp(_settings.PresignedUrlMinutes, 5, capabilities.PendingLifetimeMinutes));
         var uploadUrlExpiresAtUtc = now.Add(lifetime);
+        var resourceId = replacement?.Id ?? ObjectId.GenerateNewId().ToString();
+        var assetId = ObjectId.GenerateNewId().ToString();
+        var assetVersion = replacement is null ? 1 : Math.Max(1, replacement.AssetVersion) + 1;
+        var resourceName = replacement?.Name.GetValueOrDefault("en") ?? CleanResourceName(request.ResourceName, fileName);
         var session = new ResourceUploadSession
         {
             Id = ObjectId.GenerateNewId().ToString(),
             ActorId = actorId,
             Kind = kind,
             FileName = fileName,
-            ResourceName = replacement?.Name.GetValueOrDefault("en") ?? CleanResourceName(request.ResourceName, fileName),
+            ResourceName = resourceName,
             ContentType = string.IsNullOrWhiteSpace(request.ContentType) ? "application/octet-stream" : request.ContentType.Trim(),
             SizeBytes = request.SizeBytes,
             AlbumId = string.IsNullOrWhiteSpace(requestedAlbumId) ? null : requestedAlbumId.Trim(),
             ReplaceResourceId = replacement?.Id,
+            ReservedResourceId = resourceId,
+            AssetId = assetId,
+            AssetVersion = assetVersion,
+            StorageSchemaVersion = Math.Max(1, _settings.StorageSchemaVersion),
             Mode = request.SizeBytes >= capabilities.MultipartThresholdBytes ? "multipart" : "single",
             Status = "initiated",
             PresignedExpiresAtUtc = uploadUrlExpiresAtUtc,
@@ -155,6 +177,12 @@ public sealed class ResourceUploadSessionService
             ExpiresAtUtc = now.AddMinutes(capabilities.PendingLifetimeMinutes)
         };
         session.PendingStorageKey = _storage.CreatePendingKey(session.Id, session.FileName);
+        session.FinalStorageKey = _storage.CreateResourceFinalKey(
+            resourceId,
+            assetVersion,
+            kind,
+            resourceName,
+            fileName);
         await _context.ResourceUploadSessions.InsertOneAsync(session, cancellationToken: cancellationToken);
 
         try
@@ -314,15 +342,18 @@ public sealed class ResourceUploadSessionService
             if (session.Kind == "image" && !ResourceUploadInspection.HasSafeImageDimensions(sample, session.FileName, out var dimensionError))
                 throw new ResourceUploadException("unsafe_image_dimensions", dimensionError!, StatusCodes.Status422UnprocessableEntity);
 
-            session.FinalStorageKey = _storage.CreateFinalKey(session.FileName);
+            if (string.IsNullOrWhiteSpace(session.FinalStorageKey))
+                throw new ResourceUploadException("storage_key_missing", "The final storage key was not reserved.", StatusCodes.Status500InternalServerError);
             session.UpdatedAt = DateTime.UtcNow;
             await SaveAsync(session, cancellationToken);
             await _storage.CopyAsync(session.PendingStorageKey, session.FinalStorageKey, cancellationToken);
 
             ManagedResource? resource;
             List<string> errors;
+            string? previousStorageKey = null;
             if (!string.IsNullOrWhiteSpace(session.ReplaceResourceId))
             {
+                previousStorageKey = (await _resources.GetByIdAsync(session.ReplaceResourceId))?.StorageKey;
                 (resource, _, errors) = await _resources.ReplaceUploadAsync(
                     session.ReplaceResourceId,
                     _storage.PublicUrl(session.FinalStorageKey),
@@ -331,7 +362,11 @@ public sealed class ResourceUploadSessionService
                     session.FileName,
                     session.ContentType,
                     session.SizeBytes,
-                    actorId);
+                    actorId,
+                    session.AssetId,
+                    session.AssetVersion,
+                    session.StorageSchemaVersion,
+                    deferOldAssetCleanup: true);
             }
             else
             {
@@ -344,10 +379,41 @@ public sealed class ResourceUploadSessionService
                     session.SizeBytes,
                     session.AlbumId);
                 create.Name["en"] = session.ResourceName;
-                (resource, errors) = await _resources.CreateAsync(create, actorId);
+                (resource, errors) = await _resources.CreateUploadedAsync(
+                    create,
+                    actorId,
+                    session.ReservedResourceId!,
+                    session.AssetId!,
+                    session.AssetVersion,
+                    session.StorageSchemaVersion);
             }
             if (resource is null)
                 throw new ResourceUploadException("resource_creation_failed", string.Join(" ", errors), StatusCodes.Status422UnprocessableEntity);
+
+            var finalMetadata = await _storage.GetMetadataAsync(session.FinalStorageKey, cancellationToken);
+            await _storedAssets.RecordReadyAsync(
+                session.AssetId!,
+                session.StorageSchemaVersion,
+                new AssetStorageOwner("resource-library", "managed-resource", resource.Id, resource.Kind),
+                session.FinalStorageKey,
+                resource.Url,
+                session.FileName,
+                session.ContentType,
+                session.SizeBytes,
+                actorId,
+                session.AssetVersion,
+                resource.Id,
+                finalMetadata?.ETag,
+                previousStorageKey,
+                cancellationToken);
+            if (!string.IsNullOrWhiteSpace(previousStorageKey) &&
+                !string.Equals(previousStorageKey, session.FinalStorageKey, StringComparison.Ordinal))
+            {
+                await _storedAssets.MarkSupersededAsync(
+                    previousStorageKey,
+                    DateTime.UtcNow.AddDays(Math.Max(1, _settings.LegacyObjectRetentionDays)),
+                    cancellationToken);
+            }
 
             session.ResourceId = resource.Id;
             session.Status = "ready";
@@ -591,6 +657,9 @@ public sealed class ResourceUploadSessionService
         Resource = resource is null ? null : new ResourceUploadResourceDto
         {
             Id = resource.Id,
+            AssetId = resource.AssetId,
+            AssetVersion = resource.AssetVersion,
+            StorageSchemaVersion = resource.StorageSchemaVersion,
             Kind = resource.Kind,
             Purpose = resource.Purpose,
             Name = new Dictionary<string, string>(resource.Name),
