@@ -117,9 +117,9 @@ namespace FullProject.Controllers
             {
                 created = await _service.CreateAsync(pageId, sectionId, dto);
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException)
             {
-                return BadRequest(ApiResult.BadRequest(exception.Message));
+                return BadRequest(ApiResult.BadRequest("The Block settings are invalid."));
             }
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId, blockId = created.Id },
@@ -165,9 +165,9 @@ namespace FullProject.Controllers
             {
                 updated = await _service.UpdateAsync(pageId, sectionId, blockId, dto);
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException)
             {
-                return BadRequest(ApiResult.BadRequest(exception.Message));
+                return BadRequest(ApiResult.BadRequest("The Block settings are invalid."));
             }
             if (updated is null) return NotFound(ApiResult.NotFound("Block not found."));
             return Ok(ApiResult.Ok(MapToDto(pageId, sectionId, updated), "Block updated.")
@@ -470,6 +470,11 @@ namespace FullProject.Controllers
                     dto.OpenInLightbox = img.OpenInLightbox;
                     dto.FocalPointX = img.FocalPointX;
                     dto.FocalPointY = img.FocalPointY;
+                    dto.ImagePlacement = MediaPlacementPolicy.ToAdmin(img.ImagePlacement ?? new MediaPlacement
+                    {
+                        FocalPointX = img.FocalPointX,
+                        FocalPointY = img.FocalPointY
+                    });
                     break;
 
                 case VideoBlock v:
@@ -531,6 +536,7 @@ namespace FullProject.Controllers
                     dto.Description = card.Description;
                     dto.ImageUrl = card.ImageUrl;
                     dto.Asset = BlockAssetMetadataService.ToAdmin(card.Asset);
+                    dto.ImagePlacement = MediaPlacementPolicy.ToAdmin(card.ImagePlacement);
                     dto.AltText = card.ImageAltText;
                     dto.ButtonLabel = card.ButtonLabel;
                     dto.Href = card.Href;
@@ -597,6 +603,7 @@ namespace FullProject.Controllers
                     dto.Title = container.Title;
                     dto.ContainerLayout = BlockContractService.ToAdminContainerLayout(container.ContainerLayout);
                     break;
+
             }
 
             return dto;

@@ -13,21 +13,39 @@
             </div>
             <div class="modal-body">
                 <div class="content-resource-picker__toolbar">
-                    <input class="form-control"
+                    <input class="form-control content-resource-picker__search"
                            placeholder="@T("SearchResources")"
                            value="@_search"
                            @oninput="OnSearchChanged" />
-                    <a class="btn-admin btn-ghost" href="/content/resources" target="_blank" rel="noopener">
-                        <i class="fas fa-up-right-from-square"></i> @T("ResourceLibrary")
+                    <select class="form-control content-resource-picker__album"
+                            value="@_albumId"
+                            disabled="@_albumLoadFailed"
+                            aria-label="@T("Album")"
+                            @onchange="OnAlbumChanged">
+                        <option value="">@T("AllAlbums")</option>
+                        @foreach (var album in _albums)
+                        {
+                            <option value="@album.Id">@album.Name</option>
+                        }
+                    </select>
+                    <a class="btn-admin btn-ghost content-resource-picker__open"
+                       href="/content/resources"
+                       target="_blank"
+                       rel="noopener"
+                       title="@T("ResourceLibrary")">
+                        <i class="fas fa-up-right-from-square"></i>
+                        <span>@T("ResourceLibrary")</span>
                     </a>
                 </div>
                 <div class="form-hint">@T("ResourcePickerHint")</div>
+                <AdminInlineStatus TargetId="resource-picker-albums-load" Retry="LoadAlbums" RetryText="@T("Retry")" />
+                <AdminInlineStatus TargetId="resource-picker-items-load" Retry="LoadResources" Retrying="_loading" RetryText="@T("Retry")" />
 
                 @if (_loading)
                 {
                     <p class="text-muted">@T("Loading")</p>
                 }
-                else if (!FilteredResources.Any())
+                else if (!_resourceLoadFailed && !FilteredResources.Any())
                 {
                     <p class="text-muted">@T("NoMatchingResources")</p>
                 }
@@ -86,10 +104,14 @@
 
     private bool _wasOpen;
     private bool _loading;
+    private bool _resourceLoadFailed;
+    private bool _albumLoadFailed;
     private string _loadedKind = string.Empty;
     private string _search = string.Empty;
+    private string _albumId = string.Empty;
     private ManagedResourceModel? _selectedResource;
     private List<ManagedResourceModel> _resources = new();
+    private List<ResourceAlbumModel> _albums = new();
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
@@ -108,14 +130,19 @@
         {
             _loadedKind = normalizedKind;
             _search = string.Empty;
+            _albumId = string.Empty;
             _selectedResource = null;
+            await LoadAlbums();
             await LoadResources();
         }
 
         if (!Open)
         {
             _resources = new();
+            _albums = new();
             _selectedResource = null;
+            Http.ClearInlineStatus("resource-picker-albums-load");
+            Http.ClearInlineStatus("resource-picker-items-load");
         }
 
         _wasOpen = Open;
@@ -123,10 +150,16 @@
 
     private async Task LoadResources()
     {
+        Http.ClearInlineStatus("resource-picker-items-load");
         _loading = true;
-        var res = await ContentService.GetResourcesAsync(_loadedKind, _search, includeInactive: false);
+        var res = await ContentService.GetResourcesAsync(
+            _loadedKind,
+            _search,
+            includeInactive: false,
+            albumId: string.IsNullOrWhiteSpace(_albumId) ? null : _albumId);
         if (res.Success)
         {
+            _resourceLoadFailed = false;
             _resources = (res.Data ?? new()).Where(r => r.Active).ToList();
             if (_selectedResource is not null &&
                 !_resources.Any(r => string.Equals(r.Id, _selectedResource.Id, StringComparison.OrdinalIgnoreCase)))
@@ -136,16 +169,46 @@
         }
         else
         {
+            _resourceLoadFailed = true;
             _resources = new();
             _selectedResource = null;
-            Http.Notify(res.Message, res.StatusCode);
+            Http.NotifyInline(res, "resource-picker-items-load");
         }
         _loading = false;
+    }
+
+    private async Task LoadAlbums()
+    {
+        Http.ClearInlineStatus("resource-picker-albums-load");
+        var scope = string.Equals(_loadedKind, "file", StringComparison.OrdinalIgnoreCase) ? "file" : "media";
+        var response = await ContentService.GetResourceAlbumsAsync(scope);
+        if (response.Success)
+        {
+            _albumLoadFailed = false;
+            _albums = (response.Data ?? [])
+                .OrderBy(album => album.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (!string.IsNullOrWhiteSpace(_albumId) && !_albums.Any(album => album.Id == _albumId))
+                _albumId = string.Empty;
+            return;
+        }
+
+        _albums = [];
+        _albumLoadFailed = true;
+        _albumId = string.Empty;
+        Http.NotifyInline(response, "resource-picker-albums-load");
     }
 
     private async Task OnSearchChanged(ChangeEventArgs e)
     {
         _search = e.Value?.ToString() ?? string.Empty;
+        await LoadResources();
+    }
+
+    private async Task OnAlbumChanged(ChangeEventArgs e)
+    {
+        _albumId = e.Value?.ToString() ?? string.Empty;
+        _selectedResource = null;
         await LoadResources();
     }
 

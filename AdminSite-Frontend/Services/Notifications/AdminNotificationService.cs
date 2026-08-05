@@ -1,4 +1,6 @@
 using Blazored.Toast.Services;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Routing;
 using System.Globalization;
 
 namespace AdminSite.Services.Notifications;
@@ -6,8 +8,6 @@ namespace AdminSite.Services.Notifications;
 public interface IAdminNotificationService
 {
     event Action? InlineFeedbackChanged;
-
-    string? LastTechnicalDetail { get; }
 
     void Notify(AdminFeedbackMessage message);
     void Notify(string? message, int statusCode);
@@ -23,19 +23,29 @@ public interface IAdminNotificationService
     bool TryGetInlineStatus(string targetId, out AdminInlineFeedbackState status);
 }
 
-public sealed class AdminNotificationService : IAdminNotificationService
+public sealed class AdminNotificationService : IAdminNotificationService, IDisposable
 {
     private readonly IToastService _toast;
+    private readonly IAdminLanguageContext _language;
+    private readonly NavigationManager _navigation;
+    private readonly ILogger<AdminNotificationService> _logger;
     private readonly Dictionary<string, AdminInlineFeedbackState> _inlineStatuses = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _shownOperations = new(StringComparer.Ordinal);
 
-    public AdminNotificationService(IToastService toast)
+    public AdminNotificationService(
+        IToastService toast,
+        IAdminLanguageContext language,
+        NavigationManager navigation,
+        ILogger<AdminNotificationService> logger)
     {
         _toast = toast;
+        _language = language;
+        _navigation = navigation;
+        _logger = logger;
+        _navigation.LocationChanged += OnLocationChanged;
     }
 
     public event Action? InlineFeedbackChanged;
-
-    public string? LastTechnicalDetail { get; private set; }
 
     public void Notify(string? message, int statusCode)
     {
@@ -80,7 +90,9 @@ public sealed class AdminNotificationService : IAdminNotificationService
         if (string.IsNullOrWhiteSpace(text)) return;
 
         if (!string.IsNullOrWhiteSpace(message.TechnicalDetail))
-            LastTechnicalDetail = message.TechnicalDetail;
+            _logger.LogWarning("Notification diagnostic detail: {TechnicalDetail}", message.TechnicalDetail);
+
+        if (IsDuplicate(message.OperationId)) return;
 
         var isSuccess = message.Severity is AdminFeedbackSeverity.Success or AdminFeedbackSeverity.Info;
         if (message.SuppressSuccess && isSuccess)
@@ -135,7 +147,8 @@ public sealed class AdminNotificationService : IAdminNotificationService
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
 
-        var text = AdminUiLocalizer.T(key, AdminUiLocalizer.FallbackLanguage);
+        var language = _language.CurrentLanguage;
+        var text = AdminUiLocalizer.T(key, language);
         if (string.Equals(text, key, StringComparison.Ordinal))
             return null;
 
@@ -144,11 +157,16 @@ public sealed class AdminNotificationService : IAdminNotificationService
 
         try
         {
-            return string.Format(CultureInfo.CurrentCulture, text, args.ToArray());
+            var resolvedArgs = args
+                .Select(value => value is string stringValue
+                    ? AdminOutcomeTextResolver.ResolveArgument(stringValue, language)
+                    : value)
+                .ToArray();
+            return string.Format(CultureInfo.CurrentCulture, text, resolvedArgs);
         }
         catch (FormatException)
         {
-            LastTechnicalDetail = $"Notification key '{key}' has incompatible format arguments.";
+            _logger.LogWarning("Notification key {NotificationKey} has incompatible format arguments.", key);
             return text;
         }
     }
@@ -172,4 +190,24 @@ public sealed class AdminNotificationService : IAdminNotificationService
                 break;
         }
     }
+
+    private bool IsDuplicate(string? operationId)
+    {
+        if (string.IsNullOrWhiteSpace(operationId)) return false;
+        var now = DateTimeOffset.UtcNow;
+        foreach (var expired in _shownOperations.Where(pair => now - pair.Value > TimeSpan.FromMinutes(2)).Select(pair => pair.Key).ToList())
+            _shownOperations.Remove(expired);
+        if (_shownOperations.ContainsKey(operationId)) return true;
+        _shownOperations[operationId] = now;
+        return false;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        if (_inlineStatuses.Count == 0) return;
+        _inlineStatuses.Clear();
+        InlineFeedbackChanged?.Invoke();
+    }
+
+    public void Dispose() => _navigation.LocationChanged -= OnLocationChanged;
 }

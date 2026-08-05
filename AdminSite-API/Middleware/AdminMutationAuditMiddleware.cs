@@ -1,5 +1,7 @@
 using Contracts.Auth;
 using FullProject.Services.LogManagement;
+using FullProject.Services.Notifications;
+using FullProject.Utils;
 using Microsoft.AspNetCore.Mvc.Controllers;
 
 namespace FullProject.Middleware;
@@ -20,7 +22,10 @@ public sealed class AdminMutationAuditMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context, IAuditTrailWriter writer)
+    public async Task InvokeAsync(
+        HttpContext context,
+        IAuditTrailWriter writer,
+        IAdminDomainEventPublisher domainEvents)
     {
         var isAdminMutation = context.Request.Path.StartsWithSegments("/api/admin") &&
                               MutationMethods.Contains(context.Request.Method);
@@ -44,7 +49,10 @@ public sealed class AdminMutationAuditMiddleware
         finally
         {
             if (descriptor is not null)
+            {
                 await PersistAuditAsync(context, writer, descriptor, downstreamException);
+                await PublishDomainEventAsync(context, domainEvents, descriptor, downstreamException);
+            }
         }
     }
 
@@ -75,6 +83,9 @@ public sealed class AdminMutationAuditMiddleware
             {
                 DomainCode = definition.DomainCode,
                 ActionCode = definition.ActionCode,
+                OutcomeCode = context.Items.TryGetValue(ApiOutcomePolicy.OperationErrorItem, out var errorCode)
+                    ? errorCode?.ToString() ?? outcome.ToString().ToLowerInvariant()
+                    : outcome.ToString().ToLowerInvariant(),
                 TargetTypeCode = definition.TargetTypeCode,
                 TargetId = targetId,
                 Outcome = outcome,
@@ -103,6 +114,47 @@ public sealed class AdminMutationAuditMiddleware
             // already-produced response.
             _logger.LogError(ex,
                 "Failed to persist audit event {DomainCode}/{ActionCode}; correlation {CorrelationId}.",
+                definition.DomainCode,
+                definition.ActionCode,
+                context.TraceIdentifier);
+        }
+    }
+
+    private async Task PublishDomainEventAsync(
+        HttpContext context,
+        IAdminDomainEventPublisher publisher,
+        ControllerActionDescriptor descriptor,
+        Exception? downstreamException)
+    {
+        if (downstreamException is not null || context.Response.StatusCode is < 200 or >= 300)
+            return;
+
+        var definition = AuditActionCatalog.Resolve(descriptor);
+        if (!definition.ShouldAudit) return;
+        var targetId = TargetRouteKeys
+            .Select(key => context.Request.RouteValues.TryGetValue(key, out var value) ? value?.ToString() : null)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        var eventId = Guid.NewGuid().ToString("N");
+        try
+        {
+            await publisher.PublishAsync(new AdminDomainEventEnvelope(
+                eventId,
+                definition.ActionCode,
+                definition.DomainCode,
+                definition.ActionCode,
+                context.User.FindFirst("adminId")?.Value,
+                definition.TargetTypeCode,
+                targetId,
+                DateTimeOffset.UtcNow,
+                context.TraceIdentifier,
+                $"{definition.ActionCode}:{targetId ?? "none"}:{context.TraceIdentifier}",
+                new Dictionary<string, string?>()), CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Failed to publish domain event {DomainCode}/{ActionCode}; correlation {CorrelationId}.",
                 definition.DomainCode,
                 definition.ActionCode,
                 context.TraceIdentifier);

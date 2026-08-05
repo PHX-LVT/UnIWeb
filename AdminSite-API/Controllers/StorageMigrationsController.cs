@@ -14,10 +14,14 @@ namespace FullProject.Controllers;
 public sealed class StorageMigrationsController : ControllerBase
 {
     private readonly StorageMigrationService _migrations;
+    private readonly ManagedImageBackfillService _managedImages;
 
-    public StorageMigrationsController(StorageMigrationService migrations)
+    public StorageMigrationsController(
+        StorageMigrationService migrations,
+        ManagedImageBackfillService managedImages)
     {
         _migrations = migrations;
+        _managedImages = managedImages;
     }
 
     [HttpGet("inventory")]
@@ -41,6 +45,24 @@ public sealed class StorageMigrationsController : ControllerBase
         if (!AdminAuthorization.IsAdminAdmin(User)) return Forbid();
         var result = await _migrations.ExecuteAsync(request, ActorId, cancellationToken);
         return Ok(ApiResult.Ok(result, $"Completed {result.CompletedCount} migration(s); {result.FailedCount} failed."));
+    }
+
+    [HttpPost("backfill-managed-images")]
+    public async Task<IActionResult> BackfillManagedImages(
+        [FromBody] ManagedImageBackfillRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!AdminAuthorization.IsAdminAdmin(User)) return Forbid();
+        if (!string.IsNullOrWhiteSpace(request.AfterAssetId) &&
+            !MongoDB.Bson.ObjectId.TryParse(request.AfterAssetId, out _))
+        {
+            return UnprocessableEntity(ApiResult.BadRequest("The managed image backfill cursor is invalid."));
+        }
+        var result = await _managedImages.RunAsync(request, ActorId, cancellationToken);
+        var message = request.DryRun
+            ? $"Managed image backfill preview found {result.WouldCreateCount} image(s) to register."
+            : $"Managed image backfill registered {result.CreatedCount} image(s); {result.FailedCount} failed.";
+        return Ok(ApiResult.Ok(result, message));
     }
 
     private string ActorId =>

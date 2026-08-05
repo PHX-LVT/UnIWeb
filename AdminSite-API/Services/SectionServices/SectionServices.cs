@@ -97,6 +97,7 @@ namespace FullProject.Services.SectionServices
                         Title = item.Title,
                         Description = item.Description,
                         ImageUrl = item.ImageUrl,
+                        ImagePlacement = item.ImagePlacement is null ? null : MediaPlacementPolicy.Normalize(item.ImagePlacement),
                         LinkHref = CleanUrl(item.LinkHref),
                         Visible = item.Visible,
                         Order = i
@@ -276,6 +277,8 @@ namespace FullProject.Services.SectionServices
                     cardUpdates.Add(Builders<Page>.Update.Set(p => p.Card!.CardContent, heroDto.Subheading));
                 if (heroDto.ImageUrl != null)
                     cardUpdates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImageUrl, heroDto.ImageUrl));
+                if (heroDto.ImagePlacement != null)
+                    cardUpdates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImagePlacement, MediaPlacementPolicy.Normalize(heroDto.ImagePlacement)));
 
                 await _context.PagesDraft.UpdateOneAsync(
                     p => p.Id == pageId,
@@ -331,6 +334,8 @@ namespace FullProject.Services.SectionServices
                                 cardUpdates.Add(Builders<Page>.Update.Set(p => p.Card!.CardContent, hDto.Subheading));
                             if (hDto.ImageUrl != null)
                                 cardUpdates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImageUrl, EmptyToNull(hDto.ImageUrl)));
+                            if (hDto.ImagePlacement != null)
+                                cardUpdates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImagePlacement, MediaPlacementPolicy.Normalize(hDto.ImagePlacement)));
                             await _context.PagesDraft.UpdateOneAsync(p => p.Id == pageId, Builders<Page>.Update.Combine(cardUpdates));
                         }
                         break;
@@ -362,6 +367,7 @@ namespace FullProject.Services.SectionServices
                                 Title = item.Title,
                                 Description = item.Description,
                                 ImageUrl = item.ImageUrl,
+                                ImagePlacement = item.ImagePlacement is null ? null : MediaPlacementPolicy.Normalize(item.ImagePlacement),
                                 LinkHref = CleanUrl(item.LinkHref),
                                 Visible = item.Visible,
                                 Order = i
@@ -885,7 +891,8 @@ namespace FullProject.Services.SectionServices
             CardContent = item.CardContent ?? new(),
             CardBackgroundType = string.IsNullOrWhiteSpace(item.CardBackgroundType) ? "color" : item.CardBackgroundType!,
             CardBackgroundColor = string.IsNullOrWhiteSpace(item.CardBackgroundColor) ? "#ffffff" : item.CardBackgroundColor!,
-            CardImageUrl = item.CardImageUrl
+            CardImageUrl = item.CardImageUrl,
+            CardImagePlacement = item.CardImagePlacement is null ? null : MediaPlacementPolicy.Normalize(item.CardImagePlacement)
         };
 
         private static int NormalizeShowcaseLimit(int value) =>
@@ -959,6 +966,7 @@ namespace FullProject.Services.SectionServices
             Title = item.Title ?? new(),
             Description = item.Description ?? new(),
             ImageUrl = item.ImageUrl,
+            ImagePlacement = item.ImagePlacement is null ? null : MediaPlacementPolicy.Normalize(item.ImagePlacement),
             LinkHref = CleanUrl(item.LinkHref),
             Metrics = (item.Metrics ?? new()).Select(MapCarouselMetric).ToList(),
             Visible = item.Visible,
@@ -989,6 +997,7 @@ namespace FullProject.Services.SectionServices
             Title = item.Title ?? new(),
             Description = item.Description ?? new(),
             ImageUrl = item.ImageUrl,
+            ImagePlacement = item.ImagePlacement is null ? null : MediaPlacementPolicy.Normalize(item.ImagePlacement),
             BadgeText = item.BadgeText,
             Highlighted = item.Highlighted,
             Visible = item.Visible,

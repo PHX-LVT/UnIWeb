@@ -62,6 +62,7 @@
                     {
                         <div class="sc-showcase__image">
                             <img src="@imageSrc"
+                                 style="@StyleHelper.GetMediaPlacementStyle(child.Card?.CardImagePlacement)"
                                  alt="@CardTitle(child)" />
                         </div>
                     }
@@ -70,6 +71,7 @@
                     {
                         <img class="sc-showcase__media-bg"
                              src="@imageSrc"
+                             style="@StyleHelper.GetMediaPlacementStyle(child.Card?.CardImagePlacement)"
                              alt="" />
                         <div class="sc-showcase__media-overlay"></div>
                     }

@@ -6,6 +6,7 @@
 @inject ThemeService ThemeService
 @inject IHttpService Http
 @inject IJSRuntime JS
+@inject ILogger<ThemeSettingsPanel> Logger
 
 @if (_model is not null)
 {
@@ -397,17 +398,23 @@ else if (_model is not null)
             _model = Normalize(res.Data);
         }
 
-        Http.Notify(res.Message, res.StatusCode);
         _saving = false;
 
-        try
+        var previewRefreshed = true;
+        if (res.Success) try
         {
             await JS.InvokeVoidAsync("reloadPreviewIframe");
         }
-        catch
+        catch (JSException exception)
         {
-            // The next dashboard render will refresh the preview if iframe JS is unavailable.
+            previewRefreshed = false;
+            Logger.LogWarning(exception, "Theme saved but the preview could not be refreshed.");
         }
+
+        if (res.Success && !previewRefreshed)
+            Http.Notify(T("ThemePreviewRefreshFailed"), 422);
+        else
+            Http.Notify(res);
 
         await OnSaved.InvokeAsync();
         StateHasChanged();
@@ -427,17 +434,23 @@ else if (_model is not null)
             ApplyLivePreview();
         }
 
-        Http.Notify(res.Message, res.StatusCode);
         _resetting = false;
 
-        try
+        var previewRefreshed = true;
+        if (res.Success) try
         {
             await JS.InvokeVoidAsync("reloadPreviewIframe");
         }
-        catch
+        catch (JSException exception)
         {
-            // The next dashboard render will refresh the preview if iframe JS is unavailable.
+            previewRefreshed = false;
+            Logger.LogWarning(exception, "Theme reset saved but the preview could not be refreshed.");
         }
+
+        if (res.Success && !previewRefreshed)
+            Http.Notify(T("ThemePreviewRefreshFailed"), 422);
+        else
+            Http.Notify(res);
 
         await OnSaved.InvokeAsync();
         StateHasChanged();

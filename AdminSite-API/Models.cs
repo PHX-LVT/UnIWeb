@@ -263,6 +263,7 @@ namespace FullProject.Models
         public string CardBackgroundType { get; set; } = "color";
         public string CardBackgroundColor { get; set; } = "#ffffff";
         public string? CardImageUrl { get; set; }
+        public MediaPlacement? CardImagePlacement { get; set; }
         public bool IsCustomized { get; set; } = false;
     }
 
@@ -276,6 +277,7 @@ namespace FullProject.Models
         public string CardBackgroundType { get; set; } = "color";
         public string CardBackgroundColor { get; set; } = "#ffffff";
         public string? CardImageUrl { get; set; }
+        public MediaPlacement? CardImagePlacement { get; set; }
     }
 
         [BsonIgnoreExtraElements]
@@ -513,6 +515,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public MediaPlacement? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -554,6 +557,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public MediaPlacement? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public List<CarouselMetric> Metrics { get; set; } = new();
         public bool Visible { get; set; } = true;
@@ -587,6 +591,7 @@ namespace FullProject.Models
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public MediaPlacement? ImagePlacement { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
     }
@@ -914,6 +919,7 @@ namespace FullProject.Models
         public bool OpenInLightbox { get; set; }
         public double FocalPointX { get; set; } = 50;
         public double FocalPointY { get; set; } = 50;
+        public MediaPlacement? ImagePlacement { get; set; }
     }
 
     [BsonDiscriminator("video")]
@@ -990,6 +996,7 @@ namespace FullProject.Models
         public Dictionary<string, string> ImageAltText { get; set; } = new();
         [BsonIgnore, JsonIgnore]
         public string? ImageUrl { get => Asset.Url; set => Asset.Url = value; }
+        public MediaPlacement? ImagePlacement { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -1351,6 +1358,14 @@ namespace FullProject.Models
         public string Id { get; set; } = string.Empty;
         public string Scope { get; set; } = "media"; // media | file
         public string Name { get; set; } = string.Empty;
+        public string? SystemKey { get; set; }
+        public bool IsSystemRoot { get; set; }
+        public string? CoverUrl { get; set; }
+        public string? CoverStorageKey { get; set; }
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string? CoverAssetId { get; set; }
+        public int CoverAssetVersion { get; set; }
+        public int CoverStorageSchemaVersion { get; set; }
         public string CreatedById { get; set; } = string.Empty;
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -1365,6 +1380,7 @@ namespace FullProject.Models
         public string Id { get; set; } = string.Empty;
         public string Kind { get; set; } = "file"; // image | file | video
         public string? Purpose { get; set; }
+        public string? OriginContext { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;
@@ -1402,12 +1418,15 @@ namespace FullProject.Models
         public string Kind { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public string ResourceName { get; set; } = string.Empty;
+        public string UploadContext { get; set; } = Contracts.Admin.ResourceUploadContextCodes.LibraryManual;
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
         [BsonRepresentation(BsonType.ObjectId)]
         public string? AlbumId { get; set; }
         public string PendingStorageKey { get; set; } = string.Empty;
         public string? FinalStorageKey { get; set; }
+        public string? PreviousStorageKey { get; set; }
+        public string? PreviousResourceUrl { get; set; }
         [BsonRepresentation(BsonType.ObjectId)]
         public string? AssetId { get; set; }
         public int AssetVersion { get; set; }

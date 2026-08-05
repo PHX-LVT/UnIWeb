@@ -4,14 +4,29 @@
 
 @if (_status is not null)
 {
-    <span class="@CssClass" role="status" aria-live="polite">
+    <span class="@CssClass"
+          role="@(_status.Severity == AdminFeedbackSeverity.Error ? "alert" : "status")"
+          aria-live="@(_status.Severity == AdminFeedbackSeverity.Error ? "assertive" : "polite")">
         <span class="admin-inline-status__dot" aria-hidden="true"></span>
         <span>@_status.Message</span>
+        @if (Retry.HasDelegate)
+        {
+            <button type="button" class="btn-admin btn-ghost" disabled="@Retrying" @onclick="Retry">
+                @if (Retrying)
+                {
+                    <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+                }
+                @RetryText
+            </button>
+        }
     </span>
 }
 
 @code {
     [Parameter, EditorRequired] public string TargetId { get; set; } = string.Empty;
+    [Parameter] public EventCallback Retry { get; set; }
+    [Parameter] public bool Retrying { get; set; }
+    [Parameter] public string RetryText { get; set; } = "Retry";
 
     private AdminInlineFeedbackState? _status;
 
@@ -48,5 +63,7 @@
     public void Dispose()
     {
         Notifications.InlineFeedbackChanged -= HandleChanged;
+        if (!string.IsNullOrWhiteSpace(TargetId))
+            Notifications.ClearInlineStatus(TargetId);
     }
 }

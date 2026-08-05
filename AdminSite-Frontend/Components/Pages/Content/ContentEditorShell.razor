@@ -1,11 +1,14 @@
 @page "/content/new"
 @page "/content/edit/{Id}"
+@using Contracts.Admin
+@using Contracts.Api
 @inject AdminContentService ContentService
 @inject DirectResourceUploadService DirectUploads
 @inject IHttpService Http
 @inject NavigationManager Nav
 @inject AdminAuthService Auth
 @inject IJSRuntime JS
+@inject ILogger<ContentEditorShell> Logger
 
 <div class="page-header content-editor-header">
     <h1 class="page-title"><i class="fas fa-pen-nib"></i> @T(IsNew ? "NewContent" : "EditContent")</h1>
@@ -20,9 +23,16 @@
         <p class="text-muted">@T("Loading")</p>
     </div>
 }
+else if (_loadFailed)
+{
+    <div class="admin-card">
+        <AdminInlineStatus TargetId="content-editor-load" Retry="LoadEditorAsync" Retrying="_loading" RetryText="@T("Retry")" />
+    </div>
+}
 else
 {
     <div class="content-editor-shell">
+        <AdminValidationSummary Errors="_fieldErrors" Title="@T("ValidationFailed")" />
         <div class="admin-card content-workflow-panel">
             <div class="content-status-line">
                 <span class="content-status-dot @StatusClass"></span>
@@ -589,6 +599,8 @@ else
     private string _fileResourceSource = DirectUploadSource;
     private string? _fileStorageKey;
     private bool _loading = true;
+    private bool _loadFailed;
+    private IReadOnlyList<ApiFieldError>? _fieldErrors;
     private HashSet<string> _expandedBodyItemIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _resourcePickerOpen;
     private string _resourcePickerKind = "file";
@@ -743,8 +755,24 @@ else
     {
         await Auth.InitializeAsync();
         await Auth.RefreshSessionAsync();
+        await LoadEditorAsync();
+    }
+
+    private async Task LoadEditorAsync()
+    {
+        Http.ClearInlineStatus("content-editor-load");
+        _loading = true;
+        _loadFailed = false;
         var typeRes = await ContentService.GetTypesAsync();
-        _types = typeRes.Data ?? new();
+        if (!typeRes.Success || typeRes.Data is null)
+        {
+            _types = new();
+            _loadFailed = true;
+            _loading = false;
+            Http.NotifyInline(typeRes, "content-editor-load");
+            return;
+        }
+        _types = typeRes.Data;
         _edit.ContentTypeKey = _types.FirstOrDefault()?.Key ?? "article";
 
         if (!IsNew)
@@ -753,7 +781,10 @@ else
             if (res.Success && res.Data is not null)
                 LoadItem(res.Data);
             else
-                Http.Notify(res.Message, res.StatusCode);
+            {
+                _loadFailed = true;
+                Http.NotifyInline(res, "content-editor-load");
+            }
         }
 
         _loading = false;
@@ -819,14 +850,19 @@ else
 
     private async Task<bool> SaveCurrentAsync()
     {
-        await FlushRichTextEditorsAsync();
+        _fieldErrors = null;
+        if (!await FlushRichTextEditorsAsync()) return false;
         PrepareRequest();
         var res = IsNew
             ? await ContentService.CreateAsync(_edit)
             : await ContentService.UpdateAsync(Id!, _edit);
 
-        Http.Notify(res.Message, res.StatusCode);
-        if (!res.Success || res.Data is null) return false;
+        Http.Notify(res);
+        if (!res.Success || res.Data is null)
+        {
+            _fieldErrors = res.FieldErrors;
+            return false;
+        }
 
         if (IsNew)
         {
@@ -839,14 +875,18 @@ else
         return true;
     }
 
-    private async Task FlushRichTextEditorsAsync()
+    private async Task<bool> FlushRichTextEditorsAsync()
     {
         try
         {
             await JS.InvokeVoidAsync("contentRichTextEditor.flushAll");
+            return true;
         }
-        catch (JSException)
+        catch (JSException exception)
         {
+            Logger.LogWarning(exception, "Rich-text editors could not be synchronized before content save.");
+            Http.Notify(T("ContentSaveSyncFailed"), 500);
+            return false;
         }
     }
 
@@ -873,7 +913,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.PublishAsync(Id!);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
             Nav.NavigateTo("/content/all");
     }
@@ -883,7 +923,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.SetStatusAsync(Id!, status);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success || res.Data is null) return;
 
         LoadItem(res.Data);
@@ -896,7 +936,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.DeleteAsync(Id!);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) Nav.NavigateTo(Auth.IsAdminAdmin ? "/content/deleted" : "/content/my");
     }
 
@@ -905,7 +945,7 @@ else
         if (IsNew) return;
 
         var res = await ContentService.RestoreAsync(Id!);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success && res.Data is not null) LoadItem(res.Data);
     }
 
@@ -1266,13 +1306,16 @@ else
 
     private async Task UploadHero(InputFileChangeEventArgs e)
     {
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-hero", e.File, maxBytes: 5 * 1024 * 1024);
-        Http.Notify(res.Message, res.StatusCode);
+        var res = await DirectUploads.UploadInputAsync(
+            "content-hero-upload",
+            "image",
+            uploadContext: ResourceUploadContextCodes.ContentManagementHero);
+        Http.Notify(res);
         if (res.Success && res.Data is not null)
         {
             _edit.HeroImageUrl = res.Data.Url;
-            _edit.HeroImageResourceId = null;
-            _edit.HeroImageResourceSource = DirectUploadSource;
+            _edit.HeroImageResourceId = res.Data.Id;
+            _edit.HeroImageResourceSource = ManagedResourceSource;
             _edit.HeroImageStorageKey = res.Data.StorageKey;
             _edit.HeroImagePlacement = MediaCropEditor.DefaultPlacement();
         }
@@ -1280,28 +1323,16 @@ else
 
     private async Task UploadThumbnail(InputFileChangeEventArgs e)
     {
-        if (IsImageResource)
-        {
-            var managed = await DirectUploads.UploadInputAsync("content-thumbnail-upload", "image");
-            Http.Notify(managed.Message, managed.StatusCode);
-            if (managed.Success && managed.Data is not null)
-            {
-                _edit.ThumbnailUrl = ResourceThumbnailUrl(managed.Data);
-                _edit.ThumbnailResourceId = managed.Data.Id;
-                _edit.ThumbnailResourceSource = ManagedResourceSource;
-                _edit.ThumbnailStorageKey = managed.Data.StorageKey;
-                _edit.ThumbnailPlacement = MediaCropEditor.DefaultPlacement();
-            }
-            return;
-        }
-
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-thumbnails", e.File, maxBytes: 5 * 1024 * 1024);
-        Http.Notify(res.Message, res.StatusCode);
+        var res = await DirectUploads.UploadInputAsync(
+            "content-thumbnail-upload",
+            "image",
+            uploadContext: ResourceUploadContextCodes.ContentManagementThumbnail);
+        Http.Notify(res);
         if (res.Success && res.Data is not null)
         {
-            _edit.ThumbnailUrl = res.Data.Url;
-            _edit.ThumbnailResourceId = null;
-            _edit.ThumbnailResourceSource = DirectUploadSource;
+            _edit.ThumbnailUrl = ResourceThumbnailUrl(res.Data);
+            _edit.ThumbnailResourceId = res.Data.Id;
+            _edit.ThumbnailResourceSource = ManagedResourceSource;
             _edit.ThumbnailStorageKey = res.Data.StorageKey;
             _edit.ThumbnailPlacement = MediaCropEditor.DefaultPlacement();
         }
@@ -1311,15 +1342,18 @@ else
     {
         if (!IsPageContent)
         {
-            var managed = await DirectUploads.UploadInputAsync("content-file-upload", "file");
-            Http.Notify(managed.Message, managed.StatusCode);
+            var managed = await DirectUploads.UploadInputAsync(
+                "content-file-upload",
+                "file",
+                ResourceUploadContextCodes.LibraryManual);
+            Http.Notify(managed);
             if (managed.Success && managed.Data is not null)
                 SetPrimaryFileFromResource(managed.Data);
             return;
         }
 
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-files", e.File, maxBytes: 20 * 1024 * 1024);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success && res.Data is not null)
         {
             _fileUrl = res.Data.Url;
@@ -1334,19 +1368,22 @@ else
 
     private async Task UploadBodyImage(ContentBodyItemModel item, InputFileChangeEventArgs e)
     {
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-body", e.File, maxBytes: 5 * 1024 * 1024);
-        Http.Notify(res.Message, res.StatusCode);
+        var res = await DirectUploads.UploadInputAsync(
+            $"content-body-image-{item.Id}",
+            "image",
+            uploadContext: ResourceUploadContextCodes.ContentManagementBody);
+        Http.Notify(res);
         if (res.Success && res.Data is not null)
         {
             item.Url = res.Data.Url;
-            ApplyDirectUpload(item, res.Data.StorageKey);
+            ApplyManagedResource(item, res.Data);
         }
     }
 
     private async Task UploadBodyFile(ContentBodyItemModel item, InputFileChangeEventArgs e)
     {
         var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=content-files", e.File, maxBytes: 20 * 1024 * 1024);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success && res.Data is not null)
         {
             item.Url = res.Data.Url;
@@ -1359,8 +1396,11 @@ else
 
     private async Task UploadGalleryImage(ContentGalleryItemModel item, InputFileChangeEventArgs e)
     {
-        var managed = await DirectUploads.UploadInputAsync($"content-gallery-image-{item.Id}", "image");
-        Http.Notify(managed.Message, managed.StatusCode);
+        var managed = await DirectUploads.UploadInputAsync(
+            $"content-gallery-image-{item.Id}",
+            "image",
+            uploadContext: ResourceUploadContextCodes.ContentManagementGallery);
+        Http.Notify(managed);
         if (managed.Success && managed.Data is not null)
             SetGalleryItemFromResource(item, managed.Data);
     }

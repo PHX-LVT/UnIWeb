@@ -182,6 +182,7 @@ namespace FullProject.Services
             if (dto.CardBackgroundType != null) updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardBackgroundType, dto.CardBackgroundType));
             if (dto.CardBackgroundColor != null) updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardBackgroundColor, dto.CardBackgroundColor));
             if (dto.CardImageUrl != null) updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImageUrl, dto.CardImageUrl));
+            if (dto.CardImagePlacement != null) updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImagePlacement, MediaPlacementPolicy.Normalize(dto.CardImagePlacement)));
 
             updates.Add(Builders<Page>.Update.Set(p => p.Card!.IsCustomized, isCustomized));
             updates.Add(Builders<Page>.Update.Set(p => p.UpdatedAt, DateTime.UtcNow));
@@ -220,7 +221,7 @@ namespace FullProject.Services
             return true;
         }
 
-        public async Task AutoSyncCardFromHeroAsync(string pageId, Dictionary<string, string>? heading, Dictionary<string, string>? subheading, string? imageUrl)
+        public async Task AutoSyncCardFromHeroAsync(string pageId, Dictionary<string, string>? heading, Dictionary<string, string>? subheading, string? imageUrl, MediaPlacement? imagePlacement = null)
         {
             var page = await GetByIdAsync(pageId);
             if (page is null || page.Card is null || page.Card.IsCustomized)
@@ -237,6 +238,8 @@ namespace FullProject.Services
                 updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImageUrl, imageUrl));
                 updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardBackgroundType, "image"));
             }
+            if (imagePlacement is not null)
+                updates.Add(Builders<Page>.Update.Set(p => p.Card!.CardImagePlacement, MediaPlacementPolicy.Normalize(imagePlacement)));
 
             await _context.PagesDraft.UpdateOneAsync(p => p.Id == pageId, Builders<Page>.Update.Combine(updates));
         }

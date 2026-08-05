@@ -1,4 +1,5 @@
 @inject AdminBlockService BlockService
+@inject DirectResourceUploadService DirectUploads
 @inject IHttpService Http
 @inject AdminFormSubmissionService FormService
 @using Contracts.Admin
@@ -22,7 +23,7 @@
         {
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem">
                 <img src="@_imageUrl"
-                     style="width:120px;height:78px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />
+                     style="width:120px;height:78px;border-radius:6px;border:1px solid var(--border);@CardPreviewImageStyle" />
                 <button type="button" class="btn-admin btn-ghost" @onclick="ClearImage">
                     <i class="fas fa-times"></i> @T("Remove")
                 </button>
@@ -35,6 +36,10 @@
         <button type="button" class="btn-admin btn-ghost" @onclick="() => _resourcePickerOpen = true">
             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
         </button>
+        <MediaCropField ImageUrl="@(_imageUrl ?? string.Empty)"
+                        Value="_imagePlacement"
+                        ValueChanged="SetImagePlacement"
+                        AspectRatio="@(16d / 10d)" />
         <div class="form-group" style="margin-top:.6rem">
             <label class="form-label">@T("AltText")</label>
             <LangField @bind-Value="_imageAltText" Languages="Languages" />
@@ -201,7 +206,9 @@
     private string _iconPosition = "left";
     private string? _imageUrl;
     private BlockAssetReferenceModel _cardAsset = new();
+    private MediaPlacementModel _imagePlacement = MediaCropEditor.DefaultPlacement();
     private bool _resourcePickerOpen;
+    private bool _uploadingImage;
     private Dictionary<string, string> _title = new();
     private Dictionary<string, string> _label = new();
     private Dictionary<string, string> _stepLabel = new();
@@ -225,6 +232,7 @@
     private BlockResponsiveOverrideModel? _mobileResponsive;
     private List<FormDefinitionModel> _formDefinitions = new();
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string CardPreviewImageStyle => FormattableString.Invariant($"object-fit:{_imagePlacement.Fit};object-position:{_imagePlacement.FocalPointX:0.##}% {_imagePlacement.FocalPointY:0.##}%;transform:scale({_imagePlacement.Zoom:0.###});transform-origin:{_imagePlacement.FocalPointX:0.##}% {_imagePlacement.FocalPointY:0.##}%");
 
     protected override async Task OnInitializedAsync()
     {
@@ -241,6 +249,7 @@
         _iconPosition = Block.IconPosition == "right" ? "right" : "left";
         _cardAsset = CopyAsset(Block.Asset);
         _imageUrl = _cardAsset.Url;
+        _imagePlacement = MediaCropEditor.Normalize(MediaCropEditor.Clone(Block.ImagePlacement));
         _title = new(Block.Title ?? new());
         _label = new(Block.Label ?? new());
         _stepLabel = new(Block.StepLabel ?? new());
@@ -272,31 +281,34 @@
 
     private async Task OnImageSelected(InputFileChangeEventArgs e)
     {
-        var file = e.File;
-        const long maxImageBytes = 20L * 1024 * 1024;
-        if (file.Size > maxImageBytes)
+        if (_uploadingImage) return;
+        _uploadingImage = true;
+        try
         {
-            Http.Notify(T("ImageTooLarge"), 400);
-            return;
+            var res = await DirectUploads.UploadInputAsync(
+                "card-block-upload",
+                "image",
+                uploadContext: ResourceUploadContextCodes.ContentBlockCard);
+            if (res.Success && res.Data is not null)
+            {
+                _cardAsset = ManagedAsset(res.Data);
+                _imageUrl = _cardAsset.Url;
+                _imagePlacement = MediaCropEditor.DefaultPlacement();
+                Http.Notify(T("ImageUploaded"), res.StatusCode);
+            }
+            else
+            {
+                Http.Notify(res, failureFallback: T("ImageUploadFailed"));
+            }
         }
-
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=card-blocks", file, maxBytes: maxImageBytes);
-        if (res.Success && res.Data is not null)
-        {
-            _cardAsset = DirectAsset(res.Data);
-            _imageUrl = _cardAsset.Url;
-            Http.Notify(T("ImageUploaded"), res.StatusCode);
-        }
-        else
-        {
-            Http.Notify(res.Message ?? T("ImageUploadFailed"), res.StatusCode);
-        }
+        finally { _uploadingImage = false; }
     }
 
     private void ClearImage()
     {
         _imageUrl = string.Empty;
         _cardAsset = new();
+        _imagePlacement = MediaCropEditor.DefaultPlacement();
     }
 
     private void AddItem() => _items.Add(new BulletListItemModel
@@ -320,7 +332,7 @@
         try
         {
             var res = await BlockService.UpdateAsync(PageId, SectionId, Block.Id, BuildDto());
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally
@@ -406,7 +418,11 @@
             SizeBytes = resource.SizeBytes
         };
         _imageUrl = resource.Url;
+        _imagePlacement = MediaCropEditor.DefaultPlacement();
     }
+
+    private void SetImagePlacement(MediaPlacementModel? value) =>
+        _imagePlacement = MediaCropEditor.Normalize(MediaCropEditor.Clone(value));
 
     private static BlockAssetReferenceModel CopyAsset(BlockAssetReferenceModel? asset) => new()
     {
@@ -420,15 +436,16 @@
         SizeBytes = asset?.SizeBytes ?? 0
     };
 
-    private static BlockAssetReferenceModel DirectAsset(AssetUploadModel upload) => new()
+    private static BlockAssetReferenceModel ManagedAsset(ManagedResourceModel resource) => new()
     {
         SchemaVersion = 1,
-        Url = upload.Url,
-        ResourceSource = "DirectUpload",
-        StorageKey = upload.StorageKey,
-        FileName = upload.FileName,
-        ContentType = upload.ContentType,
-        SizeBytes = upload.Size
+        Url = resource.Url,
+        ResourceId = resource.Id,
+        ResourceSource = "ManagedResource",
+        StorageKey = resource.StorageKey,
+        FileName = resource.FileName,
+        ContentType = resource.ContentType,
+        SizeBytes = resource.SizeBytes
     };
 
     private static BlockAssetReferenceDto AssetDto(BlockAssetReferenceModel asset) => new()
@@ -452,6 +469,7 @@
             Title = _title,
             Description = _description,
             Asset = AssetDto(_cardAsset),
+            ImagePlacement = MediaPlacementModelMapper.ToAdmin(_imagePlacement),
             ButtonLabel = _buttonLabel,
             ImageAltText = _imageAltText,
             Href = _href,

@@ -45,6 +45,7 @@
 
         <div class="admin-card-title">@T("RememberedDevices")</div>
         <p class="text-muted" style="margin:.25rem 0 .75rem">@T("RememberedDevicesDescription")</p>
+        <AdminInlineStatus TargetId="account-devices-load" Retry="LoadDevicesAsync" Retrying="_loadingDevices" RetryText="@T("Retry")" />
         @if (_loadingDevices)
         {
             <p class="text-muted">@T("Loading")</p>
@@ -80,6 +81,7 @@
 
     <div class="admin-card">
         <div class="admin-card-title">@T("MyLoginActivity")</div>
+        <AdminInlineStatus TargetId="account-activity-load" Retry="LoadActivityAsync" Retrying="_loading" RetryText="@T("Retry")" />
         @if (_loading)
         {
             <p class="text-muted">@T("Loading")</p>
@@ -225,12 +227,14 @@
 
     private async Task LoadDevicesAsync()
     {
+        Http.ClearInlineStatus("account-devices-load");
+        _loadingDevices = true;
         var res = await Users.GetMyRememberedDevicesAsync();
         _devices.Clear();
         if (res.Success && res.Data is not null)
             _devices.AddRange(res.Data);
         else
-            Http.Notify(res.Message, res.StatusCode);
+            Http.NotifyInline(res, "account-devices-load");
         _loadingDevices = false;
     }
 
@@ -238,7 +242,7 @@
     {
         _revokingDevice = true;
         var res = await Users.RevokeMyRememberedDevicesAsync([id]);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) await LoadDevicesAsync();
         _revokingDevice = false;
     }
@@ -247,7 +251,7 @@
     {
         _signingOutAll = true;
         var res = await Users.SignOutAllMyDevicesAsync();
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             await JS.InvokeVoidAsync("adminAuth.submitSignOut", "signed-out", true);
@@ -258,11 +262,14 @@
 
     private async Task LoadActivityAsync()
     {
+        Http.ClearInlineStatus("account-activity-load");
+        _loading = true;
+        _activity.Clear();
         var res = await Users.GetMyLoginActivityAsync();
         if (res.Success && res.Data is not null)
             _activity.AddRange(res.Data);
         else
-            Http.Notify(res.Message, res.StatusCode);
+            Http.NotifyInline(res, "account-activity-load");
 
         _loading = false;
     }
@@ -272,7 +279,7 @@
         var adminId = Auth.CurrentUser?.AdminId;
         _saving = true;
         var res = await Users.UpdatePasswordAsync(_currentPassword, _newPassword);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         _saving = false;
 
         if (!res.Success) return;

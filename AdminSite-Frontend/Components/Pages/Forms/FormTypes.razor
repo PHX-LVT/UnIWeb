@@ -21,6 +21,7 @@ else if (_loading)
 }
 else
 {
+    <AdminInlineStatus TargetId="form-types-page-load" Retry="() => LoadTypesAsync()" Retrying="_loading" RetryText="@T("Retry")" />
     <div class="admin-card form-type-card">
         <div class="form-type-heading">
             <div>
@@ -31,7 +32,7 @@ else
 
         <div class="form-type-shell">
             <div class="form-type-list">
-                @if (_types.Count == 0)
+                @if (!_loadFailed && _types.Count == 0)
                 {
                     <div class="admin-data-empty">@T("NoFormTypes")</div>
                 }
@@ -197,6 +198,7 @@ else
     private bool _hasAccess;
     private bool _loading = true;
     private bool _saving;
+    private bool _loadFailed;
 
     private FormInputTypeCapability RendererCapability => FormInputTypeCatalog.Get(_editing?.Type);
     private bool CanConfigureMaxCharacters => Auth.CanEditFormDefinitions && RendererCapability.SupportsMaxCharacters;
@@ -216,17 +218,22 @@ else
 
     private async Task LoadTypesAsync(string? selectedType = null)
     {
+        Http.ClearInlineStatus("form-types-page-load");
         _loading = true;
         var result = await FormService.GetInputTypesAsync();
         if (!result.Success)
         {
-            Http.Notify(result.Message, result.StatusCode);
+            _loadFailed = true;
+            _types.Clear();
+            _editing = null;
+            Http.NotifyInline(result, "form-types-page-load");
             if (result.StatusCode is 401 or 403)
                 _hasAccess = false;
             _loading = false;
             return;
         }
 
+        _loadFailed = false;
         _types = result.Data ?? new();
         var selected = _types.FirstOrDefault(type => type.Type == (selectedType ?? _editing?.Type))
             ?? _types.FirstOrDefault();
@@ -248,7 +255,7 @@ else
         _saving = true;
         var result = await FormService.SaveInputTypeAsync(_editing);
         _saving = false;
-        Http.Notify(result.Message, result.StatusCode);
+        Http.Notify(result);
         if (result.Success)
             await LoadTypesAsync(_editing.Type);
     }

@@ -69,7 +69,17 @@
     font-size: 0.78rem;
     font-weight: 650;
     line-height: 1;
-    white-space: nowrap;
+    max-width: 100%;
+    white-space: normal;
+}
+
+.admin-inline-status .btn-admin {
+    min-height: 1.65rem;
+    margin-left: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-color: currentColor;
+    color: inherit;
+    font-size: 0.72rem;
 }
 
 .admin-inline-status__dot {
@@ -97,6 +107,26 @@
 .admin-inline-status--error {
     background: #fef2f2;
     color: #b91c1c;
+}
+
+.admin-validation-summary {
+    grid-column: 1 / -1;
+    margin: 0 0 1rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-size: 0.84rem;
+}
+
+.admin-validation-summary ul {
+    margin: 0.45rem 0 0;
+    padding-left: 1.15rem;
+}
+
+.admin-validation-summary li + li {
+    margin-top: 0.25rem;
 }
 
 .ez-canvas__feedback-row {

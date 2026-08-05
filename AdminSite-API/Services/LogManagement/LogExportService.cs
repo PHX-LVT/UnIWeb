@@ -124,7 +124,7 @@ public sealed class LogExportService
         CancellationToken cancellationToken)
     {
         await using var writer = new StreamWriter(output, new UTF8Encoding(true), leaveOpen: true);
-        await writer.WriteLineAsync("OccurredAtUtc,DomainCode,ActionCode,Outcome,Severity,ActorEmail,ActorRole,SessionId,TargetType,TargetId,TargetLabel,ChangeCount,Message,IpAddress,CorrelationId");
+        await writer.WriteLineAsync("OccurredAtUtc,DomainCode,ActionCode,OutcomeCode,Outcome,Severity,ActorEmail,ActorRole,SessionId,TargetType,TargetId,TargetLabel,ChangeCount,Message,IpAddress,CorrelationId");
         long count = 0;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var cursor in cursors)
@@ -138,7 +138,7 @@ public sealed class LogExportService
                     cancellationToken.ThrowIfCancellationRequested();
                     await writer.WriteLineAsync(string.Join(',', new[]
                     {
-                        Csv(item.OccurredAtUtc.ToString("O")), Csv(item.DomainCode), Csv(item.ActionCode), Csv(item.Outcome.ToString()),
+                        Csv(item.OccurredAtUtc.ToString("O")), Csv(item.DomainCode), Csv(item.ActionCode), Csv(item.OutcomeCode), Csv(item.Outcome.ToString()),
                         Csv(item.Severity.ToString()), Csv(item.ActorEmail), Csv(item.ActorRoleName), Csv(item.SessionId),
                         Csv(item.TargetTypeCode), Csv(item.TargetId), Csv(item.TargetLabel), item.ChangeCount.ToString(),
                         Csv(item.ResultMessage), Csv(includeSensitiveFields ? item.IpAddress : MaskIp(item.IpAddress)),

@@ -13,17 +13,20 @@ public sealed class BlockAuthoringService
     private readonly BlockService _blocks;
     private readonly PageGraphCloneService _clones;
     private readonly AssetCleanupService _assetCleanup;
+    private readonly ILogger<BlockAuthoringService> _logger;
 
     public BlockAuthoringService(
         MongoDbContext context,
         BlockService blocks,
         PageGraphCloneService clones,
-        AssetCleanupService assetCleanup)
+        AssetCleanupService assetCleanup,
+        ILogger<BlockAuthoringService> logger)
     {
         _context = context;
         _blocks = blocks;
         _clones = clones;
         _assetCleanup = assetCleanup;
+        _logger = logger;
     }
 
     public async Task<string?> ValidateContentMutationAsync(
@@ -395,7 +398,8 @@ public sealed class BlockAuthoringService
         catch (Exception exception)
         {
             await session.AbortTransactionAsync();
-            return (null, $"Block move failed: {exception.Message}");
+            _logger.LogError(exception, "Block move transaction failed for Block {BlockId}", block.Id);
+            return (null, "Block move failed: the change could not be stored.");
         }
 
         return (await _blocks.GetByIdAsync(pageId, sectionId, block.Id), null);

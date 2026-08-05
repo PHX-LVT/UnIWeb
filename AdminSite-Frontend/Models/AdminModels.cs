@@ -185,6 +185,7 @@ namespace AdminSite.Models
         public string? CardBackgroundType { get; set; }
         public string? CardBackgroundColor { get; set; }
         public string? CardImageUrl { get; set; }
+        public MediaPlacementModel? CardImagePlacement { get; set; }
         public bool IsCustomized { get; set; }
     }
 
@@ -195,6 +196,7 @@ namespace AdminSite.Models
         public string? CardBackgroundType { get; set; }
         public string? CardBackgroundColor { get; set; }
         public string? CardImageUrl { get; set; }
+        public MediaPlacementModel? CardImagePlacement { get; set; }
     }
 
     public class PageRequest
@@ -376,6 +378,7 @@ namespace AdminSite.Models
         public string? CardBackgroundType { get; set; }
         public string? CardBackgroundColor { get; set; }
         public string? CardImageUrl { get; set; }
+        public MediaPlacementModel? CardImagePlacement { get; set; }
     }
 
     public class SectionButtonModel
@@ -406,6 +409,7 @@ namespace AdminSite.Models
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
+        public MediaPlacementModel? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -429,6 +433,7 @@ namespace AdminSite.Models
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
+        public MediaPlacementModel? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public List<CarouselMetricModel>? Metrics { get; set; }
         public bool Visible { get; set; } = true;
@@ -465,6 +470,7 @@ namespace AdminSite.Models
         public Dictionary<string, string>? Title { get; set; }
         public Dictionary<string, string>? Description { get; set; }
         public string? ImageUrl { get; set; }
+        public MediaPlacementModel? ImagePlacement { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
     }
@@ -541,6 +547,7 @@ namespace AdminSite.Models
         public bool OpenInLightbox { get; set; }
         public double FocalPointX { get; set; } = 50;
         public double FocalPointY { get; set; } = 50;
+        public MediaPlacementModel? ImagePlacement { get; set; }
         public List<BulletListItemModel>? BulletItems { get; set; }
 
         [JsonIgnore]
@@ -1073,13 +1080,29 @@ namespace AdminSite.Models
     public class ResourceAlbumModel
     {
         public string Id { get; set; } = string.Empty;
+        public string? SystemKey { get; set; }
+        public bool IsSystemRoot { get; set; }
         public string Scope { get; set; } = "media";
         public string Name { get; set; } = string.Empty;
+        public string? CoverUrl { get; set; }
+        public string? CoverStorageKey { get; set; }
+        public string? CoverAssetId { get; set; }
+        public int CoverAssetVersion { get; set; }
+        public int CoverStorageSchemaVersion { get; set; }
         public int ResourceCount { get; set; }
         public string CreatedById { get; set; } = string.Empty;
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ResourceAlbumDeleteResult
+    {
+        public string AlbumId { get; set; } = string.Empty;
+        public bool Deleted { get; set; }
+        public int ResourceCount { get; set; }
+        public int DeletedResourceCount { get; set; }
+        public int BlockedResourceCount { get; set; }
     }
 
     public class ResourceAlbumRequest
@@ -1117,6 +1140,7 @@ namespace AdminSite.Models
         public string ContentType { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
         public string Source { get; set; } = "managed-upload";
+        public string? OriginContext { get; set; }
         public string? OriginalSourceUrl { get; set; }
         public string? LicenseName { get; set; }
         public string? Attribution { get; set; }

@@ -37,6 +37,21 @@ public sealed class AssetStorageKeyPolicy
             $"{Segment(resourceId)}-v{Math.Max(1, version)}-{readable}{Extension(originalFileName)}");
     }
 
+    public string CreateAlbumCoverKey(
+        string albumId,
+        string assetId,
+        int version,
+        string originalFileName)
+    {
+        var readable = Slug(Path.GetFileNameWithoutExtension(originalFileName), 64);
+        return Join(
+            _settings.KeyPrefix,
+            _settings.ResourceLibraryFolder,
+            "album-covers",
+            Segment(albumId),
+            $"{Segment(assetId)}-v{Math.Max(1, version)}-{readable}{Extension(originalFileName)}");
+    }
+
     public string CreateOwnedKey(
         string ownerDomain,
         string ownerType,

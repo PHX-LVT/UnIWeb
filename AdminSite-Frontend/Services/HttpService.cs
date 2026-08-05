@@ -36,12 +36,35 @@ namespace AdminSite.Services
         public byte[] Bytes { get; set; } = Array.Empty<byte>();
         public string FileName { get; set; } = "download.bin";
         public string ContentType { get; set; } = "application/octet-stream";
+        public string? NotificationKey { get; set; }
+        public List<string>? NotificationArgs { get; set; }
+        public string? ErrorCode { get; set; }
+        public string? TraceId { get; set; }
 
-        public static FileDownloadResult Fail(string message, int statusCode) => new()
+        public static FileDownloadResult Fail(
+            string message,
+            int statusCode,
+            string? notificationKey = null,
+            string? errorCode = null,
+            string? traceId = null) => new()
         {
             Success = false,
             Message = message,
-            StatusCode = statusCode
+            StatusCode = statusCode,
+            NotificationKey = notificationKey,
+            ErrorCode = errorCode,
+            TraceId = traceId
+        };
+
+        public ApiResponse<object> ToApiResponse() => new()
+        {
+            Success = Success,
+            Message = Message,
+            StatusCode = StatusCode,
+            NotificationKey = NotificationKey,
+            NotificationArgs = NotificationArgs,
+            ErrorCode = ErrorCode,
+            TraceId = TraceId
         };
     }
 
@@ -52,6 +75,7 @@ namespace AdminSite.Services
         private readonly AuthenticationStateProvider _authenticationStateProvider;
         private readonly AdminSessionInvalidationService _invalidations;
         private readonly IAdminNotificationService _notifications;
+        private readonly ILogger<HttpService> _logger;
 
         private static readonly JsonSerializerOptions _json = new()
         {
@@ -64,13 +88,15 @@ namespace AdminSite.Services
             IHttpClientFactory httpClientFactory,
             AuthenticationStateProvider authenticationStateProvider,
             AdminSessionInvalidationService invalidations,
-            IAdminNotificationService notifications)
+            IAdminNotificationService notifications,
+            ILogger<HttpService> logger)
         {
             _http = httpClientFactory.CreateClient(AdminAuthConstants.ApiClientName);
             _uploadHttp = httpClientFactory.CreateClient(AdminAuthConstants.ApiUploadClientName);
             _authenticationStateProvider = authenticationStateProvider;
             _invalidations = invalidations;
             _notifications = notifications;
+            _logger = logger;
         }
 
         public Task<ApiResponse<T>> GetAsync<T>(string uri) =>
@@ -146,7 +172,11 @@ namespace AdminSite.Services
                     ShouldExpireSession(request, response, auth.IsAuthenticated))
                 {
                     PublishSessionInvalidation(auth);
-                    return FileDownloadResult.Fail(AdminUiLocalizer.T("NotificationSessionExpired", "en"), 401);
+                    return FileDownloadResult.Fail(
+                        "Session expired.",
+                        401,
+                        "NotificationSessionExpired",
+                        "authentication-required");
                 }
 
                 if (!response.IsSuccessStatusCode)
@@ -154,7 +184,10 @@ namespace AdminSite.Services
                     var apiResponse = await ReadApiResponse<object>(response);
                     return FileDownloadResult.Fail(
                         apiResponse?.Message ?? response.ReasonPhrase ?? "Download failed.",
-                        (int)response.StatusCode);
+                        (int)response.StatusCode,
+                        apiResponse?.NotificationKey ?? "NotificationDownloadFailed",
+                        apiResponse?.ErrorCode ?? ErrorCodeFromStatus((int)response.StatusCode),
+                        apiResponse?.TraceId);
                 }
 
                 var bytes = await response.Content.ReadAsByteArrayAsync();
@@ -175,36 +208,30 @@ namespace AdminSite.Services
             }
             catch (TaskCanceledException ex)
             {
-                _notifications.Notify(new AdminFeedbackMessage
-                {
-                    Severity = AdminFeedbackSeverity.Warning,
-                    MessageKey = "NotificationRequestTimedOut",
-                    MessageFallback = "The download request timed out. Please try again.",
-                    TechnicalDetail = ex.Message
-                });
-                return FileDownloadResult.Fail("The download request timed out.", 504);
+                _logger.LogWarning(ex, "Download request timed out.");
+                return FileDownloadResult.Fail(
+                    "Download failed: the request timed out.",
+                    504,
+                    "NotificationRequestTimedOut",
+                    "request-timeout");
             }
             catch (HttpRequestException ex)
             {
-                _notifications.Notify(new AdminFeedbackMessage
-                {
-                    Severity = AdminFeedbackSeverity.Error,
-                    MessageKey = "NotificationServiceUnavailable",
-                    MessageFallback = "The API is temporarily unavailable.",
-                    TechnicalDetail = ex.Message
-                });
-                return FileDownloadResult.Fail("The API is temporarily unavailable.", 503);
+                _logger.LogWarning(ex, "Download service was unavailable.");
+                return FileDownloadResult.Fail(
+                    "Download failed: the service is temporarily unavailable.",
+                    503,
+                    "NotificationServiceUnavailable",
+                    "service-unavailable");
             }
             catch (Exception ex)
             {
-                _notifications.Notify(new AdminFeedbackMessage
-                {
-                    Severity = AdminFeedbackSeverity.Error,
-                    MessageKey = "NotificationDownloadFailed",
-                    MessageFallback = "Download failed.",
-                    TechnicalDetail = ex.Message
-                });
-                return FileDownloadResult.Fail(AdminUiLocalizer.T("NotificationDownloadFailed", "en"), 500);
+                _logger.LogError(ex, "Unexpected download failure.");
+                return FileDownloadResult.Fail(
+                    "Download failed: an unexpected system error occurred.",
+                    500,
+                    "NotificationDownloadFailed",
+                    "unexpected-error");
             }
         }
 
@@ -240,34 +267,34 @@ namespace AdminSite.Services
                 }
 
                 return await ReadApiResponse<T>(response)
-                       ?? ApiResponse<T>.Fail(
-                           "No response from server.",
-                           500,
-                           notificationKey: "NotificationNoResponse");
+                       ?? EmptyResponse<T>(response);
             }
             catch (TaskCanceledException ex)
             {
+                _logger.LogWarning(ex, "Admin API request timed out.");
                 return ApiResponse<T>.Fail(
                     "Request timed out.",
                     504,
-                    errors: [ex.Message],
-                    notificationKey: "NotificationRequestTimedOut");
+                    notificationKey: "NotificationRequestTimedOut",
+                    errorCode: "request-timeout");
             }
             catch (HttpRequestException ex)
             {
+                _logger.LogWarning(ex, "Admin API request service was unavailable.");
                 return ApiResponse<T>.Fail(
                     "The API is temporarily unavailable.",
                     503,
-                    errors: [ex.Message],
-                    notificationKey: "NotificationServiceUnavailable");
+                    notificationKey: "NotificationServiceUnavailable",
+                    errorCode: "service-unavailable");
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Unexpected Admin API request failure.");
                 return ApiResponse<T>.Fail(
                     "Request failed.",
                            502,
-                    errors: [ex.Message],
-                    notificationKey: "NotificationRequestFailed");
+                    notificationKey: "NotificationRequestFailed",
+                    errorCode: "unexpected-error");
             }
         }
 
@@ -324,11 +351,71 @@ namespace AdminSite.Services
                     notificationKey: "NotificationUnexpectedResponse");
             }
 
-            if (result is { Success: false, Errors.Count: > 0 })
-                result.Message = string.Join(" ", result.Errors);
+            if (result is null) return null;
+
+            result.StatusCode = statusCode;
+            result.Success = response.IsSuccessStatusCode && result.Success;
+            result.ErrorCode ??= result.Success ? null : ErrorCodeFromStatus(statusCode);
+            if (response.Headers.TryGetValues("Retry-After", out var retryValues) &&
+                int.TryParse(retryValues.FirstOrDefault(), out var retryAfter))
+                result.RetryAfterSeconds ??= retryAfter;
 
             return result;
         }
+
+        private static ApiResponse<T> EmptyResponse<T>(HttpResponseMessage response)
+        {
+            var statusCode = (int)response.StatusCode;
+            return statusCode switch
+            {
+                401 => ApiResponse<T>.Fail("Authentication failed: the session is no longer valid.", 401,
+                    notificationKey: "NotificationSessionExpired", errorCode: "authentication-required"),
+                403 => ApiResponse<T>.Fail("Permission denied: your account cannot perform this operation.", 403,
+                    notificationKey: "NotificationPermissionDenied", errorCode: "permission-denied"),
+                404 => ApiResponse<T>.Fail("Load failed: the requested item no longer exists.", 404,
+                    notificationKey: "NotificationActionFailed",
+                    notificationArgs: ["@action:operation.load", "@reason:not-found"], errorCode: "not-found"),
+                413 => ApiResponse<T>.Fail("Upload failed: the selected file exceeds the allowed size.", 413,
+                    notificationKey: "NotificationActionFailed",
+                    notificationArgs: ["@action:resource.uploaded", "@reason:size-exceeded"], errorCode: "size-exceeded"),
+                429 => RateLimited<T>(response),
+                >= 500 => ApiResponse<T>.Fail("Request failed: the required service is temporarily unavailable.", statusCode,
+                    notificationKey: "NotificationServiceUnavailable", errorCode: "service-unavailable"),
+                _ => ApiResponse<T>.Fail("Request failed: the server returned no details.", statusCode,
+                    notificationKey: "NotificationNoResponse", errorCode: ErrorCodeFromStatus(statusCode))
+            };
+        }
+
+        private static ApiResponse<T> RateLimited<T>(HttpResponseMessage response)
+        {
+            var retryAfter = response.Headers.TryGetValues("Retry-After", out var values) &&
+                             int.TryParse(values.FirstOrDefault(), out var parsed)
+                ? Math.Max(1, parsed)
+                : 1;
+            var result = ApiResponse<T>.Fail(
+                "Request failed: too many requests are currently active.",
+                429,
+                notificationKey: "NotificationRateLimited",
+                notificationArgs: [retryAfter.ToString()],
+                errorCode: "rate-limited");
+            result.RetryAfterSeconds = retryAfter;
+            return result;
+        }
+
+        private static string ErrorCodeFromStatus(int statusCode) => statusCode switch
+        {
+            401 => "authentication-required",
+            403 => "permission-denied",
+            404 => "not-found",
+            409 => "conflict",
+            410 => "expired",
+            413 => "size-exceeded",
+            422 => "validation-failed",
+            429 => "rate-limited",
+            502 or 503 or 504 => "service-unavailable",
+            >= 500 => "unexpected-error",
+            _ => "operation-failed"
+        };
 
         private static bool ShouldExpireSession(
             HttpRequestMessage request,

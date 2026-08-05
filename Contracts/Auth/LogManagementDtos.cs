@@ -6,6 +6,7 @@ public sealed class AdminAuditEventResponse
     public DateTime OccurredAtUtc { get; set; }
     public string DomainCode { get; set; } = string.Empty;
     public string ActionCode { get; set; } = string.Empty;
+    public string OutcomeCode { get; set; } = string.Empty;
     public AdminAuditOutcome Outcome { get; set; }
     public AdminAuditSeverity Severity { get; set; }
     public string ActorId { get; set; } = string.Empty;

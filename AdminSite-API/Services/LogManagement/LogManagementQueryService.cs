@@ -299,6 +299,7 @@ public sealed class LogManagementQueryService
         OccurredAtUtc = item.OccurredAtUtc,
         DomainCode = item.DomainCode,
         ActionCode = item.ActionCode,
+        OutcomeCode = item.OutcomeCode,
         Outcome = item.Outcome,
         Severity = item.Severity,
         ActorId = item.ActorId,

@@ -58,11 +58,31 @@ public sealed class ContentIconRenderingTests : BunitContext
                 }
             }));
 
-        var style = cut.Find("i").GetAttribute("style") ?? string.Empty;
+        var style = cut.Find(".sc-content-icon").GetAttribute("style") ?? string.Empty;
         Assert.Contains("font-size:32px", style);
         Assert.Contains("color:var(--theme-color-accent)", style);
         Assert.Contains("background:var(--theme-color-primary)", style);
         Assert.Contains("border-radius:50%", style);
+    }
+
+    [Fact]
+    public void BuiltInIcon_RendersStarBackgroundWithoutClippingGlyphElement()
+    {
+        var cut = Render<ContentIcon>(parameters => parameters
+            .Add(component => component.Icon, new PublicIconReferenceDto
+            {
+                Source = IconSources.BuiltIn,
+                ClassName = "fa-solid fa-truck",
+                Appearance = new IconAppearanceDto
+                {
+                    BackgroundMode = "theme",
+                    Shape = "star"
+                }
+            }));
+
+        var wrapper = cut.Find(".sc-content-icon");
+        Assert.Contains("clip-path:polygon", wrapper.GetAttribute("style"));
+        Assert.Null(cut.Find("i").GetAttribute("style"));
     }
 
     [Fact]

@@ -14,8 +14,7 @@ public enum AdminFeedbackDisplayMode
 {
     Toast,
     Inline,
-    Silent,
-    Modal
+    Silent
 }
 
 public sealed class AdminFeedbackMessage
@@ -28,6 +27,9 @@ public sealed class AdminFeedbackMessage
     public string? InlineTargetId { get; init; }
     public bool SuppressSuccess { get; init; }
     public string? TechnicalDetail { get; init; }
+    public string? OperationId { get; init; }
+    public string? ErrorCode { get; init; }
+    public IReadOnlyList<ApiFieldError>? FieldErrors { get; init; }
 
     public static AdminFeedbackMessage FromResponse<T>(
         ApiResponse<T>? response,
@@ -51,12 +53,16 @@ public sealed class AdminFeedbackMessage
             };
         }
 
-        var success = response.Success || response.StatusCode is >= 200 and < 300;
+        var success = response.Success;
         var args = response.NotificationArgs?.Select(value => (object?)value).ToList();
 
         return new AdminFeedbackMessage
         {
-            Severity = success ? AdminFeedbackSeverity.Success : SeverityFromStatusCode(response.StatusCode),
+            Severity = success
+                ? AdminFeedbackSeverity.Success
+                : response.StatusCode is >= 200 and < 300
+                    ? AdminFeedbackSeverity.Error
+                    : SeverityFromStatusCode(response.StatusCode),
             MessageKey = response.NotificationKey,
             MessageArgs = args,
             MessageFallback = success
@@ -65,14 +71,17 @@ public sealed class AdminFeedbackMessage
             DisplayMode = displayMode,
             InlineTargetId = inlineTargetId,
             SuppressSuccess = suppressSuccess,
-            TechnicalDetail = technicalDetail
+            TechnicalDetail = technicalDetail,
+            OperationId = response.TraceId,
+            ErrorCode = response.ErrorCode,
+            FieldErrors = response.FieldErrors
         };
     }
 
     public static AdminFeedbackSeverity SeverityFromStatusCode(int statusCode) => statusCode switch
     {
         >= 200 and < 300 => AdminFeedbackSeverity.Success,
-        400 or 404 or 409 or 422 => AdminFeedbackSeverity.Warning,
+        400 or 404 or 409 or 410 or 413 or 422 or 429 => AdminFeedbackSeverity.Warning,
         401 or 403 => AdminFeedbackSeverity.Warning,
         _ => AdminFeedbackSeverity.Error
     };

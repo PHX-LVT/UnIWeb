@@ -1,0 +1,52 @@
+@if (!string.IsNullOrWhiteSpace(ImageUrl))
+{
+    <button type="button" class="btn-admin btn-ghost" @onclick="OpenEditor">
+        <i class="fas fa-crop-simple" aria-hidden="true"></i> @T("AdjustCrop")
+    </button>
+}
+
+<MediaCropEditor Open="_open"
+                 ImageUrl="@ImageUrl"
+                 Value="@CurrentValue"
+                 Title="@ResolvedTitle"
+                 DesktopAspectRatio="@AspectRatio"
+                 MobileAspectRatio="@MobileAspectRatio"
+                 AllowMobileOverride="@AllowMobileOverride"
+                 RecommendedWidth="@RecommendedWidth"
+                 RecommendedMobileWidth="@RecommendedMobileWidth"
+                 MinimumWidth="@MinimumWidth"
+                 MinimumMobileWidth="@MinimumMobileWidth"
+                 Applied="Apply"
+                 Closed="Close" />
+
+@code {
+    [Parameter] public string ImageUrl { get; set; } = string.Empty;
+    [Parameter] public MediaPlacementModel? Value { get; set; }
+    [Parameter] public EventCallback<MediaPlacementModel?> ValueChanged { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public double AspectRatio { get; set; } = 16d / 10d;
+    [Parameter] public double MobileAspectRatio { get; set; } = 4d / 3d;
+    [Parameter] public bool AllowMobileOverride { get; set; } = true;
+    [Parameter] public int RecommendedWidth { get; set; } = 1200;
+    [Parameter] public int RecommendedMobileWidth { get; set; } = 750;
+    [Parameter] public int MinimumWidth { get; set; }
+    [Parameter] public int MinimumMobileWidth { get; set; }
+    [CascadingParameter(Name = "AdminLanguage")] public string AdminLanguage { get; set; } = "en";
+
+    private bool _open;
+    private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
+    private string ResolvedTitle => string.IsNullOrWhiteSpace(Title) ? T("AdjustCrop") : Title;
+    private MediaPlacementModel CurrentValue => MediaCropEditor.Normalize(MediaCropEditor.Clone(Value));
+
+    private void OpenEditor() => _open = true;
+    private void Close() => _open = false;
+
+    private async Task Apply(MediaPlacementModel placement)
+    {
+        _open = false;
+        var normalized = MediaCropEditor.Normalize(MediaCropEditor.Clone(placement));
+        await ValueChanged.InvokeAsync(normalized);
+        await Changed.InvokeAsync();
+    }
+}

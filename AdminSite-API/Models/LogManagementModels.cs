@@ -14,6 +14,7 @@ public sealed class AdminAuditEvent
     public DateTime OccurredAtUtc { get; set; } = DateTime.UtcNow;
     public string DomainCode { get; set; } = string.Empty;
     public string ActionCode { get; set; } = string.Empty;
+    public string OutcomeCode { get; set; } = string.Empty;
     [BsonRepresentation(BsonType.String)]
     public AdminAuditOutcome Outcome { get; set; } = AdminAuditOutcome.Succeeded;
     [BsonRepresentation(BsonType.String)]

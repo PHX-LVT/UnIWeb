@@ -7,6 +7,7 @@ namespace AdminSite.Services
         private const string StorageKey = "admin-lang";
         private readonly ILocalStorageService _storage;
         private readonly AdminSettingsService _settings;
+        private readonly IAdminLanguageContext _context;
         private string? _lang;
         private string _fallbackLanguage = "en";
         private List<LanguageOption> _supportedLanguages = new()
@@ -16,10 +17,14 @@ namespace AdminSite.Services
             new("cn", "Chinese", "中文")
         };
 
-        public AdminLanguageService(ILocalStorageService storage, AdminSettingsService settings)
+        public AdminLanguageService(
+            ILocalStorageService storage,
+            AdminSettingsService settings,
+            IAdminLanguageContext context)
         {
             _storage = storage;
             _settings = settings;
+            _context = context;
         }
 
         public event Action? Changed;
@@ -34,6 +39,7 @@ namespace AdminSite.Services
             var requestedLanguage = _lang ?? await _storage.GetItemAsync<string>(StorageKey);
             await LoadSettingsAsync();
             _lang = Normalize(requestedLanguage);
+            _context.Set(_lang);
             return _lang;
         }
 
@@ -44,6 +50,7 @@ namespace AdminSite.Services
             if (_lang == normalized) return;
 
             _lang = normalized;
+            _context.Set(_lang);
             await _storage.SetItemAsync(StorageKey, normalized);
             Changed?.Invoke();
         }
@@ -72,7 +79,10 @@ namespace AdminSite.Services
                 _supportedLanguages = options;
 
             if (!string.IsNullOrWhiteSpace(_lang))
+            {
                 _lang = Normalize(_lang);
+                _context.Set(_lang);
+            }
         }
 
         private string Normalize(string? lang)

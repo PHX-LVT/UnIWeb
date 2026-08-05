@@ -188,7 +188,7 @@
                 }).ToList(),
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

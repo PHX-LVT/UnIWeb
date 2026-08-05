@@ -149,7 +149,7 @@
                 ButtonStyle = _buttonStyle, ShowImage = _showImage, ShowSummary = _showSummary, ShowButton = _showButton,
                 ShowSearchBar = _showSearchBar, ShowFilters = _showFilters, SearchPlaceholder = _searchPlaceholder, SortMode = _sortMode
             });
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) { ApplyLocalSectionState(); await OnSaved.InvokeAsync(); }
         }
         finally { _saving = false; }

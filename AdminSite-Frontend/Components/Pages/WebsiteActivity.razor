@@ -36,6 +36,12 @@ else if (_loading)
         <div class="admin-data-empty">@T("Loading")</div>
     </div>
 }
+else if (_loadFailed)
+{
+    <div class="admin-data-table-card">
+        <AdminInlineStatus TargetId="website-activity-load" Retry="LoadAsync" Retrying="_loading" RetryText="@T("Retry")" />
+    </div>
+}
 else
 {
     <div class="admin-data-stats website-activity__stats">
@@ -135,6 +141,7 @@ else
     private DateTime _from = DateTime.Today.AddDays(-29);
     private DateTime _to = DateTime.Today;
     private bool _loading = true;
+    private bool _loadFailed;
 
     protected override async Task OnInitializedAsync()
     {
@@ -157,6 +164,8 @@ else
 
     private async Task LoadAsync()
     {
+        Http.ClearInlineStatus("website-activity-load");
+        _loadFailed = false;
         _loading = true;
         var from = Uri.EscapeDataString(_from.ToString("yyyy-MM-dd"));
         var to = Uri.EscapeDataString(_to.ToString("yyyy-MM-dd"));
@@ -170,7 +179,8 @@ else
         }
         else
         {
-            Http.Notify(response.Message, response.StatusCode);
+            _loadFailed = true;
+            Http.NotifyInline(response, "website-activity-load");
         }
 
         _loading = false;

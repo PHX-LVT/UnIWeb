@@ -1,5 +1,7 @@
 @inject AdminSectionService SectionService
+@using Contracts.Admin
 @inject IHttpService Http
+@inject DirectResourceUploadService DirectUploads
 
 <section class="ez-content-editor__text">
     <h3>@T("SectionText")</h3>
@@ -19,7 +21,7 @@
         @foreach (var item in _items.OrderBy(item => item.Order))
         {
             var number = item.Order + 1;
-            var uploadId = $"highlight-image-{item.Id}";
+            var uploadId = ItemImageUploadId(item);
             <ContentItemAccordion @key="item.Id" ItemId="@item.Id" Number="@number" Title="@ItemTitle(item, number)" Summary="@ItemSummary(item)"
                                   Expanded="@(_openItemId == item.Id)" OnToggle="() => ToggleItem(item.Id)" OnDelete="() => RemoveItem(item)"
                                   Visible="@item.Visible" VisibleChanged="value => SetVisible(item, value)">
@@ -43,6 +45,7 @@
                         <InputFile id="@uploadId" OnChange="args => UploadImage(args, item)" accept="image/*" style="display:none" />
                         <label class="btn-admin btn-ghost" for="@uploadId"><i class="fas fa-image"></i> @T("UploadNew")</label>
                         <button type="button" class="btn-admin btn-ghost" @onclick="() => OpenResourcePicker(item)"><i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")</button>
+                        <MediaCropField ImageUrl="@(item.ImageUrl ?? string.Empty)" Value="item.ImagePlacement" ValueChanged="value => SetImagePlacement(item, value)" AspectRatio="1" AllowMobileOverride="false" RecommendedWidth="600" />
                     </div>
                 </div>
             </ContentItemAccordion>
@@ -91,7 +94,7 @@
         {
             Id = string.IsNullOrWhiteSpace(item.Id) ? ClientId() : item.Id, Icon = item.Icon, IconVisual = CopyIcon(item.IconVisual),
             BadgeText = item.BadgeText, Highlighted = item.Highlighted, Title = new(item.Title ?? new()), Description = new(item.Description ?? new()),
-            ImageUrl = item.ImageUrl, Visible = item.Visible, Order = index
+            ImageUrl = item.ImageUrl, ImagePlacement = MediaPlacementModelMapper.Clone(item.ImagePlacement), Visible = item.Visible, Order = index
         }).ToList() ?? new();
     }
 
@@ -126,15 +129,19 @@
 
     private async Task UploadImage(InputFileChangeEventArgs args, TestimonialItemModel item)
     {
-        if (args.File.Size > 5 * 1024 * 1024) { Http.Notify(T("ImageTooLarge"), 400); return; }
-        var response = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=highlights", args.File, maxBytes: 5 * 1024 * 1024);
-        if (response.Success && response.Data is not null) { item.ImageUrl = response.Data.Url; ContentSession?.MarkDirty(); Http.Notify(response.Message, response.StatusCode); }
-        else Http.Notify(response.Message, response.StatusCode);
+        var response = await DirectUploads.UploadInputAsync(
+            ItemImageUploadId(item),
+            "image",
+            uploadContext: ResourceUploadContextCodes.ContentSectionHighlight);
+        if (response.Success && response.Data is not null) { item.ImageUrl = response.Data.Url; item.ImagePlacement = MediaCropEditor.DefaultPlacement(); ContentSession?.MarkDirty(); Http.Notify(response); }
+        else Http.Notify(response);
     }
-    private void ClearImage(TestimonialItemModel item) { item.ImageUrl = string.Empty; ContentSession?.MarkDirty(); }
+    private void ClearImage(TestimonialItemModel item) { item.ImageUrl = string.Empty; item.ImagePlacement = null; ContentSession?.MarkDirty(); }
+    private static string ItemImageUploadId(TestimonialItemModel item) => $"highlight-image-{item.Id}";
+    private void SetImagePlacement(TestimonialItemModel item, MediaPlacementModel? value) { item.ImagePlacement = MediaPlacementModelMapper.Clone(value); ContentSession?.MarkDirty(); }
     private void OpenResourcePicker(TestimonialItemModel item) { _resourcePickerItem = item; _resourcePickerOpen = true; }
     private void CloseResourcePicker() { _resourcePickerItem = null; _resourcePickerOpen = false; }
-    private void SelectResourceImage(ManagedResourceModel resource) { if (_resourcePickerItem is not null) { _resourcePickerItem.ImageUrl = resource.Url; ContentSession?.MarkDirty(); } }
+    private void SelectResourceImage(ManagedResourceModel resource) { if (_resourcePickerItem is not null) { _resourcePickerItem.ImageUrl = resource.Url; _resourcePickerItem.ImagePlacement = MediaCropEditor.DefaultPlacement(); ContentSession?.MarkDirty(); } }
 
     private async Task Save()
     {
@@ -146,7 +153,7 @@
                 Eyebrow = _eyebrow, SectionTitle = _title, Subheading = _subheading, Layout = _layout, HeaderAlignment = _headerAlignment,
                 Columns = _columns, Items = _items.OrderBy(item => item.Order).Select(MapItem).ToList(), Visible = Section.Visible
             });
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }
@@ -154,7 +161,7 @@
     private static TestimonialItemDto MapItem(TestimonialItemModel item) => new()
     {
         Id = item.Id, Icon = item.Icon ?? string.Empty, IconVisual = BlockUpdateDtoMapper.ToIconDto(item.IconVisual), BadgeText = item.BadgeText,
-        Highlighted = item.Highlighted, Title = item.Title ?? new(), Description = item.Description ?? new(), ImageUrl = item.ImageUrl,
+        Highlighted = item.Highlighted, Title = item.Title ?? new(), Description = item.Description ?? new(), ImageUrl = item.ImageUrl, ImagePlacement = MediaPlacementModelMapper.ToAdmin(item.ImagePlacement),
         Visible = item.Visible, Order = item.Order
     };
     private static IconReferenceModel? CopyIcon(IconReferenceModel? value) => value is null ? null : new()

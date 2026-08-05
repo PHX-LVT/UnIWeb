@@ -1,5 +1,84 @@
 namespace Contracts.Admin;
 
+public static class ResourceUploadContextCodes
+{
+    public const string LibraryManual = "library.manual";
+
+    public const string BrandLogo = "brand.logo";
+    public const string BrandFavicon = "brand.favicon";
+    public const string BrandFooter = "brand.footer";
+
+    public const string BackgroundSection = "background.section";
+    public const string BackgroundBanner = "background.banner";
+
+    public const string ContentManagementHero = "content.management.hero";
+    public const string ContentManagementThumbnail = "content.management.thumbnail";
+    public const string ContentManagementBody = "content.management.body";
+    public const string ContentManagementGallery = "content.management.gallery";
+    public const string ContentManagementLegacy = "content.management.legacy";
+    public const string ContentSectionHeroMedia = "content.section.hero-media";
+    public const string ContentSectionListItem = "content.section.list-item";
+    public const string ContentSectionCarousel = "content.section.carousel";
+    public const string ContentSectionHighlight = "content.section.highlight";
+    public const string ContentSectionShowcase = "content.section.showcase";
+    public const string ContentSectionGallery = "content.section.gallery";
+    public const string ContentSectionLegacy = "content.section.legacy";
+    public const string ContentBlockImage = "content.block.image";
+    public const string ContentBlockCard = "content.block.card";
+    public const string ContentBlockLegacy = "content.block.legacy";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        LibraryManual,
+        BrandLogo,
+        BrandFavicon,
+        BrandFooter,
+        BackgroundSection,
+        BackgroundBanner,
+        ContentManagementHero,
+        ContentManagementThumbnail,
+        ContentManagementBody,
+        ContentManagementGallery,
+        ContentManagementLegacy,
+        ContentSectionHeroMedia,
+        ContentSectionListItem,
+        ContentSectionCarousel,
+        ContentSectionHighlight,
+        ContentSectionShowcase,
+        ContentSectionGallery,
+        ContentSectionLegacy,
+        ContentBlockImage,
+        ContentBlockCard,
+        ContentBlockLegacy
+    };
+
+    public static readonly IReadOnlySet<string> ClientInitiable = new HashSet<string>(
+        All.Where(context =>
+            !string.Equals(context, ContentManagementLegacy, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(context, ContentSectionLegacy, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(context, ContentBlockLegacy, StringComparison.OrdinalIgnoreCase)),
+        StringComparer.OrdinalIgnoreCase);
+
+    public static string? Normalize(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? LibraryManual
+            : value.Trim().ToLowerInvariant();
+        return All.Contains(normalized) ? normalized : null;
+    }
+
+    public static string? NormalizeClient(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = Normalize(value);
+        return normalized is not null && ClientInitiable.Contains(normalized) ? normalized : null;
+    }
+
+    public static bool IsAutomatic(string? value) =>
+        Normalize(value) is { } normalized &&
+        !string.Equals(normalized, LibraryManual, StringComparison.OrdinalIgnoreCase);
+}
+
 public sealed class ResourceUploadCapabilitiesDto
 {
     public bool DirectUploadEnabled { get; set; }
@@ -22,6 +101,7 @@ public sealed class ResourceUploadInitiateRequest
     public string Kind { get; set; } = string.Empty;
     public string ContentType { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
+    public string UploadContext { get; set; } = string.Empty;
     public string? AlbumId { get; set; }
     public string? ReplaceResourceId { get; set; }
 }
@@ -74,6 +154,7 @@ public sealed class ResourceUploadSessionDto
     public string Kind { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
     public string ResourceName { get; set; } = string.Empty;
+    public string UploadContext { get; set; } = ResourceUploadContextCodes.LibraryManual;
     public long SizeBytes { get; set; }
     public DateTime ExpiresAtUtc { get; set; }
     public string? ErrorCode { get; set; }
@@ -91,6 +172,7 @@ public sealed class ResourceUploadResourceDto
     public int StorageSchemaVersion { get; set; }
     public string Kind { get; set; } = "file";
     public string? Purpose { get; set; }
+    public string? OriginContext { get; set; }
     public Dictionary<string, string> Name { get; set; } = [];
     public Dictionary<string, string> Description { get; set; } = [];
     public string Url { get; set; } = string.Empty;

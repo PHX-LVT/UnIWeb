@@ -11,15 +11,18 @@ namespace FullProject.Services.PublishAndResetService
         private readonly MongoDbContext _context;
         private readonly AssetCleanupService _assetCleanup;
         private readonly PageGraphCloneService _cloneService;
+        private readonly ILogger<ResetService> _logger;
 
         public ResetService(
             MongoDbContext context,
             AssetCleanupService assetCleanup,
-            PageGraphCloneService cloneService)
+            PageGraphCloneService cloneService,
+            ILogger<ResetService> logger)
         {
             _context = context;
             _assetCleanup = assetCleanup;
             _cloneService = cloneService;
+            _logger = logger;
         }
 
         public async Task<ResetResult> ResetPageAsync(string pageId)
@@ -114,7 +117,8 @@ namespace FullProject.Services.PublishAndResetService
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
-                return ResetResult.Fail($"Reset failed: {ex.Message}");
+                _logger.LogError(ex, "Page reset failed for Page {PageId}", pageId);
+                return ResetResult.Fail("Reset failed: the published version could not be restored.");
             }
 
             await _assetCleanup.DeleteUnusedPageGraphAssetsAsync(replacedPages, replacedSections, replacedBlocks);

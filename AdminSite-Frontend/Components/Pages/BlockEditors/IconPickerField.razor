@@ -127,7 +127,13 @@
                             {
                                 <label>@T("Shape")
                                     <select class="form-control" @bind="_draftVisual.Appearance.Shape">
-                                        <option value="none">@T("Square")</option><option value="rounded">@T("Rounded")</option><option value="circle">@T("Circle")</option>
+                                        <option value="square">@T("Square")</option>
+                                        <option value="rounded-square">@T("RoundedSquare")</option>
+                                        <option value="circle">@T("Circle")</option>
+                                        <option value="oval">@T("Oval")</option>
+                                        <option value="diamond">@T("Diamond")</option>
+                                        <option value="hexagon">@T("Hexagon")</option>
+                                        <option value="star">@T("Star")</option>
                                     </select>
                                 </label>
                             }
@@ -327,7 +333,7 @@
             _customIcons = response.Success && response.Data is not null
                 ? response.Data.Where(resource => string.IsNullOrWhiteSpace(resource.DeletionState)).ToList()
                 : new();
-            if (!response.Success) Http.Notify(response.Message, response.StatusCode);
+            if (!response.Success) Http.Notify(response);
         }
         finally { _loading = false; await InvokeAsync(StateHasChanged); }
     }
@@ -349,10 +355,10 @@
             var response = await Content.UploadCustomIconAsync(args.File, _sourceUrl, _license, _attribution);
             if (response.Success && response.Data is not null)
             {
-                Http.Notify(response.Message, response.StatusCode);
+                Http.Notify(response);
                 await SelectCustom(response.Data);
             }
-            else Http.Notify(response.Message, response.StatusCode);
+            else Http.Notify(response);
         }
         finally { _uploading = false; }
     }
@@ -364,7 +370,7 @@
         try
         {
             var response = await Content.DeleteResourceAsync(resource.Id);
-            Http.Notify(response.Message, response.StatusCode);
+            Http.Notify(response);
             if (response.Success) await LoadCustomIcons();
         }
         finally { _deleting = false; }
@@ -386,10 +392,21 @@
             var color = appearance.ColorMode == "custom" ? appearance.Color : appearance.ThemeRole switch { "primary" => "var(--primary)", "text" => "var(--text)", _ => "var(--primary-light)" };
             if (appearance.BackgroundMode == "none") return $"font-size:{size}px;color:{color};";
             var background = appearance.BackgroundMode == "custom" ? appearance.BackgroundColor : appearance.BackgroundThemeRole switch { "primary" => "var(--primary)", "accent" => "var(--primary-light)", "background" => "var(--bg,#fff)", _ => "var(--surface-muted,#eef2f7)" };
-            var radius = appearance.Shape switch { "circle" => "50%", "rounded" => "10px", _ => "0" };
-            return $"font-size:{size}px;color:{color};background:{background};border-radius:{radius};";
+            var (width, height, radius, clipPath) = IconShapeStyle(appearance.Shape, size);
+            return $"font-size:{size}px;color:{color};background:{background};width:{width}px;height:{height}px;border-radius:{radius};clip-path:{clipPath};";
         }
     }
+
+    private static (int Width, int Height, string Radius, string ClipPath) IconShapeStyle(string? shape, int size) => shape switch
+    {
+        "rounded" or "rounded-square" => (size + 20, size + 20, "10px", "none"),
+        "circle" => (size + 20, size + 20, "50%", "none"),
+        "oval" => (size + 32, size + 18, "999px", "none"),
+        "diamond" => (size + 24, size + 24, "0", "polygon(50% 0,100% 50%,50% 100%,0 50%)"),
+        "hexagon" => (size + 28, size + 22, "0", "polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"),
+        "star" => (size + 30, size + 30, "0", "polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 93%,50% 72%,21% 93%,32% 57%,2% 35%,39% 35%)"),
+        _ => (size + 20, size + 20, "0", "none")
+    };
 
     private static IconReferenceModel CloneBuiltIn(IconReferenceModel? value, string className) => new()
     {

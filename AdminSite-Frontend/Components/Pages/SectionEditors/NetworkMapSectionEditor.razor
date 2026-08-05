@@ -99,7 +99,7 @@
                     Label = pin.Label ?? string.Empty, Lat = pin.Lat, Lng = pin.Lng, Href = pin.Href, Visible = pin.Visible, Order = pin.Order
                 }).ToList(), Visible = Section.Visible
             });
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }

@@ -53,6 +53,7 @@ namespace Contracts.Public
         public bool OpenInLightbox { get; set; }
         public double FocalPointX { get; set; } = 50;
         public double FocalPointY { get; set; } = 50;
+        public PublicMediaPlacementDto? ImagePlacement { get; set; }
     }
 
     public class PublicVideoBlockDto : PublicBlockDto
@@ -111,6 +112,7 @@ namespace Contracts.Public
         public string? ImageUrl { get; set; }
         public PublicBlockAssetReferenceDto Asset { get; set; } = new();
         public Dictionary<string, string>? ImageAltText { get; set; }
+        public PublicMediaPlacementDto? ImagePlacement { get; set; }
         public Dictionary<string, string>? ButtonLabel { get; set; }
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";

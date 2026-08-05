@@ -38,6 +38,7 @@ else
         </div>
 
         <div class="admin-card">
+            <AdminInlineStatus TargetId="user-management-load" Retry="LoadAsync" Retrying="_loading" RetryText="@T("Retry")" />
             @if (_loading)
             {
                 <p class="text-muted">@T("Loading")</p>
@@ -98,6 +99,7 @@ else
             }
         </div>
         <div class="admin-card">
+            <AdminInlineStatus TargetId="role-management-load" Retry="LoadRolesAsync" Retrying="_loadingRoles" RetryText="@T("Retry")" />
             @if (_loadingRoles)
             {
                 <p class="text-muted">@T("Loading")</p>
@@ -383,6 +385,7 @@ else
 
     private async Task LoadRolesAsync()
     {
+        Http.ClearInlineStatus("role-management-load");
         _loadingRoles = true;
         var res = await Users.GetRolesAsync();
         if (res.Success && res.Data is not null)
@@ -392,13 +395,14 @@ else
         }
         else
         {
-            Http.Notify(res.Message, res.StatusCode);
+            Http.NotifyInline(res, "role-management-load");
         }
         _loadingRoles = false;
     }
 
     private async Task LoadAsync()
     {
+        Http.ClearInlineStatus("user-management-load");
         _loading = true;
         var res = await Users.GetUsersAsync();
         if (res.Success && res.Data is not null)
@@ -408,7 +412,7 @@ else
         }
         else
         {
-            Http.Notify(res.Message, res.StatusCode);
+            Http.NotifyInline(res, "user-management-load");
         }
         _loading = false;
     }
@@ -484,7 +488,7 @@ else
             });
         }
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         _saving = false;
         if (!res.Success) return;
 
@@ -517,7 +521,7 @@ else
         var adminId = _resetUser.Id;
         _saving = true;
         var res = await Users.ResetPasswordAsync(adminId, _resetPassword);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         _saving = false;
         if (res.Success)
         {
@@ -530,14 +534,14 @@ else
     private async Task EnableUser(AdminUserResponse user)
     {
         var res = await Users.EnableUserAsync(user.Id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) await LoadAsync();
     }
 
     private async Task DisableUser(AdminUserResponse user)
     {
         var res = await Users.DisableUserAsync(user.Id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             Invalidations.InvalidateAccount(user.Id, "account-disabled");
@@ -552,7 +556,7 @@ else
 
         _saving = true;
         var res = await Users.DeleteUserAsync(adminId);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         _saving = false;
         if (!res.Success) return;
 
@@ -634,7 +638,7 @@ else
         _saving = false;
         if (!res.Success)
         {
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             return;
         }
         _roleImpact = res.Data;
@@ -652,7 +656,7 @@ else
             })
             : await Users.UpdateRoleAsync(_roleEdit.Id, RoleUpdateRequest());
         _saving = false;
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success) return;
 
         CloseRoleEditor();
@@ -685,7 +689,7 @@ else
         _saving = true;
         var res = await Users.DeleteRoleAsync(_deleteRole.Id, _replacementRoleId);
         _saving = false;
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success) return;
 
         CloseRoleDelete();

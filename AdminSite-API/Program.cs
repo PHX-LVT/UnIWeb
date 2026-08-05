@@ -27,6 +27,7 @@ using Contracts.Api;
 using FullProject.Security;
 using FullProject.Services.LogManagement;
 using FullProject.Services.Health;
+using FullProject.Services.Notifications;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Text.Json;
@@ -153,6 +154,7 @@ builder.Services.AddScoped<ManagedResourceService>();
 builder.Services.AddScoped<ResourceUploadSessionService>();
 builder.Services.AddScoped<StoredAssetService>();
 builder.Services.AddScoped<StorageMigrationService>();
+builder.Services.AddScoped<ManagedImageBackfillService>();
 builder.Services.AddHostedService<StoredAssetCleanupService>();
 builder.Services.AddHostedService<ResourceUploadCleanupService>();
 builder.Services.AddScoped<IconReferenceService>();
@@ -171,6 +173,8 @@ builder.Services.AddScoped<ILoginActivityWriter, LoginActivityWriter>();
 builder.Services.AddScoped<LogManagementQueryService>();
 builder.Services.AddScoped<LogExportService>();
 builder.Services.AddScoped<LogRetentionService>();
+builder.Services.AddScoped<ApiOutcomeFilter>();
+builder.Services.AddSingleton<IAdminDomainEventPublisher, NullAdminDomainEventPublisher>();
 
 // --- Memory Cache (Phase 1 - Maybe Redis in Phase 2) ---
 builder.Services.AddMemoryCache();
@@ -190,7 +194,10 @@ builder.Services.AddRateLimiter(options =>
             Success = false,
             StatusCode = StatusCodes.Status429TooManyRequests,
             Message = "Too many requests. Try again shortly.",
-            Errors = ["rate_limited"],
+            NotificationKey = "NotificationRateLimited",
+            NotificationArgs = [retryAfterSeconds.ToString()],
+            ErrorCode = "rate-limited",
+            TraceId = context.HttpContext.TraceIdentifier,
             RetryAfterSeconds = retryAfterSeconds
         }, cancellationToken);
     };
@@ -322,6 +329,7 @@ builder.Services.AddAuthorization
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<GlobalExceptionFilter>();
+    options.Filters.AddService<ApiOutcomeFilter>();
 })
 .AddJsonOptions(options =>
 {
@@ -343,6 +351,28 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowCredentials();
     });
+});
+
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var fieldErrors = context.ModelState
+            .SelectMany(entry => entry.Value?.Errors.Select(error => new Contracts.Api.ApiFieldError
+            {
+                FieldKey = entry.Key,
+                Message = string.IsNullOrWhiteSpace(error.ErrorMessage)
+                    ? "The supplied value is invalid."
+                    : error.ErrorMessage
+            }) ?? [])
+            .ToList();
+        var response = FullProject.Utils.ApiResult.BadRequest(
+            "Validation failed.",
+            fieldErrors.Select(error => error.Message ?? "The supplied value is invalid.").ToList());
+        response.ErrorCode = "validation-failed";
+        response.FieldErrors = fieldErrors;
+        return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(response);
+    };
 });
 
 // --- Swagger ---
@@ -407,6 +437,21 @@ catch (Exception ex)
 {
     logger.LogCritical(ex,
         "MongoDB index creation failed. The API cannot start safely.");
+    throw;
+}
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<ManagedResourceAlbumService>()
+        .EnsureSystemRootsAsync("system")
+        .WaitAsync(TimeSpan.FromSeconds(10));
+    logger.LogInformation("Resource Library system root albums verified.");
+}
+catch (Exception ex)
+{
+    logger.LogCritical(ex,
+        "Resource Library system root album initialization failed. The API cannot start safely.");
     throw;
 }
 

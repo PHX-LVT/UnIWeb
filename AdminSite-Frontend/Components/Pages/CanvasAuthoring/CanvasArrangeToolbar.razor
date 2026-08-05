@@ -1,5 +1,7 @@
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
+@inject IHttpService Http
+@inject ILogger<CanvasArrangeToolbar> Logger
 @implements IAsyncDisposable
 
 @if (Visible)
@@ -651,8 +653,10 @@
         {
             await JS.InvokeVoidAsync("replayPreviewBlockAnimations", SelectedIds.ToArray());
         }
-        catch
+        catch (JSException exception)
         {
+            Logger.LogWarning(exception, "Canvas animation replay failed.");
+            Http.Notify(T("NotificationAnimationReplayFailed"), 500);
         }
     }
 

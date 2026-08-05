@@ -1,12 +1,23 @@
 using FullProject.Data;
 using FullProject.DTOs;
 using FullProject.Models;
+using FullProject.Security;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace FullProject.Services
 {
     public class ManagedResourceAlbumService
     {
+        private sealed record SystemRootDefinition(string SystemKey, string Name, int Order);
+
+        private static readonly SystemRootDefinition[] SystemRoots =
+        [
+            new(ResourceUploadContextPolicy.BrandRootKey, "Brand", 0),
+            new(ResourceUploadContextPolicy.BackgroundsRootKey, "Backgrounds", 1),
+            new(ResourceUploadContextPolicy.ContentRootKey, "Content", 2)
+        ];
+
         private readonly MongoDbContext _context;
 
         public ManagedResourceAlbumService(MongoDbContext context)
@@ -16,15 +27,161 @@ namespace FullProject.Services
 
         public async Task<List<ResourceAlbum>> GetAllAsync(string? scope = null)
         {
+            await EnsureSystemRootsAsync("system");
             var filter = Builders<ResourceAlbum>.Filter.Empty;
             var normalizedScope = NormalizeScope(scope, allowEmpty: true);
             if (!string.IsNullOrWhiteSpace(normalizedScope))
                 filter &= Builders<ResourceAlbum>.Filter.Eq(a => a.Scope, normalizedScope);
 
-            return await _context.ResourceAlbums.Find(filter)
+            var albums = await _context.ResourceAlbums.Find(filter)
                 .SortBy(a => a.Scope)
                 .ThenBy(a => a.Name)
                 .ToListAsync();
+
+            return albums
+                .OrderBy(album => SystemRootOrder(album.SystemKey))
+                .ThenBy(album => album.Scope, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(album => album.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        public async Task EnsureSystemRootsAsync(string actorId, CancellationToken cancellationToken = default)
+        {
+            foreach (var definition in SystemRoots)
+                await GetOrCreateSystemRootAsync(definition.SystemKey, actorId, cancellationToken);
+        }
+
+        public async Task<ResourceAlbum> ResolveSystemRootAsync(
+            string uploadContext,
+            string actorId,
+            CancellationToken cancellationToken = default)
+        {
+            var systemKey = ResourceUploadContextPolicy.RootSystemKeyFor(uploadContext)
+                ?? throw new ArgumentException("The upload context does not use a system root album.", nameof(uploadContext));
+            return await GetOrCreateSystemRootAsync(systemKey, actorId, cancellationToken);
+        }
+
+        public async Task<ResourceAlbum> GetOrCreateSystemRootAsync(
+            string systemKey,
+            string actorId,
+            CancellationToken cancellationToken = default)
+        {
+            var definition = SystemRoots.FirstOrDefault(root =>
+                string.Equals(root.SystemKey, systemKey, StringComparison.OrdinalIgnoreCase))
+                ?? throw new ArgumentException("Unknown system root album.", nameof(systemKey));
+
+            var existing = await _context.ResourceAlbums
+                .Find(album => album.SystemKey == definition.SystemKey)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (existing is null)
+            {
+                var legacyCandidate = (await _context.ResourceAlbums
+                        .Find(album => album.Scope == "media")
+                        .ToListAsync(cancellationToken))
+                    .Where(album =>
+                        string.IsNullOrWhiteSpace(album.SystemKey) &&
+                        string.Equals(album.Name, definition.Name, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(album => album.CreatedAt)
+                    .ThenBy(album => album.Id, StringComparer.Ordinal)
+                    .FirstOrDefault();
+
+                if (legacyCandidate is not null)
+                {
+                    try
+                    {
+                        await _context.ResourceAlbums.UpdateOneAsync(
+                            Builders<ResourceAlbum>.Filter.And(
+                                Builders<ResourceAlbum>.Filter.Eq(album => album.Id, legacyCandidate.Id),
+                                Builders<ResourceAlbum>.Filter.Or(
+                                    Builders<ResourceAlbum>.Filter.Eq(album => album.SystemKey, null),
+                                    Builders<ResourceAlbum>.Filter.Eq(album => album.SystemKey, string.Empty))),
+                            Builders<ResourceAlbum>.Update
+                                .Set(album => album.SystemKey, definition.SystemKey)
+                                .Set(album => album.IsSystemRoot, true)
+                                .Set(album => album.Scope, "media")
+                                .Set(album => album.Name, definition.Name)
+                                .Set(album => album.UpdatedById, actorId)
+                                .Set(album => album.UpdatedAt, DateTime.UtcNow),
+                            cancellationToken: cancellationToken);
+                    }
+                    catch (MongoWriteException exception) when (
+                        exception.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+                    {
+                        // Another application instance established the same root first.
+                    }
+                    catch (MongoCommandException exception) when (exception.Code == 11000)
+                    {
+                        // Another application instance established the same root first.
+                    }
+                }
+            }
+
+            var now = DateTime.UtcNow;
+            ResourceAlbum root;
+            try
+            {
+                root = await _context.ResourceAlbums.FindOneAndUpdateAsync<ResourceAlbum>(
+                    album => album.SystemKey == definition.SystemKey,
+                    Builders<ResourceAlbum>.Update
+                        .Set(album => album.Scope, "media")
+                        .Set(album => album.Name, definition.Name)
+                        .Set(album => album.IsSystemRoot, true)
+                        .SetOnInsert(album => album.Id, ObjectId.GenerateNewId().ToString())
+                        .SetOnInsert(album => album.CreatedById, actorId)
+                        .SetOnInsert(album => album.CreatedAt, now)
+                        .Set(album => album.UpdatedById, actorId)
+                        .Set(album => album.UpdatedAt, now),
+                    new FindOneAndUpdateOptions<ResourceAlbum, ResourceAlbum>
+                    {
+                        IsUpsert = true,
+                        ReturnDocument = ReturnDocument.After
+                    },
+                    cancellationToken);
+            }
+            catch (MongoWriteException exception) when (exception.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+            {
+                root = await _context.ResourceAlbums
+                    .Find(album => album.SystemKey == definition.SystemKey)
+                    .FirstAsync(cancellationToken);
+            }
+            catch (MongoCommandException exception) when (exception.Code == 11000)
+            {
+                root = await _context.ResourceAlbums
+                    .Find(album => album.SystemKey == definition.SystemKey)
+                    .FirstAsync(cancellationToken);
+            }
+
+            await RenameReservedNameCollisionsAsync(root, definition, actorId, cancellationToken);
+            return root;
+        }
+
+        private async Task RenameReservedNameCollisionsAsync(
+            ResourceAlbum root,
+            SystemRootDefinition definition,
+            string actorId,
+            CancellationToken cancellationToken)
+        {
+            var albums = await _context.ResourceAlbums
+                .Find(FilterDefinition<ResourceAlbum>.Empty)
+                .ToListAsync(cancellationToken);
+            var collisions = albums
+                .Where(album =>
+                    !string.Equals(album.Id, root.Id, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(album.Name, definition.Name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var collision in collisions)
+            {
+                var suffix = collision.Id.Length > 10 ? collision.Id[..10] : collision.Id;
+                await _context.ResourceAlbums.UpdateOneAsync(
+                    album => album.Id == collision.Id,
+                    Builders<ResourceAlbum>.Update
+                        .Set(album => album.Name, $"{definition.Name} (Legacy {suffix})")
+                        .Set(album => album.UpdatedById, actorId)
+                        .Set(album => album.UpdatedAt, DateTime.UtcNow),
+                    cancellationToken: cancellationToken);
+            }
         }
 
         public async Task<ResourceAlbum?> GetByIdAsync(string? id)
@@ -81,6 +238,16 @@ namespace FullProject.Services
             var album = await GetByIdAsync(id);
             if (album is null) return (null, ["Album not found."]);
 
+            if (album.IsSystemRoot)
+            {
+                if (dto.Scope is not null &&
+                    !string.Equals(NormalizeScope(dto.Scope), album.Scope, StringComparison.OrdinalIgnoreCase))
+                    return (null, ["System root albums cannot change album type."]);
+                if (dto.Name is not null &&
+                    !string.Equals(NormalizeName(dto.Name), album.Name, StringComparison.Ordinal))
+                    return (null, ["System root albums cannot be renamed."]);
+            }
+
             var originalScope = album.Scope;
             if (dto.Scope is not null) album.Scope = NormalizeScope(dto.Scope) ?? NormalizeRawScope(dto.Scope);
             if (dto.Name is not null) album.Name = NormalizeName(dto.Name);
@@ -101,23 +268,40 @@ namespace FullProject.Services
             return (album, errors);
         }
 
-        public async Task<(bool Deleted, int ResourceCount, List<string> Errors)> DeleteAsync(string id)
+        public async Task<(ResourceAlbum? Album, List<string> Errors)> UpdateCoverAsync(
+            string id,
+            string coverUrl,
+            string coverStorageKey,
+            string coverAssetId,
+            int coverAssetVersion,
+            int coverStorageSchemaVersion,
+            string actorId)
         {
             var album = await GetByIdAsync(id);
-            if (album is null) return (false, 0, ["Album not found."]);
+            if (album is null) return (null, ["Album not found."]);
 
-            var count = await GetResourceCountAsync(id);
-            if (count > 0)
-            {
-                var names = await FirstResourceNamesAsync(id);
-                var suffix = names.Count == 0 ? string.Empty : $" First resources: {string.Join(", ", names)}.";
-                return (false, count, [$"Album contains {count} resource(s).{suffix} Move or remove those resources before deleting the album."]);
-            }
+            album.CoverUrl = coverUrl;
+            album.CoverStorageKey = coverStorageKey;
+            album.CoverAssetId = coverAssetId;
+            album.CoverAssetVersion = Math.Max(1, coverAssetVersion);
+            album.CoverStorageSchemaVersion = Math.Max(1, coverStorageSchemaVersion);
+            album.UpdatedById = actorId;
+            album.UpdatedAt = DateTime.UtcNow;
+            await _context.ResourceAlbums.ReplaceOneAsync(a => a.Id == id, album);
+            return (album, []);
+        }
+
+        public async Task<(bool Deleted, List<string> Errors)> DeleteRecordAsync(string id)
+        {
+            var album = await GetByIdAsync(id);
+            if (album is null) return (false, ["Album not found."]);
+            if (album.IsSystemRoot)
+                return (false, ["System root albums cannot be deleted."]);
 
             var result = await _context.ResourceAlbums.DeleteOneAsync(a => a.Id == id);
             return result.DeletedCount > 0
-                ? (true, 0, [])
-                : (false, 0, ["Album not found."]);
+                ? (true, [])
+                : (false, ["Album not found."]);
         }
 
         public static string ScopeForKind(string? kind) =>
@@ -144,6 +328,8 @@ namespace FullProject.Services
                 errors.Add("Album type must be media or file.");
             if (string.IsNullOrWhiteSpace(album.Name))
                 errors.Add("Album name is required.");
+            if (!album.IsSystemRoot && IsReservedSystemRootName(album.Name))
+                errors.Add("Brand, Backgrounds, and Content are reserved system album names.");
 
             if (errors.Count > 0) return errors;
 
@@ -164,17 +350,15 @@ namespace FullProject.Services
         private static string NormalizeRawScope(string? value) =>
             (value ?? string.Empty).Trim().ToLowerInvariant();
 
-        private async Task<List<string>> FirstResourceNamesAsync(string albumId)
-        {
-            var resources = await _context.ManagedResources
-                .Find(r => r.AlbumId == albumId)
-                .Limit(5)
-                .ToListAsync();
+        public static bool IsReservedSystemRootName(string? value) =>
+            SystemRoots.Any(root => string.Equals(root.Name, NormalizeName(value), StringComparison.OrdinalIgnoreCase));
 
-            return resources
-                .Select(r => r.Name.GetValueOrDefault("en") ?? r.FileName)
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .ToList();
+        private static int SystemRootOrder(string? systemKey)
+        {
+            var root = SystemRoots.FirstOrDefault(item =>
+                string.Equals(item.SystemKey, systemKey, StringComparison.OrdinalIgnoreCase));
+            return root is null ? int.MaxValue : root.Order;
         }
+
     }
 }

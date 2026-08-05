@@ -60,6 +60,7 @@
                                 {
                                     <span class="sc-carousel__video-media">
                                         <img src="@item.ImageUrl"
+                                             style="@StyleHelper.GetMediaPlacementStyle(item.ImagePlacement)"
                                              alt="@StyleHelper.Lang(item.Title, Lang)" />
                                         <span class="sc-library__play" aria-hidden="true"></span>
                                     </span>
@@ -78,6 +79,7 @@
                             @if (!string.IsNullOrEmpty(item.ImageUrl))
                             {
                                 <img src="@item.ImageUrl"
+                                     style="@StyleHelper.GetMediaPlacementStyle(item.ImagePlacement)"
                                      alt="@StyleHelper.Lang(item.Title, Lang)" />
                             }
                             <div class="sc-carousel__body">

@@ -280,7 +280,7 @@ namespace FullProject.Controllers
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("saved Field Key", StringComparison.OrdinalIgnoreCase))
             {
-                return BadRequest(ApiResult.BadRequest(ex.Message));
+                return BadRequest(ApiResult.BadRequest("A saved Field Key cannot be changed."));
             }
         }
 

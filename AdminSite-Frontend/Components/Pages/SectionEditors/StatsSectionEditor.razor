@@ -155,7 +155,7 @@
                 }).ToList(),
                 Visible = Section.Visible
             });
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }

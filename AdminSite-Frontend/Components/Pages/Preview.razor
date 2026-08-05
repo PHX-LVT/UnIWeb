@@ -10,6 +10,7 @@
 @inject AdminLanguageService AdminLanguageState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ILogger<Preview> Logger
 @using Contracts.Forms
 @using Contracts.Admin
 @using Contracts.Public
@@ -60,6 +61,9 @@ else
 {
     <div style="padding:2rem;text-align:center;font-family:sans-serif;color:#999;">
         @(_error ?? "Page not found.")
+        <div style="margin-top:1rem">
+            <button type="button" class="btn-admin btn-secondary" @onclick="RetryPreviewAsync">@T("Retry")</button>
+        </div>
     </div>
 }
 
@@ -138,11 +142,16 @@ else
             var pageRes = await PageService.GetByIdAsync(PageId);
             if (pageRes?.Data is null)
             {
-                _error = pageRes?.Message ?? "Page not found.";
+                _error = pageRes?.StatusCode == 404 ? T("PageNotFound") : T("PreviewLoadFailed");
                 return;
             }
 
             var sectionsRes = await SectionService.GetAllAsync(PageId);
+            if (!sectionsRes.Success)
+            {
+                _error = T("PreviewLoadFailed");
+                return;
+            }
             var sections = sectionsRes.Data ?? new();
             var blocksBySection = await LoadBlocksAsync(sections);
             var formsResponse = await FormService.GetDefinitionsAsync();
@@ -165,9 +174,10 @@ else
                     .ToList()
             };
         }
-        catch
+        catch (Exception exception)
         {
-            _error = "Preview could not be loaded.";
+            Logger.LogError(exception, "Preview for Page {PageId} could not be loaded.", PageId);
+            _error = T("PreviewLoadFailed");
         }
         finally
         {
@@ -303,6 +313,7 @@ else
                     Title = i.Title ?? new(),
                     Description = i.Description ?? new(),
                     ImageUrl = i.ImageUrl,
+                    ImagePlacement = ToPublicPlacement(i.ImagePlacement),
                     LinkHref = i.LinkHref
                 }).ToList()
             },
@@ -391,6 +402,7 @@ else
                     Title = i.Title ?? new(),
                     Description = i.Description ?? new(),
                     ImageUrl = i.ImageUrl,
+                    ImagePlacement = ToPublicPlacement(i.ImagePlacement),
                     LinkHref = i.LinkHref,
                     Metrics = i.Metrics?
                         .OrderBy(m => m.Order)
@@ -445,6 +457,7 @@ else
                     Title = i.Title ?? new(),
                     Description = i.Description ?? new(),
                     ImageUrl = i.ImageUrl,
+                    ImagePlacement = ToPublicPlacement(i.ImagePlacement),
                     Order = i.Order
                 }).ToList()
             },
@@ -540,7 +553,12 @@ else
                 Caption = b.Caption,
                 OpenInLightbox = b.OpenInLightbox,
                 FocalPointX = b.FocalPointX,
-                FocalPointY = b.FocalPointY
+                FocalPointY = b.FocalPointY,
+                ImagePlacement = ToPublicPlacement(b.ImagePlacement ?? new MediaPlacementModel
+                {
+                    FocalPointX = b.FocalPointX,
+                    FocalPointY = b.FocalPointY
+                })
             },
             "video" => new PublicVideoBlockDto
             {
@@ -600,6 +618,7 @@ else
                 Description = b.Description,
                 ImageUrl = b.ImageUrl,
                 Asset = MapBlockAsset(b.Asset),
+                ImagePlacement = ToPublicPlacement(b.ImagePlacement),
                 ButtonLabel = b.ButtonLabel,
                 Href = b.Href,
                 Action = b.Action ?? "linkToPage",
@@ -878,6 +897,17 @@ else
         };
     }
 
+    private async Task RetryPreviewAsync()
+    {
+        _ready = false;
+        _pageDto = null;
+        _error = null;
+        _widgetsInitialized = false;
+        await LoadPreviewAsync(GetRequestedLang());
+    }
+
+    private string T(string key) => AdminUiLocalizer.T(key, _lang);
+
     private static PublicContainerLayoutSettingsDto MapContainerLayout(ContainerLayoutSettingsModel? value) => new()
     {
         SchemaVersion = 1,
@@ -1003,7 +1033,10 @@ else
         CardContent = HasValues(itemOverride?.CardContent) ? itemOverride!.CardContent : fallback?.CardContent ?? new(),
         CardBackgroundType = !string.IsNullOrWhiteSpace(itemOverride?.CardBackgroundType) ? itemOverride!.CardBackgroundType : fallback?.CardBackgroundType,
         CardBackgroundColor = !string.IsNullOrWhiteSpace(itemOverride?.CardBackgroundColor) ? itemOverride!.CardBackgroundColor : fallback?.CardBackgroundColor,
-        CardImageUrl = itemOverride?.CardImageUrl ?? fallback?.CardImageUrl
+        CardImageUrl = itemOverride?.CardImageUrl ?? fallback?.CardImageUrl,
+        CardImagePlacement = itemOverride?.CardImagePlacement is { } placement
+            ? ToPublicPlacement(placement)
+            : fallback?.CardImagePlacement
     };
 
     private static bool HasValues(Dictionary<string, string>? value) =>
@@ -1214,7 +1247,8 @@ else
             CardContent = page.Card.CardContent,
             CardBackgroundType = page.Card.CardBackgroundType,
             CardBackgroundColor = page.Card.CardBackgroundColor,
-            CardImageUrl = page.Card.CardImageUrl
+            CardImageUrl = page.Card.CardImageUrl,
+            CardImagePlacement = ToPublicPlacement(page.Card.CardImagePlacement)
         }
     };
 

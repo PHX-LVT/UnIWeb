@@ -24,6 +24,8 @@
     </div>
 </div>
 
+<AdminInlineStatus TargetId="social-buttons-load" Retry="Load" Retrying="_loading" RetryText="@T("Retry")" />
+
 @if (_loading)
 {
     <div class="admin-card" style="text-align:center;padding:2rem">
@@ -125,9 +127,16 @@ else if (_group is not null)
 
     private async Task Load()
     {
+        Http.ClearInlineStatus("social-buttons-load");
         _loading = true;
         var res = await SocialService.GetAsync();
-        _group = res.Data;
+        if (res.Success && res.Data is not null)
+            _group = res.Data;
+        else
+        {
+            _group = null;
+            Http.NotifyInline(res, "social-buttons-load");
+        }
         _loading = false;
     }
 
@@ -156,7 +165,7 @@ else if (_group is not null)
         else
             res = await SocialService.UpdateAsync(_editing.Id, _form);
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) { CloseModal(); await Load(); }
         _saving = false;
     }
@@ -164,21 +173,21 @@ else if (_group is not null)
     private async Task ToggleButton(SocialButtonModel btn)
     {
         var res = await SocialService.SetButtonVisibilityAsync(btn.Id, !btn.Visible);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) btn.Visible = !btn.Visible;
     }
 
     private async Task ToggleGroup()
     {
         var res = await SocialService.SetGroupVisibilityAsync(!_group!.Visible);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) _group.Visible = !_group.Visible;
     }
 
     private async Task Delete(string id)
     {
         var res = await SocialService.DeleteAsync(id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) await Load();
     }
 

@@ -53,7 +53,8 @@ namespace FullProject.Utils
             Success = false,
             StatusCode = 400,
             Message = message,
-            Errors = errors
+            Errors = errors,
+            FieldErrors = ToFieldErrors(errors)
         };
 
         public static ApiResponse BadRequest(string message, List<string>? errors = null) => new()
@@ -61,7 +62,8 @@ namespace FullProject.Utils
             Success = false,
             StatusCode = 400,
             Message = message,
-            Errors = errors
+            Errors = errors,
+            FieldErrors = ToFieldErrors(errors)
         };
 
         public static ApiResponse<T> Conflict<T>(T data, string message) => new()
@@ -99,8 +101,15 @@ namespace FullProject.Utils
             Success = false,
             StatusCode = 422,
             Message = "Validation failed.",
-            Errors = errors
+            Errors = errors,
+            FieldErrors = ToFieldErrors(errors)
         };
+
+        public static List<ApiFieldError> ToFieldErrors(IEnumerable<string>? errors, string field = "") =>
+            errors?
+                .Where(error => !string.IsNullOrWhiteSpace(error))
+                .Select(error => new ApiFieldError { FieldKey = field, Message = error.Trim() })
+                .ToList() ?? [];
 
         public static ApiResponse<T> ServerError<T>(string message = "An unexpected error occurred.") => new()
         {
@@ -123,6 +132,30 @@ namespace FullProject.Utils
         {
             response.NotificationKey = notificationKey;
             response.NotificationArgs = notificationArgs;
+            return response;
+        }
+
+        public static TResponse WithOutcome<TResponse>(
+            this TResponse response,
+            string? errorCode = null,
+            List<ApiFieldError>? fieldErrors = null)
+            where TResponse : IApiResponse
+        {
+            response.ErrorCode = errorCode;
+            response.FieldErrors = fieldErrors;
+            return response;
+        }
+
+        public static TResponse WithOperation<TResponse>(
+            this TResponse response,
+            string domainCode,
+            string actionCode,
+            string traceId)
+            where TResponse : IApiResponse
+        {
+            response.DomainCode = domainCode;
+            response.ActionCode = actionCode;
+            response.TraceId = traceId;
             return response;
         }
     }

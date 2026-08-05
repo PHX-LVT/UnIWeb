@@ -120,9 +120,9 @@ public sealed class LogManagementController : ControllerBase
             var result = await _retention.RunAsync(User.FindFirst("adminId")?.Value ?? string.Empty, cancellationToken);
             return Ok(ApiResult.Ok(result, "Log retention completed."));
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            return Conflict(ApiResult.BadRequest(ex.Message));
+            return Conflict(ApiResult.BadRequest("Log retention is already running."));
         }
     }
 

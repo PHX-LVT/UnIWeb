@@ -132,6 +132,8 @@ builder.Services.AddScoped<AuthenticationStateProvider, AdminRevalidatingAuthent
 
 // Application services
 builder.Services.AddScoped<IHttpService, HttpService>();
+builder.Services.AddScoped<AdminLanguageContext>();
+builder.Services.AddScoped<IAdminLanguageContext>(sp => sp.GetRequiredService<AdminLanguageContext>());
 builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 builder.Services.AddScoped<AdminAuthService>();
 builder.Services.AddScoped<BrandingService>();

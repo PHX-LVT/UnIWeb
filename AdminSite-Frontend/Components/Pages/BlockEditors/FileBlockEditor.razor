@@ -112,7 +112,7 @@
             "api/admin/assets/upload?folder=file-blocks", file, maxBytes: MaxFileBytes);
         if (!response.Success || response.Data is null)
         {
-            Http.Notify(response.Message ?? T("FileUploadFailed"), response.StatusCode);
+            Http.Notify(response, failureFallback: T("FileUploadFailed"));
             return;
         }
 
@@ -153,7 +153,7 @@
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Notify(response.Message, response.StatusCode);
+            Http.Notify(response);
             if (response.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }

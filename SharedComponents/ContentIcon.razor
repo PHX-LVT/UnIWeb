@@ -6,7 +6,9 @@
 }
 else if (!string.IsNullOrWhiteSpace(BuiltInClass))
 {
-    <i class="@($"{BuiltInClass} {CssClassValue}")" style="@BuiltInStyle" aria-hidden="true"></i>
+    <span class="@CssClassValue" style="@BuiltInStyle" aria-hidden="true">
+        <i class="@BuiltInClass"></i>
+    </span>
 }
 
 @code {
@@ -45,11 +47,21 @@ else if (!string.IsNullOrWhiteSpace(BuiltInClass))
                     "background" => "var(--theme-color-background)",
                     _ => "color-mix(in srgb, var(--theme-color-background) 92%, var(--theme-color-primary))"
                 };
-            var radius = appearance.Shape switch { "circle" => "50%", "rounded" => "10px", _ => "0" };
-            var box = size + 20;
-            return $"{declarations}display:inline-grid;place-items:center;width:{box}px;height:{box}px;background:{background};border-radius:{radius};";
+            var (width, height, radius, clipPath) = IconShapeStyle(appearance.Shape, size);
+            return $"{declarations}display:inline-grid;place-items:center;width:{width}px;height:{height}px;background:{background};border-radius:{radius};clip-path:{clipPath};";
         }
     }
+
+    private static (int Width, int Height, string Radius, string ClipPath) IconShapeStyle(string? shape, int size) => shape switch
+    {
+        "rounded" or "rounded-square" => (size + 20, size + 20, "10px", "none"),
+        "circle" => (size + 20, size + 20, "50%", "none"),
+        "oval" => (size + 32, size + 18, "999px", "none"),
+        "diamond" => (size + 24, size + 24, "0", "polygon(50% 0,100% 50%,50% 100%,0 50%)"),
+        "hexagon" => (size + 28, size + 22, "0", "polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"),
+        "star" => (size + 30, size + 30, "0", "polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 93%,50% 72%,21% 93%,32% 57%,2% 35%,39% 35%)"),
+        _ => (size + 20, size + 20, "0", "none")
+    };
 
     private static string SafeColor(string? value, string fallback) => value is { Length: 7 } && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit) ? value : fallback;
 }

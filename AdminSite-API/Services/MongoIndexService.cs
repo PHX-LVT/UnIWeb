@@ -201,6 +201,32 @@ namespace FullProject.Services
                     .Ascending(r => r.DeletionState)
                     .Descending(r => r.UpdatedAt),
                 IndexOptions("ix_managed_resources_purpose_active_deletion_updated"));
+            await EnsureIndexAsync(resources,
+                Builders<ManagedResource>.IndexKeys.Ascending(r => r.AssetId),
+                new CreateIndexOptions<ManagedResource>
+                {
+                    Name = "ux_managed_resources_asset_id",
+                    Unique = true,
+                    PartialFilterExpression = Builders<ManagedResource>.Filter.And(
+                        Builders<ManagedResource>.Filter.Exists(r => r.AssetId, true),
+                        Builders<ManagedResource>.Filter.Type(r => r.AssetId, BsonType.ObjectId))
+                });
+            await EnsureIndexAsync(resources,
+                Builders<ManagedResource>.IndexKeys.Ascending(r => r.StorageKey),
+                new CreateIndexOptions<ManagedResource>
+                {
+                    Name = "ux_managed_resources_storage_key",
+                    Unique = true,
+                    PartialFilterExpression = Builders<ManagedResource>.Filter.And(
+                        Builders<ManagedResource>.Filter.Exists(r => r.StorageKey, true),
+                        Builders<ManagedResource>.Filter.Type(r => r.StorageKey, BsonType.String),
+                        Builders<ManagedResource>.Filter.Gt(r => r.StorageKey, string.Empty))
+                });
+            await EnsureIndexAsync(resources,
+                Builders<ManagedResource>.IndexKeys
+                    .Ascending(r => r.OriginContext)
+                    .Descending(r => r.CreatedAt),
+                IndexOptions("ix_managed_resources_origin_created"));
 
             var albums = _database.GetCollection<ResourceAlbum>("resource_albums");
             await EnsureIndexAsync(albums,
@@ -213,6 +239,17 @@ namespace FullProject.Services
                     .Ascending(a => a.CreatedById)
                     .Descending(a => a.CreatedAt),
                 IndexOptions("ix_resource_albums_creator_created"));
+            await EnsureIndexAsync(albums,
+                Builders<ResourceAlbum>.IndexKeys.Ascending(a => a.SystemKey),
+                new CreateIndexOptions<ResourceAlbum>
+                {
+                    Name = "ux_resource_albums_system_key",
+                    Unique = true,
+                    PartialFilterExpression = Builders<ResourceAlbum>.Filter.And(
+                        Builders<ResourceAlbum>.Filter.Exists(a => a.SystemKey, true),
+                        Builders<ResourceAlbum>.Filter.Type(a => a.SystemKey, BsonType.String),
+                        Builders<ResourceAlbum>.Filter.Gt(a => a.SystemKey, string.Empty))
+                });
         }
         private async Task EnsureUserIndexesAsync()
         {

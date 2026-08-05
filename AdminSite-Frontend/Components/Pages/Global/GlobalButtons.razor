@@ -18,11 +18,17 @@
     </div>
 </div>
 
+<AdminInlineStatus TargetId="global-buttons-load" Retry="Load" Retrying="_loading" RetryText="@T("Retry")" />
+<AdminInlineStatus TargetId="global-button-forms-load" Retry="LoadForms" RetryText="@T("Retry")" />
+
 @if (_loading)
 {
     <div class="admin-card" style="text-align:center;padding:2rem">
         <div class="spinner" style="margin:0 auto"></div>
     </div>
+}
+else if (_loadFailed)
+{
 }
 else if (!_buttons.Any())
 {
@@ -115,6 +121,7 @@ else
     private GlobalButtonRequest _form = new();
     private Dictionary<string, string> _formLabelText = new();
     private bool _loading = true;
+    private bool _loadFailed;
     private bool _saving = false;
     private bool _showModal = false;
     private List<string> _actions = new() { "OpenModal", "LinkToPage", "ExternalUrl" };
@@ -126,19 +133,40 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var forms = await FormService.GetDefinitionsAsync();
-        _formDefinitions = forms.Data ?? new();
+        await LoadForms();
 
         await AdminLanguageState.LoadSettingsAsync();
         _languages = AdminLanguageState.SupportedLanguages.ToList();
         await Load();
     }
 
+    private async Task LoadForms()
+    {
+        Http.ClearInlineStatus("global-button-forms-load");
+        var response = await FormService.GetDefinitionsAsync();
+        if (response.Success && response.Data is not null)
+            _formDefinitions = response.Data;
+        else
+        {
+            _formDefinitions = new();
+            Http.NotifyInline(response, "global-button-forms-load");
+        }
+    }
+
     private async Task Load()
     {
+        Http.ClearInlineStatus("global-buttons-load");
+        _loadFailed = false;
         _loading = true;
         var res = await ButtonsService.GetAllAsync();
-        _buttons = res.Data ?? new();
+        if (res.Success && res.Data is not null)
+            _buttons = res.Data;
+        else
+        {
+            _buttons = new();
+            _loadFailed = true;
+            Http.NotifyInline(res, "global-buttons-load");
+        }
         _loading = false;
     }
 
@@ -175,7 +203,7 @@ else
         else
             res = await ButtonsService.UpdateAsync(_editing.Id, _form);
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
 
         if (res.Success)
         {
@@ -188,14 +216,14 @@ else
     private async Task ToggleVisibility(GlobalButtonModel btn)
     {
         var res = await ButtonsService.SetVisibilityAsync(btn.Id, !btn.Visible);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) btn.Visible = !btn.Visible;
     }
 
     private async Task Delete(string id)
     {
         var res = await ButtonsService.DeleteAsync(id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) await Load();
     }
 

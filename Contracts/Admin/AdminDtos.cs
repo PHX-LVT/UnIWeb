@@ -155,6 +155,7 @@ namespace Contracts.Admin
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; } = 0;
@@ -168,6 +169,7 @@ namespace Contracts.Admin
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public bool Visible { get; set; }
         public int Order { get; set; }
@@ -194,6 +196,7 @@ namespace Contracts.Admin
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public List<CarouselMetricDto> Metrics { get; set; } = new();
         public bool Visible { get; set; } = true;
@@ -233,6 +236,7 @@ namespace Contracts.Admin
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public bool Visible { get; set; } = true;
         public int Order { get; set; }
     }
@@ -773,6 +777,7 @@ public class ColumnSlotResponseDto
         public string? CardBackgroundType { get; set; }
         public string? CardBackgroundColor { get; set; }
         public string? CardImageUrl { get; set; }
+        public MediaPlacementDto? CardImagePlacement { get; set; }
         public bool IsCustomized { get; set; }
     }
 
@@ -784,6 +789,7 @@ public class ColumnSlotResponseDto
         public string? CardBackgroundType { get; set; }
         public string? CardBackgroundColor { get; set; }
         public string? CardImageUrl { get; set; }
+        public MediaPlacementDto? CardImagePlacement { get; set; }
     }
 
     public class AssetUploadResponseDto
@@ -924,6 +930,7 @@ public class ColumnSlotResponseDto
         public bool OpenInLightbox { get; set; }
         public double FocalPointX { get; set; } = 50;
         public double FocalPointY { get; set; } = 50;
+        public MediaPlacementDto? ImagePlacement { get; set; }
     }
 
     public class VideoBlockCreateDto : BlockCreateDto
@@ -977,6 +984,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Description { get; set; } = new();
         public BlockAssetReferenceDto? Asset { get; set; }
         public Dictionary<string, string> ImageAltText { get; set; } = new();
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -1078,6 +1086,7 @@ public class ColumnSlotResponseDto
         public bool OpenInLightbox { get; set; }
         public double FocalPointX { get; set; } = 50;
         public double FocalPointY { get; set; } = 50;
+        public MediaPlacementDto? ImagePlacement { get; set; }
     }
 
     public class VideoBlockUpdateDto : BlockUpdateDto
@@ -1121,6 +1130,7 @@ public class ColumnSlotResponseDto
         public Dictionary<string, string> Description { get; set; } = new();
         public BlockAssetReferenceDto? Asset { get; set; }
         public Dictionary<string, string> ImageAltText { get; set; } = new();
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public Dictionary<string, string> ButtonLabel { get; set; } = new();
         public string? Href { get; set; }
         public string Action { get; set; } = "linkToPage";
@@ -1332,6 +1342,7 @@ public class ColumnSlotResponseDto
         public bool OpenInLightbox { get; set; }
         public double FocalPointX { get; set; } = 50;
         public double FocalPointY { get; set; } = 50;
+        public MediaPlacementDto? ImagePlacement { get; set; }
         public List<BulletListItemDto>? BulletItems { get; set; }
 
         // Video

@@ -16,6 +16,8 @@
     </div>
 </div>
 
+<AdminInlineStatus TargetId="footer-load" Retry="Load" Retrying="_loading" RetryText="@T("Retry")" />
+
 @if (_loading)
 {
     <div class="admin-card" style="text-align:center;padding:2rem">
@@ -280,9 +282,16 @@ else if (_footer is not null)
 
     private async Task Load()
     {
+        Http.ClearInlineStatus("footer-load");
         _loading = true;
         var res = await FooterService.GetAsync();
-        _footer = res.Data;
+        if (res.Success && res.Data is not null)
+            _footer = res.Data;
+        else
+        {
+            _footer = null;
+            Http.NotifyInline(res, "footer-load");
+        }
         _sortableInitialized = false;
         _loading = false;
     }
@@ -306,7 +315,7 @@ else if (_footer is not null)
         }
 
         var res = await FooterService.ReorderGroupsAsync(cleanOrderedIds);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success)
         {
             _sortableInitialized = false;
@@ -358,7 +367,7 @@ else if (_footer is not null)
         }
 
         var res = await FooterService.ReorderLinksAsync(groupId, cleanOrderedIds);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success)
         {
             _sortableInitialized = false;
@@ -393,7 +402,7 @@ else if (_footer is not null)
         var res = await FooterService.UpdateMetaAsync(
             new FooterMetaRequest { CompanyName = _footer!.CompanyName }); 
         if (res.Data is not null) _footer = res.Data;
-        Http.Notify(res.Message ?? T("FooterIdentitySaved"), res.StatusCode);
+        Http.Notify(res, T("FooterIdentitySaved"));
     }
 
     // Groups
@@ -413,7 +422,7 @@ else if (_footer is not null)
             res = await FooterService.UpdateGroupAsync(_editingGroup.Id, _groupForm);
 
         if (res.Data is not null) _footer = res.Data;  
-        Http.Notify(res.Message ?? (_editingGroup is null ? T("FooterGroupCreated") : T("FooterGroupSaved")), res.StatusCode);
+        Http.Notify(res, _editingGroup is null ? T("FooterGroupCreated") : T("FooterGroupSaved"));
         if (res.Success) CloseModals();
     }
 
@@ -421,14 +430,14 @@ else if (_footer is not null)
     {
         var res = await FooterService.SetGroupVisibilityAsync(g.Id, !g.Visible);
         if (res.Data is not null) _footer = res.Data;  
-        Http.Notify(res.Message ?? (res.Success ? T("FooterGroupUpdated") : T("FooterGroupUpdateFailed")), res.StatusCode);
+        Http.Notify(res, T("FooterGroupUpdated"), T("FooterGroupUpdateFailed"));
     }
 
     private async Task DeleteGroup(string id)
     {
         var res = await FooterService.DeleteGroupAsync(id);
         if (res.Data is not null) _footer = res.Data; 
-        Http.Notify(res.Message ?? T("FooterGroupDeleted"), res.StatusCode);
+        Http.Notify(res, T("FooterGroupDeleted"));
     }
     // Links
     private void OpenLinkModal(FooterGroupModel group, FooterLinkModel? link)
@@ -448,7 +457,7 @@ else if (_footer is not null)
             res = await FooterService.UpdateLinkAsync(_activeGroup!.Id, _editingLink.Id, _linkForm);
 
         if (res.Data is not null) _footer = res.Data;  
-        Http.Notify(res.Message ?? (_editingLink is null ? T("FooterLinkCreated") : T("FooterLinkSaved")), res.StatusCode);
+        Http.Notify(res, _editingLink is null ? T("FooterLinkCreated") : T("FooterLinkSaved"));
         if (res.Success) CloseModals();
     }
 
@@ -456,14 +465,14 @@ else if (_footer is not null)
     {
         var res = await FooterService.SetLinkVisibilityAsync(groupId, link.Id, !link.Visible);
         if (res.Data is not null) _footer = res.Data; 
-        Http.Notify(res.Message ?? (res.Success ? T("FooterLinkUpdated") : T("FooterLinkUpdateFailed")), res.StatusCode);
+        Http.Notify(res, T("FooterLinkUpdated"), T("FooterLinkUpdateFailed"));
     }
 
     private async Task DeleteLink(string groupId, string linkId)
     {
         var res = await FooterService.DeleteLinkAsync(groupId, linkId);
         if (res.Data is not null) _footer = res.Data;  // ← replace Load()
-        Http.Notify(res.Message ?? T("FooterLinkDeleted"), res.StatusCode);
+        Http.Notify(res, T("FooterLinkDeleted"));
     }
 
     private void CloseModals()

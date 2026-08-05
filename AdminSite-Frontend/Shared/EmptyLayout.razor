@@ -1,6 +1,11 @@
 @inherits LayoutComponentBase
 @using Blazored.Toast
+@using Blazored.Toast.Configuration
 
 @Body
 
-<BlazoredToasts MaxToastCount="3" />
+<BlazoredToasts Position="ToastPosition.TopRight"
+                Timeout="4"
+                ShowProgressBar="true"
+                MaxToastCount="3"
+                RemoveToastsOnNavigation="false" />

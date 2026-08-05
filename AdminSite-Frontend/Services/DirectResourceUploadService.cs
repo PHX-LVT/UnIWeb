@@ -9,16 +9,22 @@ public sealed class DirectResourceUploadService
 {
     private readonly AdminContentService _content;
     private readonly IJSRuntime _js;
+    private readonly ILogger<DirectResourceUploadService> _logger;
 
-    public DirectResourceUploadService(AdminContentService content, IJSRuntime js)
+    public DirectResourceUploadService(
+        AdminContentService content,
+        IJSRuntime js,
+        ILogger<DirectResourceUploadService> logger)
     {
         _content = content;
         _js = js;
+        _logger = logger;
     }
 
     public async Task<ApiResponse<ManagedResourceModel>> UploadInputAsync(
         string inputId,
         string kind,
+        string uploadContext,
         string? albumId = null,
         string? resourceName = null,
         string? replaceResourceId = null)
@@ -29,17 +35,21 @@ public sealed class DirectResourceUploadService
         var requestId = Guid.NewGuid().ToString("N");
         try
         {
-            var capabilities = await _content.GetResourceUploadCapabilitiesAsync();
-            if (!capabilities.Success || capabilities.Data is null || !capabilities.Data.DirectUploadEnabled)
-                return ApiResponse<ManagedResourceModel>.Fail(
-                    capabilities.Message ?? "Direct R2 upload is not available.",
-                    capabilities.StatusCode > 0 ? capabilities.StatusCode : 503,
-                    capabilities.Errors);
-
             var capture = await _js.InvokeAsync<BrowserCaptureBatch>("resourceUploadClient.captureFiles", inputId, 1);
             browserFile = capture.Files.FirstOrDefault();
             if (browserFile is null)
-                return ApiResponse<ManagedResourceModel>.Fail("Choose a file to upload.", 422);
+                return UploadFailure("Upload failed: choose a file.", 422, "validation-failed");
+
+            var normalizedUploadContext = ResourceUploadContextCodes.NormalizeClient(uploadContext);
+            if (normalizedUploadContext is null)
+                return UploadFailure("Upload failed: the upload context is not supported.", 422, "validation-failed");
+
+            var capabilities = await _content.GetResourceUploadCapabilitiesAsync();
+            if (!capabilities.Success || capabilities.Data is null || !capabilities.Data.DirectUploadEnabled)
+                return UploadFailure(
+                    FailureMessage(capabilities, "Upload failed: storage is not available."),
+                    capabilities.StatusCode > 0 ? capabilities.StatusCode : 503,
+                    capabilities.ErrorCode ?? "service-unavailable");
 
             var initiated = await RetryAsync(
                 () => _content.InitiateResourceUploadAsync(new ResourceUploadInitiateRequest
@@ -52,13 +62,14 @@ public sealed class DirectResourceUploadService
                     ContentType = NormalizeContentType(browserFile.ContentType),
                     SizeBytes = browserFile.Size,
                     AlbumId = albumId,
-                    ReplaceResourceId = replaceResourceId
+                    ReplaceResourceId = replaceResourceId,
+                    UploadContext = normalizedUploadContext
                 }));
             if (!initiated.Success || initiated.Data is null)
-                return ApiResponse<ManagedResourceModel>.Fail(
-                    initiated.Message ?? "Upload could not be initiated.",
+                return UploadFailure(
+                    FailureMessage(initiated, "Upload failed: storage could not start the transfer."),
                     initiated.StatusCode,
-                    initiated.Errors);
+                    initiated.ErrorCode ?? "initiation-failed");
 
             var upload = initiated.Data;
             sessionId = upload.SessionId;
@@ -69,10 +80,10 @@ public sealed class DirectResourceUploadService
                 {
                     var urls = await RetryAsync(() => _content.GetResourceUploadPartUrlsAsync(upload.SessionId, batch));
                     if (!urls.Success || urls.Data is null)
-                        return ApiResponse<ManagedResourceModel>.Fail(
-                            urls.Message ?? "Upload part URLs could not be created.",
+                        return UploadFailure(
+                            FailureMessage(urls, "Upload failed: storage could not prepare the file parts."),
                             urls.StatusCode,
-                            urls.Errors);
+                            urls.ErrorCode ?? "service-unavailable");
 
                     foreach (var part in urls.Data.Parts.OrderBy(value => value.PartNumber))
                     {
@@ -89,9 +100,10 @@ public sealed class DirectResourceUploadService
                             end,
                             UploadTimeoutMilliseconds(end - start));
                         if (string.IsNullOrWhiteSpace(result.ETag))
-                            return ApiResponse<ManagedResourceModel>.Fail(
-                                "R2 did not expose the ETag required for multipart upload.",
-                                422);
+                            return UploadFailure(
+                                "Upload failed: storage could not verify a file part.",
+                                422,
+                                "verification-failed");
                         completedParts.Add(new ResourceUploadCompletedPartDto
                         {
                             PartNumber = part.PartNumber,
@@ -103,7 +115,10 @@ public sealed class DirectResourceUploadService
             else
             {
                 if (string.IsNullOrWhiteSpace(upload.UploadUrl))
-                    return ApiResponse<ManagedResourceModel>.Fail("The upload URL was not returned.", 502);
+                    return UploadFailure(
+                        "Upload failed: storage did not provide a transfer URL.",
+                        502,
+                        "service-unavailable");
                 await _js.InvokeAsync<BrowserUploadResult>(
                     "resourceUploadClient.upload",
                     browserFile.Token,
@@ -118,10 +133,12 @@ public sealed class DirectResourceUploadService
 
             var completed = await RetryAsync(() => _content.CompleteResourceUploadAsync(upload.SessionId, completedParts));
             if (!completed.Success || completed.Data?.Status != "ready" || completed.Data.Resource is null)
-                return ApiResponse<ManagedResourceModel>.Fail(
-                    completed.Data?.ErrorMessage ?? completed.Message ?? "Upload verification failed.",
+                return UploadFailure(
+                    !string.IsNullOrWhiteSpace(completed.Data?.ErrorMessage)
+                        ? completed.Data.ErrorMessage
+                        : FailureMessage(completed, "Upload failed: the file could not be verified."),
                     completed.StatusCode,
-                    completed.Errors);
+                    completed.Data?.ErrorCode ?? completed.ErrorCode ?? "verification-failed");
 
             sessionCompleted = true;
             return new ApiResponse<ManagedResourceModel>
@@ -134,18 +151,29 @@ public sealed class DirectResourceUploadService
         }
         catch (JSException exception)
         {
-            return ApiResponse<ManagedResourceModel>.Fail(exception.Message, 502);
+            _logger.LogWarning(exception, "Browser-to-storage resource upload failed.");
+            return UploadFailure(
+                "Upload failed: the storage service is temporarily unavailable.",
+                502,
+                "service-unavailable");
         }
         catch (Exception exception)
         {
-            return ApiResponse<ManagedResourceModel>.Fail(exception.Message, 502);
+            _logger.LogError(exception, "Unexpected direct resource upload failure.");
+            return UploadFailure(
+                "Upload failed: an unexpected system error occurred.",
+                500,
+                "unexpected-error");
         }
         finally
         {
             if (!string.IsNullOrWhiteSpace(sessionId) && !sessionCompleted)
             {
                 try { await _content.AbortResourceUploadAsync(sessionId); }
-                catch { }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(exception, "Resource upload session {SessionId} could not be aborted during cleanup.", sessionId);
+                }
             }
             if (browserFile is not null && !string.IsNullOrWhiteSpace(browserFile.Token))
             {
@@ -170,6 +198,27 @@ public sealed class DirectResourceUploadService
 
     private static int UploadTimeoutMilliseconds(long bytes) =>
         (int)Math.Clamp(60_000d + bytes / (256d * 1024) * 1000d, 120_000d, 30 * 60_000d);
+
+    private static string FailureMessage<T>(ApiResponse<T>? response, string fallback)
+    {
+        var message = response?.Message?.Trim();
+        return string.IsNullOrWhiteSpace(message) ||
+               string.Equals(message, "Request failed.", StringComparison.OrdinalIgnoreCase)
+            ? fallback
+            : message;
+    }
+
+    private static ApiResponse<ManagedResourceModel> UploadFailure(
+        string message,
+        int statusCode,
+        string errorCode) =>
+        ApiResponse<ManagedResourceModel>.Fail(
+            message,
+            statusCode,
+            notificationKey: "NotificationActionFailed",
+            notificationArgs: ["@action:resource.uploaded", $"@reason:{errorCode}"],
+            errorCode: errorCode,
+            traceId: Guid.NewGuid().ToString("N"));
 
     private static string NormalizeContentType(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "application/octet-stream" : value.Trim();
@@ -197,6 +246,7 @@ public sealed class DirectResourceUploadService
         DeletionState = resource.DeletionState,
         Tags = [.. resource.Tags],
         AlbumId = resource.AlbumId,
+        OriginContext = resource.OriginContext,
         Active = resource.Active,
         UsageCount = resource.UsageCount,
         IsInUse = resource.IsInUse,

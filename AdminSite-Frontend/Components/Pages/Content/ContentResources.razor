@@ -5,6 +5,7 @@
 @using Microsoft.JSInterop
 @using Contracts.Admin
 @using Contracts.Api
+@using AdminSite.Services.Notifications
 @implements IAsyncDisposable
 @inject AdminContentService ContentService
 @inject DirectResourceUploadService DirectUploads
@@ -13,6 +14,7 @@
 @inject AdminAuthService Auth
 @inject IHttpService Http
 @inject IJSRuntime JS
+@inject ILogger<ContentResources> Logger
 
 <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
     <h1 class="page-title"><i class="fas fa-photo-film"></i> @T("ResourceLibrary")</h1>
@@ -214,9 +216,14 @@ else
                 }
             </div>
 
+            <AdminInlineStatus TargetId="resource-albums-load" Retry="LoadAlbums" Retrying="_albumLoading" RetryText="@T("Retry")" />
+            <AdminInlineStatus TargetId="resource-items-load" Retry="LoadResources" Retrying="_loading" RetryText="@T("Retry")" />
             @if (_loading || _albumLoading)
             {
                 <p class="text-muted">@T("Loading")</p>
+            }
+            else if (_resourceLoadFailed || _albumLoadFailed)
+            {
             }
             else if (VisibleItemCount == 0)
             {
@@ -243,7 +250,8 @@ else
                         }
                     </span>
                     <span style="display:flex;gap:.5rem;flex-wrap:wrap">
-                        <button class="btn-admin btn-ghost" type="button" @onclick="OpenBulkMove">
+                        <button class="btn-admin btn-ghost" type="button" @onclick="ClearSelection">@T("ClearSelection")</button>
+                        <button class="btn-admin btn-ghost content-resource-bulk-move" type="button" @onclick="OpenBulkMove">
                             <i class="fas fa-folder-tree"></i> @T("MoveToAlbum")
                         </button>
                         @if (CanManageResources)
@@ -255,7 +263,6 @@ else
                                 <i class="fas fa-trash"></i> @T("BulkDeleteResources")
                             </button>
                         }
-                        <button class="btn-admin btn-ghost" type="button" @onclick="ClearSelection">@T("ClearSelection")</button>
                     </span>
                 </div>
             }
@@ -281,10 +288,23 @@ else
                                 <tr style="cursor:pointer" @onclick="() => OpenAlbum(album)">
                                     <td>
                                         <div style="display:flex;align-items:center;gap:.75rem;min-width:260px">
-                                            <span style="display:inline-flex;width:56px;height:42px;align-items:center;justify-content:center;border-radius:8px;background:#eef2ff;color:#0f2742">
-                                                <i class="fas fa-folder"></i>
+                                            <span class="resource-album-list-cover">
+                                                @if (!string.IsNullOrWhiteSpace(album.CoverUrl))
+                                                {
+                                                    <img src="@album.CoverUrl" alt="" />
+                                                }
+                                                else
+                                                {
+                                                    <i class="fas fa-folder"></i>
+                                                }
                                             </span>
                                             <strong>@album.Name</strong>
+                                            @if (album.IsSystemRoot)
+                                            {
+                                                <span class="resource-album-system-badge">
+                                                    <i class="fas fa-lock"></i> @T("SystemAlbum")
+                                                </span>
+                                            }
                                         </div>
                                     </td>
                                     <td>@AlbumScopeLabel(album.Scope)</td>
@@ -293,18 +313,21 @@ else
                                     {
                                         <td style="width:96px">
                                             <div style="display:flex;gap:.35rem;justify-content:flex-end">
-                                                <button class="btn-admin btn-ghost content-icon-btn"
-                                                        title="@T("Edit")"
+                                                <button class="btn-admin btn-ghost content-icon-btn resource-album-action-btn"
+                                                        title="@T("AlbumConfiguration")"
                                                         @onclick="() => OpenAlbumEditor(album)"
                                                         @onclick:stopPropagation="true">
-                                                    <i class="fas fa-edit"></i>
+                                                    <i class="fas fa-gear"></i>
                                                 </button>
-                                                <button class="btn-admin btn-danger content-icon-btn"
-                                                        title="@DeleteAlbumTitle(album)"
-                                                        @onclick="() => AskDeleteAlbum(album)"
-                                                        @onclick:stopPropagation="true">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
+                                                @if (!album.IsSystemRoot)
+                                                {
+                                                    <button class="btn-admin btn-danger content-icon-btn resource-album-action-btn"
+                                                            title="@DeleteAlbumTitle(album)"
+                                                            @onclick="() => AskDeleteAlbum(album)"
+                                                            @onclick:stopPropagation="true">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                }
                                             </div>
                                         </td>
                                     }
@@ -319,33 +342,51 @@ else
                 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.85rem">
                     @foreach (var album in PagedAlbums)
                     {
-                        <div class="admin-card" style="position:relative;padding:.6rem;text-align:left;border-color:#d8e0ea;box-shadow:none">
-                            @if (CanManageResources)
-                            {
-                                <div style="position:absolute;top:.5rem;right:.5rem;display:flex;gap:.25rem;z-index:1">
-                                    <button class="btn-admin btn-ghost content-icon-btn"
-                                            title="@T("Edit")"
-                                            @onclick="() => OpenAlbumEditor(album)">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn-admin btn-danger content-icon-btn"
-                                            title="@DeleteAlbumTitle(album)"
-                                            @onclick="() => AskDeleteAlbum(album)">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            }
+                        <div class="admin-card resource-album-card">
                             <button type="button"
-                                    style="width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer"
+                                    class="resource-album-card__cover"
                                     @onclick="() => OpenAlbum(album)">
-                                <span style="display:flex;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:#eef2ff;border:1px solid #e5e7eb;margin-bottom:.55rem;align-items:center;justify-content:center;color:#0f2742;font-size:2rem">
+                                @if (!string.IsNullOrWhiteSpace(album.CoverUrl))
+                                {
+                                    <img src="@album.CoverUrl" alt="" />
+                                }
+                                else
+                                {
                                     <i class="fas fa-folder"></i>
-                                </span>
-                                <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@album.Name</strong>
-                                <small class="text-muted" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                                    @AlbumScopeLabel(album.Scope) &middot; @string.Format(T("ResourceCount"), album.ResourceCount)
-                                </small>
+                                }
                             </button>
+                            <div class="resource-album-card__title-row">
+                                <button type="button" class="resource-album-card__name" @onclick="() => OpenAlbum(album)">
+                                    <strong>@album.Name</strong>
+                                    @if (album.IsSystemRoot)
+                                    {
+                                        <span class="resource-album-system-badge">
+                                            <i class="fas fa-lock"></i> @T("SystemAlbum")
+                                        </span>
+                                    }
+                                </button>
+                                @if (CanManageResources)
+                                {
+                                    <div class="resource-album-card__actions">
+                                        <button class="btn-admin btn-ghost content-icon-btn resource-album-action-btn"
+                                                title="@T("AlbumConfiguration")"
+                                                @onclick="() => OpenAlbumEditor(album)">
+                                            <i class="fas fa-gear"></i>
+                                        </button>
+                                        @if (!album.IsSystemRoot)
+                                        {
+                                            <button class="btn-admin btn-danger content-icon-btn resource-album-action-btn"
+                                                    title="@DeleteAlbumTitle(album)"
+                                                    @onclick="() => AskDeleteAlbum(album)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <small class="text-muted resource-album-card__meta">
+                                @AlbumScopeLabel(album.Scope) &middot; @string.Format(T("ResourceCount"), album.ResourceCount)
+                            </small>
                         </div>
                     }
                 </div>
@@ -360,6 +401,7 @@ else
                                 {
                                     <th style="width:38px">
                                         <input type="checkbox"
+                                               class="content-resource-select-checkbox"
                                                checked="@AllPagedBulkSelected"
                                                title="@T("SelectPage")"
                                                @onchange="ToggleAllPagedBulk" />
@@ -379,6 +421,7 @@ else
                                     {
                                         <td>
                                             <input type="checkbox"
+                                                   class="content-resource-select-checkbox"
                                                    checked="@IsBulkSelected(resource)"
                                                    title="@BulkSelectTitle(resource)"
                                                    @onclick:stopPropagation="true"
@@ -388,7 +431,9 @@ else
                                     }
                                     <td colspan="2">
                                         <div style="display:flex;align-items:center;gap:.75rem;min-width:260px">
-                                            @ResourceVisual(resource, "width:56px;height:42px;object-fit:cover;border-radius:6px")
+                                            <span class="content-resource-selection-thumb @(IsBulkSelected(resource) ? "is-bulk-selected" : string.Empty)">
+                                                @ResourceVisual(resource, "width:56px;height:42px;object-fit:cover;border-radius:6px")
+                                            </span>
                                             <div style="min-width:0">
                                                 <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ResourceName(resource)</strong>
                                                 <div class="text-muted" style="font-size:.8rem;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@ResourceHint(resource)</div>
@@ -408,21 +453,21 @@ else
                     @foreach (var resource in PagedResources)
                     {
                         <div class="admin-card @((IsSelected(resource) || IsBulkSelected(resource)) ? "is-selected" : string.Empty)"
-                             style="position:relative;padding:.6rem;text-align:left;border-color:@((IsSelected(resource) || IsBulkSelected(resource)) ? "#0f2742" : "#d8e0ea");box-shadow:none">
+                             style="position:relative;padding:.6rem;text-align:left;border-color:@((IsSelected(resource) || IsBulkSelected(resource)) ? "#0f2742" : "#d8e0ea");box-shadow:none"
+                             @onclick="e => HandleResourceClick(resource, e)">
                             @if (CanUploadResources)
                             {
                                 <input type="checkbox"
+                                       class="content-resource-select-checkbox content-resource-select-checkbox--grid"
                                        checked="@IsBulkSelected(resource)"
                                        title="@BulkSelectTitle(resource)"
-                                       style="position:absolute;top:.55rem;right:.55rem;z-index:1"
                                        @onclick:stopPropagation="true"
                                        @onclick:preventDefault="true"
                                        @onclick="e => HandleBulkSelectionClick(resource, e)" />
                             }
                             <button type="button"
-                                    style="width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer"
-                                    @onclick="e => HandleResourceClick(resource, e)">
-                                <span style="display:block;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:#f8fafc;border:1px solid #e5e7eb;margin-bottom:.55rem">
+                                    style="width:100%;border:0;background:transparent;padding:0;text-align:left;cursor:pointer">
+                                <span class="content-resource-selection-thumb content-resource-selection-thumb--grid @(IsBulkSelected(resource) ? "is-bulk-selected" : string.Empty)">
                                     @ResourceVisual(resource, "width:100%;height:100%;object-fit:cover")
                                 </span>
                                 <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@ResourceName(resource)</strong>
@@ -840,14 +885,17 @@ else
     <div class="modal-backdrop" @onclick="CloseAlbumEditor">
         <div class="modal-card" style="max-width:520px" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <span>@T(_editingAlbum is null ? "NewAlbum" : "EditAlbum")</span>
+                <span>@T(_editingAlbum is null ? "NewAlbum" : "AlbumConfiguration")</span>
                 <button class="btn-admin btn-ghost content-icon-btn" @onclick="CloseAlbumEditor" title="@T("Close")">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div style="padding:1rem">
                 <label>@T("AlbumName")</label>
-                <input class="form-control" value="@_albumEdit.Name" @oninput="e => _albumEdit.Name = e.Value?.ToString() ?? string.Empty" />
+                <input class="form-control"
+                       value="@_albumEdit.Name"
+                       disabled="@(_editingAlbum?.IsSystemRoot == true)"
+                       @oninput="e => _albumEdit.Name = e.Value?.ToString() ?? string.Empty" />
 
                 <label style="margin-top:.75rem">@T("AlbumType")</label>
                 <select class="form-control" value="@_albumEdit.Scope" disabled="@(_editingAlbum is not null)" @onchange="OnAlbumScopeChanged">
@@ -856,14 +904,44 @@ else
                 </select>
                 @if (_editingAlbum is not null)
                 {
-                    <div class="form-hint">@T("AlbumTypeChangeBlockedHint")</div>
+                    <div class="form-hint">@T(_editingAlbum.IsSystemRoot ? "SystemAlbumConfigurationHint" : "AlbumTypeChangeBlockedHint")</div>
+
+                    <label style="margin-top:.75rem">@T("AlbumPlaceholder")</label>
+                    <div class="resource-album-cover-editor">
+                        <span class="resource-album-cover-editor__preview">
+                            @if (!string.IsNullOrWhiteSpace(_editingAlbum.CoverUrl))
+                            {
+                                <img src="@_editingAlbum.CoverUrl" alt="" />
+                            }
+                            else
+                            {
+                                <i class="fas fa-folder"></i>
+                            }
+                        </span>
+                        <div>
+                            <InputFile id="resource-album-cover-upload"
+                                       OnChange="UploadAlbumCover"
+                                       accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
+                                       disabled="@_albumCoverUploading"
+                                       style="display:none" />
+                            <label for="resource-album-cover-upload"
+                                   class="btn-admin btn-ghost @(_albumCoverUploading ? "is-disabled" : string.Empty)">
+                                <i class="fas @(_albumCoverUploading ? "fa-spinner fa-spin" : "fa-image")"></i>
+                                @T(_albumCoverUploading ? "Uploading" : "UploadAlbumPlaceholder")
+                            </label>
+                            <div class="form-hint">@string.Format(T("AlbumPlaceholderHint"), FormatBytes(_uploadCapabilities.MaxImageBytes))</div>
+                        </div>
+                    </div>
                 }
             </div>
             <div class="modal-footer">
-                <button class="btn-admin btn-ghost" @onclick="CloseAlbumEditor">@T("Cancel")</button>
-                <button class="btn-admin btn-primary" disabled="@string.IsNullOrWhiteSpace(_albumEdit.Name)" @onclick="SaveAlbum">
-                    <i class="fas fa-save"></i> @T("Save")
-                </button>
+                <button class="btn-admin btn-ghost" @onclick="CloseAlbumEditor">@T(_editingAlbum?.IsSystemRoot == true ? "Close" : "Cancel")</button>
+                @if (_editingAlbum?.IsSystemRoot != true)
+                {
+                    <button class="btn-admin btn-primary" disabled="@(_albumCoverUploading || string.IsNullOrWhiteSpace(_albumEdit.Name))" @onclick="SaveAlbum">
+                        <i class="fas fa-save"></i> @T("Save")
+                    </button>
+                }
             </div>
         </div>
     </div>
@@ -882,26 +960,38 @@ else
                 {
                     <p class="text-muted">@T("Loading")</p>
                 }
-                else if (_deleteAlbum.ResourceCount > 0)
+                else if (_deleteAlbumInspectionFailed)
                 {
                     <div class="alert alert-warning" style="margin-bottom:.75rem">
-                        @string.Format(T("DeleteAlbumBlocked"), _deleteAlbum.ResourceCount)
+                        @T("DeleteAlbumInspectionFailed")
                     </div>
-                    @if (_deleteAlbumResourceNames.Any())
+                }
+                else if (DeleteAlbumBlockedResources.Any())
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("DeleteAlbumUsedContentBlocked"), DeleteAlbumBlockedResources.Count)
+                    </div>
+                    @if (DeleteAlbumBlockedResources.Any())
                     {
                         <ul style="margin:.5rem 0 0;padding-left:1.2rem">
-                            @foreach (var name in _deleteAlbumResourceNames.Take(5))
+                            @foreach (var resource in DeleteAlbumBlockedResources.Take(5))
                             {
-                                <li>@name</li>
+                                <li>@ResourceName(resource)</li>
                             }
                         </ul>
                     }
+                }
+                else if (_deleteAlbumResources.Any())
+                {
+                    <div class="alert alert-warning" style="margin-bottom:.75rem">
+                        @string.Format(T("DeleteAlbumContentsWarning"), _deleteAlbumResources.Count)
+                    </div>
                 }
             </div>
             <div class="modal-footer">
                 <button class="btn-admin btn-ghost" @onclick="CancelDeleteAlbum">@T("Cancel")</button>
                 <button class="btn-admin btn-danger"
-                        disabled="@(_deleteAlbumLoading || _deleteAlbum.ResourceCount > 0)"
+                        disabled="@(_deleteAlbumLoading || _deleteAlbumInspectionFailed || DeleteAlbumBlockedResources.Any())"
                         @onclick="ConfirmDeleteAlbum">
                     @T("Delete")
                 </button>
@@ -1113,6 +1203,8 @@ else
     private int _page = 1;
     private bool _loading = true;
     private bool _albumLoading;
+    private bool _resourceLoadFailed;
+    private bool _albumLoadFailed;
     private bool _showUploadModal;
     private bool _showEditor;
     private bool _showAlbumEditor;
@@ -1142,10 +1234,12 @@ else
     private ResourceAlbumModel? _deleteAlbum;
     private ResourceAlbumModel? _editingAlbum;
     private ResourceAlbumRequest _albumEdit = new();
-    private List<string> _deleteAlbumResourceNames = new();
+    private List<ManagedResourceModel> _deleteAlbumResources = new();
     private ManagedResourceUsageModel? _deleteUsage;
     private bool _deleteLoading;
     private bool _deleteAlbumLoading;
+    private bool _deleteAlbumInspectionFailed;
+    private bool _albumCoverUploading;
     private bool _bulkDeleteLoading;
     private bool _replaceUploading;
     private readonly List<AdminUserResponse> _adminUsers = new();
@@ -1167,7 +1261,9 @@ else
             : _albums.FirstOrDefault(a => string.Equals(a.Id, _selectedAlbumId, StringComparison.OrdinalIgnoreCase));
     private string? ActiveAlbumId => IsAlbumMode ? _selectedAlbumId : null;
     private IEnumerable<ManagedResourceModel> FilteredResources => _resources;
-    private IEnumerable<ResourceAlbumModel> FilteredAlbums => _albums.Where(MatchesAlbumFilters);
+    private IEnumerable<ResourceAlbumModel> FilteredAlbums => _albums
+        .Where(MatchesAlbumFilters)
+        .OrderBy(AlbumSortRank);
     private int FilteredResourceCount => FilteredResources.Count();
     private int FilteredAlbumCount => FilteredAlbums.Count();
     private int VisibleItemCount => ShowingAlbumRoot ? FilteredAlbumCount : FilteredResourceCount;
@@ -1177,6 +1273,8 @@ else
     private IEnumerable<ManagedResourceModel> PagedResources => FilteredResources.Skip((_page - 1) * PageSize).Take(PageSize);
     private IEnumerable<ResourceAlbumModel> PagedAlbums => FilteredAlbums.Skip((_page - 1) * PageSize).Take(PageSize);
     private IEnumerable<ManagedResourceModel> SelectablePagedResources => PagedResources;
+    private List<ManagedResourceModel> DeleteAlbumBlockedResources =>
+        _deleteAlbumResources.Where(resource => resource.IsInUse).ToList();
     private List<ManagedResourceModel> BulkDeleteResources =>
         CanManageResources
             ? _resources.Where(r => _selectedResourceIds.Contains(r.Id) && !r.IsInUse).ToList()
@@ -1293,6 +1391,8 @@ else
 
     private async Task LoadResources()
     {
+        Http.ClearInlineStatus("resource-items-load");
+        _resourceLoadFailed = false;
         if (!CanViewResourceLibrary)
         {
             _resources = new();
@@ -1304,7 +1404,14 @@ else
         _loading = true;
         var previousSelectedId = _selectedResource?.Id;
         var res = await ContentService.GetResourcesAsync(_kindFilter, _search, includeInactive: true, albumId: ActiveAlbumId);
-        _resources = res.Data ?? new();
+        if (res.Success && res.Data is not null)
+            _resources = res.Data;
+        else
+        {
+            _resources = new();
+            _resourceLoadFailed = true;
+            Http.NotifyInline(res, "resource-items-load");
+        }
         PruneSelection();
         ClampPage();
         _selectedResource = FilteredResources.FirstOrDefault(r => r.Id == previousSelectedId)
@@ -1316,9 +1423,18 @@ else
 
     private async Task LoadAlbums()
     {
+        Http.ClearInlineStatus("resource-albums-load");
+        _albumLoadFailed = false;
         _albumLoading = true;
         var res = await ContentService.GetResourceAlbumsAsync();
-        _albums = res.Data ?? new();
+        if (res.Success && res.Data is not null)
+            _albums = res.Data;
+        else
+        {
+            _albums = new();
+            _albumLoadFailed = true;
+            Http.NotifyInline(res, "resource-albums-load");
+        }
         if (SelectedAlbum is null)
             _selectedAlbumId = null;
         _albumLoading = false;
@@ -1406,7 +1522,7 @@ else
 
     private async Task HandleResourceClick(ManagedResourceModel resource, MouseEventArgs e)
     {
-        if (CanUploadResources && (e.ShiftKey || e.CtrlKey || e.MetaKey))
+        if (CanUploadResources && (_selectedResourceIds.Count > 0 || e.ShiftKey || e.CtrlKey || e.MetaKey))
         {
             HandleBulkSelectionClick(resource, e);
             return;
@@ -1591,7 +1707,7 @@ else
         }
         catch (JSException)
         {
-            Http.Notify(T("UploadFailed"), 500);
+            Http.Notify(T("UploadSelectionFailed"), 500);
             return;
         }
 
@@ -1689,8 +1805,8 @@ else
             var successful = items.Count(item => item.IsComplete);
             var failed = items.Count - successful;
             Http.Notify(failed == 0
-                ? $"Uploaded {successful} resource(s)."
-                : $"Uploaded {successful} resource(s); {failed} failed or were cancelled.",
+                ? string.Format(T("UploadBatchSucceeded"), successful)
+                : string.Format(T("UploadBatchPartial"), successful, failed),
                 failed == 0 ? 200 : 422);
             closeAfterSuccess = failed == 0 &&
                 _uploadQueue.All(item => item.Status == UploadQueueStatus.Done);
@@ -1714,7 +1830,7 @@ else
         try
         {
             if (!_uploadCapabilities.DirectUploadEnabled)
-                throw new InvalidOperationException("Direct R2 upload is not available. Check the API storage configuration.");
+                throw new UploadQueueException(T("UploadStorageUnavailable"));
             await UploadQueueItemDirectAsync(item);
 
             if (item.CancelRequested)
@@ -1725,12 +1841,18 @@ else
         catch (OperationCanceledException)
         {
             item.Status = UploadQueueStatus.Cancelled;
-            item.Error = "Upload cancelled.";
+            item.Error = T("UploadCancelled");
+        }
+        catch (UploadQueueException exception)
+        {
+            item.Status = UploadQueueStatus.Failed;
+            item.Error = exception.UserMessage;
         }
         catch (Exception exception)
         {
+            Logger.LogWarning(exception, "Resource upload queue item {QueueItemId} failed in the browser.", item.Id);
             item.Status = UploadQueueStatus.Failed;
-            item.Error = string.IsNullOrWhiteSpace(exception.Message) ? T("UploadFailed") : exception.Message;
+            item.Error = T("UploadStorageFailed");
         }
         finally
         {
@@ -1741,7 +1863,7 @@ else
     private async Task UploadQueueItemDirectAsync(ResourceUploadQueueItem item)
     {
         if (string.IsNullOrWhiteSpace(item.BrowserToken))
-            throw new InvalidOperationException("The selected browser file is no longer available. Select it again.");
+            throw new UploadQueueException(T("UploadBrowserFileUnavailable"));
 
         var initiated = await InitiateUploadWithRetryAsync(item, new ResourceUploadInitiateRequest
         {
@@ -1751,10 +1873,11 @@ else
             ContentType = item.ContentType,
             SizeBytes = item.SizeBytes,
             AlbumId = item.AlbumId,
-            ReplaceResourceId = item.ReplaceResourceId
+            ReplaceResourceId = item.ReplaceResourceId,
+            UploadContext = ResourceUploadContextCodes.LibraryManual
         });
         if (!initiated.Success || initiated.Data is null)
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(initiated.Message) ? T("UploadFailed") : initiated.Message);
+            throw new UploadQueueException(LocalizedUploadFailure(initiated.ErrorCode));
 
         var upload = initiated.Data;
         item.SessionId = upload.SessionId;
@@ -1770,7 +1893,7 @@ else
             else
             {
                 if (string.IsNullOrWhiteSpace(upload.UploadUrl))
-                    throw new InvalidOperationException("The upload URL was not returned.");
+                    throw new UploadQueueException(T("UploadUrlUnavailable"));
                 item.ProgressBaseBytes = 0;
                 await JS.InvokeAsync<BrowserUploadResult>(
                     "resourceUploadClient.upload",
@@ -1787,7 +1910,7 @@ else
             if (item.CancelRequested) throw new OperationCanceledException();
             var completed = await CompleteUploadWithRetryAsync(item, upload.SessionId, completedParts);
             if (!completed.Success || completed.Data is null || completed.Data.Status != "ready")
-                throw new InvalidOperationException(completed.Data?.ErrorMessage ?? completed.Message ?? T("UploadFailed"));
+                throw new UploadQueueException(LocalizedUploadFailure(completed.Data?.ErrorCode ?? completed.ErrorCode));
             item.ResourceId = completed.Data.ResourceId;
             item.Resource = MapUploadedResource(completed.Data.Resource);
         }
@@ -1808,7 +1931,7 @@ else
         {
             var urls = await GetPartUrlsWithRetryAsync(item, upload.SessionId, batch);
             if (!urls.Success || urls.Data is null)
-                throw new InvalidOperationException(urls.Message ?? "Upload part URLs could not be created.");
+                throw new UploadQueueException(LocalizedUploadFailure(urls.ErrorCode));
 
             foreach (var part in urls.Data.Parts.OrderBy(value => value.PartNumber))
             {
@@ -1827,7 +1950,7 @@ else
                     end,
                     UploadTimeoutMilliseconds(end - start));
                 if (string.IsNullOrWhiteSpace(result.ETag))
-                    throw new InvalidOperationException("R2 did not expose the ETag response header required for multipart upload.");
+                    throw new UploadQueueException(T("UploadPartVerificationFailed"));
                 completed.Add(new ResourceUploadCompletedPartDto { PartNumber = part.PartNumber, ETag = result.ETag });
                 item.ProgressPercent = Math.Min(99, end * 100d / item.SizeBytes);
             }
@@ -2012,7 +2135,7 @@ else
             };
 
             var res = await ContentService.CreateResourceAsync(request);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (!res.Success) return;
 
             ResetYouTubeDraft();
@@ -2065,7 +2188,7 @@ else
             }
             else
             {
-                Http.Notify(res.Message, res.StatusCode);
+                Http.Notify(res);
             }
         }
         finally
@@ -2114,7 +2237,7 @@ else
         {
             var selectedIds = _albumExistingSelectedIds.ToList();
             var res = await ContentService.AssignResourcesToAlbumAsync(SelectedAlbum.Id, selectedIds);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (!res.Success) return;
 
             _albumExistingSelectedIds.Clear();
@@ -2166,14 +2289,14 @@ else
 
         if (_editingId is null)
         {
-            Http.Notify(T("UploadResources"), 422);
+            Http.Notify(T("ResourceEditRequiresUpload"), 422);
             return;
         }
 
         PrepareRequest();
         var res = await ContentService.UpdateResourceAsync(_editingId, _edit);
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             var selectedId = res.Data?.Id;
@@ -2198,10 +2321,11 @@ else
             var response = await DirectUploads.UploadInputAsync(
                 "managed-resource-replace-upload",
                 NormalizeKind(_edit.Kind),
-                _edit.AlbumId,
-                GetValue(_edit.Name, CurrentLang, fallback: true),
-                _editingId);
-            Http.Notify(response.Message, response.StatusCode);
+                ResourceUploadContextCodes.LibraryManual,
+                albumId: _edit.AlbumId,
+                resourceName: GetValue(_edit.Name, CurrentLang, fallback: true),
+                replaceResourceId: _editingId);
+            Http.Notify(response);
             if (!response.Success || response.Data is null) return;
 
             var index = _resources.FindIndex(resource => resource.Id == response.Data.Id);
@@ -2233,7 +2357,7 @@ else
         if (usage.Success)
             _deleteUsage = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
         else
-            Http.Notify(usage.Message, usage.StatusCode);
+            Http.Notify(usage);
 
         _deleteLoading = false;
     }
@@ -2252,7 +2376,7 @@ else
 
         var deletedId = _deleteResource.Id;
         var res = await ContentService.DeleteResourceAsync(deletedId);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             _usageByResourceId.Remove(deletedId);
@@ -2315,7 +2439,7 @@ else
             var response = await ContentService.BulkMoveResourcesAsync(
                 _selectedResourceIds,
                 string.IsNullOrWhiteSpace(_bulkMoveAlbumId) ? null : _bulkMoveAlbumId);
-            Http.Notify(response.Message, response.StatusCode);
+            Http.Notify(response);
             if (!response.Success) return;
 
             _showBulkMove = false;
@@ -2390,7 +2514,7 @@ else
         if (usage.Success)
             _usageByResourceId[resource.Id] = usage.Data ?? new ManagedResourceUsageModel { ResourceId = resource.Id };
         else
-            Http.Notify(usage.Message, usage.StatusCode);
+            Http.Notify(usage);
 
         if (string.Equals(_usageLoadingResourceId, resource.Id, StringComparison.OrdinalIgnoreCase))
             _usageLoadingResourceId = null;
@@ -2432,9 +2556,11 @@ else
 
     private void CloseAlbumEditor()
     {
+        if (_albumCoverUploading) return;
         _showAlbumEditor = false;
         _editingAlbum = null;
         _albumEdit = new();
+        _albumCoverUploading = false;
     }
 
     private void OnAlbumScopeChanged(ChangeEventArgs e)
@@ -2445,6 +2571,7 @@ else
     private async Task SaveAlbum()
     {
         if (!EnsureCanManageResources()) return;
+        if (_editingAlbum?.IsSystemRoot == true) return;
         _albumEdit.Scope = NormalizeAlbumScope(_albumEdit.Scope);
         _albumEdit.Name = (_albumEdit.Name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(_albumEdit.Name))
@@ -2457,7 +2584,7 @@ else
             ? await ContentService.CreateResourceAlbumAsync(_albumEdit)
             : await ContentService.UpdateResourceAlbumAsync(_editingAlbum.Id, _albumEdit);
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success) return;
 
         var selectedAlbumId = res.Data?.Id ?? _selectedAlbumId;
@@ -2472,25 +2599,48 @@ else
         ClampPage();
     }
 
+    private async Task UploadAlbumCover(InputFileChangeEventArgs args)
+    {
+        if (!EnsureCanManageResources() || _editingAlbum is null || _albumCoverUploading) return;
+
+        _albumCoverUploading = true;
+        try
+        {
+            var response = await ContentService.UploadResourceAlbumCoverAsync(
+                _editingAlbum.Id,
+                args.File,
+                _uploadCapabilities.MaxImageBytes);
+            Http.Notify(response);
+            if (!response.Success || response.Data is null) return;
+
+            var albumId = _editingAlbum.Id;
+            await LoadAlbums();
+            _editingAlbum = _albums.FirstOrDefault(album =>
+                string.Equals(album.Id, albumId, StringComparison.OrdinalIgnoreCase)) ?? response.Data;
+        }
+        finally
+        {
+            _albumCoverUploading = false;
+        }
+    }
+
     private async Task AskDeleteAlbum(ResourceAlbumModel album)
     {
         if (!EnsureCanManageResources()) return;
+        if (album.IsSystemRoot) return;
 
         _deleteAlbum = album;
-        _deleteAlbumResourceNames = new();
+        _deleteAlbumResources = new();
+        _deleteAlbumInspectionFailed = false;
         _deleteAlbumLoading = true;
 
-        if (album.ResourceCount > 0)
+        var res = await ContentService.GetResourcesAsync(albumId: album.Id, includeInactive: true);
+        if (res.Success && res.Data is not null)
+            _deleteAlbumResources = res.Data;
+        else
         {
-            var res = await ContentService.GetResourcesAsync(albumId: album.Id, includeInactive: true);
-            if (res.Success && res.Data is not null)
-            {
-                _deleteAlbumResourceNames = res.Data
-                    .Take(5)
-                    .Select(ResourceName)
-                    .Where(name => !string.IsNullOrWhiteSpace(name))
-                    .ToList();
-            }
+            _deleteAlbumInspectionFailed = true;
+            Http.Notify(res);
         }
 
         _deleteAlbumLoading = false;
@@ -2499,7 +2649,8 @@ else
     private void CancelDeleteAlbum()
     {
         _deleteAlbum = null;
-        _deleteAlbumResourceNames = new();
+        _deleteAlbumResources = new();
+        _deleteAlbumInspectionFailed = false;
         _deleteAlbumLoading = false;
     }
 
@@ -2508,10 +2659,18 @@ else
         if (!EnsureCanManageResources()) return;
         if (_deleteAlbum is null) return;
 
-        var deletedId = _deleteAlbum.Id;
+        var album = _deleteAlbum;
+        var deletedId = album.Id;
+        _deleteAlbumLoading = true;
         var res = await ContentService.DeleteResourceAlbumAsync(deletedId);
-        Http.Notify(res.Message, res.StatusCode);
-        if (!res.Success) return;
+        _deleteAlbumLoading = false;
+        Http.Notify(res);
+        if (!res.Success)
+        {
+            await LoadAlbums();
+            await AskDeleteAlbum(album);
+            return;
+        }
 
         if (string.Equals(_selectedAlbumId, deletedId, StringComparison.OrdinalIgnoreCase))
             BackToAlbums();
@@ -2751,7 +2910,15 @@ else
         NormalizeAlbumScope(scope) == "file" ? T("FileAlbum") : T("MediaAlbum");
 
     private string DeleteAlbumTitle(ResourceAlbumModel album) =>
-        album.ResourceCount > 0 ? T("DeleteAlbumInUseBlocked") : T("Delete");
+        T("DeleteAlbum");
+
+    private static int AlbumSortRank(ResourceAlbumModel album) => album.SystemKey switch
+    {
+        "root.brand" => 0,
+        "root.backgrounds" => 1,
+        "root.content" => 2,
+        _ => 3
+    };
 
     private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -3001,6 +3168,20 @@ else
     {
         await ReleaseUploadQueueAsync(_uploadQueue);
         _uploadDotNetRef?.Dispose();
+    }
+
+    private string LocalizedUploadFailure(string? errorCode)
+    {
+        var action = AdminOutcomeTextResolver.ResolveArgument("@action:resource.uploaded", CurrentLang);
+        var reason = AdminOutcomeTextResolver.ResolveArgument(
+            $"@reason:{(string.IsNullOrWhiteSpace(errorCode) ? "operation-failed" : errorCode)}",
+            CurrentLang);
+        return string.Format(T("NotificationActionFailed"), action, reason);
+    }
+
+    private sealed class UploadQueueException(string userMessage) : Exception(userMessage)
+    {
+        public string UserMessage { get; } = userMessage;
     }
 
     private static class UploadQueueStatus

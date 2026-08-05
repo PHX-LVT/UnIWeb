@@ -3,6 +3,7 @@ using FullProject.Data;
 using FullProject.Models;
 using FullProject.Services;
 using FullProject.Services.AssetService;
+using FullProject.Services.SectionServices;
 using MongoDB.Driver;
 
 namespace FullProject.Services.BlockServices;
@@ -12,16 +13,19 @@ public sealed class FormationAuthoringService
     private readonly MongoDbContext _context;
     private readonly BlockService _blocks;
     private readonly AssetCleanupService _assetCleanup;
+    private readonly ILogger<FormationAuthoringService> _logger;
     private static readonly Ganss.Xss.HtmlSanitizer Sanitizer = new();
 
     public FormationAuthoringService(
         MongoDbContext context,
         BlockService blocks,
-        AssetCleanupService assetCleanup)
+        AssetCleanupService assetCleanup,
+        ILogger<FormationAuthoringService> logger)
     {
         _context = context;
         _blocks = blocks;
         _assetCleanup = assetCleanup;
+        _logger = logger;
     }
 
     public async Task<(Block? Block, string? Error)> ReplaceSlotAsync(
@@ -53,9 +57,9 @@ public sealed class FormationAuthoringService
         {
             replacement = BuildReplacement(request, existing, formation, preset, slot);
         }
-        catch (ArgumentException exception)
+        catch (ArgumentException)
         {
-            return (null, exception.Message);
+            return (null, "The selected Block is invalid for this Formation slot.");
         }
 
         var obsoleteAssets = _assetCleanup.BlockAssetUrls(existing).ToList();
@@ -101,7 +105,8 @@ public sealed class FormationAuthoringService
         catch (Exception exception)
         {
             await session.AbortTransactionAsync();
-            return $"Formation slot swap failed: {exception.Message}";
+            _logger.LogError(exception, "Formation slot swap failed for Formation {FormationId}", formationId);
+            return "Formation slot swap failed: the change could not be stored.";
         }
     }
 
@@ -191,7 +196,8 @@ public sealed class FormationAuthoringService
         catch (Exception exception)
         {
             await session.AbortTransactionAsync();
-            return (null, $"Formation conversion failed: {exception.Message}");
+            _logger.LogError(exception, "Formation conversion failed for Formation {FormationId}", formationId);
+            return (null, "Formation conversion failed: the change could not be stored.");
         }
 
         await _assetCleanup.DeleteUnusedAsync(obsoleteAssets);
@@ -292,7 +298,8 @@ public sealed class FormationAuthoringService
         catch (Exception exception)
         {
             await session.AbortTransactionAsync();
-            return (null, $"Legacy Container migration failed: {exception.Message}");
+            _logger.LogError(exception, "Legacy Container migration failed for Container {ContainerId}", containerId);
+            return (null, "Container migration failed: the change could not be stored.");
         }
 
         return (children.FirstOrDefault()?.Id, null);
@@ -374,7 +381,14 @@ public sealed class FormationAuthoringService
                 Caption = Clean(image.Caption),
                 OpenInLightbox = image.OpenInLightbox,
                 FocalPointX = Math.Clamp(image.FocalPointX, 0, 100),
-                FocalPointY = Math.Clamp(image.FocalPointY, 0, 100)
+                FocalPointY = Math.Clamp(image.FocalPointY, 0, 100),
+                ImagePlacement = image.ImagePlacement is null
+                    ? MediaPlacementPolicy.Normalize(new MediaPlacement
+                    {
+                        FocalPointX = Math.Clamp(image.FocalPointX, 0, 100),
+                        FocalPointY = Math.Clamp(image.FocalPointY, 0, 100)
+                    })
+                    : MediaPlacementPolicy.Normalize(image.ImagePlacement)
             },
             CardBlockCreateDto card => new CardBlock
             {
@@ -382,6 +396,7 @@ public sealed class FormationAuthoringService
                 Title = Clean(card.Title),
                 Description = Clean(card.Description),
                 Asset = BlockAssetMetadataService.ToModel(card.Asset),
+                ImagePlacement = card.ImagePlacement is null ? new MediaPlacement() : MediaPlacementPolicy.Normalize(card.ImagePlacement),
                 ImageAltText = Clean(card.ImageAltText),
                 ButtonLabel = Clean(card.ButtonLabel),
                 Href = CleanUrl(card.Href),

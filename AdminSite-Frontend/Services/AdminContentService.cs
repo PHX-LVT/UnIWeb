@@ -1,5 +1,6 @@
 using AdminSite.Models;
 using Contracts.Admin;
+using Microsoft.AspNetCore.Components.Forms;
 
 namespace AdminSite.Services
 {
@@ -99,8 +100,11 @@ namespace AdminSite.Services
         public Task<ApiResponse<ResourceAlbumModel>> UpdateResourceAlbumAsync(string id, ResourceAlbumRequest req) =>
             _http.PutAsync<ResourceAlbumModel>($"api/admin/resources/albums/{id}", req);
 
-        public Task<ApiResponse<object>> DeleteResourceAlbumAsync(string id) =>
-            _http.DeleteAsync<object>($"api/admin/resources/albums/{id}");
+        public Task<ApiResponse<ResourceAlbumModel>> UploadResourceAlbumCoverAsync(string id, IBrowserFile file, long maxBytes) =>
+            _http.PostFileAsync<ResourceAlbumModel>($"api/admin/resources/albums/{id}/cover", file, maxBytes: maxBytes);
+
+        public Task<ApiResponse<ResourceAlbumDeleteResult>> DeleteResourceAlbumAsync(string id) =>
+            _http.DeleteAsync<ResourceAlbumDeleteResult>($"api/admin/resources/albums/{id}");
 
         public Task<ApiResponse<ResourceAlbumAssignResourcesResult>> AssignResourcesToAlbumAsync(string id, IEnumerable<string> resourceIds) =>
             _http.PostAsync<ResourceAlbumAssignResourcesResult>($"api/admin/resources/albums/{id}/resources", new ResourceAlbumAssignResourcesRequest

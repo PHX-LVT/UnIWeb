@@ -96,6 +96,7 @@ public static class AuditActionCatalog
 
             ["ManagedResources.CreateAlbum"] = new("assets", "resource-album.created", "resource-album"),
             ["ManagedResources.UpdateAlbum"] = new("assets", "resource-album.updated", "resource-album"),
+            ["ManagedResources.UploadAlbumCover"] = new("assets", "resource-album.cover-updated", "resource-album"),
             ["ManagedResources.DeleteAlbum"] = new("assets", "resource-album.deleted", "resource-album", true),
             ["ManagedResources.AssignResourcesToAlbum"] = new("assets", "resource-album.resources-assigned", "resource-album"),
             ["ManagedResources.BulkMove"] = new("assets", "resource-album.resources-moved", "resource"),

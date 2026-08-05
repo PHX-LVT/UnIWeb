@@ -1,4 +1,5 @@
 @inject AdminBlockService BlockService
+@inject DirectResourceUploadService DirectUploads
 @inject IHttpService Http
 @using Contracts.Admin
 
@@ -8,8 +9,7 @@
     {
         <div class="block-media-selection">
             <div class="image-focal-preview">
-                <img src="@_asset.Url" alt="" style="object-position:@FocalPosition" />
-                <span class="image-focal-preview__marker" style="left:@($"{_focalPointX:0.##}%");top:@($"{_focalPointY:0.##}%")"></span>
+                <img src="@_asset.Url" alt="" style="@PreviewImageStyle" />
             </div>
             <button type="button" class="btn-admin btn-ghost" @onclick="ClearImage">
                 <i class="fas fa-times"></i> @T("Remove")
@@ -24,6 +24,10 @@
         <button type="button" class="btn-admin btn-ghost" @onclick="() => _resourcePickerOpen = true">
             <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
         </button>
+        <MediaCropField ImageUrl="@(_asset.Url ?? string.Empty)"
+                        Value="_imagePlacement"
+                        ValueChanged="SetImagePlacement"
+                        AspectRatio="@ImageAspectRatio" />
     </div>
     <div class="form-hint">@T("UploadImageHint")</div>
 </div>
@@ -47,18 +51,6 @@
     <label class="form-label">@T("Caption")</label>
     <LangField @bind-Value="_caption" Languages="Languages" />
 </div>
-<div class="block-media-settings">
-    <label class="form-group">
-        <span class="form-label">@T("FocalPointX")</span>
-        <input class="form-control" type="range" min="0" max="100" step="1" @bind="_focalPointX" />
-        <span class="form-hint">@($"{_focalPointX:0}%")</span>
-    </label>
-    <label class="form-group">
-        <span class="form-label">@T("FocalPointY")</span>
-        <input class="form-control" type="range" min="0" max="100" step="1" @bind="_focalPointY" />
-        <span class="form-hint">@($"{_focalPointY:0}%")</span>
-    </label>
-</div>
 <label class="block-layout-panel__check">
     <input type="checkbox" @bind="_openInLightbox" disabled="@_decorative" />
     <span>@T("OpenImageInLightbox")</span>
@@ -75,7 +67,6 @@
 </div>
 
 @code {
-    private const long MaxImageBytes = 20L * 1024 * 1024;
 
     [Parameter] public BlockModel Block { get; set; } = new();
     [Parameter] public string PageId { get; set; } = string.Empty;
@@ -88,14 +79,15 @@
     private Dictionary<string, string> _altText = new();
     private Dictionary<string, string> _caption = new();
     private bool _openInLightbox;
-    private double _focalPointX = 50;
-    private double _focalPointY = 50;
+    private MediaPlacementModel _imagePlacement = MediaCropEditor.DefaultPlacement();
     private bool _decorative;
     private bool _saving;
+    private bool _uploading;
     private bool _resourcePickerOpen;
     private string? _loadedBlockId;
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
-    private string FocalPosition => $"{_focalPointX:0.##}% {_focalPointY:0.##}%";
+    private string PreviewImageStyle => FormattableString.Invariant($"object-fit:{_imagePlacement.Fit};object-position:{_imagePlacement.FocalPointX:0.##}% {_imagePlacement.FocalPointY:0.##}%;transform:scale({_imagePlacement.Zoom:0.###});transform-origin:{_imagePlacement.FocalPointX:0.##}% {_imagePlacement.FocalPointY:0.##}%");
+    private double ImageAspectRatio => ParseAspectRatio(Block.Appearance.AspectRatio);
 
     protected override void OnParametersSet()
     {
@@ -105,38 +97,48 @@
         _altText = new(Block.AltText ?? new());
         _caption = new(Block.Caption ?? new());
         _openInLightbox = Block.OpenInLightbox;
-        _focalPointX = Math.Clamp(Block.FocalPointX, 0, 100);
-        _focalPointY = Math.Clamp(Block.FocalPointY, 0, 100);
+        _imagePlacement = Block.ImagePlacement is null
+            ? new MediaPlacementModel
+            {
+                FocalPointX = Math.Clamp(Block.FocalPointX, 0, 100),
+                FocalPointY = Math.Clamp(Block.FocalPointY, 0, 100)
+            }
+            : MediaCropEditor.Normalize(MediaCropEditor.Clone(Block.ImagePlacement));
         _decorative = Block.Appearance.Decorative;
     }
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
-        var file = e.File;
-        if (file.Size > MaxImageBytes)
+        if (_uploading) return;
+        _uploading = true;
+        try
         {
-            Http.Notify(T("ImageTooLarge"), 400);
-            return;
+            var response = await DirectUploads.UploadInputAsync(
+                "image-block-upload",
+                "image",
+                uploadContext: ResourceUploadContextCodes.ContentBlockImage);
+            if (!response.Success || response.Data is null)
+            {
+                Http.Notify(response, failureFallback: T("ImageUploadFailed"));
+                return;
+            }
+            _asset = ManagedAsset(response.Data);
+            _imagePlacement = MediaCropEditor.DefaultPlacement();
+            Http.Notify(T("ImageUploaded"), response.StatusCode);
         }
-        var response = await Http.PostFileAsync<AssetUploadModel>(
-            "api/admin/assets/upload?folder=image-blocks", file, maxBytes: MaxImageBytes);
-        if (!response.Success || response.Data is null)
-        {
-            Http.Notify(response.Message ?? T("ImageUploadFailed"), response.StatusCode);
-            return;
-        }
-        _asset = DirectAsset(response.Data);
-        Http.Notify(T("ImageUploaded"), response.StatusCode);
+        finally { _uploading = false; }
     }
 
     private void SelectResourceImage(ManagedResourceModel resource)
     {
         _asset = ManagedAsset(resource);
+        _imagePlacement = MediaCropEditor.DefaultPlacement();
         if (!_altText.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
             _altText = new(resource.Name);
     }
 
-    private void ClearImage() => _asset = new BlockAssetReferenceModel { SchemaVersion = 1 };
+    private void ClearImage() { _asset = new BlockAssetReferenceModel { SchemaVersion = 1 }; _imagePlacement = MediaCropEditor.DefaultPlacement(); }
+    private void SetImagePlacement(MediaPlacementModel? value) => _imagePlacement = MediaCropEditor.Normalize(MediaCropEditor.Clone(value));
 
     private void ApplyDecorativeRules()
     {
@@ -157,13 +159,14 @@
                 AltText = _decorative ? new() : _altText,
                 Caption = _caption,
                 OpenInLightbox = _openInLightbox,
-                FocalPointX = _focalPointX,
-                FocalPointY = _focalPointY,
+                FocalPointX = _imagePlacement.FocalPointX,
+                FocalPointY = _imagePlacement.FocalPointY,
+                ImagePlacement = MediaPlacementModelMapper.ToAdmin(_imagePlacement),
                 Visible = Block.Visible,
                 Appearance = appearance,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Notify(response.Message, response.StatusCode);
+            Http.Notify(response);
             if (response.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }
@@ -181,13 +184,6 @@
         SizeBytes = value?.SizeBytes ?? 0
     };
 
-    private static BlockAssetReferenceModel DirectAsset(AssetUploadModel upload) => new()
-    {
-        SchemaVersion = 1, Url = upload.Url, ResourceSource = "DirectUpload",
-        StorageKey = upload.StorageKey, FileName = upload.FileName,
-        ContentType = upload.ContentType, SizeBytes = upload.Size
-    };
-
     private static BlockAssetReferenceModel ManagedAsset(ManagedResourceModel resource) => new()
     {
         SchemaVersion = 1, Url = resource.Url, ResourceId = resource.Id,
@@ -202,10 +198,19 @@
         ResourceSource = value.ResourceSource, StorageKey = value.StorageKey,
         FileName = value.FileName, ContentType = value.ContentType, SizeBytes = value.SizeBytes
     };
+
+    private static double ParseAspectRatio(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "1:1" or "square" => 1d,
+        "4:3" => 4d / 3d,
+        "3:2" => 3d / 2d,
+        "16:9" or "wide" => 16d / 9d,
+        "21:9" => 21d / 9d,
+        _ => 16d / 10d
+    };
 }
 
 <style>
     .image-focal-preview { position:relative; width:180px; height:112px; overflow:hidden; border-radius:7px; background:#e2e8f0; }
     .image-focal-preview img { width:100%; height:100%; object-fit:cover; }
-    .image-focal-preview__marker { position:absolute; width:16px; height:16px; border:2px solid #fff; border-radius:50%; background:var(--primary); box-shadow:0 0 0 2px rgba(15,23,42,.45); transform:translate(-50%,-50%); pointer-events:none; }
 </style>

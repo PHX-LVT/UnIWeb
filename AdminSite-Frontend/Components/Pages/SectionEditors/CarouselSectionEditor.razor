@@ -1,5 +1,7 @@
 @inject AdminSectionService SectionService
+@using Contracts.Admin
 @inject IHttpService Http
+@inject DirectResourceUploadService DirectUploads
 
 <section class="ez-content-editor__text">
     <h3>@T("SectionText")</h3>
@@ -19,7 +21,7 @@
         @foreach (var item in _items.OrderBy(item => item.Order))
         {
             var number = item.Order + 1;
-            var uploadId = $"carousel-image-{item.Id}";
+            var uploadId = ItemImageUploadId(item);
             <ContentItemAccordion @key="item.Id" ItemId="@item.Id" Number="@number" Title="@ItemTitle(item, number)" Summary="@ItemSummary(item)"
                                   Expanded="@(_openItemId == item.Id)" OnToggle="() => ToggleItem(item.Id)" OnDelete="() => RemoveItem(item)"
                                   Visible="@item.Visible" VisibleChanged="value => SetVisible(item, value)">
@@ -54,6 +56,7 @@
                         <InputFile id="@uploadId" OnChange="args => OnItemImageSelected(args, item)" accept="image/*" style="display:none" />
                         <label class="btn-admin btn-ghost" for="@uploadId"><i class="fas fa-image"></i> @T("UploadNew")</label>
                         <button type="button" class="btn-admin btn-ghost" @onclick="() => OpenResourcePicker(item)"><i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")</button>
+                        <MediaCropField ImageUrl="@(item.ImageUrl ?? string.Empty)" Value="item.ImagePlacement" ValueChanged="value => SetImagePlacement(item, value)" AspectRatio="@(16d / 10d)" />
                     </div>
                 </div>
             </ContentItemAccordion>
@@ -102,6 +105,7 @@
         {
             Id = string.IsNullOrWhiteSpace(item.Id) ? ClientId() : item.Id, Tag = new(item.Tag ?? new()), Title = new(item.Title ?? new()),
             Description = new(item.Description ?? new()), LinkHref = item.LinkHref, ImageUrl = item.ImageUrl,
+            ImagePlacement = MediaPlacementModelMapper.Clone(item.ImagePlacement),
             Metrics = item.Metrics?.OrderBy(metric => metric.Order).Select((metric, metricIndex) => new CarouselMetricModel
             {
                 Id = string.IsNullOrWhiteSpace(metric.Id) ? MetricId() : metric.Id, Value = new(metric.Value ?? new()), Label = new(metric.Label ?? new()),
@@ -148,15 +152,19 @@
 
     private async Task OnItemImageSelected(InputFileChangeEventArgs args, CarouselItemModel item)
     {
-        if (args.File.Size > 5 * 1024 * 1024) { Http.Notify(T("ImageTooLarge"), 400); return; }
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=carousel", args.File, maxBytes: 5 * 1024 * 1024);
-        if (res.Success && res.Data is not null) { item.ImageUrl = res.Data.Url; ContentSession?.MarkDirty(); Http.Notify(T("NotificationImageUploaded"), res.StatusCode); }
-        else Http.Notify(res.Message ?? T("NotificationImageUploadFailed"), res.StatusCode);
+        var res = await DirectUploads.UploadInputAsync(
+            ItemImageUploadId(item),
+            "image",
+            uploadContext: ResourceUploadContextCodes.ContentSectionCarousel);
+        if (res.Success && res.Data is not null) { item.ImageUrl = res.Data.Url; item.ImagePlacement = MediaCropEditor.DefaultPlacement(); ContentSession?.MarkDirty(); Http.Notify(T("NotificationImageUploaded"), res.StatusCode); }
+        else Http.Notify(res, failureFallback: T("NotificationImageUploadFailed"));
     }
-    private void ClearItemImage(CarouselItemModel item) { item.ImageUrl = string.Empty; ContentSession?.MarkDirty(); }
+    private void ClearItemImage(CarouselItemModel item) { item.ImageUrl = string.Empty; item.ImagePlacement = null; ContentSession?.MarkDirty(); }
+    private static string ItemImageUploadId(CarouselItemModel item) => $"carousel-image-{item.Id}";
+    private void SetImagePlacement(CarouselItemModel item, MediaPlacementModel? value) { item.ImagePlacement = MediaPlacementModelMapper.Clone(value); ContentSession?.MarkDirty(); }
     private void OpenResourcePicker(CarouselItemModel item) { _resourcePickerItem = item; _resourcePickerOpen = true; }
     private void CloseResourcePicker() { _resourcePickerOpen = false; _resourcePickerItem = null; }
-    private void SelectResourceImage(ManagedResourceModel resource) { if (_resourcePickerItem is not null) { _resourcePickerItem.ImageUrl = resource.Url; ContentSession?.MarkDirty(); } }
+    private void SelectResourceImage(ManagedResourceModel resource) { if (_resourcePickerItem is not null) { _resourcePickerItem.ImageUrl = resource.Url; _resourcePickerItem.ImagePlacement = MediaCropEditor.DefaultPlacement(); ContentSession?.MarkDirty(); } }
 
     private async Task Save()
     {
@@ -168,14 +176,14 @@
                 SectionTitle = _title, Layout = _layout, Columns = _columns, Autoplay = _autoplay, ShowDots = _showDots, ShowArrows = _showArrows,
                 Items = _items.OrderBy(item => item.Order).Select(MapItem).ToList(), Visible = Section.Visible
             });
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally { _saving = false; }
     }
     private static CarouselItemDto MapItem(CarouselItemModel item) => new()
     {
-        Tag = item.Tag ?? new(), Title = item.Title ?? new(), Description = item.Description ?? new(), ImageUrl = item.ImageUrl, LinkHref = item.LinkHref,
+        Tag = item.Tag ?? new(), Title = item.Title ?? new(), Description = item.Description ?? new(), ImageUrl = item.ImageUrl, ImagePlacement = MediaPlacementModelMapper.ToAdmin(item.ImagePlacement), LinkHref = item.LinkHref,
         Metrics = item.Metrics?.OrderBy(metric => metric.Order).Select((metric, index) => new CarouselMetricDto
         {
             Value = metric.Value ?? new(), Label = metric.Label ?? new(), Tone = string.IsNullOrWhiteSpace(metric.Tone) ? "positive" : metric.Tone, Order = index

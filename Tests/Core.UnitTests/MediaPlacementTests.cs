@@ -130,6 +130,28 @@ public sealed class MediaPlacementTests
     }
 
     [Fact]
+    public void SectionItemAndImageBlockContracts_RoundTripPlacementMetadata()
+    {
+        var listItem = new ListItemDto
+        {
+            ImageUrl = "/assets/card.jpg",
+            ImagePlacement = new MediaPlacementDto { FocalPointX = 18, FocalPointY = 72, Zoom = 1.6 }
+        };
+        var imageBlock = new ImageBlockUpdateDto
+        {
+            ImagePlacement = new MediaPlacementDto { Fit = "contain", FocalPointX = 36, Zoom = 2.1 }
+        };
+
+        var restoredItem = JsonSerializer.Deserialize<ListItemDto>(JsonSerializer.Serialize(listItem));
+        var restoredBlock = JsonSerializer.Deserialize<ImageBlockUpdateDto>(JsonSerializer.Serialize(imageBlock));
+
+        Assert.Equal(18, restoredItem?.ImagePlacement?.FocalPointX);
+        Assert.Equal(1.6, restoredItem?.ImagePlacement?.Zoom);
+        Assert.Equal("contain", restoredBlock?.ImagePlacement?.Fit);
+        Assert.Equal(2.1, restoredBlock?.ImagePlacement?.Zoom);
+    }
+
+    [Fact]
     public void ContentMapping_RoundTripsIndependentHeroThumbnailAndGalleryPlacements()
     {
         var source = new ContentItem

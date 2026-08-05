@@ -544,7 +544,8 @@
             {
                 401 => T("NotificationSessionExpired"),
                 403 => T("NoPermission"),
-                _ => string.IsNullOrWhiteSpace(res.Message) ? T("PageLoadFailed") : res.Message
+                >= 500 => T("PageLoadServiceUnavailable"),
+                _ => T("PageLoadFailed")
             };
             _pageSortableInitialized = false;
             return;
@@ -885,7 +886,7 @@
                     _createForm.Name[code] = en;
 
             var res = await PageService.CreateAsync(_createForm);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success && res.Data is not null)
             {
                 await PageService.SeedTemplateAsync(res.Data.Id, _pendingTemplate);
@@ -921,7 +922,7 @@
                     _childCreateForm.Name[code] = en;
 
             var res = await PageService.CreateChildAsync(parent.Id, _childCreateForm);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success && res.Data is not null)
             {
                 _showCreateChildForm = false;
@@ -963,7 +964,7 @@
         try
         {
             var res = await PageService.UpdateAsync(_editingPage.Id, _settingsForm);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success)
             {
                 await LoadPages();
@@ -988,7 +989,7 @@
         var res = string.IsNullOrWhiteSpace(parentId)
             ? await PageService.DeleteAsync(deleting.Id)
             : await PageService.DeleteChildAsync(parentId, deleting.Id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             _confirmDelete = null;
@@ -1023,7 +1024,7 @@
     {
         if (_selectedPageId is null) return;
         var res = await SectionService.CreateFromTemplateAsync(_selectedPageId, request);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success)
         {
             return;

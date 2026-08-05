@@ -13,19 +13,22 @@ namespace FullProject.Services
         private readonly ContentRevisionService _revisions;
         private readonly ContentMappingService _mapping;
         private readonly AssetCleanupService _assetCleanup;
+        private readonly ILogger<ContentWorkflowService> _logger;
 
         public ContentWorkflowService(
             MongoDbContext context,
             ContentValidationService validation,
             ContentRevisionService revisions,
             ContentMappingService mapping,
-            AssetCleanupService assetCleanup)
+            AssetCleanupService assetCleanup,
+            ILogger<ContentWorkflowService> logger)
         {
             _context = context;
             _validation = validation;
             _revisions = revisions;
             _mapping = mapping;
             _assetCleanup = assetCleanup;
+            _logger = logger;
         }
 
         public async Task<(ContentItem? Item, List<string> Errors)> SetStatusAsync(string id, ContentStatusUpdateDto dto, string actorId)
@@ -96,7 +99,8 @@ namespace FullProject.Services
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
-                return (null, [$"Content status update failed: {ex.Message}"]);
+                _logger.LogError(ex, "Content status update failed for Content {ContentId}", id);
+                return (null, ["Content status update failed: the change could not be stored."]);
             }
         }
 
@@ -145,7 +149,8 @@ namespace FullProject.Services
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
-                return (null, [$"Content publish failed: {ex.Message}"]);
+                _logger.LogError(ex, "Content publish failed for Content {ContentId}", id);
+                return (null, ["Content publish failed: the change could not be stored."]);
             }
 
             await _assetCleanup.DeleteUnusedContentAssetsAsync(replacedPublishedItems);
@@ -232,7 +237,8 @@ namespace FullProject.Services
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
-                return (null, [$"Content restore failed: {ex.Message}"]);
+                _logger.LogError(ex, "Content restore failed for Content {ContentId}", id);
+                return (null, ["Content restore failed: the change could not be stored."]);
             }
         }
 

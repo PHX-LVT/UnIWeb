@@ -8,6 +8,7 @@
 @inject AdminBlockService BlockService
 @inject IHttpService Http
 @inject AdminLanguageService AdminLanguageState
+@inject ILogger<Canvas> Logger
 @implements IAsyncDisposable
 
 <div class="ez-canvas">
@@ -1876,6 +1877,7 @@
 
         async Task<bool> Apply(IReadOnlyList<string> ids)
         {
+            Http.ClearInlineStatus("canvas-authoring");
             var response = await BlockService.ReorderAsync(Page.Id, request.SectionId, ids.ToList());
             Http.NotifyInline(response, "canvas-authoring", T("NotificationOrderSaved"), T("NotificationReorderFailed"));
             if (!response.Success) return false;
@@ -2228,6 +2230,7 @@
             }
             else
             {
+                var previewPatchFailed = false;
                 foreach (var state in states)
                 {
                     try
@@ -2236,9 +2239,17 @@
                             state.BlockId, state.X, state.Y, state.W, state.H,
                             state.LeftPercent, state.TopPx, state.WidthPercent, state.HeightPx, state.ZIndex);
                     }
-                    catch { }
+                    catch (JSException exception)
+                    {
+                        Logger.LogWarning(exception, "Incremental preview layout patch failed; refreshing the preview document.");
+                        previewPatchFailed = true;
+                        break;
+                    }
                 }
-                await InvokeAsync(StateHasChanged);
+                if (previewPatchFailed)
+                    await ReloadPreviewSafelyAsync();
+                else
+                    await InvokeAsync(StateHasChanged);
             }
             succeeded = true;
             return true;
@@ -2914,6 +2925,7 @@
 
     private async Task ToggleVisibility(SectionModel section)
     {
+        Http.ClearInlineStatus("canvas-authoring");
         var res = await SectionService.SetVisibilityAsync(Page.Id, section.Id, !section.Visible);
         Http.NotifyInline(res, "canvas-authoring", T("NotificationSectionVisibilityUpdated"));
         if (!res.Success)
@@ -2929,7 +2941,7 @@
     private async Task DeleteSection(SectionModel section)
     {
         var res = await SectionService.DeleteAsync(Page.Id, section.Id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (!res.Success)
         {
             return;
@@ -2944,6 +2956,7 @@
     [JSInvokable]
     public async Task OnReordered(List<string> orderedIds)
     {
+        Http.ClearInlineStatus("canvas-authoring");
         var res = await SectionService.ReorderAsync(Page.Id, orderedIds);
         Http.NotifyInline(res, "canvas-authoring", T("NotificationOrderSaved"), T("NotificationReorderFailed"));
         if (res.Success)

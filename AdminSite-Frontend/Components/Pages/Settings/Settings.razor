@@ -33,6 +33,7 @@
                 </button>
             </div>
 
+            <AdminInlineStatus TargetId="settings-languages-load" Retry="LoadLanguagesAsync" Retrying="_langsLoading" RetryText="@T("Retry")" />
             @if (_langsLoading)
             {
                 <div class="spinner" style="margin:1rem auto"></div>
@@ -265,6 +266,7 @@
                 </button>
             </div>
 
+            <AdminInlineStatus TargetId="settings-appearance-load" Retry="LoadAppearanceAsync" Retrying="_appearanceLoading" RetryText="@T("Retry")" />
             @if (_appearanceLoading)
             {
                 <div class="spinner" style="margin:1rem auto"></div>
@@ -329,6 +331,7 @@
                     </button>
                 </div>
 
+                <AdminInlineStatus TargetId="settings-resource-load" Retry="LoadResourceSettingsAsync" Retrying="_resourceSettingsLoading" RetryText="@T("Retry")" />
                 @if (_resourceSettingsLoading)
                 {
                     <div class="spinner" style="margin:1rem auto"></div>
@@ -410,6 +413,7 @@
                 </button>
             </div>
 
+            <AdminInlineStatus TargetId="settings-glossary-load" Retry="LoadGlossaryAsync" Retrying="_glossaryLoading" RetryText="@T("Retry")" />
             @if (_glossaryLoading)
             {
                 <div class="spinner" style="margin:1rem auto"></div>
@@ -621,47 +625,71 @@
         {
             await Auth.InitializeAsync();
             await Auth.RefreshSessionAsync();
-
-            var langRes = await SettingsService.GetLanguagesAsync();
-            if (_cts.IsCancellationRequested) return;
-            _languages = langRes.Data?.Languages ?? new();
-            ReassignLocalLanguageOrders();
-            _defaultLanguage = NormalizeCode(langRes.Data?.DefaultLanguage);
-            if (string.IsNullOrWhiteSpace(_defaultLanguage))
-            {
-                _defaultLanguage = "en";
-            }
-            AdminUiLocalizer.SetFallbackLanguage(_defaultLanguage);
-            RefreshTranslationHealth();
-            _langsLoading = false;
-
-            var appearanceRes = await SettingsService.GetAdminAppearanceAsync();
-            if (_cts.IsCancellationRequested) return;
-            _appearancePreset = appearanceRes.Data?.Preset ?? "navy-gold";
-            _appearanceLoading = false;
-
-            if (Auth.IsAdminAdmin)
-            {
-                var resourceRes = await SettingsService.GetResourceLibrarySettingsAsync();
-                if (_cts.IsCancellationRequested) return;
-                if (resourceRes.Success && resourceRes.Data is not null)
-                {
-                    _resourceSettings = resourceRes.Data;
-                    SyncResourceFormatText();
-                }
-                else
-                {
-                    Http.Notify(resourceRes.Message, resourceRes.StatusCode);
-                }
-                _resourceSettingsLoading = false;
-            }
-
-            var glossaryRes = await SettingsService.GetGlossaryAsync();
-            if (_cts.IsCancellationRequested) return;
-            _glossary = glossaryRes.Data ?? new();
-            _glossaryLoading = false;
+            await LoadLanguagesAsync();
+            await LoadAppearanceAsync();
+            if (Auth.IsAdminAdmin) await LoadResourceSettingsAsync();
+            else _resourceSettingsLoading = false;
+            await LoadGlossaryAsync();
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }
+    }
+
+    private async Task LoadLanguagesAsync()
+    {
+        Http.ClearInlineStatus("settings-languages-load");
+        _langsLoading = true;
+        var response = await SettingsService.GetLanguagesAsync();
+        if (_cts.IsCancellationRequested) return;
+        if (response.Success && response.Data is not null)
+        {
+            _languages = response.Data.Languages;
+            ReassignLocalLanguageOrders();
+            _defaultLanguage = NormalizeCode(response.Data.DefaultLanguage);
+            if (string.IsNullOrWhiteSpace(_defaultLanguage)) _defaultLanguage = "en";
+            AdminUiLocalizer.SetFallbackLanguage(_defaultLanguage);
+            RefreshTranslationHealth();
+        }
+        else Http.NotifyInline(response, "settings-languages-load");
+        _langsLoading = false;
+    }
+
+    private async Task LoadAppearanceAsync()
+    {
+        Http.ClearInlineStatus("settings-appearance-load");
+        _appearanceLoading = true;
+        var response = await SettingsService.GetAdminAppearanceAsync();
+        if (_cts.IsCancellationRequested) return;
+        if (response.Success && response.Data is not null)
+            _appearancePreset = response.Data.Preset;
+        else Http.NotifyInline(response, "settings-appearance-load");
+        _appearanceLoading = false;
+    }
+
+    private async Task LoadResourceSettingsAsync()
+    {
+        Http.ClearInlineStatus("settings-resource-load");
+        _resourceSettingsLoading = true;
+        var response = await SettingsService.GetResourceLibrarySettingsAsync();
+        if (_cts.IsCancellationRequested) return;
+        if (response.Success && response.Data is not null)
+        {
+            _resourceSettings = response.Data;
+            SyncResourceFormatText();
+        }
+        else Http.NotifyInline(response, "settings-resource-load");
+        _resourceSettingsLoading = false;
+    }
+
+    private async Task LoadGlossaryAsync()
+    {
+        Http.ClearInlineStatus("settings-glossary-load");
+        _glossaryLoading = true;
+        var response = await SettingsService.GetGlossaryAsync();
+        if (_cts.IsCancellationRequested) return;
+        if (response.Success && response.Data is not null)
+            _glossary = response.Data;
+        else Http.NotifyInline(response, "settings-glossary-load");
+        _glossaryLoading = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -740,7 +768,7 @@
             Languages = _languages.OrderBy(l => l.Order).ToList(),
             DefaultLanguage = _defaultLanguage
         });
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             var langRes = await SettingsService.GetLanguagesAsync();
@@ -901,7 +929,7 @@
             {
                 Preset = _appearancePreset
             });
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success && res.Data is not null)
                 _appearancePreset = res.Data.Preset;
         }
@@ -921,7 +949,7 @@
             _resourceSettings.AllowedVideoFormats = ResourceLibrarySettingsUiHelper.ParseFormats(_videoFormatsText);
 
             var res = await SettingsService.UpdateResourceLibrarySettingsAsync(_resourceSettings);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success && res.Data is not null)
             {
                 _resourceSettings = res.Data;
@@ -1117,7 +1145,7 @@
         else
             res = await SettingsService.UpdateTermAsync(_editingTerm.Id, _termForm);
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             CloseTermModal();
@@ -1130,7 +1158,7 @@
     private async Task DeleteTerm(string id)
     {
         var res = await SettingsService.DeleteTermAsync(id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success) _glossary.RemoveAll(t => t.Id == id);
     }
 }

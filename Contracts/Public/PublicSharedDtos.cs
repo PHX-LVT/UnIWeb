@@ -91,6 +91,7 @@ namespace Contracts.Public
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public PublicMediaPlacementDto? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public int Order { get; set; }
     }
@@ -112,6 +113,7 @@ namespace Contracts.Public
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public PublicMediaPlacementDto? ImagePlacement { get; set; }
         public string? LinkHref { get; set; }
         public List<PublicCarouselMetricDto> Metrics { get; set; } = new();
         public int Order { get; set; }
@@ -136,6 +138,7 @@ namespace Contracts.Public
         public Dictionary<string, string> Title { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string? ImageUrl { get; set; }
+        public PublicMediaPlacementDto? ImagePlacement { get; set; }
         public int Order { get; set; }
     }
 
@@ -163,6 +166,7 @@ namespace Contracts.Public
         public string? CardBackgroundType { get; set; }
         public string? CardBackgroundColor { get; set; }
         public string? CardImageUrl { get; set; }
+        public PublicMediaPlacementDto? CardImagePlacement { get; set; }
     }
 
     public class PublicLibraryAttachmentDto

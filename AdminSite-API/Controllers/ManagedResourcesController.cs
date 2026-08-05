@@ -27,6 +27,7 @@ namespace FullProject.Controllers
         private readonly SettingsService _siteSettings;
         private readonly ILogger<ManagedResourcesController> _logger;
         private readonly StoredAssetService _storedAssets;
+        private readonly AssetStorageKeyPolicy _storageKeys;
 
         public ManagedResourcesController(
             ManagedResourceService resources,
@@ -35,6 +36,7 @@ namespace FullProject.Controllers
             IOptions<R2StorageSettings> settings,
             SettingsService siteSettings,
             StoredAssetService storedAssets,
+            AssetStorageKeyPolicy storageKeys,
             ILogger<ManagedResourcesController> logger)
         {
             _resources = resources;
@@ -43,6 +45,7 @@ namespace FullProject.Controllers
             _settings = settings.Value;
             _siteSettings = siteSettings;
             _storedAssets = storedAssets;
+            _storageKeys = storageKeys;
             _logger = logger;
         }
 
@@ -105,19 +108,169 @@ namespace FullProject.Controllers
             return Ok(ApiResult.Ok(MapAlbum(album!, count), "Album updated."));
         }
 
+        [HttpPost("albums/{id}/cover")]
+        [EnableRateLimiting("admin-resource-upload-initiate")]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(110L * 1024 * 1024)]
+        public async Task<IActionResult> UploadAlbumCover(string id, [FromForm] IFormFile file)
+        {
+            if (!IsContentManager) return Forbid();
+
+            var album = await _albums.GetByIdAsync(id);
+            if (album is null) return NotFound(ApiResult.NotFound("Album not found."));
+            var resourceCount = await _albums.GetResourceCountAsync(album.Id);
+            if (file is null || file.Length <= 0)
+                return UnprocessableEntity(ApiResult.BadRequest("Choose a non-empty album cover image."));
+            if (!_storage.IsConfigured)
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, ApiResult.BadRequest("R2 storage is not configured."));
+
+            var librarySettings = await _siteSettings.GetResourceLibrarySettingsAsync();
+            var maximumBytes = Math.Min(librarySettings.MaxImageBytes, _settings.MaxUploadBytes);
+            if (file.Length > maximumBytes)
+                return StatusCode(StatusCodes.Status413PayloadTooLarge, ApiResult.BadRequest($"Album cover must be {maximumBytes / 1024 / 1024}MB or smaller."));
+            if (!UploadSecurityPolicy.IsAllowedManagedResourceUpload(file.FileName, file.ContentType, "image", librarySettings))
+                return UnprocessableEntity(ApiResult.BadRequest("Album cover must use an allowed image format."));
+
+            var sampleLength = (int)Math.Min(file.Length, 512L * 1024);
+            var sample = new byte[sampleLength];
+            await using (var sampleStream = file.OpenReadStream())
+            {
+                var offset = 0;
+                while (offset < sample.Length)
+                {
+                    var read = await sampleStream.ReadAsync(sample.AsMemory(offset, sample.Length - offset), HttpContext.RequestAborted);
+                    if (read <= 0) break;
+                    offset += read;
+                }
+                if (offset != sample.Length) Array.Resize(ref sample, offset);
+            }
+            if (!UploadSecurityPolicy.HasAllowedManagedResourceSignature(sample, file.FileName, file.ContentType, "image"))
+                return UnprocessableEntity(ApiResult.BadRequest(UploadSecurityPolicy.InvalidSignatureMessage));
+            if (!ResourceUploadInspection.HasSafeImageDimensions(sample, file.FileName, out var dimensionError))
+                return UnprocessableEntity(ApiResult.BadRequest(dimensionError ?? "Album cover dimensions are invalid."));
+
+            var assetId = MongoDB.Bson.ObjectId.GenerateNewId().ToString();
+            var assetVersion = Math.Max(1, album.CoverAssetVersion + 1);
+            var storageKey = _storageKeys.CreateAlbumCoverKey(album.Id, assetId, assetVersion, file.FileName);
+            R2UploadResult? upload = null;
+            try
+            {
+                await using var input = file.OpenReadStream();
+                upload = await _storage.UploadWithMetadataToKeyAsync(
+                    input,
+                    file.FileName,
+                    file.ContentType,
+                    storageKey,
+                    HttpContext.RequestAborted);
+
+                await _storedAssets.RecordReadyAsync(
+                    assetId,
+                    _storageKeys.SchemaVersion,
+                    new AssetStorageOwner("resource-library", "resource-album", album.Id, "cover"),
+                    upload.StorageKey,
+                    upload.Url,
+                    file.FileName,
+                    file.ContentType,
+                    file.Length,
+                    ActorId,
+                    assetVersion,
+                    cancellationToken: HttpContext.RequestAborted);
+
+                var (updated, errors) = await _albums.UpdateCoverAsync(
+                    album.Id,
+                    upload.Url,
+                    upload.StorageKey,
+                    assetId,
+                    assetVersion,
+                    _storageKeys.SchemaVersion,
+                    ActorId);
+                if (errors.Count > 0 || updated is null)
+                {
+                    await _storedAssets.MarkSupersededAsync(upload.StorageKey, DateTime.UtcNow, HttpContext.RequestAborted);
+                    return UnprocessableEntity(ApiResult.Unprocessable<ResourceAlbumResponseDto>(errors));
+                }
+
+                if (!string.IsNullOrWhiteSpace(album.CoverStorageKey) &&
+                    !string.Equals(album.CoverStorageKey, upload.StorageKey, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        await _storedAssets.MarkSupersededAsync(
+                            album.CoverStorageKey,
+                            DateTime.UtcNow.AddDays(Math.Max(1, _settings.LegacyObjectRetentionDays)),
+                            HttpContext.RequestAborted);
+                    }
+                    catch (Exception exception)
+                    {
+                        _logger.LogWarning(exception, "Could not schedule the previous cover for cleanup. AlbumId: {AlbumId}", album.Id);
+                    }
+                }
+
+                return Ok(ApiResult.Ok(MapAlbum(updated, resourceCount), "Album cover updated."));
+            }
+            catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                if (upload is not null)
+                {
+                    try
+                    {
+                        await _storedAssets.MarkSupersededAsync(upload.StorageKey, DateTime.UtcNow);
+                        await _storage.DeleteAsync(upload.Url);
+                    }
+                    catch (Exception cleanupException)
+                    {
+                        _logger.LogWarning(cleanupException, "Could not clean up a failed album cover upload. AlbumId: {AlbumId}", album.Id);
+                    }
+                }
+                _logger.LogError(exception, "Album cover upload failed. AlbumId: {AlbumId}", album.Id);
+                return StatusCode(StatusCodes.Status502BadGateway, ApiResult.BadRequest("Album cover upload failed."));
+            }
+        }
+
         [HttpDelete("albums/{id}")]
         public async Task<IActionResult> DeleteAlbum(string id)
         {
             if (!IsContentManager) return Forbid();
 
-            var (deleted, count, errors) = await _albums.DeleteAsync(id);
+            var targetAlbum = await _albums.GetByIdAsync(id);
+            if (targetAlbum is null) return NotFound(ApiResult.NotFound("Album not found."));
+            if (targetAlbum.IsSystemRoot)
+                return Conflict(ApiResult.BadRequest("System root albums cannot be deleted."));
+
+            var (result, album, errors) = await _resources.DeleteAlbumWithResourcesAsync(id);
             if (errors.Count > 0)
             {
                 if (errors.Contains("Album not found.")) return NotFound(ApiResult.NotFound("Album not found."));
-                return Conflict(ApiResult.BadRequest(errors[0], errors));
+                return Conflict(new ApiResponse<ResourceAlbumDeleteResultDto>
+                {
+                    Success = false,
+                    StatusCode = StatusCodes.Status409Conflict,
+                    Message = errors[0],
+                    Errors = errors,
+                    Data = result
+                });
             }
 
-            return Ok(ApiResult.Ok(new { deleted, resourceCount = count }, "Album deleted."));
+            if (result.Deleted && !string.IsNullOrWhiteSpace(album?.CoverStorageKey))
+            {
+                try
+                {
+                    await _storedAssets.MarkSupersededAsync(
+                        album.CoverStorageKey,
+                        DateTime.UtcNow.AddDays(Math.Max(1, _settings.LegacyObjectRetentionDays)),
+                        HttpContext.RequestAborted);
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(exception, "Could not schedule a deleted album cover for cleanup. AlbumId: {AlbumId}", id);
+                }
+            }
+
+            return Ok(ApiResult.Ok(result, $"Album and {result.DeletedResourceCount} contained resource(s) deleted."));
         }
 
         [HttpPost("albums/{id}/resources")]
@@ -483,10 +636,12 @@ namespace FullProject.Controllers
             !IsContentManager;
 
         private bool IsResourceLibraryReader =>
-            IsContentManager || IsWriter;
+            IsContentManager ||
+            IsWriter ||
+            AdminAuthorization.HasPermission(User, AdminPermissionKeys.PageBuilder);
 
         private bool IsResourceUploader =>
-            IsResourceLibraryReader;
+            IsContentManager || IsWriter;
 
         private static long MaxBytesForKind(ResourceLibrarySettings settings, string kind) =>
             kind switch
@@ -555,6 +710,7 @@ namespace FullProject.Controllers
             AssetVersion = resource.AssetVersion,
             StorageSchemaVersion = resource.StorageSchemaVersion,
             Kind = resource.Kind,
+            OriginContext = resource.OriginContext,
             Name = resource.Name,
             Description = resource.Description,
             Url = resource.Url,
@@ -585,6 +741,13 @@ namespace FullProject.Controllers
             Id = album.Id,
             Scope = album.Scope,
             Name = album.Name,
+            SystemKey = album.SystemKey,
+            IsSystemRoot = album.IsSystemRoot,
+            CoverUrl = album.CoverUrl,
+            CoverStorageKey = album.CoverStorageKey,
+            CoverAssetId = album.CoverAssetId,
+            CoverAssetVersion = album.CoverAssetVersion,
+            CoverStorageSchemaVersion = album.CoverStorageSchemaVersion,
             ResourceCount = resourceCount,
             CreatedById = album.CreatedById,
             UpdatedById = album.UpdatedById,

@@ -147,7 +147,7 @@ else
                 };
 
             var res = await SectionService.UpdateAsync(PageId, Section.Id, dto);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

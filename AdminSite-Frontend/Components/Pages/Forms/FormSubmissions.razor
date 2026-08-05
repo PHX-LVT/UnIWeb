@@ -100,9 +100,15 @@ else
 }
 
 <div class="admin-data-table-card">
+    <AdminInlineStatus TargetId="form-submissions-load" Retry="() => LoadAsync(false)" Retrying="_loading" RetryText="@T("Retry")" />
+    <AdminInlineStatus TargetId="form-submission-definitions-load" Retry="() => LoadAsync(false)" Retrying="_loading" RetryText="@T("Retry")" />
+    <AdminInlineStatus TargetId="form-submission-assignees-load" Retry="() => LoadAsync(false)" Retrying="_loading" RetryText="@T("Retry")" />
     @if (_loading)
     {
         <div class="admin-data-empty">@T("Loading")</div>
+    }
+    else if (_submissionLoadFailed)
+    {
     }
     else if (!_filteredSubmissions.Any())
     {
@@ -378,6 +384,7 @@ else
     private FormSubmissionModel? _detail;
     private bool _hasAccess = true;
     private bool _loading = true;
+    private bool _submissionLoadFailed;
     private bool _exporting;
     private int _page = 1;
     private string _search = string.Empty;
@@ -426,6 +433,10 @@ else
 
     private async Task LoadAsync(bool resetPage = true)
     {
+        Http.ClearInlineStatus("form-submissions-load");
+        Http.ClearInlineStatus("form-submission-definitions-load");
+        Http.ClearInlineStatus("form-submission-assignees-load");
+        _submissionLoadFailed = false;
         _loading = true;
         if (resetPage) _page = 1;
 
@@ -448,15 +459,16 @@ else
 
         if (!submissions.Success)
         {
-            Http.Notify(submissions.Message, submissions.StatusCode);
+            _submissionLoadFailed = true;
+            Http.NotifyInline(submissions, "form-submissions-load");
             if (submissions.StatusCode is 401 or 403)
                 _hasAccess = false;
         }
 
         if (!definitions.Success)
-            Http.Notify(definitions.Message, definitions.StatusCode);
+            Http.NotifyInline(definitions, "form-submission-definitions-load");
         if (!assignees.Success)
-            Http.Notify(assignees.Message, assignees.StatusCode);
+            Http.NotifyInline(assignees, "form-submission-assignees-load");
 
         _submissions = submissions.Data ?? new();
         _filteredSubmissions = _submissions;
@@ -534,7 +546,7 @@ else
             }
             else
             {
-                Http.Notify(result.Message, result.StatusCode);
+                Http.Notify(result.ToApiResponse());
             }
         }
         finally
@@ -566,14 +578,14 @@ else
     private async Task BulkStatus(FormSubmissionStatusModel status)
     {
         var res = await FormService.BulkStatusAsync(_selectedIds.ToList(), status);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         await LoadAsync(false);
     }
 
     private async Task BulkDelete()
     {
         var res = await FormService.BulkDeleteAsync(_selectedIds.ToList());
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         await LoadAsync(false);
     }
 
@@ -587,7 +599,7 @@ else
             return;
         }
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         _detail = Clone(sub);
     }
 
@@ -602,7 +614,7 @@ else
             InternalNotes = _detail.InternalNotes,
             AssignedToAdminId = string.IsNullOrWhiteSpace(_detail.AssignedToAdminId) ? null : _detail.AssignedToAdminId
         });
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success && res.Data is not null)
             UpsertSubmission(res.Data);
         _detail = null;

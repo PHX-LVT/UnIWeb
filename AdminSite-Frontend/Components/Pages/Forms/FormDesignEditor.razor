@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @inject IHttpService Http
 @inject ThemeService ThemeService
+@inject ILogger<FormDesignEditor> Logger
 
 @if (_theme is not null)
 {
@@ -570,19 +571,34 @@
         if (_drawerFocusPending)
         {
             _drawerFocusPending = false;
-            await JS.InvokeVoidAsync("formDesignEditor.openDrawer", _drawerElement, _reference);
+            try
+            {
+                await JS.InvokeVoidAsync("formDesignEditor.openDrawer", _drawerElement, _reference);
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Form Design settings drawer failed to initialize.");
+                Http.Notify(T("NotificationFormDesignInitFailed"), 500);
+            }
         }
         if (SettingsOpen && _sortablesRefreshPending)
         {
             _sortablesRefreshPending = false;
             try { await JS.InvokeVoidAsync("formDesignEditor.initDesignSortables", _rowsElement, _informationItemsElement, _auxiliaryActionsElement, _reference, Disabled); }
-            catch (JSException) { }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Form Design drag sorting failed to initialize.");
+                Http.Notify(T("NotificationFormDesignSortingInitFailed"), 500);
+            }
         }
         if (_previewRecenteringPending)
         {
             _previewRecenteringPending = false;
             try { await JS.InvokeVoidAsync("formDesignEditor.centerPreview", _previewStageElement); }
-            catch (JSException) { }
+            catch (JSException exception)
+            {
+                Logger.LogDebug(exception, "Form Design preview could not be recentered.");
+            }
         }
     }
 

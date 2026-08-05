@@ -1972,7 +1972,7 @@ else
             var before = CloneUpdateDto(_savedVisualSnapshot ?? BlockUpdateDtoMapper.Build(_fullBlock));
             var dto = CloneUpdateDto(BlockUpdateDtoMapper.Build(_fullBlock));
             var res = await BlockService.UpdateAsync(PageId, SectionId, _fullBlock.Id, dto);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success)
             {
                 if (!UpdateDtosEqual(before, dto))
@@ -2016,7 +2016,7 @@ else
             var res = await BlockService.UpdateAsync(PageId, SectionId, blockId, target);
             if (!res.Success)
             {
-                Http.Notify(res.Message, res.StatusCode);
+                Http.Notify(res);
                 return;
             }
 

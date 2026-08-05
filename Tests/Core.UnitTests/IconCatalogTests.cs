@@ -110,4 +110,23 @@ public sealed class IconCatalogTests
         Assert.NotNull(result);
         Assert.Null(result.Appearance);
     }
+
+    [Theory]
+    [InlineData("rounded-square")]
+    [InlineData("circle")]
+    [InlineData("oval")]
+    [InlineData("diamond")]
+    [InlineData("hexagon")]
+    [InlineData("star")]
+    public void BuiltInIcon_PreservesSupportedBackgroundShape(string shape)
+    {
+        var result = IconReferenceService.ToModel(new IconReferenceDto
+        {
+            Source = IconSources.BuiltIn,
+            ClassName = "fa-solid fa-truck",
+            Appearance = new IconAppearanceDto { BackgroundMode = "theme", Shape = shape }
+        });
+
+        Assert.Equal(shape, result?.Appearance?.Shape);
+    }
 }

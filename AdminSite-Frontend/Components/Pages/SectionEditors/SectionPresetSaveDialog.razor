@@ -84,7 +84,7 @@
                 string.IsNullOrWhiteSpace(_description)
                     ? new()
                     : new Dictionary<string, string> { [AdminLanguage] = _description.Trim() });
-            Http.Notify(response.Message, response.StatusCode);
+            Http.Notify(response);
             if (!response.Success || response.Data is null) return;
             await OnSaved.InvokeAsync(response.Data);
             await Close();

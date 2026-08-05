@@ -71,9 +71,9 @@ namespace FullProject.Controllers
             {
                 created = await _service.CreateAsync(pageId, dto);
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException)
             {
-                return BadRequest(ApiResult.BadRequest(exception.Message));
+                return BadRequest(ApiResult.BadRequest("The Section settings are invalid."));
             }
             return CreatedAtAction(nameof(GetById),
                 new { pageId, sectionId = created.Id },
@@ -106,9 +106,9 @@ namespace FullProject.Controllers
                     ApiResult.Created(MapToDto(pageId, created), "Section created from layout.")
                         .WithNotification("NotificationSectionSaved"));
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException)
             {
-                return BadRequest(ApiResult.BadRequest(exception.Message));
+                return BadRequest(ApiResult.BadRequest("The selected Section layout is invalid."));
             }
         }
 
@@ -124,9 +124,9 @@ namespace FullProject.Controllers
             {
                 updated = await _service.UpdateAsync(pageId, sectionId, dto);
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException)
             {
-                return BadRequest(ApiResult.BadRequest(exception.Message));
+                return BadRequest(ApiResult.BadRequest("The Section settings are invalid."));
             }
             if (updated is null) return NotFound(ApiResult.NotFound("Section not found."));
 
@@ -278,6 +278,7 @@ namespace FullProject.Controllers
                         Title = i.Title,
                         Description = i.Description,
                         ImageUrl = i.ImageUrl,
+                        ImagePlacement = MediaPlacementPolicy.ToAdmin(i.ImagePlacement),
                         LinkHref = i.LinkHref,
                         Visible = i.Visible,
                         Order = i.Order
@@ -381,6 +382,7 @@ namespace FullProject.Controllers
                         Title = i.Title,
                         Description = i.Description,
                         ImageUrl = i.ImageUrl,
+                        ImagePlacement = MediaPlacementPolicy.ToAdmin(i.ImagePlacement),
                         LinkHref = i.LinkHref,
                         Metrics = i.Metrics.Select(m => new CarouselMetricDto
                         {
@@ -424,6 +426,7 @@ namespace FullProject.Controllers
                         Title = i.Title,
                         Description = i.Description,
                         ImageUrl = i.ImageUrl,
+                        ImagePlacement = MediaPlacementPolicy.ToAdmin(i.ImagePlacement),
                         BadgeText = i.BadgeText,
                         Highlighted = i.Highlighted,
                         Visible = i.Visible,
@@ -445,7 +448,8 @@ namespace FullProject.Controllers
             CardContent = item.CardContent ?? new(),
             CardBackgroundType = item.CardBackgroundType,
             CardBackgroundColor = item.CardBackgroundColor,
-            CardImageUrl = item.CardImageUrl
+            CardImageUrl = item.CardImageUrl,
+            CardImagePlacement = MediaPlacementPolicy.ToAdmin(item.CardImagePlacement)
         };
 
         private static Dictionary<string, string> ResolveShowcaseButtonLabel(ShowcaseSection section) =>

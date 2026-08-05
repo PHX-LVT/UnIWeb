@@ -23,6 +23,7 @@
 else
 {
     <section class="admin-card log-management__surface">
+        <AdminInlineStatus TargetId="active-sessions-load" Retry="LoadAsync" Retrying="_loading" RetryText="@T("Retry")" />
         @if (_loading)
         {
             <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
@@ -90,6 +91,7 @@ else
     </div>
 
     <section class="admin-card log-management__surface">
+        <AdminInlineStatus TargetId="remembered-devices-load" Retry="LoadDevicesAsync" Retrying="_loadingDevices" RetryText="@T("Retry")" />
         @if (_loadingDevices)
         {
             <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
@@ -174,6 +176,7 @@ else
 
     private async Task LoadDevicesAsync()
     {
+        Http.ClearInlineStatus("remembered-devices-load");
         _loadingDevices = true;
         var response = await Users.GetRememberedDevicesAsync(_devicePage, 25);
         if (response.Success && response.Data is not null)
@@ -184,12 +187,13 @@ else
             _deviceTotalPages = response.Data.TotalPages;
             _selectedDevices.RemoveWhere(id => _devices.All(item => item.Id != id));
         }
-        else Http.Notify(response.Message, response.StatusCode);
+        else Http.NotifyInline(response, "remembered-devices-load");
         _loadingDevices = false;
     }
 
     private async Task LoadAsync()
     {
+        Http.ClearInlineStatus("active-sessions-load");
         _loading = true;
         var response = await Users.GetSessionsAsync(_page, 25);
         if (response.Success && response.Data is not null)
@@ -200,7 +204,7 @@ else
             _totalPages = response.Data.TotalPages;
             _selected.RemoveWhere(id => _items.All(item => item.Id != id));
         }
-        else Http.Notify(response.Message, response.StatusCode);
+        else Http.NotifyInline(response, "active-sessions-load");
         _loading = false;
     }
 
@@ -214,7 +218,7 @@ else
         if (!Auth.IsAdminAdmin || _selected.Count == 0) return;
         _deleting = true;
         var response = await Users.DeleteSessionsAsync(_selected);
-        Http.Notify(response.Message, response.StatusCode);
+        Http.Notify(response);
         if (response.Success) { _selected.Clear(); await LoadAsync(); }
         _deleting = false;
     }
@@ -224,7 +228,7 @@ else
         if (!Auth.IsAdminAdmin || _selectedDevices.Count == 0) return;
         _revokingDevices = true;
         var response = await Users.RevokeRememberedDevicesAsync(_selectedDevices);
-        Http.Notify(response.Message, response.StatusCode);
+        Http.Notify(response);
         if (response.Success) { _selectedDevices.Clear(); await LoadDevicesAsync(); }
         _revokingDevices = false;
     }

@@ -63,6 +63,7 @@ else
     </section>
 
     <section class="admin-card log-management__surface">
+        <AdminInlineStatus TargetId="login-activity-load" Retry="LoadAsync" Retrying="_loading" RetryText="@T("Retry")" />
         @if (_loading)
         {
             <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
@@ -156,6 +157,7 @@ else
 
     private async Task LoadAsync()
     {
+        Http.ClearInlineStatus("login-activity-load");
         _loading = true;
         var response = await Logs.GetLoginActivityAsync(Filter());
         if (response.Success && response.Data is not null)
@@ -165,7 +167,7 @@ else
             _hasMore = response.Data.HasMore;
             _nextCursor = response.Data.NextCursor;
         }
-        else Http.Notify(response.Message, response.StatusCode);
+        else Http.NotifyInline(response, "login-activity-load");
         _loading = false;
     }
 
@@ -215,7 +217,7 @@ else
             });
             if (result.Success)
                 await JS.InvokeVoidAsync("adminDownloads.downloadBase64", result.FileName, result.ContentType, Convert.ToBase64String(result.Bytes));
-            else Http.Notify(result.Message, result.StatusCode);
+            else Http.Notify(result.ToApiResponse());
         }
         finally { _exporting = false; }
     }

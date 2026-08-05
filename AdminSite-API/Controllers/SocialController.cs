@@ -47,9 +47,9 @@ namespace FullProject.Controllers
             {
                 created = await _service.CreateAsync(dto);
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException)
             {
-                return BadRequest(ApiResult.BadRequest(exception.Message));
+                return BadRequest(ApiResult.BadRequest("The social button settings are invalid."));
             }
             return Ok(ApiResult.Created(MapToDto(created), "Social button created."));
         }
@@ -63,9 +63,9 @@ namespace FullProject.Controllers
             {
                 updated = await _service.UpdateAsync(buttonId, dto);
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException)
             {
-                return BadRequest(ApiResult.BadRequest(exception.Message));
+                return BadRequest(ApiResult.BadRequest("The social button settings are invalid."));
             }
             if (updated is null) return NotFound(ApiResult.NotFound("Social button not found."));
             return Ok(ApiResult.Ok(MapToDto(updated)));

@@ -29,6 +29,7 @@ else
     </section>
     <section class="admin-card">
         <div class="admin-card-title">@T("LastRetentionRun")</div>
+        <AdminInlineStatus TargetId="retention-status-load" Retry="LoadAsync" Retrying="_loading" RetryText="@T("Retry")" />
         @if (_loading)
         {
             <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
@@ -63,10 +64,11 @@ else
 
     private async Task LoadAsync()
     {
+        Http.ClearInlineStatus("retention-status-load");
         _loading = true;
         var response = await Logs.GetRetentionAsync();
         if (response.Success) _status = response.Data;
-        else Http.Notify(response.Message, response.StatusCode);
+        else Http.NotifyInline(response, "retention-status-load");
         _loading = false;
     }
 
@@ -74,7 +76,7 @@ else
     {
         _running = true;
         var response = await Logs.RunRetentionAsync();
-        Http.Notify(response.Message, response.StatusCode);
+        Http.Notify(response);
         if (response.Success) _status = response.Data;
         _running = false;
     }

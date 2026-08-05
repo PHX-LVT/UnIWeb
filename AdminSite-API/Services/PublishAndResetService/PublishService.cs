@@ -3,6 +3,7 @@ using FullProject.Models;
 using FullProject.Services.AssetService;
 using FullProject.Services.CloneServices;
 using FullProject.Services.BlockServices;
+using FullProject.Services.SectionServices;
 using MongoDB.Driver;
 
 namespace FullProject.Services.PublishAndResetService
@@ -13,17 +14,20 @@ namespace FullProject.Services.PublishAndResetService
         private readonly AssetCleanupService _assetCleanup;
         private readonly PageGraphCloneService _cloneService;
         private readonly PageGraphPublishDiffService _publishDiff;
+        private readonly ILogger<PublishService> _logger;
 
         public PublishService(
             MongoDbContext context,
             AssetCleanupService assetCleanup,
             PageGraphCloneService cloneService,
-            PageGraphPublishDiffService publishDiff)
+            PageGraphPublishDiffService publishDiff,
+            ILogger<PublishService> logger)
         {
             _context = context;
             _assetCleanup = assetCleanup;
             _cloneService = cloneService;
             _publishDiff = publishDiff;
+            _logger = logger;
         }
 
         public async Task<PublishResult> PublishPageAsync(string pageId)
@@ -113,7 +117,8 @@ namespace FullProject.Services.PublishAndResetService
             catch (Exception ex)
             {
                 await session.AbortTransactionAsync();
-                return PublishResult.Fail($"Publish failed: {ex.Message}");
+                _logger.LogError(ex, "Page publish failed for Page {PageId}", pageId);
+                return PublishResult.Fail("Publish failed: the page could not be stored.");
             }
 
             await _assetCleanup.DeleteUnusedPageGraphAssetsAsync(replacedPages, replacedSections, replacedBlocks);
@@ -301,6 +306,7 @@ namespace FullProject.Services.PublishAndResetService
                         CardBackgroundType = draftChild.Card.CardBackgroundType,
                         CardBackgroundColor = draftChild.Card.CardBackgroundColor,
                         CardImageUrl = draftChild.Card.CardImageUrl,
+                        CardImagePlacement = draftChild.Card.CardImagePlacement is null ? null : MediaPlacementPolicy.Normalize(draftChild.Card.CardImagePlacement),
                         IsCustomized = draftChild.Card.IsCustomized
                     } : null)
                     .Set(p => p.UpdatedAt, DateTime.UtcNow);

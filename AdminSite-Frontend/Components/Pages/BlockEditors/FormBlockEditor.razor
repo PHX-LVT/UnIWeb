@@ -101,7 +101,7 @@ else if (!string.IsNullOrWhiteSpace(_formDefinitionId))
                 Visible = Block.Visible,
                 Authoring = BlockUpdateDtoMapper.ToAuthoringDto(Block.Authoring)
             });
-            Http.Notify(response.Message, response.StatusCode);
+            Http.Notify(response);
             if (response.Success)
             {
                 if (response.Data is not null)

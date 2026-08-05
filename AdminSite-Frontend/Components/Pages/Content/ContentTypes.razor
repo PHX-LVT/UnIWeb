@@ -16,6 +16,7 @@
 }
 else
 {
+<AdminInlineStatus TargetId="content-types-load" Retry="LoadTypes" Retrying="_loading" RetryText="@T("Retry")" />
 <div style="display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:1rem;align-items:start">
     <div class="admin-card">
         <h2 style="font-size:1rem;margin:0 0 1rem">@T(_editingId is null ? "CreateType" : "EditType")</h2>
@@ -103,7 +104,7 @@ else
         {
             <p class="text-muted">@T("Loading")</p>
         }
-        else if (!_types.Any())
+        else if (!_loadFailed && !_types.Any())
         {
             <p class="text-muted">@T("NoContentTypesYet")</p>
         }
@@ -153,6 +154,7 @@ else
     private ContentTypeRequest _edit = new();
     private string? _editingId;
     private bool _loading = true;
+    private bool _loadFailed;
 
     private string T(string key) => AdminUiLocalizer.T(key, AdminLanguage);
     private string CurrentLang => NormalizeLang(AdminLanguage);
@@ -170,9 +172,17 @@ else
 
     private async Task LoadTypes()
     {
+        Http.ClearInlineStatus("content-types-load");
         _loading = true;
         var res = await ContentService.GetTypesAsync();
-        _types = res.Data ?? new();
+        _loadFailed = !res.Success;
+        if (res.Success)
+            _types = res.Data ?? new();
+        else
+        {
+            _types = new();
+            Http.NotifyInline(res, "content-types-load");
+        }
         _loading = false;
     }
 
@@ -209,7 +219,7 @@ else
             ? await ContentService.CreateTypeAsync(_edit)
             : await ContentService.UpdateTypeAsync(_editingId, _edit);
 
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             NewType();
@@ -222,7 +232,7 @@ else
         if (_editingId is null) return;
 
         var res = await ContentService.DeleteTypeAsync(_editingId);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
         {
             NewType();

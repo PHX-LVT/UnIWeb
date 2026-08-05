@@ -474,6 +474,7 @@ namespace FullProject.Services.PublicService
                             Title = item.Title,
                             Description = item.Description,
                             ImageUrl = item.ImageUrl,
+                            ImagePlacement = MediaPlacementPolicy.ToPublic(item.ImagePlacement),
                             LinkHref = item.LinkHref,
                             Order = item.Order
                         })
@@ -551,6 +552,7 @@ namespace FullProject.Services.PublicService
                             Title = item.Title,
                             Description = item.Description,
                             ImageUrl = item.ImageUrl,
+                            ImagePlacement = MediaPlacementPolicy.ToPublic(item.ImagePlacement),
                             LinkHref = item.LinkHref,
                             Order = item.Order,
                             Metrics = item.Metrics
@@ -608,6 +610,7 @@ namespace FullProject.Services.PublicService
                             Title = item.Title,
                             Description = item.Description,
                             ImageUrl = item.ImageUrl,
+                            ImagePlacement = MediaPlacementPolicy.ToPublic(item.ImagePlacement),
                             BadgeText = item.BadgeText,
                             Highlighted = item.Highlighted,
                             Order = item.Order
@@ -1397,7 +1400,8 @@ namespace FullProject.Services.PublicService
             CardContent = HasValues(itemOverride?.CardContent) ? itemOverride!.CardContent : fallback?.CardContent ?? new Dictionary<string, string>(),
             CardBackgroundType = !string.IsNullOrWhiteSpace(itemOverride?.CardBackgroundType) ? itemOverride!.CardBackgroundType : fallback?.CardBackgroundType,
             CardBackgroundColor = !string.IsNullOrWhiteSpace(itemOverride?.CardBackgroundColor) ? itemOverride!.CardBackgroundColor : fallback?.CardBackgroundColor,
-            CardImageUrl = itemOverride?.CardImageUrl ?? fallback?.CardImageUrl
+            CardImageUrl = itemOverride?.CardImageUrl ?? fallback?.CardImageUrl,
+            CardImagePlacement = MediaPlacementPolicy.ToPublic(itemOverride?.CardImagePlacement ?? fallback?.CardImagePlacement)
         };
 
         private static bool HasValues(Dictionary<string, string>? value) =>
@@ -1468,7 +1472,12 @@ namespace FullProject.Services.PublicService
                     Caption = image.Caption,
                     OpenInLightbox = image.OpenInLightbox,
                     FocalPointX = image.FocalPointX,
-                    FocalPointY = image.FocalPointY
+                    FocalPointY = image.FocalPointY,
+                    ImagePlacement = MediaPlacementPolicy.ToPublic(image.ImagePlacement ?? new MediaPlacement
+                    {
+                        FocalPointX = image.FocalPointX,
+                        FocalPointY = image.FocalPointY
+                    })
                 },
                 VideoBlock video => new PublicVideoBlockDto
                 {
@@ -1521,6 +1530,7 @@ namespace FullProject.Services.PublicService
                     Description = card.Description,
                     ImageUrl = card.ImageUrl,
                     Asset = BlockAssetMetadataService.ToPublic(card.Asset),
+                    ImagePlacement = MediaPlacementPolicy.ToPublic(card.ImagePlacement),
                     ImageAltText = card.ImageAltText,
                     ButtonLabel = card.ButtonLabel,
                     Href = card.Href,

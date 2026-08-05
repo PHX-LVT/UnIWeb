@@ -1,8 +1,10 @@
 @using Microsoft.AspNetCore.Components.Forms
+@using Contracts.Admin
 @inject AdminSectionService SectionService
 @inject AdminPageService PageService
 @inject IHttpService Http
 @inject AdminFormSubmissionService FormService
+@inject DirectResourceUploadService DirectUploads
 
 <section class="ez-content-editor__text">
     <h3>@T("SectionText")</h3>
@@ -185,8 +187,7 @@
                                 <div class="showcase-child-card__placeholder">@T("NoImage")</div>
                             }
                             <div class="showcase-child-card__media-actions">
-                                <InputFile @key="card.UploadVersion"
-                                           id="@UploadInputId(card)"
+                                <InputFile id="@UploadInputId(card)"
                                            class="showcase-child-card__file-input"
                                            OnChange="async e => await OnCardImageSelected(e, card)"
                                            disabled="@IsUploading(card)"
@@ -200,6 +201,10 @@
                                         @onclick="() => OpenResourcePicker(card)">
                                     <i class="fas fa-photo-film"></i> @T("ChooseFromResourceLibrary")
                                 </button>
+                                <MediaCropField ImageUrl="@(card.CardImageUrl ?? string.Empty)"
+                                                Value="card.CardImagePlacement"
+                                                ValueChanged="value => SetCardImagePlacement(card, value)"
+                                                AspectRatio="@(16d / 10d)" />
                                 @if (!string.IsNullOrWhiteSpace(card.CardImageUrl))
                                 {
                                     <button type="button"
@@ -404,6 +409,7 @@
                         CardBackgroundType = NormalizeBackgroundType(itemOverride?.CardBackgroundType ?? p.Card?.CardBackgroundType, cardImageUrl),
                         CardBackgroundColor = NormalizeBackgroundColor(itemOverride?.CardBackgroundColor ?? p.Card?.CardBackgroundColor),
                         CardImageUrl = cardImageUrl,
+                        CardImagePlacement = MediaPlacementModelMapper.Clone(itemOverride?.CardImagePlacement ?? p.Card?.CardImagePlacement),
                         IsCustomized = itemOverride is not null || p.Card?.IsCustomized == true
                     };
                 })
@@ -444,11 +450,12 @@
                     CardContent = card.CardContent,
                     CardBackgroundType = NormalizeBackgroundType(card.CardBackgroundType, card.CardImageUrl),
                     CardBackgroundColor = NormalizeBackgroundColor(card.CardBackgroundColor),
-                    CardImageUrl = card.CardImageUrl
+                    CardImageUrl = card.CardImageUrl,
+                    CardImagePlacement = MediaPlacementModelMapper.ToAdmin(card.CardImagePlacement)
                 }).ToList()
             });
 
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally
@@ -462,7 +469,7 @@
         if (string.IsNullOrWhiteSpace(_sourcePageId)) return;
 
         var res = await PageService.ResetChildCardAsync(_sourcePageId, card.Id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.Success)
             await LoadChildrenAsync(_sourcePageId);
     }
@@ -471,25 +478,21 @@
     {
         if (_uploadingCardId is not null) return;
 
-        var file = e.File;
-        const long max = 5 * 1024 * 1024;
-        if (file.Size > max)
-        {
-            Http.Notify(T("ImageTooLarge"), 422);
-            return;
-        }
-
         _uploadingCardId = card.Id;
         try
         {
-            var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=showcase", file, maxBytes: max);
+            var res = await DirectUploads.UploadInputAsync(
+                UploadInputId(card),
+                "image",
+                uploadContext: ResourceUploadContextCodes.ContentSectionShowcase);
             if (!res.Success || res.Data is null)
             {
-                Http.Notify(res.Message ?? T("NotificationImageUploadFailed"), res.StatusCode);
+                Http.Notify(res, failureFallback: T("NotificationImageUploadFailed"));
                 return;
             }
 
             card.CardImageUrl = res.Data.Url;
+            card.CardImagePlacement = MediaCropEditor.DefaultPlacement();
             card.CardBackgroundType = "image";
             ContentSession?.MarkDirty();
         }
@@ -499,7 +502,6 @@
         }
         finally
         {
-            card.UploadVersion++;
             _uploadingCardId = null;
         }
     }
@@ -507,7 +509,7 @@
     private void ClearCardImage(ShowcaseChildCardModel card)
     {
         card.CardImageUrl = string.Empty;
-        card.UploadVersion++;
+        card.CardImagePlacement = null;
         ContentSession?.MarkDirty();
     }
 
@@ -527,6 +529,7 @@
     {
         if (_resourcePickerCard is null) return;
         _resourcePickerCard.CardImageUrl = resource.Url;
+        _resourcePickerCard.CardImagePlacement = MediaCropEditor.DefaultPlacement();
         _resourcePickerCard.CardBackgroundType = "image";
         ContentSession?.MarkDirty();
     }
@@ -553,6 +556,12 @@
         if (string.Equals(_layout, normalized, StringComparison.Ordinal)) return;
         _layout = normalized;
         _columns = Math.Clamp(_columns, 1, ColumnMax);
+        ContentSession?.MarkDirty();
+    }
+
+    private void SetCardImagePlacement(ShowcaseChildCardModel card, MediaPlacementModel? value)
+    {
+        card.CardImagePlacement = MediaPlacementModelMapper.Clone(value);
         ContentSession?.MarkDirty();
     }
 
@@ -645,8 +654,8 @@
         public string CardBackgroundType { get; set; } = "color";
         public string CardBackgroundColor { get; set; } = "#ffffff";
         public string? CardImageUrl { get; set; }
+        public MediaPlacementModel? CardImagePlacement { get; set; }
         public bool IsCustomized { get; set; }
-        public int UploadVersion { get; set; }
     }
 }
 

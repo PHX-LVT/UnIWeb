@@ -174,18 +174,20 @@
         await Task.WhenAll(catalogTask, pagesTask, contentTypesTask);
 
         var catalog = await catalogTask;
-        if (!catalog.Success || catalog.Data is null)
+        var pages = await pagesTask;
+        var contentTypes = await contentTypesTask;
+        if (!catalog.Success || catalog.Data is null || !pages.Success || !contentTypes.Success)
         {
-            _error = string.IsNullOrWhiteSpace(catalog.Message) ? "The Section catalogue could not be loaded." : catalog.Message;
+            _error = "The Section catalogue could not be loaded. Please retry.";
             _loading = false;
             return;
         }
 
         _catalog = catalog.Data;
         _pages.Clear();
-        _pages.AddRange((await pagesTask).Data ?? new());
+        _pages.AddRange(pages.Data ?? new());
         _contentTypes.Clear();
-        _contentTypes.AddRange(((await contentTypesTask).Data ?? new()).Where(type => type.Visible));
+        _contentTypes.AddRange((contentTypes.Data ?? new()).Where(type => type.Visible));
         _loading = false;
     }
 

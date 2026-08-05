@@ -79,7 +79,8 @@ namespace FullProject.Services
             string resourceId,
             string assetId,
             int assetVersion,
-            int storageSchemaVersion)
+            int storageSchemaVersion,
+            string? originContext = null)
         {
             if (!ObjectId.TryParse(resourceId, out _) || !ObjectId.TryParse(assetId, out _))
                 return (null, ["The reserved resource identity is invalid."]);
@@ -91,6 +92,9 @@ namespace FullProject.Services
                 resource.AssetId = assetId;
                 resource.AssetVersion = Math.Max(1, assetVersion);
                 resource.StorageSchemaVersion = Math.Max(1, storageSchemaVersion);
+                resource.OriginContext = string.IsNullOrWhiteSpace(originContext)
+                    ? null
+                    : originContext.Trim().ToLowerInvariant();
                 await _validation.AddAlbumAssignmentErrorsAsync(resource, errors);
             }
             if (errors.Count > 0) return (null, errors);
@@ -181,6 +185,17 @@ namespace FullProject.Services
 
         public Task<Dictionary<string, int>> GetUsageCountsAsync(IEnumerable<ManagedResource> resources) =>
             _usage.GetUsageCountsAsync(resources);
+
+        public Task<int> ReconcileUploadReplacementAsync(ManagedResource resource, string? previousUrl)
+        {
+            if (string.IsNullOrWhiteSpace(previousUrl) ||
+                string.Equals(previousUrl, resource.Url, StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(0);
+            }
+
+            return PropagateUploadReplacementAsync(resource, previousUrl);
+        }
 
         public async Task<(int UpdatedCount, List<string> Errors)> AssignToAlbumAsync(string albumId, IEnumerable<string>? resourceIds, string actorId)
             => await MoveToAlbumAsync(albumId, resourceIds, actorId);
@@ -283,6 +298,61 @@ namespace FullProject.Services
             if (!isCustomIcon)
                 await _assetCleanup.DeleteUnusedAsync([resource.Url, resource.ThumbnailUrl]);
             return (true, usage, []);
+        }
+
+        public async Task<(ResourceAlbumDeleteResultDto Result, ResourceAlbum? Album, List<string> Errors)> DeleteAlbumWithResourcesAsync(string id)
+        {
+            var result = new ResourceAlbumDeleteResultDto { AlbumId = id };
+            var album = await _albums.GetByIdAsync(id);
+            if (album is null) return (result, null, ["Album not found."]);
+            if (album.IsSystemRoot)
+                return (result, album, ["System root albums cannot be deleted."]);
+
+            var resources = await _context.ManagedResources
+                .Find(resource => resource.AlbumId == id)
+                .ToListAsync();
+            result.ResourceCount = resources.Count;
+
+            var usageCounts = await _usage.GetUsageCountsAsync(resources);
+            var blocked = resources
+                .Where(resource => usageCounts.GetValueOrDefault(resource.Id) > 0)
+                .ToList();
+            result.BlockedResourceCount = blocked.Count;
+            if (blocked.Count > 0)
+            {
+                var names = blocked
+                    .Take(5)
+                    .Select(resource => resource.Name.GetValueOrDefault("en") ?? resource.FileName ?? resource.Id)
+                    .Where(name => !string.IsNullOrWhiteSpace(name));
+                var examples = string.Join(", ", names);
+                var detail = string.IsNullOrWhiteSpace(examples) ? string.Empty : $" Used resources include: {examples}.";
+                return (result, album,
+                [
+                    $"Album cannot be deleted because {blocked.Count} contained resource(s) are used elsewhere in the project.{detail}"
+                ]);
+            }
+
+            var errors = new List<string>();
+            foreach (var resource in resources)
+            {
+                var (deleted, usage, resourceErrors) = await DeleteAsync(resource.Id);
+                if (deleted)
+                {
+                    result.DeletedResourceCount++;
+                    continue;
+                }
+
+                if ((usage?.UsageCount ?? 0) > 0)
+                    result.BlockedResourceCount++;
+                errors.AddRange(resourceErrors.Select(error => $"{resource.Name.GetValueOrDefault("en") ?? resource.FileName ?? resource.Id}: {error}"));
+            }
+
+            if (errors.Count > 0)
+                return (result, album, errors);
+
+            var (albumDeleted, albumErrors) = await _albums.DeleteRecordAsync(id);
+            result.Deleted = albumDeleted;
+            return (result, album, albumErrors);
         }
 
         public ManagedResourceCreateDto BuildUploadCreateDto(string url, string storageKey, string kind, string fileName, string contentType, long sizeBytes, string? albumId = null, string? purpose = null) =>

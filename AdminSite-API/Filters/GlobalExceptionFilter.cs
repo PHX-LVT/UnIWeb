@@ -16,9 +16,14 @@ namespace FullProject.Filters
         public void OnException(ExceptionContext context)
         {
             _logger.LogError(context.Exception,
-                "Unhandled exception: {Message}", context.Exception.Message);
+                "Unhandled API exception. TraceId: {TraceId}",
+                context.HttpContext.TraceIdentifier);
 
-            var response = ApiResult.ServerError("An unexpected error occurred.");
+            var response = ApiResult.ServerError("Operation failed: an unexpected system error occurred.")
+                .WithOutcome("unexpected-error");
+            response.NotificationKey = "NotificationActionFailed";
+            response.NotificationArgs = ["@action:operation.changed", "@reason:unexpected-error"];
+            response.TraceId = context.HttpContext.TraceIdentifier;
             context.Result = new ObjectResult(response) { StatusCode = 500 };
             context.ExceptionHandled = true;
         }

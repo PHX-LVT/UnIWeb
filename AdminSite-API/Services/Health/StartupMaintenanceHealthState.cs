@@ -10,13 +10,8 @@ public sealed class StartupMaintenanceHealthState : IHealthCheck
 
     public void MarkSucceeded(string operation) => _failures.TryRemove(operation, out _);
 
-    public void MarkDegraded(string operation, Exception exception)
-    {
-        var message = string.IsNullOrWhiteSpace(exception.Message)
-            ? exception.GetType().Name
-            : exception.Message;
-        _failures[operation] = message.Length <= 300 ? message : message[..300];
-    }
+    public void MarkDegraded(string operation, Exception exception) =>
+        _failures[operation] = "maintenance-failed";
 
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,

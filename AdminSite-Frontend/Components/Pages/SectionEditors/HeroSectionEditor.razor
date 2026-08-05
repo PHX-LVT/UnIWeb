@@ -1,6 +1,8 @@
+@using Contracts.Admin
 @inject AdminSectionService SectionService
 @inject IHttpService Http
 @inject AdminFormSubmissionService FormService
+@inject DirectResourceUploadService DirectUploads
 
 <section class="ez-content-editor__text">
     <h3>@T("SectionText")</h3>
@@ -275,10 +277,10 @@
 
     private async Task OnImageSelected(InputFileChangeEventArgs e)
     {
-        var file = e.File;
-        if (file.Size > 5 * 1024 * 1024) return;
-
-        var res = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=hero", file, maxBytes: 5 * 1024 * 1024);
+        var res = await DirectUploads.UploadInputAsync(
+            "hero-section-image-upload",
+            "image",
+            uploadContext: ResourceUploadContextCodes.ContentSectionHeroMedia);
         if (res.Success && res.Data is not null)
         {
             _imageUrl = res.Data.Url;
@@ -289,7 +291,7 @@
         }
         else
         {
-            Http.Notify(res.Message ?? T("NotificationImageUploadFailed"), res.StatusCode);
+            Http.Notify(res, failureFallback: T("NotificationImageUploadFailed"));
         }
     }
 
@@ -350,7 +352,7 @@
                 Visible = Section.Visible
             };
             var res = await SectionService.UpdateAsync(PageId, Section.Id, dto);
-            Http.Notify(res.Message, res.StatusCode);
+            Http.Notify(res);
             if (res.Success) await OnSaved.InvokeAsync();
         }
         finally

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Contracts.Auth;
+using FullProject.Services.SectionServices;
 
 namespace FullProject.Controllers
 {
@@ -235,6 +236,7 @@ namespace FullProject.Controllers
                 CardBackgroundType = p.Card.CardBackgroundType,
                 CardBackgroundColor = p.Card.CardBackgroundColor,
                 CardImageUrl = p.Card.CardImageUrl,
+                CardImagePlacement = MediaPlacementPolicy.ToAdmin(p.Card.CardImagePlacement),
                 IsCustomized = p.Card.IsCustomized
             } : null
         };

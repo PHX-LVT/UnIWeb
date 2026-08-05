@@ -15,8 +15,12 @@ public sealed class LogRetentionService
     private readonly IMongoCollection<AdminLoginActivityEvent> _loginArchive;
     private readonly IMongoCollection<AdminLogRetentionLedger> _ledger;
     private readonly LogManagementSettings _settings;
+    private readonly ILogger<LogRetentionService> _logger;
 
-    public LogRetentionService(IMongoDatabase database, IOptions<LogManagementSettings> settings)
+    public LogRetentionService(
+        IMongoDatabase database,
+        IOptions<LogManagementSettings> settings,
+        ILogger<LogRetentionService> logger)
     {
         _audit = database.GetCollection<AdminAuditEvent>("admin_audit_events");
         _login = database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_events");
@@ -24,6 +28,7 @@ public sealed class LogRetentionService
         _loginArchive = database.GetCollection<AdminLoginActivityEvent>("admin_login_activity_event_archives");
         _ledger = database.GetCollection<AdminLogRetentionLedger>("admin_log_retention_ledger");
         _settings = settings.Value;
+        _logger = logger;
     }
 
     public async Task<AdminLogRetentionStatusResponse> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -62,8 +67,9 @@ public sealed class LogRetentionService
         catch (Exception ex)
         {
             run.Status = "Failed";
-            run.Error = ex.Message.Length <= 500 ? ex.Message : ex.Message[..500];
+            run.Error = "Retention failed: archived logs could not be updated.";
             run.CompletedAtUtc = DateTime.UtcNow;
+            _logger.LogError(ex, "Log retention run {RunId} failed.", run.Id);
             throw;
         }
         finally

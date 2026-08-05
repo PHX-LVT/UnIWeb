@@ -1,5 +1,6 @@
 @page "/forms/definitions"
 @implements IAsyncDisposable
+@using Contracts.Api
 @using Contracts.Forms
 @using System.Text.Json
 @inject AdminFormSubmissionService FormService
@@ -7,6 +8,7 @@
 @inject AdminAuthService Auth
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ILogger<FormDefinitions> Logger
 
 <NavigationLock ConfirmExternalNavigation="@IsDirty" OnBeforeInternalNavigation="HandleInternalNavigation" />
 
@@ -73,6 +75,9 @@ else
         </div>
     </div>
 
+    <AdminInlineStatus TargetId="form-types-load" Retry="LoadInputTypesAsync" RetryText="@T("Retry")" />
+    <AdminInlineStatus TargetId="form-definitions-load" Retry="() => LoadDefinitionsAsync()" Retrying="_loading" RetryText="@T("Retry")" />
+    <AdminValidationSummary Errors="_fieldErrors" Title="@T("ValidationFailed")" />
     @if (_loading)
     {
         <div class="admin-data-empty">@T("Loading")</div>
@@ -452,6 +457,7 @@ else
     private FormDefinitionUsageModel? _usage;
     private bool _hasAccess = true;
     private bool _loading = true;
+    private IReadOnlyList<ApiFieldError>? _fieldErrors;
     private bool _usageExpanded;
     private bool _usageLoading;
     private bool _saving;
@@ -537,15 +543,16 @@ else
                 _sortableReference,
                 CanReorderDefinitions);
         }
-        catch (JSException)
+        catch (JSException exception)
         {
-            // A tab opened before deployment may still hold the previous script.
-            // The versioned script is loaded on the next normal page refresh.
+            Logger.LogWarning(exception, "Form Definition drag sorting failed to initialize.");
+            Http.Notify(T("NotificationDefinitionSortingInitFailed"), 500);
         }
     }
 
     private async Task LoadInputTypesAsync()
     {
+        Http.ClearInlineStatus("form-types-load");
         var result = await FormService.GetInputTypesAsync();
         if (result.Success && result.Data is { Count: > 0 })
         {
@@ -554,16 +561,18 @@ else
         }
 
         _fieldTypes = BuildFallbackTypes();
-        Http.Notify(result.Message, result.StatusCode);
+        Http.NotifyInline(result, "form-types-load");
     }
 
     private async Task LoadDefinitionsAsync(string? preferredDefinitionId = null)
     {
+        Http.ClearInlineStatus("form-definitions-load");
+        _fieldErrors = null;
         _loading = true;
         var definitions = await FormService.GetDefinitionsAsync();
         if (!definitions.Success)
         {
-            Http.Notify(definitions.Message, definitions.StatusCode);
+            Http.NotifyInline(definitions, "form-definitions-load");
             if (definitions.StatusCode is 401 or 403)
                 _hasAccess = false;
             _loading = false;
@@ -586,6 +595,7 @@ else
                 PersistentOrderAvailable = false,
                 WritesEnabled = false
             };
+            Http.NotifyInline(orderResult, "form-definitions-load");
         }
         _expandedOptionFields.Clear();
         _newUnsavedFields.Clear();
@@ -787,7 +797,7 @@ else
         _definitions = previous;
         if (result.Data is not null) _definitionOrder = result.Data;
         _definitionSortableRefreshPending = true;
-        Http.Notify(result.Message, result.StatusCode);
+        Http.Notify(result);
         await InvokeAsync(StateHasChanged);
         return false;
     }
@@ -827,7 +837,7 @@ else
         _definitions = previous;
         if (result.Data is not null) _definitionOrder = result.Data;
         _definitionSortableRefreshPending = true;
-        Http.Notify(result.Message, result.StatusCode);
+        Http.Notify(result);
     }
 
     private Task HandleDefinitionKeyDown(KeyboardEventArgs args, string definitionId)
@@ -947,6 +957,7 @@ else
     private async Task<bool> SaveDefinitionAsync()
     {
         if (!Auth.CanEditFormDefinitions || _editingDefinition is null || _saving) return false;
+        _fieldErrors = null;
 
         NormalizeEditingFields();
         EnsureEditingV2Coverage();
@@ -961,8 +972,12 @@ else
         try
         {
             var res = await FormService.SaveDefinitionAsync(_editingDefinition);
-            Http.Notify(res.Message, res.StatusCode);
-            if (res.StatusCode is not (>= 200 and < 300)) return false;
+            Http.Notify(res);
+            if (res.StatusCode is not (>= 200 and < 300))
+            {
+                _fieldErrors = res.FieldErrors;
+                return false;
+            }
             await LoadDefinitionsAsync(res.Data?.Id);
             return true;
         }
@@ -982,7 +997,7 @@ else
     {
         if (!CanDeleteDefinition || _editingDefinition is null) return;
         var res = await FormService.DeleteDefinitionAsync(_editingDefinition.Id);
-        Http.Notify(res.Message, res.StatusCode);
+        Http.Notify(res);
         if (res.StatusCode is >= 200 and < 300)
         {
             _editingDefinition = null;

@@ -31,7 +31,7 @@ public sealed class IconAppearanceDto
     public string BackgroundMode { get; set; } = "none";
     public string BackgroundThemeRole { get; set; } = "surface";
     public string? BackgroundColor { get; set; }
-    public string Shape { get; set; } = "none";
+    public string Shape { get; set; } = "square";
 }
 
 public sealed class PublicIconReferenceDto

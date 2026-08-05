@@ -21,10 +21,7 @@ public sealed class LogPersistenceHealthState : IHealthCheck
     {
         lock (_gate)
         {
-            var message = string.IsNullOrWhiteSpace(exception.Message)
-                ? exception.GetType().Name
-                : exception.Message;
-            _lastFailure = message.Length <= 300 ? message : message[..300];
+            _lastFailure = "persistence-failed";
             _failedAtUtc = DateTime.UtcNow;
         }
     }

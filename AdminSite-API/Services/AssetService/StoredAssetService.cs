@@ -66,12 +66,29 @@ public sealed class StoredAssetService
     public async Task MarkSupersededAsync(string? storageKey, DateTime deleteAfterUtc, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(storageKey)) return;
+        var now = DateTime.UtcNow;
         await _context.StoredAssets.UpdateOneAsync(
             item => item.StorageKey == storageKey,
             Builders<StoredAsset>.Update
+                .SetOnInsert(item => item.Id, ObjectId.GenerateNewId().ToString())
+                .SetOnInsert(item => item.SchemaVersion, 2)
+                .SetOnInsert(item => item.OwnerDomain, "resource-library")
+                .SetOnInsert(item => item.OwnerType, "superseded-object")
+                .SetOnInsert(item => item.OwnerId, string.Empty)
+                .SetOnInsert(item => item.Role, "replacement")
+                .SetOnInsert(item => item.AssetVersion, 1)
+                .SetOnInsert(item => item.StorageKey, storageKey)
+                .SetOnInsert(item => item.PublicUrl, string.Empty)
+                .SetOnInsert(item => item.OriginalFileName, Path.GetFileName(storageKey))
+                .SetOnInsert(item => item.StoredFileName, Path.GetFileName(storageKey))
+                .SetOnInsert(item => item.ContentType, "application/octet-stream")
+                .SetOnInsert(item => item.SizeBytes, 0)
+                .SetOnInsert(item => item.CreatedById, "system")
+                .SetOnInsert(item => item.CreatedAt, now)
                 .Set(item => item.LifecycleStatus, "superseded")
                 .Set(item => item.DeleteAfterUtc, deleteAfterUtc)
-                .Set(item => item.UpdatedAt, DateTime.UtcNow),
+                .Set(item => item.UpdatedAt, now),
+            new UpdateOptions { IsUpsert = true },
             cancellationToken: cancellationToken);
     }
 

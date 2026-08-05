@@ -14,6 +14,8 @@
     </div>
 </div>
 
+<AdminInlineStatus TargetId="content-preview-load" Retry="LoadAsync" Retrying="_loading" RetryText="@T("Retry")" />
+
 @if (!Auth.CanViewContent)
 {
     <div class="admin-card">
@@ -26,7 +28,7 @@ else if (_loading)
         <p class="text-muted">@T("Loading")</p>
     </div>
 }
-else
+else if (!_loadFailed)
 {
     <div class="content-preview-workspace">
         <aside class="admin-card content-preview-list">
@@ -112,6 +114,7 @@ else
     private readonly List<ContentItemModel> _items = new();
     private ContentItemModel? _selected;
     private bool _loading = true;
+    private bool _loadFailed;
     private bool _previewViewportInitialized;
     private ElementReference _previewViewport;
     private string _search = string.Empty;
@@ -172,13 +175,21 @@ else
 
     private async Task LoadAsync()
     {
+        Http.ClearInlineStatus("content-preview-load");
         _loading = true;
+        _loadFailed = false;
 
         var typeRes = await ContentService.GetTypesAsync();
         if (typeRes.Success && typeRes.Data is not null)
         {
             _types.Clear();
             _types.AddRange(typeRes.Data);
+        }
+        else
+        {
+            _types.Clear();
+            _loadFailed = true;
+            Http.NotifyInline(typeRes, "content-preview-load");
         }
 
         var itemRes = await ContentService.GetAllAsync(status: "Published", scope: "all");
@@ -189,7 +200,9 @@ else
         }
         else
         {
-            Http.Notify(itemRes.Message, itemRes.StatusCode);
+            _items.Clear();
+            _loadFailed = true;
+            Http.NotifyInline(itemRes, "content-preview-load");
         }
 
         ApplySelection();

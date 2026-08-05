@@ -1,5 +1,7 @@
 @using System.Globalization
+@using Contracts.Admin
 @inject IHttpService Http
+@inject DirectResourceUploadService DirectUploads
 
 <div class="section-design" data-section-design>
     <header class="section-design__intro">
@@ -259,7 +261,6 @@
     private bool _resourcePickerOpen;
     private bool _cropEditorOpen;
     private string _resourcePickerKind = "image";
-    private const long MaxBackgroundImageBytes = 5L * 1024 * 1024;
     private const long MaxBackgroundVideoBytes = 250L * 1024 * 1024;
 
     private static readonly DesignOption[] BackgroundOptions =
@@ -373,16 +374,13 @@
 
     private async Task OnImageSelected(InputFileChangeEventArgs args)
     {
-        if (args.File.Size > MaxBackgroundImageBytes)
-        {
-            Http.Notify(T("NotificationBackgroundImageUploadFailed"), 413);
-            return;
-        }
-
-        var response = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", args.File, maxBytes: MaxBackgroundImageBytes);
+        var response = await DirectUploads.UploadInputAsync(
+            ImageUploadId,
+            "image",
+            uploadContext: ResourceUploadContextCodes.BackgroundSection);
         if (!response.Success || response.Data is null)
         {
-            Http.Notify(response.Message ?? T("NotificationBackgroundImageUploadFailed"), response.StatusCode);
+            Http.Notify(response, failureFallback: T("NotificationBackgroundImageUploadFailed"));
             return;
         }
 
@@ -406,7 +404,7 @@
         var response = await Http.PostFileAsync<AssetUploadModel>("api/admin/assets/upload?folder=section-backgrounds", args.File, maxBytes: MaxBackgroundVideoBytes);
         if (!response.Success || response.Data is null)
         {
-            Http.Notify(response.Message ?? T("NotificationBackgroundVideoUploadFailed"), response.StatusCode);
+            Http.Notify(response, failureFallback: T("NotificationBackgroundVideoUploadFailed"));
             return;
         }
 

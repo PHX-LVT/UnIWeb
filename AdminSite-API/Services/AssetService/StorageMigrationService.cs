@@ -16,6 +16,7 @@ public sealed class StorageMigrationService
     private readonly StoredAssetService _storedAssets;
     private readonly ManagedResourceService _resources;
     private readonly R2StorageSettings _settings;
+    private readonly ILogger<StorageMigrationService> _logger;
 
     public StorageMigrationService(
         MongoDbContext context,
@@ -23,7 +24,8 @@ public sealed class StorageMigrationService
         AssetStorageKeyPolicy keys,
         StoredAssetService storedAssets,
         ManagedResourceService resources,
-        IOptions<R2StorageSettings> settings)
+        IOptions<R2StorageSettings> settings,
+        ILogger<StorageMigrationService> logger)
     {
         _context = context;
         _storage = storage;
@@ -31,6 +33,7 @@ public sealed class StorageMigrationService
         _storedAssets = storedAssets;
         _resources = resources;
         _settings = settings.Value;
+        _logger = logger;
     }
 
     public async Task<StorageInventoryDto> InventoryAsync(CancellationToken cancellationToken)
@@ -232,11 +235,17 @@ public sealed class StorageMigrationService
             catch (Exception exception)
             {
                 record.Status = "failed";
-                record.LastError = exception.Message.Length > 1000 ? exception.Message[..1000] : exception.Message;
+                record.LastError = "Storage migration failed: the object could not be transferred.";
                 record.UpdatedAt = DateTime.UtcNow;
                 await SaveAsync(record, CancellationToken.None);
                 itemResult.Status = "failed";
                 itemResult.Error = record.LastError;
+                _logger.LogError(
+                    exception,
+                    "Storage migration failed for {OwnerType} {OwnerId} and record {RecordId}.",
+                    record.OwnerType,
+                    record.OwnerId,
+                    record.Id);
                 result.FailedCount++;
             }
             result.Results.Add(itemResult);

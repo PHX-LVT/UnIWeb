@@ -9,6 +9,7 @@ using FullProject.Services.AssetService;
 using FullProject.Services.BlockServices;
 using FullProject.Services.FormServices;
 using FullProject.Services.IconServices;
+using FullProject.Services.SectionServices;
 using Contracts.Icons;
 using SharedComponents.Helpers;
 
@@ -221,7 +222,14 @@ namespace FullProject.Services
                     Caption = SanitizeDictionary(img.Caption),
                     OpenInLightbox = img.OpenInLightbox,
                     FocalPointX = Math.Clamp(img.FocalPointX, 0, 100),
-                    FocalPointY = Math.Clamp(img.FocalPointY, 0, 100)
+                    FocalPointY = Math.Clamp(img.FocalPointY, 0, 100),
+                    ImagePlacement = img.ImagePlacement is null
+                        ? MediaPlacementPolicy.Normalize(new MediaPlacement
+                        {
+                            FocalPointX = Math.Clamp(img.FocalPointX, 0, 100),
+                            FocalPointY = Math.Clamp(img.FocalPointY, 0, 100)
+                        })
+                        : MediaPlacementPolicy.Normalize(img.ImagePlacement)
                 },
                 VideoBlockCreateDto v => new VideoBlock
                 {
@@ -270,6 +278,7 @@ namespace FullProject.Services
                     Title = card.Title,
                     Description = SanitizeDictionary(card.Description),
                     Asset = BlockAssetMetadataService.ToModel(card.Asset),
+                    ImagePlacement = card.ImagePlacement is null ? new MediaPlacement() : MediaPlacementPolicy.Normalize(card.ImagePlacement),
                     ImageAltText = SanitizeDictionary(card.ImageAltText),
                     ButtonLabel = card.ButtonLabel,
                     Href = CleanUrl(card.Href),
@@ -868,7 +877,15 @@ namespace FullProject.Services
                                 .Set(b => ((ImageBlock)b).Caption, SanitizeDictionary(imgDto.Caption))
                                 .Set(b => ((ImageBlock)b).OpenInLightbox, imgDto.OpenInLightbox)
                                 .Set(b => ((ImageBlock)b).FocalPointX, Math.Clamp(imgDto.FocalPointX, 0, 100))
-                                .Set(b => ((ImageBlock)b).FocalPointY, Math.Clamp(imgDto.FocalPointY, 0, 100))));
+                                .Set(b => ((ImageBlock)b).FocalPointY, Math.Clamp(imgDto.FocalPointY, 0, 100))
+                                .Set(b => ((ImageBlock)b).ImagePlacement,
+                                    imgDto.ImagePlacement is null
+                                        ? MediaPlacementPolicy.Normalize(new MediaPlacement
+                                        {
+                                            FocalPointX = Math.Clamp(imgDto.FocalPointX, 0, 100),
+                                            FocalPointY = Math.Clamp(imgDto.FocalPointY, 0, 100)
+                                        })
+                                        : MediaPlacementPolicy.Normalize(imgDto.ImagePlacement))));
                     break;
 
                 case (VideoBlock _, VideoBlockUpdateDto vDto):
@@ -955,6 +972,7 @@ namespace FullProject.Services
                                 .Set(b => ((CardBlock)b).Title, cardDto.Title)
                                 .Set(b => ((CardBlock)b).Description, SanitizeDictionary(cardDto.Description))
                                 .Set(b => ((CardBlock)b).Asset, BlockAssetMetadataService.ToModel(cardDto.Asset))
+                                .Set(b => ((CardBlock)b).ImagePlacement, cardDto.ImagePlacement is null ? new MediaPlacement() : MediaPlacementPolicy.Normalize(cardDto.ImagePlacement))
                                 .Set(b => ((CardBlock)b).ImageAltText, SanitizeDictionary(cardDto.ImageAltText))
                                 .Set(b => ((CardBlock)b).ButtonLabel, cardDto.ButtonLabel)
                                 .Set(b => ((CardBlock)b).Href, CleanUrl(cardDto.Href))

@@ -1,0 +1,27 @@
+@using Contracts.Api
+
+@if (Errors is { Count: > 0 })
+{
+    <div class="admin-validation-summary" role="alert" aria-live="assertive" tabindex="-1" @ref="_summary">
+        <strong>@Title</strong>
+        <ul>
+            @foreach (var error in Errors)
+            {
+                <li>
+                    @if (!string.IsNullOrWhiteSpace(error.FieldKey))
+                    {
+                        <span>@error.FieldKey: </span>
+                    }
+                    @error.Message
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<ApiFieldError>? Errors { get; set; }
+    [Parameter] public string Title { get; set; } = "Please correct the following fields.";
+
+    private ElementReference _summary;
+}

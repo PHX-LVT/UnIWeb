@@ -64,6 +64,7 @@ else
     </section>
 
     <section class="admin-card log-management__surface">
+        <AdminInlineStatus TargetId="audit-log-load" Retry="LoadAsync" Retrying="_loading" RetryText="@T("Retry")" />
         @if (_loading)
         {
             <div class="log-management__empty"><i class="fas fa-spinner fa-spin"></i> @T("Loading")</div>
@@ -143,7 +144,13 @@ else
                                                                     <small>@auditEvent.ActionCode</small>
                                                                 </td>
                                                                 <td>@DisplayTarget(auditEvent)</td>
-                                                                <td><span class="log-status log-status--@auditEvent.Outcome.ToString().ToLowerInvariant()">@T($"AuditOutcome{auditEvent.Outcome}")</span></td>
+                                                                <td>
+                                                                    <span class="log-status log-status--@auditEvent.Outcome.ToString().ToLowerInvariant()">@T($"AuditOutcome{auditEvent.Outcome}")</span>
+                                                                    @if (!string.IsNullOrWhiteSpace(auditEvent.OutcomeCode))
+                                                                    {
+                                                                        <small>@auditEvent.OutcomeCode</small>
+                                                                    }
+                                                                </td>
                                                                 <td><code title="@auditEvent.CorrelationId">@ShortCode(auditEvent.CorrelationId)</code></td>
                                                             </tr>
                                                         }
@@ -213,6 +220,7 @@ else
 
     private async Task LoadAsync()
     {
+        Http.ClearInlineStatus("audit-log-load");
         _loading = true;
         var response = await Logs.GetAuditSessionsAsync(Filter());
         if (response.Success && response.Data is not null)
@@ -223,7 +231,7 @@ else
             _nextCursor = response.Data.NextCursor;
             _expanded.Clear();
         }
-        else Http.Notify(response.Message, response.StatusCode);
+        else Http.NotifyInline(response, "audit-log-load");
         _loading = false;
     }
 
@@ -238,7 +246,7 @@ else
         _loadingSessions.Add(session.SessionKey);
         var response = await Logs.GetSessionEventsAsync(session.SessionKey);
         if (response.Success && response.Data is not null) _eventsBySession[session.SessionKey] = response.Data;
-        else Http.Notify(response.Message, response.StatusCode);
+        else Http.Notify(response);
         _loadingSessions.Remove(session.SessionKey);
     }
 
@@ -291,7 +299,7 @@ else
             });
             if (result.Success)
                 await JS.InvokeVoidAsync("adminDownloads.downloadBase64", result.FileName, result.ContentType, Convert.ToBase64String(result.Bytes));
-            else Http.Notify(result.Message, result.StatusCode);
+            else Http.Notify(result.ToApiResponse());
         }
         finally { _exporting = false; }
     }

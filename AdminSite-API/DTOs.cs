@@ -241,6 +241,7 @@ namespace FullProject.DTOs
         public string? CardBackgroundType { get; set; }
         public string? CardBackgroundColor { get; set; }
         public string? CardImageUrl { get; set; }
+        public MediaPlacementDto? CardImagePlacement { get; set; }
     }
 
     
@@ -599,11 +600,27 @@ namespace FullProject.DTOs
         public string Id { get; set; } = string.Empty;
         public string Scope { get; set; } = "media";
         public string Name { get; set; } = string.Empty;
+        public string? SystemKey { get; set; }
+        public bool IsSystemRoot { get; set; }
+        public string? CoverUrl { get; set; }
+        public string? CoverStorageKey { get; set; }
+        public string? CoverAssetId { get; set; }
+        public int CoverAssetVersion { get; set; }
+        public int CoverStorageSchemaVersion { get; set; }
         public int ResourceCount { get; set; }
         public string CreatedById { get; set; } = string.Empty;
         public string? UpdatedById { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ResourceAlbumDeleteResultDto
+    {
+        public string AlbumId { get; set; } = string.Empty;
+        public bool Deleted { get; set; }
+        public int ResourceCount { get; set; }
+        public int DeletedResourceCount { get; set; }
+        public int BlockedResourceCount { get; set; }
     }
 
     public class ResourceAlbumAssignResourcesDto
@@ -668,6 +685,7 @@ namespace FullProject.DTOs
         public int StorageSchemaVersion { get; set; }
         public string Kind { get; set; } = "file";
         public string? Purpose { get; set; }
+        public string? OriginContext { get; set; }
         public Dictionary<string, string> Name { get; set; } = new();
         public Dictionary<string, string> Description { get; set; } = new();
         public string Url { get; set; } = string.Empty;

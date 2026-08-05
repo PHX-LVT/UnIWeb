@@ -76,6 +76,10 @@ public sealed class ResourceUploadSessionService
         if (!_settings.IsConfigured)
             throw new ResourceUploadException("storage_unavailable", "R2 storage is not configured.", StatusCodes.Status503ServiceUnavailable);
 
+        var uploadContext = ResourceUploadContextCodes.NormalizeClient(request.UploadContext);
+        if (uploadContext is null)
+            throw Validation("Upload context is not supported.");
+
         var library = await _siteSettings.GetResourceLibrarySettingsAsync();
         var kind = _resources.NormalizeKind(request.Kind);
         if (kind is null)
@@ -87,6 +91,11 @@ public sealed class ResourceUploadSessionService
         var inferredKind = ManagedResourceService.InferKindFromUpload(fileName, request.ContentType);
         if (!string.Equals(kind, inferredKind, StringComparison.OrdinalIgnoreCase))
             throw Validation($"Uploaded file does not match the selected {kind} resource type.");
+        if (ResourceUploadContextCodes.IsAutomatic(uploadContext) &&
+            !string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
+        {
+            throw Validation("Automatic editor uploads currently accept images only.");
+        }
         if (request.SizeBytes <= 0)
             throw Validation("The upload is empty.");
 
@@ -105,6 +114,8 @@ public sealed class ResourceUploadSessionService
         ManagedResource? replacement = null;
         if (!string.IsNullOrWhiteSpace(request.ReplaceResourceId))
         {
+            if (!string.Equals(uploadContext, ResourceUploadContextCodes.LibraryManual, StringComparison.Ordinal))
+                throw Validation("Editor uploads create a new Resource Library item and cannot replace an existing resource.");
             if (!ObjectId.TryParse(request.ReplaceResourceId, out _)) throw Validation("Resource not found.");
             replacement = await _resources.GetByIdAsync(request.ReplaceResourceId);
             if (replacement is null) throw new ResourceUploadException("resource_not_found", "Resource not found.", StatusCodes.Status404NotFound);
@@ -136,7 +147,18 @@ public sealed class ResourceUploadSessionService
                 "Too many uploads are already active. Wait for an upload to finish or cancel one before retrying.",
                 StatusCodes.Status429TooManyRequests);
 
-        var requestedAlbumId = replacement?.AlbumId ?? request.AlbumId;
+        string? requestedAlbumId;
+        if (ResourceUploadContextCodes.IsAutomatic(uploadContext))
+        {
+            if (!string.IsNullOrWhiteSpace(request.AlbumId))
+                throw Validation("The album for this upload context is assigned automatically.");
+            requestedAlbumId = (await _albums.ResolveSystemRootAsync(uploadContext, "system", cancellationToken)).Id;
+        }
+        else
+        {
+            requestedAlbumId = replacement?.AlbumId ?? request.AlbumId;
+        }
+
         if (!string.IsNullOrWhiteSpace(requestedAlbumId))
         {
             if (!ObjectId.TryParse(requestedAlbumId, out _)) throw Validation("Album not found.");
@@ -160,6 +182,7 @@ public sealed class ResourceUploadSessionService
             Kind = kind,
             FileName = fileName,
             ResourceName = resourceName,
+            UploadContext = uploadContext,
             ContentType = string.IsNullOrWhiteSpace(request.ContentType) ? "application/octet-stream" : request.ContentType.Trim(),
             SizeBytes = request.SizeBytes,
             AlbumId = string.IsNullOrWhiteSpace(requestedAlbumId) ? null : requestedAlbumId.Trim(),
@@ -230,7 +253,8 @@ public sealed class ResourceUploadSessionService
                 catch (Exception cleanupException) { _logger.LogWarning(cleanupException, "Could not abort failed multipart initiation {SessionId}", session.Id); }
             }
             await SafeDeleteAsync(session.PendingStorageKey, cancellationToken);
-            await FailAsync(session, "initiation_failed", exception.Message, cancellationToken);
+            _logger.LogError(exception, "Resource upload initiation failed for Session {SessionId}", session.Id);
+            await FailAsync(session, "initiation_failed", "Upload initialization failed: storage is unavailable.", cancellationToken);
             throw;
         }
     }
@@ -284,13 +308,21 @@ public sealed class ResourceUploadSessionService
         CancellationToken cancellationToken)
     {
         var session = await GetOwnedAsync(sessionId, actorId, cancellationToken);
+        if (string.Equals(session.Status, "reconciliation-required", StringComparison.OrdinalIgnoreCase))
+            return await ReconcileStoredAssetRegistryAsync(session, actorId, cancellationToken);
         if (session.Status == "ready")
+            return await ReconcileStoredAssetRegistryAsync(session, actorId, cancellationToken);
+        if (string.Equals(session.Status, "verifying", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(session.FinalStorageKey))
         {
-            var readyResource = string.IsNullOrWhiteSpace(session.ResourceId)
-                ? null
-                : await _resources.GetByIdAsync(session.ResourceId);
-            var readyUsage = readyResource is null ? 0 : (await _resources.GetUsageAsync(readyResource.Id)).UsageCount;
-            return Map(session, readyResource, readyUsage);
+            var persistedResource = await _context.ManagedResources
+                .Find(resource => resource.StorageKey == session.FinalStorageKey)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (persistedResource is not null)
+            {
+                session.ResourceId = persistedResource.Id;
+                return await ReconcileStoredAssetRegistryAsync(session, actorId, cancellationToken);
+            }
         }
         EnsureActive(session);
 
@@ -305,6 +337,7 @@ public sealed class ResourceUploadSessionService
                 "This upload is already being completed by another request.",
                 StatusCodes.Status409Conflict);
 
+        var previousStorageKey = session.PreviousStorageKey;
         try
         {
             if (session.Mode == "multipart")
@@ -350,10 +383,14 @@ public sealed class ResourceUploadSessionService
 
             ManagedResource? resource;
             List<string> errors;
-            string? previousStorageKey = null;
             if (!string.IsNullOrWhiteSpace(session.ReplaceResourceId))
             {
-                previousStorageKey = (await _resources.GetByIdAsync(session.ReplaceResourceId))?.StorageKey;
+                var previousResource = await _resources.GetByIdAsync(session.ReplaceResourceId);
+                previousStorageKey = previousResource?.StorageKey;
+                session.PreviousStorageKey = previousStorageKey;
+                session.PreviousResourceUrl = previousResource?.Url;
+                session.UpdatedAt = DateTime.UtcNow;
+                await SaveAsync(session, cancellationToken);
                 (resource, _, errors) = await _resources.ReplaceUploadAsync(
                     session.ReplaceResourceId,
                     _storage.PublicUrl(session.FinalStorageKey),
@@ -385,35 +422,13 @@ public sealed class ResourceUploadSessionService
                     session.ReservedResourceId!,
                     session.AssetId!,
                     session.AssetVersion,
-                    session.StorageSchemaVersion);
+                    session.StorageSchemaVersion,
+                    session.UploadContext);
             }
             if (resource is null)
                 throw new ResourceUploadException("resource_creation_failed", string.Join(" ", errors), StatusCodes.Status422UnprocessableEntity);
 
-            var finalMetadata = await _storage.GetMetadataAsync(session.FinalStorageKey, cancellationToken);
-            await _storedAssets.RecordReadyAsync(
-                session.AssetId!,
-                session.StorageSchemaVersion,
-                new AssetStorageOwner("resource-library", "managed-resource", resource.Id, resource.Kind),
-                session.FinalStorageKey,
-                resource.Url,
-                session.FileName,
-                session.ContentType,
-                session.SizeBytes,
-                actorId,
-                session.AssetVersion,
-                resource.Id,
-                finalMetadata?.ETag,
-                previousStorageKey,
-                cancellationToken);
-            if (!string.IsNullOrWhiteSpace(previousStorageKey) &&
-                !string.Equals(previousStorageKey, session.FinalStorageKey, StringComparison.Ordinal))
-            {
-                await _storedAssets.MarkSupersededAsync(
-                    previousStorageKey,
-                    DateTime.UtcNow.AddDays(Math.Max(1, _settings.LegacyObjectRetentionDays)),
-                    cancellationToken);
-            }
+            await EnsureStoredAssetRegistryAsync(session, resource, actorId, cancellationToken);
 
             session.ResourceId = resource.Id;
             session.Status = "ready";
@@ -438,6 +453,32 @@ public sealed class ResourceUploadSessionService
                     .FirstOrDefaultAsync(recoveryToken);
                 if (persistedResource is not null)
                 {
+                    try
+                    {
+                        await EnsureStoredAssetRegistryAsync(session, persistedResource, actorId, recoveryToken);
+                    }
+                    catch (Exception reconciliationException)
+                    {
+                        _logger.LogError(
+                            reconciliationException,
+                            "Stored asset registry reconciliation failed for upload Session {SessionId} and Resource {ResourceId}.",
+                            session.Id,
+                            persistedResource.Id);
+                        session.ResourceId = persistedResource.Id;
+                        session.Status = "reconciliation-required";
+                        session.ErrorCode = "registry_reconciliation_required";
+                        session.ErrorMessage = "Upload registration is still being completed. Retry shortly.";
+                        session.UpdatedAt = DateTime.UtcNow;
+                        session.CleanupAfterUtc = session.UpdatedAt.AddMinutes(5);
+                        session.DeleteAfterUtc = null;
+                        await SaveAsync(session, recoveryToken);
+                        await SafeDeleteAsync(session.PendingStorageKey, recoveryToken);
+                        throw new ResourceUploadException(
+                            "registry_reconciliation_required",
+                            "Upload registration is still being completed. Retry shortly.",
+                            StatusCodes.Status503ServiceUnavailable);
+                    }
+
                     session.ResourceId = persistedResource.Id;
                     session.Status = "ready";
                     session.ErrorCode = null;
@@ -453,9 +494,132 @@ public sealed class ResourceUploadSessionService
                 await SafeDeleteAsync(session.FinalStorageKey, recoveryToken);
             }
             await SafeDeleteAsync(session.PendingStorageKey, recoveryToken);
-            var code = exception is ResourceUploadException uploadException ? uploadException.Code : "verification_failed";
-            await FailAsync(session, code, exception.Message, recoveryToken);
+            var uploadException = exception as ResourceUploadException;
+            var code = uploadException?.Code ?? "verification_failed";
+            var userMessage = uploadException?.UserMessage ?? "Upload verification failed: the file could not be accepted.";
+            if (uploadException is null)
+                _logger.LogError(exception, "Resource upload verification failed for Session {SessionId}", session.Id);
+            await FailAsync(session, code, userMessage, recoveryToken);
             throw;
+        }
+    }
+
+    private async Task<ResourceUploadSessionDto> ReconcileStoredAssetRegistryAsync(
+        ResourceUploadSession session,
+        string actorId,
+        CancellationToken cancellationToken)
+    {
+        var resource = !string.IsNullOrWhiteSpace(session.ResourceId)
+            ? await _resources.GetByIdAsync(session.ResourceId)
+            : null;
+        if (resource is null && !string.IsNullOrWhiteSpace(session.FinalStorageKey))
+        {
+            resource = await _context.ManagedResources
+                .Find(item => item.StorageKey == session.FinalStorageKey)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        if (resource is null)
+        {
+            throw new ResourceUploadException(
+                "resource_reconciliation_failed",
+                "Upload registration could not find the Resource Library item.",
+                StatusCodes.Status409Conflict);
+        }
+
+        try
+        {
+            await EnsureStoredAssetRegistryAsync(session, resource, actorId, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogError(
+                exception,
+                "Stored asset registry reconciliation failed for upload Session {SessionId} and Resource {ResourceId}.",
+                session.Id,
+                resource.Id);
+            session.ResourceId = resource.Id;
+            session.Status = "reconciliation-required";
+            session.ErrorCode = "registry_reconciliation_required";
+            session.ErrorMessage = "Upload registration is still being completed. Retry shortly.";
+            session.UpdatedAt = DateTime.UtcNow;
+            session.CleanupAfterUtc = session.UpdatedAt.AddMinutes(5);
+            session.DeleteAfterUtc = null;
+            await SaveAsync(session, CancellationToken.None);
+            throw new ResourceUploadException(
+                "registry_reconciliation_required",
+                "Upload registration is still being completed. Retry shortly.",
+                StatusCodes.Status503ServiceUnavailable);
+        }
+
+        session.ResourceId = resource.Id;
+        session.Status = "ready";
+        session.ErrorCode = null;
+        session.ErrorMessage = null;
+        session.UpdatedAt = DateTime.UtcNow;
+        SetTerminalRetention(session, session.UpdatedAt);
+        await SaveAsync(session, cancellationToken);
+        await SafeDeleteAsync(session.PendingStorageKey, cancellationToken);
+        var usageCount = (await _resources.GetUsageAsync(resource.Id)).UsageCount;
+        return Map(session, resource, usageCount);
+    }
+
+    private async Task EnsureStoredAssetRegistryAsync(
+        ResourceUploadSession session,
+        ManagedResource resource,
+        string actorId,
+        CancellationToken cancellationToken)
+    {
+        var assetId = !string.IsNullOrWhiteSpace(session.AssetId)
+            ? session.AssetId
+            : resource.AssetId;
+        var storageKey = !string.IsNullOrWhiteSpace(session.FinalStorageKey)
+            ? session.FinalStorageKey
+            : resource.StorageKey;
+        if (!ObjectId.TryParse(assetId, out _) || string.IsNullOrWhiteSpace(storageKey))
+            throw new InvalidOperationException("The completed upload is missing its asset identity or storage key.");
+
+        var registered = await _context.StoredAssets.Find(asset =>
+                asset.Id == assetId &&
+                asset.ResourceId == resource.Id &&
+                asset.StorageKey == storageKey &&
+                asset.LifecycleStatus == "ready")
+            .AnyAsync(cancellationToken);
+        if (!registered)
+        {
+            var metadata = await _storage.GetMetadataAsync(storageKey, cancellationToken)
+                ?? throw new InvalidOperationException("The completed upload object could not be found in storage.");
+            await _storedAssets.RecordReadyAsync(
+                assetId!,
+                Math.Max(1, session.StorageSchemaVersion),
+                new AssetStorageOwner("resource-library", "managed-resource", resource.Id, resource.Kind),
+                storageKey,
+                resource.Url,
+                session.FileName,
+                session.ContentType,
+                session.SizeBytes,
+                actorId,
+                Math.Max(1, session.AssetVersion),
+                resource.Id,
+                metadata.ETag,
+                session.PreviousStorageKey,
+                cancellationToken);
+        }
+
+        var previousUrl = session.PreviousResourceUrl;
+        if (string.IsNullOrWhiteSpace(previousUrl) &&
+            !string.IsNullOrWhiteSpace(session.PreviousStorageKey))
+        {
+            previousUrl = _storage.PublicUrl(session.PreviousStorageKey);
+        }
+        await _resources.ReconcileUploadReplacementAsync(resource, previousUrl);
+
+        if (!string.IsNullOrWhiteSpace(session.PreviousStorageKey) &&
+            !string.Equals(session.PreviousStorageKey, storageKey, StringComparison.Ordinal))
+        {
+            await _storedAssets.MarkSupersededAsync(
+                session.PreviousStorageKey,
+                DateTime.UtcNow.AddDays(Math.Max(1, _settings.LegacyObjectRetentionDays)),
+                cancellationToken);
         }
     }
 
@@ -467,6 +631,19 @@ public sealed class ResourceUploadSessionService
             : await _resources.GetByIdAsync(session.ResourceId);
         var usageCount = resource is null ? 0 : (await _resources.GetUsageAsync(resource.Id)).UsageCount;
         return Map(session, resource, usageCount);
+    }
+
+    public async Task<string> GetUploadContextAsync(
+        string sessionId,
+        string actorId,
+        CancellationToken cancellationToken)
+    {
+        var session = await GetOwnedAsync(sessionId, actorId, cancellationToken);
+        return ResourceUploadContextCodes.Normalize(session.UploadContext)
+            ?? throw new ResourceUploadException(
+                "invalid_upload_context",
+                "The upload session has an invalid context.",
+                StatusCodes.Status409Conflict);
     }
 
     public async Task<ResourceUploadSessionDto> AbortAsync(string sessionId, string actorId, CancellationToken cancellationToken)
@@ -503,7 +680,7 @@ public sealed class ResourceUploadSessionService
         var filters = Builders<ResourceUploadSession>.Filter;
         var activeExpired = filters.And(
             filters.Lte(item => item.ExpiresAtUtc, now),
-            filters.Nin(item => item.Status, TerminalStatuses));
+            filters.In(item => item.Status, new[] { "initiated", "verifying", "cancelling" }));
         var terminalNeedsCleanup = filters.And(
             filters.In(item => item.Status, TerminalStatuses),
             filters.Eq(item => item.StorageCleanupCompletedAtUtc, null),
@@ -511,11 +688,32 @@ public sealed class ResourceUploadSessionService
                 filters.Lte(item => item.CleanupAfterUtc, now),
                 filters.Eq(item => item.CleanupAfterUtc, null),
                 filters.Exists(item => item.CleanupAfterUtc, false)));
-        var sessions = await _context.ResourceUploadSessions.Find(filters.Or(activeExpired, terminalNeedsCleanup))
+        var needsReconciliation = filters.And(
+            filters.Eq(item => item.Status, "reconciliation-required"),
+            filters.Or(
+                filters.Lte(item => item.CleanupAfterUtc, now),
+                filters.Eq(item => item.CleanupAfterUtc, null),
+                filters.Exists(item => item.CleanupAfterUtc, false)));
+        var sessions = await _context.ResourceUploadSessions.Find(filters.Or(activeExpired, terminalNeedsCleanup, needsReconciliation))
+            .SortBy(item => item.CleanupAfterUtc)
+            .ThenBy(item => item.UpdatedAt)
             .Limit(100)
             .ToListAsync(cancellationToken);
         foreach (var session in sessions)
         {
+            if (string.Equals(session.Status, "reconciliation-required", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await ReconcileStoredAssetRegistryAsync(session, session.ActorId, cancellationToken);
+                }
+                catch (ResourceUploadException)
+                {
+                    // Reconciliation records its own safe status and retry time.
+                }
+                continue;
+            }
+
             var cleanupAfter = session.CleanupAfterUtc
                 ?? session.PresignedExpiresAtUtc?.AddMinutes(1)
                 ?? session.UpdatedAt.AddMinutes(Math.Max(5, _settings.PresignedUrlMinutes) + 1);
@@ -534,11 +732,18 @@ public sealed class ResourceUploadSessionService
                 if (existingResource is not null)
                 {
                     session.ResourceId = existingResource.Id;
-                    session.Status = "ready";
-                    session.ErrorCode = null;
-                    session.ErrorMessage = null;
-                    session.UpdatedAt = now;
-                    SetTerminalRetention(session, now);
+                    try
+                    {
+                        await ReconcileStoredAssetRegistryAsync(
+                            session,
+                            session.ActorId,
+                            cancellationToken);
+                    }
+                    catch (ResourceUploadException)
+                    {
+                        // Reconciliation records its own safe status and retry time.
+                    }
+                    continue;
                 }
             }
 
@@ -648,6 +853,8 @@ public sealed class ResourceUploadSessionService
         Kind = session.Kind,
         FileName = session.FileName,
         ResourceName = session.ResourceName,
+        UploadContext = ResourceUploadContextCodes.Normalize(session.UploadContext)
+            ?? ResourceUploadContextCodes.LibraryManual,
         SizeBytes = session.SizeBytes,
         ExpiresAtUtc = session.ExpiresAtUtc,
         ErrorCode = session.ErrorCode,
@@ -662,6 +869,7 @@ public sealed class ResourceUploadSessionService
             StorageSchemaVersion = resource.StorageSchemaVersion,
             Kind = resource.Kind,
             Purpose = resource.Purpose,
+            OriginContext = resource.OriginContext,
             Name = new Dictionary<string, string>(resource.Name),
             Description = new Dictionary<string, string>(resource.Description),
             Url = resource.Url,
@@ -704,10 +912,12 @@ public sealed class ResourceUploadException : Exception
     public ResourceUploadException(string code, string message, int statusCode) : base(message)
     {
         Code = code;
+        UserMessage = message;
         StatusCode = statusCode;
     }
 
     public string Code { get; }
+    public string UserMessage { get; }
     public int StatusCode { get; }
 }
 

@@ -25,7 +25,10 @@ public sealed class CanvasSectionSwitchingTests : BunitContext
         Services.AddSingleton(new AdminPageService(http, sections, forms));
         Services.AddSingleton(new AdminBlockService(http));
         Services.AddSingleton(new AdminContentService(http));
-        Services.AddSingleton(new AdminLanguageService(null!, new AdminSettingsService(http)));
+        Services.AddSingleton<DirectResourceUploadService>();
+        var languageContext = new AdminLanguageContext();
+        Services.AddSingleton<IAdminLanguageContext>(languageContext);
+        Services.AddSingleton(new AdminLanguageService(null!, new AdminSettingsService(http), languageContext));
         Services.AddBlazoredToast();
         Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
         Services.AddDevExpressBlazor();

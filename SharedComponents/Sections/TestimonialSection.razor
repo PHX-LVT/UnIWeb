@@ -45,7 +45,7 @@
                         @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
                         {
                             <div class="sc-testimonial__media">
-                                <img src="@item.ImageUrl" alt="@StyleHelper.Lang(item.Title, Lang)" />
+                                <img src="@item.ImageUrl" style="@StyleHelper.GetMediaPlacementStyle(item.ImagePlacement)" alt="@StyleHelper.Lang(item.Title, Lang)" />
                             </div>
                         }
                         else if (LayoutClass == "feature-grid" && !string.IsNullOrWhiteSpace(item.BadgeText))

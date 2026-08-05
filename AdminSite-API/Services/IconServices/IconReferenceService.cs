@@ -166,7 +166,16 @@ public sealed class IconReferenceService
         BackgroundMode = value?.BackgroundMode switch { "theme" => "theme", "custom" => "custom", _ => "none" },
         BackgroundThemeRole = value?.BackgroundThemeRole switch { "primary" => "primary", "accent" => "accent", "background" => "background", _ => "surface" },
         BackgroundColor = NormalizeColor(value?.BackgroundColor, "#eef2f7"),
-        Shape = value?.Shape switch { "circle" => "circle", "rounded" => "rounded", _ => "none" }
+        Shape = value?.Shape switch
+        {
+            "rounded" or "rounded-square" => "rounded-square",
+            "circle" => "circle",
+            "oval" => "oval",
+            "diamond" => "diamond",
+            "hexagon" => "hexagon",
+            "star" => "star",
+            _ => "square"
+        }
     };
 
     private static IconAppearanceDto? CopyAppearance(IconAppearanceDto? value) => value is null ? null : new()

@@ -54,6 +54,11 @@ namespace FullProject.Controllers
                 return Forbid();
 
             var inferredKind = ManagedResourceService.InferKindFromUpload(file.FileName, file.ContentType);
+            if (string.Equals(inferredKind, "image", StringComparison.OrdinalIgnoreCase))
+            {
+                return UnprocessableEntity(ApiResult.BadRequest(
+                    "Image uploads must use the managed Resource Library upload flow."));
+            }
             var allowsPageBuilderVideo =
                 (string.Equals(folder, "section-backgrounds", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(folder, "video-blocks", StringComparison.OrdinalIgnoreCase)) &&

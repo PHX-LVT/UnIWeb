@@ -12,6 +12,7 @@ public sealed class AuditWriteRequest
 {
     public string DomainCode { get; init; } = string.Empty;
     public string ActionCode { get; init; } = string.Empty;
+    public string OutcomeCode { get; init; } = string.Empty;
     public AdminAuditOutcome Outcome { get; init; } = AdminAuditOutcome.Succeeded;
     public AdminAuditSeverity Severity { get; init; } = AdminAuditSeverity.Information;
     public string? ActorId { get; init; }
@@ -128,6 +129,7 @@ public sealed class AuditTrailWriter : IAuditTrailWriter
             OccurredAtUtc = DateTime.UtcNow,
             DomainCode = _redaction.Clean(request.DomainCode, 80),
             ActionCode = _redaction.Clean(request.ActionCode, 120),
+            OutcomeCode = _redaction.Clean(request.OutcomeCode, 120),
             Outcome = request.Outcome,
             Severity = request.Severity,
             ActorId = _redaction.Clean(request.ActorId ?? principal?.FindFirst("adminId")?.Value, 80),
